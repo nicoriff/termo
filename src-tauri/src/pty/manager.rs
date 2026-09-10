@@ -1,0 +1,51 @@
+use dashmap::DashMap;
+use tauri::ipc::Channel;
+use uuid::Uuid;
+
+use super::{PtyEvent, PtySession};
+
+#[derive(Default)]
+pub struct PtyManager {
+    sessions: DashMap<Uuid, PtySession>,
+}
+
+impl PtyManager {
+    pub fn spawn(
+        &self,
+        shell_path: &str,
+        shell_args: &[String],
+        cwd: Option<&str>,
+        cols: u16,
+        rows: u16,
+        channel: Channel<PtyEvent>,
+    ) -> anyhow::Result<Uuid> {
+        let session = PtySession::spawn(shell_path, shell_args, cwd, cols, rows, channel)?;
+        let id = session.id;
+        self.sessions.insert(id, session);
+        Ok(id)
+    }
+
+    pub fn write(&self, id: Uuid, data: &[u8]) -> anyhow::Result<()> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        session.write(data)
+    }
+
+    pub fn resize(&self, id: Uuid, cols: u16, rows: u16) -> anyhow::Result<()> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        session.resize(cols, rows)
+    }
+
+    pub fn kill(&self, id: Uuid) -> anyhow::Result<()> {
+        let (_, session) = self
+            .sessions
+            .remove(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        session.kill()
+    }
+}

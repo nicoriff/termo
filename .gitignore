@@ -1,0 +1,19 @@
+.DS_Store
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Dev-loop artifacts (logs, ad-hoc window screenshots, shell crash dumps)
+*.log
+.screenshot*.png
+bash.exe.stackdump
+
+# Local-only Claude Code session state
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

@@ -1,0 +1,448 @@
+<script lang="ts">
+  import { workspaceStore } from "./workspace-store.svelte";
+  import { listShells } from "$lib/core/pty-client";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { resolveShellArgs } from "$lib/core/shell-args";
+  import type { ShellInfo } from "$lib/core/types";
+  import { paneInsets, type PaneRect, type TileNode } from "./split-tree";
+
+  let { tile, rect }: { tile: TileNode; rect: PaneRect } = $props();
+  const insets = $derived(paneInsets(rect));
+
+  // Fixed (not just min-) width so the click-time position math below can
+  // clamp against the window bounds deterministically, without waiting on a
+  // post-render measurement of the panel's actual size.
+  const SHELL_PICKER_WIDTH = 200;
+  const SHELL_PICKER_MAX_HEIGHT = 240;
+  const SHELL_PICKER_MARGIN = 8;
+
+  let shellPickerOpen = $state(false);
+  let shellPickerPos = $state({ top: 0, left: 0 });
+  let shells = $state<ShellInfo[]>([]);
+  let shellsRequested = false;
+  let addButtonEl: HTMLButtonElement | undefined;
+
+  function toggleShellPicker() {
+    shellPickerOpen = !shellPickerOpen;
+    if (shellPickerOpen && addButtonEl) {
+      // Rendered via position:fixed (not nested/absolute) because
+      // .tile-tabstrip sets overflow-x:auto, which per the CSS spec forces
+      // overflow-y to auto too — a nested absolutely-positioned panel got
+      // silently clipped by that, even though it opened correctly.
+      //
+      // Anchored right-aligned to the button by default, then clamped into
+      // the window on both axes — in a narrow split tile (e.g. the left
+      // pane of a side-by-side split), right-aligning unclamped could push
+      // the panel's left edge past the window's left edge entirely.
+      const box = addButtonEl.getBoundingClientRect();
+      const left = Math.max(
+        SHELL_PICKER_MARGIN,
+        Math.min(box.right - SHELL_PICKER_WIDTH, window.innerWidth - SHELL_PICKER_WIDTH - SHELL_PICKER_MARGIN),
+      );
+      const top = Math.min(box.bottom + 4, window.innerHeight - SHELL_PICKER_MAX_HEIGHT - SHELL_PICKER_MARGIN);
+      shellPickerPos = { top, left };
+    }
+    if (shellPickerOpen && !shellsRequested) {
+      shellsRequested = true;
+      listShells()
+        .then((list) => (shells = list))
+        .catch(() => (shellsRequested = false));
+    }
+  }
+
+  function closeShellPicker() {
+    shellPickerOpen = false;
+  }
+
+  function pickShell(shell: ShellInfo) {
+    const args = resolveShellArgs(shell.id, shell.args, appConfigStore.psreadlineMenuComplete);
+    workspaceStore.addTab(tile.id, shell.path, args, shell.display_name);
+    closeShellPicker();
+  }
+
+  // Manual pointer-based drag instead of native HTML5 DnD: on Windows, native
+  // drag-and-drop goes through the OS's OLE drag session, which doesn't behave
+  // consistently (or automate the same way) across platforms/webviews. Reusing
+  // the same pointer-capture technique as the split-divider resize keeps tab
+  // dragging fully in our control and consistent everywhere.
+  function onTabPointerDown(event: PointerEvent, sessionId: string) {
+    if (event.button !== 0) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const sourceTileId = tile.id;
+    let dragging = false;
+
+    function currentDropStrip(e: PointerEvent): HTMLElement | null {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      return el instanceof Element ? el.closest<HTMLElement>(".tile-tabstrip") : null;
+    }
+
+    function currentDropTab(e: PointerEvent): HTMLElement | null {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      return el instanceof Element ? el.closest<HTMLElement>(".tile-tab") : null;
+    }
+
+    function clearHighlight() {
+      document.querySelectorAll(".tile-tabstrip.drag-over").forEach((el) => el.classList.remove("drag-over"));
+      document
+        .querySelectorAll(".tile-tab.drag-insert-before, .tile-tab.drag-insert-after")
+        .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
+    }
+
+    // Which existing tab (if any) the pointer is currently over, and whether
+    // it should land before or after that tab — used both to preview the
+    // drop position and, on release, to compute moveSession's beforeSessionId.
+    function hoveredInsertion(e: PointerEvent): { tab: HTMLElement; before: boolean } | null {
+      const overTab = currentDropTab(e);
+      if (!overTab || overTab.dataset.sessionId === sessionId) return null;
+      const box = overTab.getBoundingClientRect();
+      return { tab: overTab, before: e.clientX < box.left + box.width / 2 };
+    }
+
+    function onMove(e: PointerEvent) {
+      if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 4) {
+        dragging = true;
+        document.body.classList.add("termini-dragging-tab");
+      }
+      if (!dragging) return;
+      clearHighlight();
+      currentDropStrip(e)?.classList.add("drag-over");
+      const insertion = hoveredInsertion(e);
+      insertion?.tab.classList.add(insertion.before ? "drag-insert-before" : "drag-insert-after");
+    }
+
+    function onUp(e: PointerEvent) {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("termini-dragging-tab");
+      clearHighlight();
+
+      if (dragging) {
+        const targetTileId = currentDropStrip(e)?.dataset.tileId;
+        if (targetTileId) {
+          const insertion = hoveredInsertion(e);
+          let beforeSessionId: string | undefined;
+          if (insertion) {
+            beforeSessionId = insertion.before
+              ? insertion.tab.dataset.sessionId
+              : insertion.tab.nextElementSibling instanceof HTMLElement
+                ? insertion.tab.nextElementSibling.dataset.sessionId
+                : undefined;
+          }
+          workspaceStore.moveSession(sourceTileId, targetTileId, sessionId, beforeSessionId);
+        }
+      } else {
+        workspaceStore.setActiveSession(sourceTileId, sessionId);
+      }
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function closeTab(event: Event, sessionId: string) {
+    event.stopPropagation();
+    workspaceStore.closeTab(tile.id, sessionId);
+  }
+
+  // Moves the shell picker to <body> so it escapes .tile-chrome's stacking
+  // context — position:fixed alone doesn't do this: an ancestor with
+  // position + z-index (needed so tiles/dividers layer correctly among
+  // themselves) still confines fixed-positioned descendants to its own
+  // stacking context, so the picker was rendering under sibling dividers.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+</script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="tile-chrome"
+  class:focused={workspaceStore.focusedTileId === tile.id}
+  style="left:calc({rect.left * 100}% + {insets.left}px); top:calc({rect.top * 100}% + {insets.top}px); width:calc({rect.width *
+    100}% - {insets.left + insets.right}px); height:calc({rect.height * 100}% - {insets.top + insets.bottom}px)"
+>
+  <div class="tile-tabstrip" data-tile-id={tile.id}>
+    {#each tile.sessions as session (session.id)}
+      <div
+        class="tile-tab"
+        class:active={tile.activeSessionId === session.id}
+        data-session-id={session.id}
+        role="tab"
+        tabindex="0"
+        aria-selected={tile.activeSessionId === session.id}
+        onpointerdown={(e) => onTabPointerDown(e, session.id)}
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") workspaceStore.setActiveSession(tile.id, session.id);
+        }}
+      >
+        <span class="tile-tab-title">{session.title}</span>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span
+          class="tile-tab-close"
+          role="button"
+          tabindex="-1"
+          aria-label="Cerrar pestaña"
+          onclick={(e) => closeTab(e, session.id)}
+          onkeydown={(e) => {
+            if (e.key === "Enter" || e.key === " ") closeTab(e, session.id);
+          }}
+        >
+          <svg viewBox="0 0 10 10" width="8" height="8">
+            <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
+          </svg>
+        </span>
+      </div>
+    {/each}
+    <button
+      class="tile-tab-add"
+      aria-label="Nueva pestaña"
+      bind:this={addButtonEl}
+      onclick={toggleShellPicker}
+    >
+      <svg viewBox="0 0 10 10" width="10" height="10">
+        <path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1" />
+      </svg>
+    </button>
+  </div>
+
+  {#if shellPickerOpen}
+    <div use:portal>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="shell-picker-backdrop" onpointerdown={closeShellPicker}></div>
+      <div class="shell-picker-panel" style="top:{shellPickerPos.top}px; left:{shellPickerPos.left}px" role="listbox">
+        {#each shells as shell (shell.id)}
+          <button class="shell-picker-item" onclick={() => pickShell(shell)}>{shell.display_name}</button>
+        {/each}
+        {#if shells.length === 0}
+          <p class="shell-picker-empty">Cargando...</p>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <div class="tile-toolbar">
+    <button title="Dividir verticalmente" onclick={() => workspaceStore.splitTile(tile.id, "row")}>
+      <svg viewBox="0 0 12 12" width="11" height="11">
+        <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
+        <line x1="6" y1="0.5" x2="6" y2="11.5" stroke="currentColor" />
+      </svg>
+    </button>
+    <button title="Dividir horizontalmente" onclick={() => workspaceStore.splitTile(tile.id, "col")}>
+      <svg viewBox="0 0 12 12" width="11" height="11">
+        <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
+        <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />
+      </svg>
+    </button>
+  </div>
+</div>
+
+<style>
+  :global(body.termini-dragging-tab) {
+    cursor: grabbing !important;
+  }
+
+  :global(body.termini-dragging-tab .tile-tab) {
+    cursor: grabbing;
+  }
+
+  .tile-chrome {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    box-sizing: border-box;
+    z-index: 8;
+  }
+
+  .tile-tabstrip {
+    pointer-events: auto;
+    display: flex;
+    align-items: stretch;
+    height: 28px;
+    flex-shrink: 0;
+    background: var(--tabbar-bg, #181818);
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* Toggled imperatively via classList (not a Svelte class: directive) since the
+     drop target is discovered by hit-testing during a manual pointer drag. */
+  :global(.tile-tabstrip.drag-over) {
+    outline: 2px dashed var(--pane-active-border, #3a6df0);
+    outline-offset: -2px;
+  }
+
+  :global(.tile-tab.drag-insert-before) {
+    box-shadow: inset 2px 0 0 var(--pane-active-border, #3a6df0);
+  }
+
+  :global(.tile-tab.drag-insert-after) {
+    box-shadow: inset -2px 0 0 var(--pane-active-border, #3a6df0);
+  }
+
+  .tile-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    max-width: 160px;
+    min-width: 70px;
+    border: none;
+    border-right: 1px solid var(--tabbar-border, #2a2a2a);
+    background: transparent;
+    color: var(--tabbar-fg, #9a9a9a);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .tile-tab.active {
+    background: var(--tabbar-active-bg, #1e1e1e);
+    color: var(--tabbar-active-fg, #f0f0f0);
+  }
+
+  /* Distinguishes the active tab of the currently-focused tile (the one
+     receiving keyboard input) from active tabs sitting in other, unfocused
+     split panes — otherwise every pane's active tab looks identical. */
+  .tile-chrome.focused .tile-tab.active {
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
+    box-shadow: inset 0 -2px 0 0 var(--tab-focus-border, #3a6df0);
+  }
+
+  .tile-tab-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .tile-tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .tile-tab-close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .tile-tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--tabbar-fg, #9a9a9a);
+    cursor: pointer;
+  }
+
+  .tile-tab-add:hover {
+    color: var(--tabbar-active-fg, #f0f0f0);
+  }
+
+  /* position:fixed with JS-computed coordinates, rendered as a sibling of
+     .tile-tabstrip rather than nested/absolute inside it — .tile-tabstrip
+     sets overflow-x:auto, which per the CSS spec forces overflow-y to auto
+     too, silently clipping a nested absolutely-positioned panel. */
+  .shell-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    pointer-events: auto;
+    z-index: 199;
+  }
+
+  .shell-picker-panel {
+    position: fixed;
+    pointer-events: auto;
+    z-index: 200;
+    width: 200px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--tabbar-active-bg, #1e1e1e);
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+  }
+
+  .shell-picker-item {
+    text-align: left;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--tabbar-active-fg, #f0f0f0);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shell-picker-item:hover {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .shell-picker-empty {
+    padding: 8px 10px;
+    font-size: 11px;
+    opacity: 0.6;
+    margin: 0;
+  }
+
+  .tile-toolbar {
+    pointer-events: auto;
+    position: absolute;
+    top: 32px;
+    right: 4px;
+    z-index: 10;
+    display: flex;
+    gap: 2px;
+    background: rgba(20, 20, 20, 0.7);
+    border-radius: 4px;
+    padding: 2px;
+    opacity: 0.4;
+    transition: opacity 0.1s;
+  }
+
+  .tile-toolbar:hover {
+    opacity: 1;
+  }
+
+  .tile-toolbar button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: #cfcfcf;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+
+  .tile-toolbar button:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+</style>
