@@ -143,6 +143,41 @@ export function paneInsets(rect: PaneRect): PaneInsets {
   };
 }
 
+/** Fraction of each edge left as margin around a zoomed tile's floating
+ * overlay — the zoomed pane occupies the central 90% of the console area
+ * (1 - 2*ZOOM_MARGIN on each axis). */
+export const ZOOM_MARGIN = 0.05;
+
+const ZOOM_RECT: PaneRect = {
+  left: ZOOM_MARGIN,
+  top: ZOOM_MARGIN,
+  width: 1 - 2 * ZOOM_MARGIN,
+  height: 1 - 2 * ZOOM_MARGIN,
+};
+
+const ZERO_INSETS: PaneInsets = { left: 0, top: 0, right: 0, bottom: 0 };
+
+/**
+ * Resolves the rect+insets a tile should render at, given zoom state:
+ * - If another tile is zoomed, this tile must not render at all -> null.
+ * - If THIS tile is the zoomed one, it floats at 90% of the console area
+ *   with zero insets (a floating overlay touching no divider — paneInsets's
+ *   edge-adjacency heuristic doesn't apply and would shrink it for no reason).
+ * - Otherwise (no zoom active), the tile's normal layout rect, inset as usual.
+ */
+export function resolvePaneRect(
+  tileId: string,
+  layout: Map<string, PaneRect>,
+  zoomedTileId: string | null,
+): { rect: PaneRect; insets: PaneInsets } | null {
+  if (zoomedTileId !== null) {
+    if (zoomedTileId !== tileId) return null;
+    return { rect: ZOOM_RECT, insets: ZERO_INSETS };
+  }
+  const rect = layout.get(tileId);
+  return rect ? { rect, insets: paneInsets(rect) } : null;
+}
+
 /** Normalized (0..1) rectangle per tile, computed from the split tree's ratios. */
 export function computeLayout(root: SplitNode): Map<string, PaneRect> {
   const result = new Map<string, PaneRect>();

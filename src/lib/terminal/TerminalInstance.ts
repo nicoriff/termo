@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
+import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
@@ -54,6 +55,27 @@ export class TerminalInstance {
 
     this.term.onData((data) => {
       if (this.sessionId) void writePty(this.sessionId, data);
+    });
+
+    // Reserve Alt+Up/Down for the tile-zoom shortcut, ahead of xterm's own
+    // key handling — some shells bind Alt+arrows to something else (e.g.
+    // word navigation), so this has to intercept before xterm forwards the
+    // keystroke to the PTY, not react to it after the fact via a window
+    // listener. Every TerminalInstance registers this same handler; it's
+    // fine that all of them resolve through the same global focusedTileId,
+    // since the terminal actually receiving keystrokes is already (in
+    // practice) the one belonging to the focused tile.
+    this.term.attachCustomKeyEventHandler((event) => {
+      if (event.type === "keydown" && event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        if (event.key === "ArrowUp") {
+          workspaceStore.zoomFocused();
+        } else {
+          workspaceStore.unzoom();
+        }
+        return false;
+      }
+      return true;
     });
   }
 

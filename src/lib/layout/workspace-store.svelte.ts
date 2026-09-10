@@ -18,6 +18,7 @@ class WorkspaceStore {
   // with the wrong shell.
   root = $state<SplitNode | null>(null);
   focusedTileId = $state<string | null>(null);
+  zoomedTileId = $state<string | null>(null);
 
   initRoot(shellPath?: string, shellArgs?: string[], title = "Shell"): void {
     if (this.root) return;
@@ -39,14 +40,21 @@ class WorkspaceStore {
 
   closeTab(tileId: string, sessionId: string): void {
     if (!this.root || countSessions(this.root) <= 1) return;
+    let tileVanishes = false;
     const updated = updateLeaf(this.root, tileId, (tile) => {
       const remaining = tile.sessions.filter((s) => s.id !== sessionId);
-      if (remaining.length === 0) return null;
+      if (remaining.length === 0) {
+        tileVanishes = true;
+        return null;
+      }
       const activeSessionId =
         tile.activeSessionId === sessionId ? remaining[remaining.length - 1].id : tile.activeSessionId;
       return { ...tile, sessions: remaining, activeSessionId };
     });
-    if (updated) this.root = updated;
+    if (updated) {
+      this.root = updated;
+      if (tileVanishes && this.zoomedTileId === tileId) this.zoomedTileId = null;
+    }
   }
 
   setActiveSession(tileId: string, sessionId: string): void {
@@ -65,6 +73,25 @@ class WorkspaceStore {
 
   focusTile(tileId: string): void {
     this.focusedTileId = tileId;
+  }
+
+  toggleZoom(tileId: string): void {
+    if (this.zoomedTileId === tileId) {
+      this.zoomedTileId = null;
+    } else {
+      this.zoomedTileId = tileId;
+      this.focusedTileId = tileId;
+    }
+  }
+
+  /** Alt+Up: bring the focused tile to the foreground. No-op if nothing is focused. */
+  zoomFocused(): void {
+    if (this.focusedTileId) this.zoomedTileId = this.focusedTileId;
+  }
+
+  /** Alt+Down: always restores, regardless of what's currently zoomed. */
+  unzoom(): void {
+    this.zoomedTileId = null;
   }
 
   updateSplitRatio(splitId: string, ratio: number): void {
@@ -98,16 +125,21 @@ class WorkspaceStore {
     }
 
     let moved: SessionTab | undefined;
+    let tileVanishes = false;
     const afterRemoval = updateLeaf(this.root, fromTileId, (tile) => {
       moved = tile.sessions.find((s) => s.id === sessionId);
       if (!moved) return tile;
       const remaining = tile.sessions.filter((s) => s.id !== sessionId);
-      if (remaining.length === 0) return null;
+      if (remaining.length === 0) {
+        tileVanishes = true;
+        return null;
+      }
       const activeSessionId =
         tile.activeSessionId === sessionId ? remaining[remaining.length - 1].id : tile.activeSessionId;
       return { ...tile, sessions: remaining, activeSessionId };
     });
     if (!moved) return;
+    if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
 
     const base = afterRemoval ?? this.root;
     const afterAdd = updateLeaf(base, toTileId, (tile) => {

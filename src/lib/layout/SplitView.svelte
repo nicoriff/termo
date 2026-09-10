@@ -5,11 +5,13 @@
     computeDividers,
     computeLayout,
     paneInsets,
+    resolvePaneRect,
     type SplitNode,
   } from "./split-tree";
   import { workspaceStore } from "./workspace-store.svelte";
   import TileChrome from "./TileChrome.svelte";
   import Terminal from "$lib/terminal/Terminal.svelte";
+  import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
 
@@ -31,6 +33,10 @@
       event.preventDefault();
       const rect = containerEl?.getBoundingClientRect();
       if (!rect) return;
+      // Suppresses the zoom transition (see .session-slot/.tile-chrome CSS)
+      // for the duration of the drag — otherwise every pointermove tick
+      // would ease toward its target instead of tracking the pointer.
+      document.body.classList.add("termini-dragging-divider");
 
       function onMove(e: PointerEvent) {
         const ratio =
@@ -42,6 +48,7 @@
       function onUp() {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        document.body.classList.remove("termini-dragging-divider");
       }
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
@@ -50,40 +57,56 @@
 </script>
 
 <div class="split-container" bind:this={containerEl}>
+  {#if workspaceStore.zoomedTileId}
+    <div class="zoom-backdrop" transition:fade={{ duration: 140 }}></div>
+  {/if}
+
   {#each sessions as loc (loc.session.id)}
-    {@const rect = layout.get(loc.tileId)}
-    {#if rect}
-      {@const insets = paneInsets(rect)}
+    {@const baseRect = layout.get(loc.tileId)}
+    {#if baseRect}
+      {@const resolved = resolvePaneRect(loc.tileId, layout, workspaceStore.zoomedTileId) ?? {
+        rect: baseRect,
+        insets: paneInsets(baseRect),
+      }}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="session-slot"
-        class:hidden={tileById.get(loc.tileId)?.activeSessionId !== loc.session.id}
+        class:hidden={tileById.get(loc.tileId)?.activeSessionId !== loc.session.id ||
+          (workspaceStore.zoomedTileId !== null && workspaceStore.zoomedTileId !== loc.tileId)}
         class:pane-focused={workspaceStore.focusedTileId === loc.tileId}
-        style="left:calc({rect.left * 100}% + {insets.left}px); top:calc({rect.top * 100}% + {TABSTRIP_HEIGHT +
-          insets.top}px); width:calc({rect.width * 100}% - {insets.left + insets.right}px); height:calc({rect.height *
-          100}% - {TABSTRIP_HEIGHT + insets.top + insets.bottom}px)"
+        style="left:calc({resolved.rect.left * 100}% + {resolved.insets.left}px); top:calc({resolved.rect.top *
+          100}% + {TABSTRIP_HEIGHT + resolved.insets.top}px); width:calc({resolved.rect.width * 100}% - {resolved
+          .insets.left + resolved.insets.right}px); height:calc({resolved.rect.height * 100}% - {TABSTRIP_HEIGHT +
+          resolved.insets.top + resolved.insets.bottom}px)"
         onpointerdown={() => workspaceStore.focusTile(loc.tileId)}
       >
-        <Terminal shellPath={loc.session.shellPath} shellArgs={loc.session.shellArgs} />
+        <Terminal
+          shellPath={loc.session.shellPath}
+          shellArgs={loc.session.shellArgs}
+          zoomed={workspaceStore.zoomedTileId === loc.tileId &&
+            tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+        />
       </div>
     {/if}
   {/each}
 
   {#each tiles as tile (tile.id)}
-    {@const rect = layout.get(tile.id)}
-    {#if rect}
-      <TileChrome {tile} {rect} />
+    {@const resolved = resolvePaneRect(tile.id, layout, workspaceStore.zoomedTileId)}
+    {#if resolved}
+      <TileChrome {tile} rect={resolved.rect} insets={resolved.insets} />
     {/if}
   {/each}
 
-  {#each dividers as divider (divider.id)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="divider {divider.direction}"
-      style="left:{divider.left * 100}%; top:{divider.top * 100}%"
-      onpointerdown={startDrag(divider)}
-    ></div>
-  {/each}
+  {#if !workspaceStore.zoomedTileId}
+    {#each dividers as divider (divider.id)}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="divider {divider.direction}"
+        style="left:{divider.left * 100}%; top:{divider.top * 100}%"
+        onpointerdown={startDrag(divider)}
+      ></div>
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -98,10 +121,37 @@
     position: absolute;
     display: flex;
     box-sizing: border-box;
+    transition:
+      left 140ms ease,
+      top 140ms ease,
+      width 140ms ease,
+      height 140ms ease;
   }
 
   .session-slot.hidden {
     display: none;
+  }
+
+  /* Suppressed during a divider drag (startDrag toggles this body class) —
+     without it, every pointermove tick would ease toward its target instead
+     of tracking the pointer, making the drag feel laggy. */
+  :global(body.termini-dragging-divider) .session-slot {
+    transition: none;
+  }
+
+  /* No z-index here on purpose: .session-slot has none either (z-index:auto),
+     so paint order between them falls back to DOM order — this element is
+     placed before the sessions loop in the markup, so it always paints
+     beneath the zoomed session (and beneath .tile-chrome, which does have
+     an explicit z-index). Giving this an explicit z-index would instead put
+     it in the "positive z-index" paint bucket, which paints AFTER (on top
+     of) any z-index:auto element regardless of DOM order — covering the
+     zoomed terminal. */
+  .zoom-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: none;
   }
 
   /* xterm.css reserves a permanent scrollbar track on every terminal

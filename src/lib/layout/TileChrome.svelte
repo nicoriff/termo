@@ -4,10 +4,9 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { resolveShellArgs } from "$lib/core/shell-args";
   import type { ShellInfo } from "$lib/core/types";
-  import { paneInsets, type PaneRect, type TileNode } from "./split-tree";
+  import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
 
-  let { tile, rect }: { tile: TileNode; rect: PaneRect } = $props();
-  const insets = $derived(paneInsets(rect));
+  let { tile, rect, insets }: { tile: TileNode; rect: PaneRect; insets: PaneInsets } = $props();
 
   // Fixed (not just min-) width so the click-time position math below can
   // clamp against the window bounds deterministically, without waiting on a
@@ -239,6 +238,23 @@
         <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />
       </svg>
     </button>
+    <button
+      title={workspaceStore.zoomedTileId === tile.id ? "Restaurar pestaña" : "Ampliar pestaña"}
+      aria-label={workspaceStore.zoomedTileId === tile.id ? "Restaurar pestaña" : "Ampliar pestaña"}
+      onclick={() => workspaceStore.toggleZoom(tile.id)}
+    >
+      {#if workspaceStore.zoomedTileId === tile.id}
+        <svg viewBox="0 0 12 12" width="11" height="11">
+          <path d="M7.5 1v3.5H11M4.5 11V7.5H1" fill="none" stroke="currentColor" />
+          <path d="M11 1L7.5 4.5M1 11l3.5-3.5" stroke="currentColor" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 12 12" width="11" height="11">
+          <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" />
+          <path d="M1 1l3.5 3.5M11 11l-3.5-3.5" stroke="currentColor" />
+        </svg>
+      {/if}
+    </button>
   </div>
 </div>
 
@@ -258,6 +274,17 @@
     pointer-events: none;
     box-sizing: border-box;
     z-index: 8;
+    transition:
+      left 140ms ease,
+      top 140ms ease,
+      width 140ms ease,
+      height 140ms ease;
+  }
+
+  /* Suppressed during a divider drag (SplitView's startDrag toggles this
+     body class) — same reasoning as .session-slot's identical rule. */
+  :global(body.termini-dragging-divider) .tile-chrome {
+    transition: none;
   }
 
   .tile-tabstrip {
