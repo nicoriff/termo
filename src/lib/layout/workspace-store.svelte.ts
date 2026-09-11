@@ -1,5 +1,6 @@
 import {
   collectTiles,
+  computeLayout,
   countSessions,
   makeSession,
   makeTile,
@@ -11,6 +12,7 @@ import {
   type SplitNode,
   type TileNode,
 } from "./split-tree";
+import { findTileInDirection, type NavDirection } from "./spatial-nav";
 
 class WorkspaceStore {
   // Starts empty and is populated once by initRoot() after the persisted
@@ -20,6 +22,8 @@ class WorkspaceStore {
   root = $state<SplitNode | null>(null);
   focusedTileId = $state<string | null>(null);
   zoomedTileId = $state<string | null>(null);
+  overviewOpen = $state(false);
+  overviewSelectedTileId = $state<string | null>(null);
 
   initRoot(shellPath?: string, shellArgs?: string[], title = "Shell"): void {
     if (this.root) return;
@@ -116,6 +120,41 @@ class WorkspaceStore {
   /** Alt+Down: always restores, regardless of what's currently zoomed. */
   unzoom(): void {
     this.zoomedTileId = null;
+  }
+
+  /** Ctrl+Alt (keydown): shows the tile overview map, preselecting whatever
+   * tile currently has focus. No-op with no tiles or if already open. */
+  openOverview(): void {
+    if (!this.root || this.overviewOpen) return;
+    const tiles = collectTiles(this.root);
+    this.overviewSelectedTileId = this.focusedTileId ?? tiles[0]?.id ?? null;
+    this.overviewOpen = true;
+  }
+
+  /** Arrow keys / hover while the overview is open: moves the selection
+   * toward the nearest tile in that direction, using the tree's real split
+   * layout (never the floating zoom rect) so the map always matches the
+   * on-screen tile arrangement. No-op if there's no tile that way. */
+  moveOverviewSelection(direction: NavDirection): void {
+    if (!this.root || !this.overviewSelectedTileId) return;
+    const next = findTileInDirection(computeLayout(this.root), this.overviewSelectedTileId, direction);
+    if (next) this.overviewSelectedTileId = next;
+  }
+
+  setOverviewSelection(tileId: string): void {
+    this.overviewSelectedTileId = tileId;
+  }
+
+  /** Ctrl/Alt released, Enter, or click: commits the selection as focus and
+   * closes the overview. */
+  confirmOverview(): void {
+    if (this.overviewSelectedTileId) this.focusTile(this.overviewSelectedTileId);
+    this.overviewOpen = false;
+  }
+
+  /** Escape, blur, or click outside a tile: closes without changing focus. */
+  cancelOverview(): void {
+    this.overviewOpen = false;
   }
 
   updateSplitRatio(splitId: string, ratio: number): void {
