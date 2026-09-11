@@ -57,16 +57,20 @@ export class TerminalInstance {
       if (this.sessionId) void writePty(this.sessionId, data);
     });
 
-    // Reserve Alt+Up/Down for the tile-zoom shortcut, ahead of xterm's own
-    // key handling — some shells bind Alt+arrows to something else (e.g.
-    // word navigation), so this has to intercept before xterm forwards the
-    // keystroke to the PTY, not react to it after the fact via a window
-    // listener. Every TerminalInstance registers this same handler; it's
-    // fine that all of them resolve through the same global focusedTileId,
-    // since the terminal actually receiving keystrokes is already (in
-    // practice) the one belonging to the focused tile.
+    // Reserve Alt+Up/Down (tile zoom), Ctrl+Tab/Ctrl+Shift+Tab (cycle tabs),
+    // and Ctrl+T (new tab) ahead of xterm's own key handling — some
+    // shells/apps bind these to something else (e.g. Alt+arrows for word
+    // navigation, Ctrl+T for transpose-chars in bash/zsh's readline), so
+    // this has to intercept before xterm forwards the keystroke to the PTY,
+    // not react to it after the fact via a window listener. Every
+    // TerminalInstance registers this same handler; it's fine that all of
+    // them resolve through the same global focusedTileId, since the
+    // terminal actually receiving keystrokes is already (in practice) the
+    // one belonging to the focused tile.
     this.term.attachCustomKeyEventHandler((event) => {
-      if (event.type === "keydown" && event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      if (event.type !== "keydown") return true;
+
+      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
         if (event.key === "ArrowUp") {
           workspaceStore.zoomFocused();
@@ -75,6 +79,19 @@ export class TerminalInstance {
         }
         return false;
       }
+
+      if (event.ctrlKey && event.key === "Tab") {
+        event.preventDefault();
+        workspaceStore.cycleTab(event.shiftKey ? -1 : 1);
+        return false;
+      }
+
+      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        workspaceStore.newTabLikeFocused();
+        return false;
+      }
+
       return true;
     });
   }

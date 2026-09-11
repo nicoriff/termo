@@ -83,7 +83,7 @@
         <Terminal
           shellPath={loc.session.shellPath}
           shellArgs={loc.session.shellArgs}
-          zoomed={workspaceStore.zoomedTileId === loc.tileId &&
+          active={workspaceStore.focusedTileId === loc.tileId &&
             tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
         />
       </div>

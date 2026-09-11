@@ -7,8 +7,8 @@
   let {
     shellPath = undefined,
     shellArgs = undefined,
-    zoomed = false,
-  }: { shellPath?: string; shellArgs?: string[]; zoomed?: boolean } = $props();
+    active = false,
+  }: { shellPath?: string; shellArgs?: string[]; active?: boolean } = $props();
 
   let container: HTMLDivElement;
   let instance: TerminalInstance | null = null;
@@ -30,12 +30,13 @@
     });
   });
 
-  // Zooming via the button or Alt+Up doesn't click inside the terminal, so
-  // without this the keyboard focus wouldn't follow — you'd have to click
-  // the enlarged pane before typing. Isolated from the theme effect above
-  // so it only reruns when `zoomed` itself changes.
+  // Becoming the active tab of the focused tile never clicks inside the
+  // terminal itself (switching via a tab click, Ctrl+Tab/Ctrl+Shift+Tab, or
+  // zooming), so without this the keyboard focus wouldn't follow — input
+  // would go nowhere until you clicked the pane. Isolated from the theme
+  // effect above so it only reruns when `active` itself changes.
   $effect(() => {
-    if (zoomed) instance?.focus();
+    if (active) instance?.focus();
   });
 
   onDestroy(() => {
