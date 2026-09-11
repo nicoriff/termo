@@ -40,6 +40,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="titlebar" data-tauri-drag-region ondblclick={handleDoubleClick}>
   <div class="titlebar-brand" data-tauri-drag-region>
+    <img class="titlebar-icon" src="/app-icon.png" alt="" />
     <span class="titlebar-title">Termini</span>
   </div>
 
@@ -115,8 +116,14 @@
   .titlebar-brand {
     display: flex;
     align-items: center;
+    gap: 8px;
     padding: 0 12px;
     opacity: 0.85;
+  }
+
+  .titlebar-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .titlebar-title {
