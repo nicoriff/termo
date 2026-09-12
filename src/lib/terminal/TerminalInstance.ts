@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { isMac } from "../core/platform";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
@@ -57,20 +58,27 @@ export class TerminalInstance {
       if (this.sessionId) void writePty(this.sessionId, data);
     });
 
-    // Reserve Alt+Up/Down (tile zoom), Ctrl+Tab/Ctrl+Shift+Tab (cycle tabs),
-    // and Ctrl+T (new tab) ahead of xterm's own key handling — some
-    // shells/apps bind these to something else (e.g. Alt+arrows for word
-    // navigation, Ctrl+T for transpose-chars in bash/zsh's readline), so
-    // this has to intercept before xterm forwards the keystroke to the PTY,
-    // not react to it after the fact via a window listener. Every
-    // TerminalInstance registers this same handler; it's fine that all of
-    // them resolve through the same global focusedTileId, since the
-    // terminal actually receiving keystrokes is already (in practice) the
-    // one belonging to the focused tile.
+    // Reserve tile zoom, tab cycling and new-tab ahead of xterm's own key
+    // handling — some shells/apps bind these to something else, so this has
+    // to intercept before xterm forwards the keystroke to the PTY, not react
+    // to it after the fact via a window listener. Every TerminalInstance
+    // registers this same handler; it's fine that all of them resolve
+    // through the same global focusedTileId, since the terminal actually
+    // receiving keystrokes is already (in practice) the one belonging to the
+    // focused tile.
+    //
+    // The chords differ on macOS because two modifiers there already belong
+    // to someone else: Ctrl carries the shell's control characters, and
+    // Option is its Meta key (Option+arrows is word navigation in zsh), so
+    // the platform convention of routing app commands through Cmd isn't just
+    // cosmetic — it's what keeps those keys reaching the shell. Ctrl+Tab is
+    // the exception kept identical everywhere: Tab isn't a control-character
+    // chord, and macOS apps use Ctrl+Tab for this too.
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
-      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      const zoomHeld = isMac ? event.metaKey : event.altKey;
+      if (zoomHeld && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
         if (event.key === "ArrowUp") {
           workspaceStore.zoomFocused();
@@ -86,7 +94,10 @@ export class TerminalInstance {
         return false;
       }
 
-      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === "t") {
+      // The !altKey guard keeps the tile-overview chord (Ctrl+Alt, which
+      // stays Ctrl-based on every platform) from also opening a tab.
+      const newTabHeld = isMac ? event.metaKey : event.ctrlKey && !event.altKey;
+      if (newTabHeld && event.key.toLowerCase() === "t") {
         event.preventDefault();
         workspaceStore.newTabLikeFocused();
         return false;
