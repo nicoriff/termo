@@ -27,7 +27,6 @@
           role="button"
           tabindex="0"
           onpointerenter={() => workspaceStore.setOverviewSelection(tile.id)}
-          onpointermove={() => workspaceStore.setOverviewSelection(tile.id)}
           onclick={() => workspaceStore.confirmOverview()}
           onkeydown={(e) => {
             if (e.key === "Enter" || e.key === " ") workspaceStore.confirmOverview();

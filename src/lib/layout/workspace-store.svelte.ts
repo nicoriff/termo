@@ -124,6 +124,19 @@ class WorkspaceStore {
     this.zoomedTileId = null;
   }
 
+  // Guards hover from overwriting an arrow-key selection. The mouse doesn't
+  // move when the user navigates by keyboard, but releasing Ctrl/Alt means
+  // taking a hand off the keyboard — that near-universally causes a tiny,
+  // unintentional pointer jitter still inside whatever tile the mouse
+  // happened to be sitting over (usually the ORIGINAL tile, not the one
+  // just picked with arrows), which fires a real pointerenter/pointermove
+  // and would silently reassign the selection back to it right before
+  // confirming. Armed by default (mouse-only use should feel unchanged);
+  // disarmed on every arrow press, and the next hover event is swallowed
+  // once (assumed to be that jitter) rather than acted on, then re-armed so
+  // a genuine subsequent mouse move still works normally.
+  private overviewHoverArmed = true;
+
   /** Ctrl+Alt (keydown): shows the tile overview map, preselecting whatever
    * tile currently has focus. No-op with no tiles or if already open. */
   openOverview(): void {
@@ -131,6 +144,7 @@ class WorkspaceStore {
     const tiles = collectTiles(this.root);
     this.overviewSelectedTileId = this.focusedTileId ?? tiles[0]?.id ?? null;
     this.overviewOpen = true;
+    this.overviewHoverArmed = true;
   }
 
   /** Arrow keys / hover while the overview is open: moves the selection
@@ -141,9 +155,14 @@ class WorkspaceStore {
     if (!this.root || !this.overviewSelectedTileId) return;
     const next = findTileInDirection(computeLayout(this.root), this.overviewSelectedTileId, direction);
     if (next) this.overviewSelectedTileId = next;
+    this.overviewHoverArmed = false;
   }
 
   setOverviewSelection(tileId: string): void {
+    if (!this.overviewHoverArmed) {
+      this.overviewHoverArmed = true;
+      return;
+    }
     this.overviewSelectedTileId = tileId;
   }
 

@@ -120,11 +120,27 @@
       workspaceStore.confirmOverview();
     }
   }
+
+  // Backstop for the keyup above: WebKit can swallow a modifier-only keyup
+  // while a <textarea> has focus, which is exactly xterm.js's hidden input
+  // — the same class of bug already worked around for Cmd elsewhere in this
+  // app. Without this, releasing Ctrl/Alt over the overview silently does
+  // nothing and only an explicit Enter (a real keydown, never dropped)
+  // confirms the selection. Picking a tile is inherently a mouse-moving
+  // gesture, so checking live modifier state on every pointer move catches
+  // the release just as fast as a real keyup would, without replacing it.
+  function handleOverviewPointerMove(event: PointerEvent) {
+    if (!workspaceStore.overviewOpen) return;
+    if (!event.getModifierState("Control") || !event.getModifierState("Alt")) {
+      workspaceStore.confirmOverview();
+    }
+  }
 </script>
 
 <svelte:window
   onkeydowncapture={handleOverviewKeyDown}
   onkeyupcapture={handleOverviewKeyUp}
+  onpointermove={handleOverviewPointerMove}
   onblur={() => workspaceStore.cancelOverview()}
 />
 
