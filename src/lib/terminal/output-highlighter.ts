@@ -15,6 +15,16 @@ interface HighlightRule {
   key: string;
   colorCode: number;
   pattern: string;
+  /**
+   * Rejects a match whose immediately preceding character matches this —
+   * i.e. a hand-rolled negative lookbehind. Written this way because the
+   * WebKit builds Tauri renders in (WKWebView on macOS, WebKitGTK on Linux)
+   * only gained lookbehind support in Safari 16.4; on anything older
+   * `new RegExp` throws at module scope, which takes the whole app down to
+   * a blank window. Chromium (WebView2 on Windows) has no such limit, so
+   * this only ever failed off-Windows.
+   */
+  notPrecededBy?: RegExp;
 }
 
 const RULES: HighlightRule[] = [
@@ -25,10 +35,15 @@ const RULES: HighlightRule[] = [
     colorCode: 244,
     pattern: String.raw`\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\b\d{1,2}:\d{2}:\d{2}\b`,
   },
+  { key: "winPath", colorCode: 176, pattern: String.raw`[A-Za-z]:\\[^\s"'<>|]+` },
   {
-    key: "path",
+    // Absolute POSIX paths only: the preceding-character check keeps the
+    // tail of a relative path (`src/lib/foo`) or of something URL-shaped
+    // from lighting up as a path of its own.
+    key: "unixPath",
     colorCode: 176,
-    pattern: String.raw`[A-Za-z]:\\[^\s"'<>|]+|(?<![\w./])\/[\w.\-]+(?:\/[\w.\-]+)+`,
+    pattern: String.raw`\/[\w.\-]+(?:\/[\w.\-]+)+`,
+    notPrecededBy: /[\w./]/,
   },
   { key: "size", colorCode: 222, pattern: String.raw`\b\d+(?:\.\d+)?\s?(?:B|KB|MB|GB|TB|%)\b` },
   { key: "error", colorCode: 203, pattern: String.raw`\b(?:error|fail(?:ed)?|fatal|exception)\b` },
@@ -50,6 +65,9 @@ function colorizePlainText(text: string): string {
   for (const match of text.matchAll(COMBINED_PATTERN)) {
     const rule = RULES.find((r) => match.groups?.[r.key] !== undefined);
     if (!rule || match.index === undefined) continue;
+    if (rule.notPrecededBy && match.index > 0 && rule.notPrecededBy.test(text[match.index - 1])) {
+      continue;
+    }
     result += text.slice(lastIndex, match.index);
     result += `\x1b[38;5;${rule.colorCode}m${match[0]}\x1b[39m`;
     lastIndex = match.index + match[0].length;

@@ -8,6 +8,16 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [sveltekit()],
 
+  build: {
+    // Tauri renders in the OS webview rather than an evergreen browser:
+    // WebView2 (Chromium) on Windows, but WKWebView on macOS and WebKitGTK
+    // on Linux, either of which can be years behind — a Monterey machine
+    // here runs the Safari 15.6 engine. Pinning the target makes the output
+    // parseable there by construction instead of depending on whatever
+    // Vite's rolling default happens to allow.
+    target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
