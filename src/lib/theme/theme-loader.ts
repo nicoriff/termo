@@ -45,7 +45,9 @@ export function applyThemeToDocument(theme: Theme, opacity = 1): void {
   root.setProperty("--divider-bg", theme.ui.border);
   root.setProperty("--divider-hover-bg", theme.ui.accent);
 
-  const terminalBg = hexToRgba(theme.colors.background, opacity);
-  root.setProperty("--terminal-bg", terminalBg);
-  document.body.style.background = terminalBg;
+  // Deliberately only a variable, never a background on <body>: the rounded
+  // window corners are a border-radius on .window-chrome, and anything
+  // painted on an ancestor of it fills those corners back in as a square.
+  // Windows hid that because SetWindowRgn clips the HWND itself.
+  root.setProperty("--terminal-bg", hexToRgba(theme.colors.background, opacity));
 }

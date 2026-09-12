@@ -178,6 +178,7 @@
     flex-direction: column;
     width: 100vw;
     height: 100vh;
+    background: var(--terminal-bg, transparent);
     border-radius: 10px;
     overflow: hidden;
   }
