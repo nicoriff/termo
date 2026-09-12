@@ -5,6 +5,8 @@
   import SplitView from "$lib/layout/SplitView.svelte";
   import SettingsPanel from "$lib/settings/SettingsPanel.svelte";
   import TileOverviewMap from "$lib/layout/TileOverviewMap.svelte";
+  import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
+  import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -129,6 +131,9 @@
 <div class="window-chrome" class:maximized={uiState.maximized}>
   <ResizeBorders />
   <TitleBar />
+  {#if appConfigStore.aiModeEnabled}
+    <AiModePanel />
+  {/if}
   <main class="content">
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
@@ -140,6 +145,7 @@
       <TileOverviewMap />
     {/if}
   </main>
+  <StatusBar />
 </div>
 
 <style>

@@ -9,6 +9,8 @@ export interface SpawnOptions {
   rows: number;
   onData: (bytes: Uint8Array) => void;
   onExit: (code: number) => void;
+  /** Unix only — never fires on Windows (see PtyEvent::ForegroundProcess). */
+  onForegroundProcess?: (path: string | null) => void;
 }
 
 export async function spawnPty(opts: SpawnOptions): Promise<string> {
@@ -16,8 +18,10 @@ export async function spawnPty(opts: SpawnOptions): Promise<string> {
   channel.onmessage = (event) => {
     if (event.type === "data") {
       opts.onData(base64ToBytes(event.data));
-    } else {
+    } else if (event.type === "exit") {
       opts.onExit(event.code);
+    } else {
+      opts.onForegroundProcess?.(event.path);
     }
   };
 

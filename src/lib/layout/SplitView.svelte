@@ -81,6 +81,7 @@
         onpointerdown={() => workspaceStore.focusTile(loc.tileId)}
       >
         <Terminal
+          sessionId={loc.session.id}
           shellPath={loc.session.shellPath}
           shellArgs={loc.session.shellArgs}
           active={workspaceStore.focusedTileId === loc.tileId &&

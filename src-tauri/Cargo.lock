@@ -3837,6 +3837,7 @@ dependencies = [
  "base64 0.22.1",
  "dashmap",
  "dirs",
+ "libc",
  "portable-pty",
  "serde",
  "serde_json",

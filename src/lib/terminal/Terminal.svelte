@@ -5,17 +5,21 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
 
   let {
+    sessionId,
     shellPath = undefined,
     shellArgs = undefined,
     active = false,
-  }: { shellPath?: string; shellArgs?: string[]; active?: boolean } = $props();
+  }: { sessionId: string; shellPath?: string; shellArgs?: string[]; active?: boolean } = $props();
 
   let container: HTMLDivElement;
   let instance: TerminalInstance | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
   onMount(() => {
-    instance = new TerminalInstance();
+    // This is the SessionTab id (the tab's identity in workspace-store),
+    // not the PTY id spawnPty() hands back later — Modo IA's status store
+    // is keyed by the former since that's what TileChrome looks up by.
+    instance = new TerminalInstance(sessionId);
     void instance.mount(container, shellPath, shellArgs);
 
     resizeObserver = new ResizeObserver(() => instance?.resize());

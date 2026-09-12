@@ -35,6 +35,10 @@ pub struct AppConfig {
     /// (Tab completes, Tab,Tab opens a navigable menu) injected at startup.
     /// Left off by default since it changes shell startup behavior.
     pub psreadline_menu_complete: bool,
+    /// Opt-in: tracks Claude Code/Codex session state (running/awaiting/
+    /// error/finished) via terminal screen-buffer pattern matching, shown
+    /// in a top panel, per-tab status dots, and the app status bar.
+    pub ai_mode_enabled: bool,
     pub window: WindowConfig,
 }
 
@@ -49,6 +53,7 @@ impl Default for AppConfig {
             background_opacity: 100,
             output_highlighting: true,
             psreadline_menu_complete: false,
+            ai_mode_enabled: false,
             window: WindowConfig::default(),
         }
     }

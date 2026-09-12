@@ -6,6 +6,7 @@ import { injectFontFace } from "../theme/google-fonts";
 class AppConfigStore {
   defaultShellId = $state<string | null>(null);
   psreadlineMenuComplete = $state(false);
+  aiModeEnabled = $state(false);
   loaded = $state(false);
 
   private windowWidth = 1000;
@@ -17,6 +18,7 @@ class AppConfigStore {
 
     this.defaultShellId = config.default_shell_id;
     this.psreadlineMenuComplete = config.psreadline_menu_complete;
+    this.aiModeEnabled = config.ai_mode_enabled;
     this.installedFontPath = config.installed_font_path;
     themeStore.setTheme(config.theme);
     themeStore.setFontSize(config.font_size_override);
@@ -50,6 +52,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setAiModeEnabled(enabled: boolean): void {
+    this.aiModeEnabled = enabled;
+    void this.persist();
+  }
+
   /** Records that `family` was downloaded to `localPath` so it can be
    * restored offline on the next launch. Pass localPath = null when the
    * user switches to a plain system font instead of a Google Font. */
@@ -72,6 +79,7 @@ class AppConfigStore {
       theme: themeStore.current.name,
       default_shell_id: this.defaultShellId,
       psreadline_menu_complete: this.psreadlineMenuComplete,
+      ai_mode_enabled: this.aiModeEnabled,
       font_size_override: themeStore.fontSizeOverride,
       font_family_override: themeStore.fontFamilyOverride,
       installed_font_path: this.installedFontPath,

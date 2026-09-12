@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -10,9 +11,12 @@ use super::PtyEvent;
 
 pub struct PtySession {
     pub id: Uuid,
-    master: Mutex<Box<dyn MasterPty + Send>>,
+    master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Mutex<Box<dyn Write + Send>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    // Stops the foreground-process poller thread (see spawn()) once the
+    // session is killed — otherwise it would keep polling a dead PTY forever.
+    stop: Arc<AtomicBool>,
 }
 
 impl PtySession {
@@ -80,7 +84,14 @@ impl PtySession {
         let writer = pair.master.take_writer()?;
         let id = Uuid::new_v4();
         let child = Arc::new(Mutex::new(child));
+        let master_arc: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(pair.master));
+        let stop = Arc::new(AtomicBool::new(false));
 
+        // Cloned before the move below consumes `channel` — Channel<T> is a
+        // cheap Clone (it's just a dispatcher handle), so both threads can
+        // hold their own independent copy.
+        #[cfg(unix)]
+        let poll_channel = channel.clone();
         let reader_channel = channel;
         let reader_child = Arc::clone(&child);
         std::thread::spawn(move || {
@@ -109,11 +120,42 @@ impl PtySession {
             let _ = reader_channel.send(PtyEvent::Exit { code });
         });
 
+        // Confirming signal for Modo IA's tool detection: which process is
+        // currently in the foreground of this PTY. A dedicated thread rather
+        // than piggybacking on the reader thread above, since that one is
+        // parked in a *blocking* read() and won't wake up while the session
+        // sits idle with no new output — e.g. Claude Code waiting on a
+        // permission prompt writes nothing further until the user responds,
+        // which is exactly when this signal matters most.
+        #[cfg(unix)]
+        {
+            let poll_master = Arc::clone(&master_arc);
+            let poll_stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let mut last_path: Option<String> = None;
+                while !poll_stop.load(Ordering::Relaxed) {
+                    let path = poll_master
+                        .lock()
+                        .unwrap()
+                        .process_group_leader()
+                        .and_then(super::foreground::process_path);
+                    if path != last_path {
+                        last_path = path.clone();
+                        if poll_channel.send(PtyEvent::ForegroundProcess { path }).is_err() {
+                            break;
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
+            });
+        }
+
         Ok(Self {
             id,
-            master: Mutex::new(pair.master),
+            master: master_arc,
             writer: Mutex::new(writer),
             child,
+            stop,
         })
     }
 
@@ -135,6 +177,7 @@ impl PtySession {
     }
 
     pub fn kill(&self) -> anyhow::Result<()> {
+        self.stop.store(true, Ordering::Relaxed);
         self.child.lock().unwrap().kill()?;
         Ok(())
     }

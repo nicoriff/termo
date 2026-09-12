@@ -1,10 +1,30 @@
 <script lang="ts">
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+  import type { AiSessionStatus } from "$lib/ai-mode/classifier";
   import { workspaceStore } from "./workspace-store.svelte";
   import { listShells } from "$lib/core/pty-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { resolveShellArgs } from "$lib/core/shell-args";
+  import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
   import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
+
+  // No CSS custom properties exist for the ANSI palette (theme-loader.ts
+  // only exposes chrome colors like --titlebar-bg) — read straight from the
+  // active theme instead, same convention SettingsPanel's swatch dots use.
+  function aiDotColor(status: AiSessionStatus): string {
+    const colors = themeStore.current.colors;
+    switch (status) {
+      case "running":
+        return colors.blue;
+      case "awaiting":
+        return colors.yellow;
+      case "error":
+        return colors.red;
+      case "finished":
+        return colors.green;
+    }
+  }
 
   let { tile, rect, insets }: { tile: TileNode; rect: PaneRect; insets: PaneInsets } = $props();
 
@@ -168,6 +188,7 @@
 >
   <div class="tile-tabstrip" data-tile-id={tile.id}>
     {#each tile.sessions as session (session.id)}
+      {@const aiStatus = aiStatusStore.byId[session.id]}
       <div
         class="tile-tab"
         class:active={tile.activeSessionId === session.id}
@@ -180,6 +201,9 @@
           if (e.key === "Enter" || e.key === " ") workspaceStore.setActiveSession(tile.id, session.id);
         }}
       >
+        {#if aiStatus?.tool && aiStatus.status}
+          <span class="tile-tab-ai-dot" style="background:{aiDotColor(aiStatus.status)}"></span>
+        {/if}
         <span class="tile-tab-title">{session.title}</span>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span
@@ -350,6 +374,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
+  }
+
+  .tile-tab-ai-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .tile-tab-close {

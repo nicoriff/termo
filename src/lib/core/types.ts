@@ -1,4 +1,7 @@
-export type PtyEvent = { type: "data"; data: string } | { type: "exit"; code: number };
+export type PtyEvent =
+  | { type: "data"; data: string }
+  | { type: "exit"; code: number }
+  | { type: "foreground_process"; path: string | null };
 
 export interface ShellInfo {
   id: string;
@@ -21,5 +24,6 @@ export interface AppConfig {
   background_opacity: number;
   output_highlighting: boolean;
   psreadline_menu_complete: boolean;
+  ai_mode_enabled: boolean;
   window: WindowConfig;
 }

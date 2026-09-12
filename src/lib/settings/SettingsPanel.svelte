@@ -102,6 +102,21 @@
     </section>
 
     <section>
+      <h3>Modo IA</h3>
+      <label class="toggle-row">
+        <span>Detectar estado de Claude Code / Codex en las pestañas</span>
+        <input
+          type="checkbox"
+          checked={appConfigStore.aiModeEnabled}
+          onchange={(e) => appConfigStore.setAiModeEnabled(e.currentTarget.checked)}
+        />
+      </label>
+      <p class="setting-hint">
+        Muestra un panel con conteos, un punto de estado por pestaña y el modo actual en la barra de estado.
+      </p>
+    </section>
+
+    <section>
       <h3>PowerShell</h3>
       <label class="toggle-row">
         <span>Menú de autocompletado (Tab, Tab)</span>

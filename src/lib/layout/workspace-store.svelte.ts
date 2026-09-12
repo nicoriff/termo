@@ -1,3 +1,4 @@
+import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import {
   collectTiles,
   computeLayout,
@@ -70,6 +71,7 @@ class WorkspaceStore {
     if (updated) {
       this.root = updated;
       if (tileVanishes && this.zoomedTileId === tileId) this.zoomedTileId = null;
+      aiStatusStore.remove(sessionId);
     }
   }
 

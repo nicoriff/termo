@@ -39,6 +39,12 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Shell",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+# Already resolved transitively via portable-pty, so declaring it directly
+# for the Modo IA foreground-process lookup (pty/foreground.rs) adds no new
+# crate to the dependency graph.
+libc = "0.2"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
