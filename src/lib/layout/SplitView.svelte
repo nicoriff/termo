@@ -103,7 +103,9 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="divider {divider.direction}"
-        style="left:{divider.left * 100}%; top:{divider.top * 100}%"
+        style={divider.direction === "row"
+          ? `left:${divider.left * 100}%; top:${divider.regionTop * 100}%; height:${divider.regionHeight * 100}%`
+          : `left:${divider.regionLeft * 100}%; top:${divider.top * 100}%; width:${divider.regionWidth * 100}%`}
         onpointerdown={startDrag(divider)}
       ></div>
     {/each}
@@ -184,17 +186,16 @@
     background: var(--divider-bg, #2a2a2a);
   }
 
+  /* Length comes from the inline style: each divider spans only its own
+     split region, not the whole container — a nested divider sized to 100%
+     would cut straight through the neighboring tiles. */
   .divider.row {
-    top: 0;
-    height: 100%;
     width: 4px;
     margin-left: -2px;
     cursor: col-resize;
   }
 
   .divider.col {
-    left: 0;
-    width: 100%;
     height: 4px;
     margin-top: -2px;
     cursor: row-resize;
