@@ -132,6 +132,20 @@ describe("getDefaultKeybinding / resolveKeybinding", () => {
   });
 });
 
+describe("Modo IA list shortcuts", () => {
+  it("default to Cmd+1..4 on mac and Ctrl+1..4 elsewhere", () => {
+    expect(getDefaultKeybinding("aiRunning", true)).toBe("meta+1");
+    expect(getDefaultKeybinding("aiFinished", false)).toBe("ctrl+4");
+    expect(formatKeybindingLabel("meta+2", true)).toBe("⌘2");
+    expect(formatKeybindingLabel("ctrl+3", false)).toBe("Ctrl+3");
+  });
+
+  it("match only the exact chord", () => {
+    expect(eventMatchesKeybinding(key({ key: "1", ctrlKey: true }), "ctrl+1")).toBe(true);
+    expect(eventMatchesKeybinding(key({ key: "1", ctrlKey: true, shiftKey: true }), "ctrl+1")).toBe(false);
+  });
+});
+
 describe("findConflict", () => {
   it("finds another action already bound to the same combo", () => {
     const overrides = { cycleTab: "meta+t" };

@@ -22,6 +22,14 @@ export interface ShortcutsConfig {
   cycle_tab_other: string | null;
   zoom_tile_mac: string | null;
   zoom_tile_other: string | null;
+  ai_running_mac: string | null;
+  ai_running_other: string | null;
+  ai_awaiting_mac: string | null;
+  ai_awaiting_other: string | null;
+  ai_error_mac: string | null;
+  ai_error_other: string | null;
+  ai_finished_mac: string | null;
+  ai_finished_other: string | null;
 }
 
 export interface AppConfig {

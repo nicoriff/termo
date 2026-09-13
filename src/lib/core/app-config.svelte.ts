@@ -5,7 +5,7 @@ import { getWindowSize, setWindowSize } from "./window-client";
 import { themeStore } from "../theme/theme-store.svelte";
 import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
-import { resolveKeybinding, type ShortcutAction } from "./shortcuts";
+import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
 import type { AppConfig, ShortcutsConfig } from "./types";
 
 const EMPTY_SHORTCUTS: ShortcutsConfig = {
@@ -15,12 +15,24 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   cycle_tab_other: null,
   zoom_tile_mac: null,
   zoom_tile_other: null,
+  ai_running_mac: null,
+  ai_running_other: null,
+  ai_awaiting_mac: null,
+  ai_awaiting_other: null,
+  ai_error_mac: null,
+  ai_error_other: null,
+  ai_finished_mac: null,
+  ai_finished_other: null,
 };
 
 const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; other: keyof ShortcutsConfig }> = {
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
   zoomTile: { mac: "zoom_tile_mac", other: "zoom_tile_other" },
+  aiRunning: { mac: "ai_running_mac", other: "ai_running_other" },
+  aiAwaiting: { mac: "ai_awaiting_mac", other: "ai_awaiting_other" },
+  aiError: { mac: "ai_error_mac", other: "ai_error_other" },
+  aiFinished: { mac: "ai_finished_mac", other: "ai_finished_other" },
 };
 
 interface InitOptions {
@@ -155,11 +167,7 @@ class AppConfigStore {
   /** Every action's current override, keyed by action — what `findConflict`
    * needs to check a candidate binding against all the *other* shortcuts. */
   get allShortcutOverrides(): Partial<Record<ShortcutAction, string | null>> {
-    return {
-      newTab: this.getShortcutOverride("newTab"),
-      cycleTab: this.getShortcutOverride("cycleTab"),
-      zoomTile: this.getShortcutOverride("zoomTile"),
-    };
+    return Object.fromEntries(SHORTCUT_ACTIONS.map((action) => [action, this.getShortcutOverride(action)]));
   }
 
   setShortcutOverride(action: ShortcutAction, binding: string | null): void {

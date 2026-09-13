@@ -31,6 +31,14 @@ pub struct ShortcutsConfig {
     pub cycle_tab_other: Option<String>,
     pub zoom_tile_mac: Option<String>,
     pub zoom_tile_other: Option<String>,
+    pub ai_running_mac: Option<String>,
+    pub ai_running_other: Option<String>,
+    pub ai_awaiting_mac: Option<String>,
+    pub ai_awaiting_other: Option<String>,
+    pub ai_error_mac: Option<String>,
+    pub ai_error_other: Option<String>,
+    pub ai_finished_mac: Option<String>,
+    pub ai_finished_other: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

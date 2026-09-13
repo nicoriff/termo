@@ -16,14 +16,33 @@
  * fired is read straight off the event by the caller, not decided here.
  */
 
-export type ShortcutAction = "newTab" | "cycleTab" | "zoomTile";
+export type ShortcutAction =
+  | "newTab"
+  | "cycleTab"
+  | "zoomTile"
+  | "aiRunning"
+  | "aiAwaiting"
+  | "aiError"
+  | "aiFinished";
 
-export const SHORTCUT_ACTIONS: ShortcutAction[] = ["newTab", "cycleTab", "zoomTile"];
+export const SHORTCUT_ACTIONS: ShortcutAction[] = [
+  "newTab",
+  "cycleTab",
+  "zoomTile",
+  "aiRunning",
+  "aiAwaiting",
+  "aiError",
+  "aiFinished",
+];
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   newTab: "Nueva pestaña",
   cycleTab: "Ciclar pestañas",
   zoomTile: "Zoom / restaurar tile",
+  aiRunning: "Modo IA: Corriendo",
+  aiAwaiting: "Modo IA: Esperando",
+  aiError: "Modo IA: Error",
+  aiFinished: "Modo IA: Listo",
 };
 
 export type ModifierName = "alt" | "ctrl" | "meta" | "shift";
@@ -146,6 +165,10 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   newTab: { mac: "meta+t", other: "ctrl+t" },
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
+  aiRunning: { mac: "meta+1", other: "ctrl+1" },
+  aiAwaiting: { mac: "meta+2", other: "ctrl+2" },
+  aiError: { mac: "meta+3", other: "ctrl+3" },
+  aiFinished: { mac: "meta+4", other: "ctrl+4" },
 };
 
 export function getDefaultKeybinding(action: ShortcutAction, isMacPlatform: boolean): string {

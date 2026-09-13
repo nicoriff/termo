@@ -83,6 +83,18 @@ class WorkspaceStore {
     this.focusedTileId = tileId;
   }
 
+  /** Activates a tab wherever it lives and brings its tile forward — zoomed
+   * when it shares the window with other tiles (a lone tile is already in
+   * front, and zooming it would only shrink it). */
+  focusSession(sessionId: string): void {
+    if (!this.root) return;
+    const tiles = collectTiles(this.root);
+    const tile = tiles.find((t) => t.sessions.some((s) => s.id === sessionId));
+    if (!tile) return;
+    this.setActiveSession(tile.id, sessionId);
+    this.zoomedTileId = tiles.length > 1 ? tile.id : null;
+  }
+
   /** Ctrl+Tab / Ctrl+Shift+Tab: cycle the active tab within the focused
    * tile, wrapping around at either end. No-op with 0-1 tabs or no focus. */
   cycleTab(direction: 1 | -1): void {

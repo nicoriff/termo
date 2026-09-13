@@ -1,12 +1,18 @@
 import type { AiSessionStatus, ClassifyResult } from "./classifier";
 
+export interface AiSessionEntry extends ClassifyResult {
+  /** When `status` last changed (ms since epoch). */
+  since: number;
+}
+
 class AiStatusStore {
-  byId = $state<Record<string, ClassifyResult>>({});
+  byId = $state<Record<string, AiSessionEntry>>({});
 
   set(sessionId: string, result: ClassifyResult): void {
     const prev = this.byId[sessionId];
     if (prev?.tool === result.tool && prev?.status === result.status) return;
-    this.byId = { ...this.byId, [sessionId]: result };
+    const since = prev && prev.status === result.status ? prev.since : Date.now();
+    this.byId = { ...this.byId, [sessionId]: { ...result, since } };
   }
 
   remove(sessionId: string): void {
@@ -22,6 +28,14 @@ class AiStatusStore {
       if (r.status) counts[r.status]++;
     }
     return counts;
+  }
+
+  /** Sessions currently in `status`, longest-standing first. */
+  entriesWith(status: AiSessionStatus): { sessionId: string; since: number }[] {
+    return Object.entries(this.byId)
+      .filter(([, entry]) => entry.status === status)
+      .map(([sessionId, entry]) => ({ sessionId, since: entry.since }))
+      .sort((a, b) => a.since - b.since);
   }
 }
 
