@@ -11,11 +11,12 @@
 
   type SectionId = "appearance" | "console" | "shortcuts" | "oh-my-posh" | "ai-mode" | "mac" | "windows" | "linux";
 
-  const SECTIONS: { id: SectionId; label: string }[] = [
+  // `child` renders the entry as a subsection of the one above it.
+  const SECTIONS: { id: SectionId; label: string; child?: boolean }[] = [
     { id: "appearance", label: "Apariencia" },
     { id: "console", label: "Consola" },
+    { id: "oh-my-posh", label: "Oh My Posh", child: true },
     { id: "shortcuts", label: "Shortcuts" },
-    { id: "oh-my-posh", label: "Oh My Posh" },
     { id: "ai-mode", label: "IA Mode" },
     { id: "mac", label: "macOS" },
     { id: "windows", label: "Windows" },
@@ -34,7 +35,12 @@
   <div class="body">
     <nav class="sidebar">
       {#each SECTIONS as section (section.id)}
-        <button class="sidebar-item" class:selected={selected === section.id} onclick={() => (selected = section.id)}>
+        <button
+          class="sidebar-item"
+          class:child={section.child}
+          class:selected={selected === section.id}
+          onclick={() => (selected = section.id)}
+        >
           {section.label}
         </button>
       {/each}
@@ -110,6 +116,11 @@
   .sidebar-item.selected {
     background: var(--pane-active-border, #3a6df0);
     color: #fff;
+  }
+
+  .sidebar-item.child {
+    padding-left: 24px;
+    font-size: 11px;
   }
 
   .detail {
