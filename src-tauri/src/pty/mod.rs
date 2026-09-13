@@ -1,10 +1,16 @@
 #[cfg(unix)]
 mod foreground;
+mod bash_colors;
 mod manager;
+mod memory;
+pub mod oh_my_posh;
 mod session;
 mod shell_detect;
+pub mod zsh_init;
 
+pub use bash_colors::bash_color_env;
 pub use manager::PtyManager;
+pub use memory::MemorySampler;
 pub use session::PtySession;
 pub use shell_detect::{default_shell, list_shells, ShellInfo};
 

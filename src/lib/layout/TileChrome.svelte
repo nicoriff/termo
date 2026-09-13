@@ -5,13 +5,15 @@
   import { listShells } from "$lib/core/pty-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { resolveShellArgs } from "$lib/core/shell-args";
+  import { resolveDefaultShell } from "$lib/core/default-shell";
+  import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
   import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
-  // active theme instead, same convention SettingsPanel's swatch dots use.
+  // active theme instead, same convention AppearanceSection's swatch dots use.
   function aiDotColor(status: AiSessionStatus): string {
     const colors = themeStore.current.colors;
     switch (status) {
@@ -77,6 +79,10 @@
     const args = resolveShellArgs(shell.id, shell.args, appConfigStore.psreadlineMenuComplete);
     workspaceStore.addTab(tile.id, shell.path, args, shell.display_name);
     closeShellPicker();
+  }
+
+  async function split(direction: "row" | "col") {
+    workspaceStore.splitTile(tile.id, direction, await resolveDefaultShell());
   }
 
   // Manual pointer-based drag instead of native HTML5 DnD: on Windows, native
@@ -204,7 +210,9 @@
         {#if aiStatus?.tool && aiStatus.status}
           <span class="tile-tab-ai-dot" style="background:{aiDotColor(aiStatus.status)}"></span>
         {/if}
-        <span class="tile-tab-title">{session.title}</span>
+        <span class="tile-tab-title" title={tabTitleStore.titleFor(session.id, session.title)}>
+          {tabTitleStore.titleFor(session.id, session.title)}
+        </span>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span
           class="tile-tab-close"
@@ -250,13 +258,13 @@
   {/if}
 
   <div class="tile-toolbar">
-    <button title="Dividir verticalmente" onclick={() => workspaceStore.splitTile(tile.id, "row")}>
+    <button title="Dividir verticalmente" onclick={() => void split("row")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
         <line x1="6" y1="0.5" x2="6" y2="11.5" stroke="currentColor" />
       </svg>
     </button>
-    <button title="Dividir horizontalmente" onclick={() => workspaceStore.splitTile(tile.id, "col")}>
+    <button title="Dividir horizontalmente" onclick={() => void split("col")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
         <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />

@@ -3,6 +3,7 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { installGoogleFont, injectPreviewStylesheet, listMonospaceGoogleFonts } from "$lib/theme/google-fonts";
+  import { hasNerdFontVersion } from "$lib/theme/nerd-fonts";
 
   let googleFonts = $state<string[]>([]);
   let fontsLoadFailed = $state(false);
@@ -107,7 +108,10 @@
             style="font-family: '{family}'"
             onclick={() => pickFont(family)}
           >
-            {family}
+            <span class="font-picker-name">{family}</span>
+            {#if hasNerdFontVersion(family)}
+              <span class="nerd-font-badge" title="Existe una versión Nerd Font de esta fuente, con íconos">Nerd Font</span>
+            {/if}
           </button>
         {/each}
         {#if filtered.length === 0}
@@ -236,6 +240,23 @@
   }
 
   .font-picker-item.selected {
+    color: var(--pane-active-border, #3a6df0);
+  }
+
+  .font-picker-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .nerd-font-badge {
+    margin-left: auto;
+    padding-left: 8px;
+    flex-shrink: 0;
+    /* The row itself previews its own font; the badge stays in the UI font. */
+    font-family: "Ubuntu", sans-serif;
+    font-size: 10px;
+    font-weight: 500;
     color: var(--pane-active-border, #3a6df0);
   }
 

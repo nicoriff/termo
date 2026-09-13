@@ -4,7 +4,7 @@
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
-  // active theme instead, same convention SettingsPanel's swatch dots use.
+  // active theme instead, same convention AppearanceSection's swatch dots use.
   const colors = $derived(themeStore.current.colors);
 </script>
 

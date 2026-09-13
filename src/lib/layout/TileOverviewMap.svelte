@@ -1,6 +1,7 @@
 <script lang="ts">
   import { collectTiles, computeLayout } from "./split-tree";
   import { workspaceStore } from "./workspace-store.svelte";
+  import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
 
   const root = $derived(workspaceStore.root);
   // Always the real split layout, never the floating zoom rect — the map
@@ -32,7 +33,9 @@
             if (e.key === "Enter" || e.key === " ") workspaceStore.confirmOverview();
           }}
         >
-          <span class="overview-tile-title">{activeSession?.title ?? "Shell"}</span>
+          <span class="overview-tile-title">
+            {activeSession ? tabTitleStore.titleFor(activeSession.id, activeSession.title) : "Shell"}
+          </span>
           {#if tile.sessions.length > 1}
             <span class="overview-tile-badge">{tile.sessions.length}</span>
           {/if}

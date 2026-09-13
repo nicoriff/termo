@@ -138,3 +138,18 @@ pub fn apply(window: &tauri::WebviewWindow) {
 
 #[cfg(not(target_os = "windows"))]
 pub fn apply(_window: &tauri::WebviewWindow) {}
+
+/// Applies this app's rounded-corner shaping to `window` and keeps it
+/// correct across resizes. Shared by every frameless window (main at
+/// startup, and any window opened later such as Preferences) so the two
+/// can't drift out of sync with each other.
+pub fn attach(window: &tauri::WebviewWindow) {
+    remove_nonclient_frame(window);
+    apply(window);
+    let shaped = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Resized(_)) {
+            apply(&shaped);
+        }
+    });
+}

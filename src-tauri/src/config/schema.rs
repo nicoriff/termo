@@ -15,6 +15,24 @@ impl Default for WindowConfig {
     }
 }
 
+/// User-remapped shortcuts, `None` per field meaning "use the built-in
+/// default for that platform" (see `src/lib/core/shortcuts.ts`, which owns
+/// the actual default bindings and matching logic — this struct only
+/// persists overrides). Two buckets per action (`_mac` / `_other`) rather
+/// than three: no shortcut in this app distinguishes Windows from Linux
+/// today, only mac vs. not-mac, so a third bucket would have nothing to
+/// hold.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct ShortcutsConfig {
+    pub new_tab_mac: Option<String>,
+    pub new_tab_other: Option<String>,
+    pub cycle_tab_mac: Option<String>,
+    pub cycle_tab_other: Option<String>,
+    pub zoom_tile_mac: Option<String>,
+    pub zoom_tile_other: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppConfig {
@@ -35,11 +53,24 @@ pub struct AppConfig {
     /// (Tab completes, Tab,Tab opens a navigable menu) injected at startup.
     /// Left off by default since it changes shell startup behavior.
     pub psreadline_menu_complete: bool,
+    /// Opt-in (macOS/Linux): new bash sessions get a colored prompt, colored
+    /// `ls`, and no macOS "default shell is now zsh" notice — see
+    /// pty/bash_colors.rs.
+    pub bash_prompt_colors: bool,
+    /// Opt-in: new PowerShell/zsh/bash 4.2+ sessions get an Oh My Posh
+    /// prompt — see pty/oh_my_posh.rs.
+    pub oh_my_posh_enabled: bool,
+    /// Official Oh My Posh theme name, e.g. "jandedobbeleer".
+    pub oh_my_posh_theme: String,
+    /// Opt-in (macOS/Linux): new zsh sessions get a navigable completion
+    /// menu on Tab, Tab — see pty/zsh_init.rs.
+    pub zsh_menu_complete: bool,
     /// Opt-in: tracks Claude Code/Codex session state (running/awaiting/
     /// error/finished) via terminal screen-buffer pattern matching, shown
     /// in a top panel, per-tab status dots, and the app status bar.
     pub ai_mode_enabled: bool,
     pub window: WindowConfig,
+    pub shortcuts: ShortcutsConfig,
 }
 
 impl Default for AppConfig {
@@ -53,8 +84,13 @@ impl Default for AppConfig {
             background_opacity: 100,
             output_highlighting: true,
             psreadline_menu_complete: false,
+            bash_prompt_colors: false,
+            oh_my_posh_enabled: false,
+            oh_my_posh_theme: "jandedobbeleer".into(),
+            zsh_menu_complete: false,
             ai_mode_enabled: false,
             window: WindowConfig::default(),
+            shortcuts: ShortcutsConfig::default(),
         }
     }
 }

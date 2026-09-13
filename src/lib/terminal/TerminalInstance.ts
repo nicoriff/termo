@@ -5,13 +5,15 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
-import { isMac } from "../core/platform";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
+import { eventMatchesKeybinding } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
 import { OutputHighlighter } from "./output-highlighter";
+import { registerPty, unregisterPty } from "./pty-registry";
+import { tabTitleStore } from "./tab-title-store.svelte";
 
 // How often the AI-mode classifier re-reads the terminal's rendered screen
 // buffer, in ms. xterm.js's onRender can fire many times a second during a
@@ -81,6 +83,8 @@ export class TerminalInstance {
       if (this.sessionId) void writePty(this.sessionId, data);
     });
 
+    this.term.onTitleChange((title) => tabTitleStore.setProgramTitle(this.tabId, title));
+
     // Reserve tile zoom, tab cycling and new-tab ahead of xterm's own key
     // handling — some shells/apps bind these to something else, so this has
     // to intercept before xterm forwards the keystroke to the PTY, not react
@@ -100,8 +104,7 @@ export class TerminalInstance {
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
-      const zoomHeld = isMac ? event.metaKey : event.altKey;
-      if (zoomHeld && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("zoomTile"))) {
         event.preventDefault();
         if (event.key === "ArrowUp") {
           workspaceStore.zoomFocused();
@@ -111,16 +114,16 @@ export class TerminalInstance {
         return false;
       }
 
-      if (event.ctrlKey && event.key === "Tab") {
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("cycleTab"), { ignore: ["shift"] })) {
         event.preventDefault();
         workspaceStore.cycleTab(event.shiftKey ? -1 : 1);
         return false;
       }
 
-      // The !altKey guard keeps the tile-overview chord (Ctrl+Alt, which
-      // stays Ctrl-based on every platform) from also opening a tab.
-      const newTabHeld = isMac ? event.metaKey : event.ctrlKey && !event.altKey;
-      if (newTabHeld && event.key.toLowerCase() === "t") {
+      // The exclude guard keeps the tile-overview chord (Ctrl+Alt, which
+      // stays Ctrl-based on every platform) from also opening a tab, no
+      // matter what the user remaps "new tab" to.
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("newTab"), { exclude: ["alt"] })) {
         event.preventDefault();
         workspaceStore.newTabLikeFocused();
         return false;
@@ -168,6 +171,7 @@ export class TerminalInstance {
       rows: this.term.rows,
       onForegroundProcess: (path) => {
         this.lastForegroundProcessPath = path;
+        tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
       },
       onData: (bytes) => {
         const text = this.decoder.decode(bytes, { stream: true });
@@ -175,6 +179,7 @@ export class TerminalInstance {
       },
       onExit: (code) => this.onExit?.(code),
     });
+    registerPty(this.tabId, this.sessionId);
 
     // resize() no-ops while sessionId is still null, so a ResizeObserver
     // tick landing during the spawnPty() await above (e.g. surrounding
@@ -216,6 +221,8 @@ export class TerminalInstance {
     // closeTab (e.g. closing the whole window/tile) — remove() is an
     // idempotent no-op if that already fired.
     aiStatusStore.remove(this.tabId);
+    unregisterPty(this.tabId);
+    tabTitleStore.remove(this.tabId);
     if (this.sessionId) void killPty(this.sessionId);
     this.term.dispose();
   }

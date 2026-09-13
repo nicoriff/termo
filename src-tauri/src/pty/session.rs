@@ -14,6 +14,7 @@ pub struct PtySession {
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Mutex<Box<dyn Write + Send>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    pid: Option<u32>,
     // Stops the foreground-process poller thread (see spawn()) once the
     // session is killed — otherwise it would keep polling a dead PTY forever.
     stop: Arc<AtomicBool>,
@@ -23,6 +24,7 @@ impl PtySession {
     pub fn spawn(
         shell_path: &str,
         shell_args: &[String],
+        env: &[(&str, String)],
         cwd: Option<&str>,
         cols: u16,
         rows: u16,
@@ -52,6 +54,9 @@ impl PtySession {
         // for its child process for exactly this reason.
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
 
         // Also strip anything identifying the process that launched Termini
         // itself (e.g. running `tauri dev` from inside an agent/CI shell
@@ -61,7 +66,13 @@ impl PtySession {
         // instance, would see CLAUDE_CODE_CHILD_SESSION and assume it's a
         // child of that unrelated session (auto-resuming its history) and
         // scale back its own UI/color output accordingly.
+        // Same goes for the host terminal's identity: inheriting Terminal.app's
+        // TERM_PROGRAM/TERM_SESSION_ID makes macOS's /etc/zshrc run
+        // Terminal.app session save/restore against that app's own session.
         for key in [
+            "TERM_PROGRAM",
+            "TERM_PROGRAM_VERSION",
+            "TERM_SESSION_ID",
             "CI",
             "NO_COLOR",
             "CLAUDE_CODE_CHILD_SESSION",
@@ -75,6 +86,7 @@ impl PtySession {
         }
 
         let child = pair.slave.spawn_command(cmd)?;
+        let pid = child.process_id();
         // Dropping the slave handle in this process lets the OS signal EOF on
         // the master's reader once the child (and any of its own children)
         // that inherited the slave fd/handle actually exit.
@@ -155,8 +167,13 @@ impl PtySession {
             master: master_arc,
             writer: Mutex::new(writer),
             child,
+            pid,
             stop,
         })
+    }
+
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
     }
 
     pub fn write(&self, data: &[u8]) -> anyhow::Result<()> {

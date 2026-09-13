@@ -7,3 +7,5 @@
  * fallback covers a future where it isn't.
  */
 export const isMac = /mac/i.test(navigator.platform || navigator.userAgent);
+export const isWindows = /win/i.test(navigator.platform || navigator.userAgent);
+export const isLinux = !isMac && !isWindows;

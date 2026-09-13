@@ -1,7 +1,9 @@
 use tauri::ipc::Channel;
+use tauri::Manager;
 use uuid::Uuid;
 
-use crate::pty::{default_shell, list_shells as detect_shells, PtyEvent, ShellInfo};
+use crate::config::store;
+use crate::pty::{bash_color_env, default_shell, list_shells as detect_shells, oh_my_posh, zsh_init, PtyEvent, ShellInfo};
 use crate::state::AppState;
 
 fn parse_id(id: &str) -> Result<Uuid, String> {
@@ -10,6 +12,7 @@ fn parse_id(id: &str) -> Result<Uuid, String> {
 
 #[tauri::command]
 pub fn pty_spawn(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     shell_path: Option<String>,
     shell_args: Option<Vec<String>>,
@@ -25,10 +28,39 @@ pub fn pty_spawn(
             (shell.path, shell.args)
         }
     };
+    // Read from the saved config here rather than passed in by the frontend,
+    // so every spawn path (startup, new tab, split) picks it up without each
+    // one having to carry it along.
+    let config = store::load(&app);
+    let mut args = args;
+    let mut env = bash_color_env(&path, config.bash_prompt_colors);
+    let mut zsh_lines: Vec<String> = Vec::new();
+    if config.zsh_menu_complete {
+        zsh_lines.extend(zsh_init::MENU_COMPLETE_LINES.iter().map(|line| line.to_string()));
+    }
+    // A broken shell integration must never keep the shell itself from
+    // opening — on failure the session just starts without it.
+    if config.oh_my_posh_enabled {
+        if let Some((binary, managed)) = oh_my_posh::find(&app) {
+            let _ = oh_my_posh::apply(
+                &app,
+                &binary,
+                managed,
+                &config.oh_my_posh_theme,
+                &path,
+                &mut args,
+                &mut env,
+                &mut zsh_lines,
+            );
+        }
+    }
+    if zsh_init::is_zsh(&path) && !zsh_lines.is_empty() {
+        let _ = zsh_init::apply(&app, &zsh_lines, &mut env);
+    }
 
     state
         .pty
-        .spawn(&path, &args, cwd.as_deref(), cols, rows, on_event)
+        .spawn(&path, &args, &env, cwd.as_deref(), cols, rows, on_event)
         .map(|id| id.to_string())
         .map_err(|err| err.to_string())
 }
@@ -60,6 +92,20 @@ pub fn pty_resize(
 pub fn pty_kill(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
     let id = parse_id(&id)?;
     state.pty.kill(id).map_err(|err| err.to_string())
+}
+
+/// Refreshing the whole process table takes tens of ms, so it runs off the
+/// main thread. An already-exited console reports `None` instead of an error.
+#[tauri::command]
+pub async fn pty_memory(app: tauri::AppHandle, id: String) -> Result<Option<u64>, String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let pid = state.pty.pid(id).ok().flatten()?;
+        state.memory.tree_bytes(pid)
+    })
+    .await
+    .map_err(|err| err.to_string())
 }
 
 #[tauri::command]

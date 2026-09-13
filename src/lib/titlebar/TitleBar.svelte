@@ -5,9 +5,20 @@
     isWindowMaximized,
     minimizeWindow,
     onWindowResized,
+    openPreferencesWindow,
     toggleMaximizeWindow,
   } from "$lib/core/window-client";
   import { uiState } from "$lib/core/ui-state.svelte";
+
+  let {
+    title = "Termini",
+    showSettingsButton = true,
+    showMaximizeButton = true,
+  }: {
+    title?: string;
+    showSettingsButton?: boolean;
+    showMaximizeButton?: boolean;
+  } = $props();
 
   let maximized = $state(false);
   let unlisten: (() => void) | null = null;
@@ -41,26 +52,28 @@
 <div class="titlebar" data-tauri-drag-region ondblclick={handleDoubleClick}>
   <div class="titlebar-brand" data-tauri-drag-region>
     <img class="titlebar-icon" src="/app-icon.png" alt="" />
-    <span class="titlebar-title">Termini</span>
+    <span class="titlebar-title">{title}</span>
   </div>
 
   <div class="titlebar-spacer" data-tauri-drag-region></div>
 
   <div class="titlebar-controls">
-    <button
-      class="titlebar-button"
-      aria-label="Configuración"
-      onclick={() => uiState.toggleSettings()}
-    >
-      <svg viewBox="0 0 14 14" width="13" height="13">
-        <line x1="1" y1="3" x2="13" y2="3" stroke="currentColor" stroke-width="1" />
-        <circle cx="9" cy="3" r="1.5" fill="currentColor" />
-        <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1" />
-        <circle cx="5" cy="7" r="1.5" fill="currentColor" />
-        <line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1" />
-        <circle cx="10" cy="11" r="1.5" fill="currentColor" />
-      </svg>
-    </button>
+    {#if showSettingsButton}
+      <button
+        class="titlebar-button"
+        aria-label="Configuración"
+        onclick={() => void openPreferencesWindow()}
+      >
+        <svg viewBox="0 0 14 14" width="13" height="13">
+          <line x1="1" y1="3" x2="13" y2="3" stroke="currentColor" stroke-width="1" />
+          <circle cx="9" cy="3" r="1.5" fill="currentColor" />
+          <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1" />
+          <circle cx="5" cy="7" r="1.5" fill="currentColor" />
+          <line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1" />
+          <circle cx="10" cy="11" r="1.5" fill="currentColor" />
+        </svg>
+      </button>
+    {/if}
     <button
       class="titlebar-button"
       aria-label="Minimizar"
@@ -70,26 +83,28 @@
         <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
       </svg>
     </button>
-    <button
-      class="titlebar-button"
-      aria-label={maximized ? "Restaurar" : "Maximizar"}
-      onclick={() => void toggleMaximize()}
-    >
-      {#if maximized}
-        <svg viewBox="0 0 10 10" width="10" height="10">
-          <path
-            d="M2 0h8v8h-2M0 2h8v8H0z"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1"
-          />
-        </svg>
-      {:else}
-        <svg viewBox="0 0 10 10" width="10" height="10">
-          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
-        </svg>
-      {/if}
-    </button>
+    {#if showMaximizeButton}
+      <button
+        class="titlebar-button"
+        aria-label={maximized ? "Restaurar" : "Maximizar"}
+        onclick={() => void toggleMaximize()}
+      >
+        {#if maximized}
+          <svg viewBox="0 0 10 10" width="10" height="10">
+            <path
+              d="M2 0h8v8h-2M0 2h8v8H0z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1"
+            />
+          </svg>
+        {:else}
+          <svg viewBox="0 0 10 10" width="10" height="10">
+            <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+        {/if}
+      </button>
+    {/if}
     <button
       class="titlebar-button titlebar-close"
       aria-label="Cerrar"

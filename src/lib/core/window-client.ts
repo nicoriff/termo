@@ -14,6 +14,10 @@ export function closeWindow(): Promise<void> {
   return invoke("close_window");
 }
 
+export function openPreferencesWindow(): Promise<void> {
+  return invoke("open_preferences_window");
+}
+
 export function isWindowMaximized(): Promise<boolean> {
   return invoke("is_maximized");
 }

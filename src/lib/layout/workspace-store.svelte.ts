@@ -1,4 +1,5 @@
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
+import type { ShellLaunch } from "../core/default-shell";
 import {
   collectTiles,
   computeLayout,
@@ -94,9 +95,9 @@ class WorkspaceStore {
     this.setActiveSession(tile.id, tile.sessions[nextIndex].id);
   }
 
-  splitTile(tileId: string, direction: SplitDirection): void {
+  splitTile(tileId: string, direction: SplitDirection, shell: ShellLaunch): void {
     if (!this.root) return;
-    const newTile = makeTile(makeSession());
+    const newTile = makeTile(makeSession(shell.title, shell.path, shell.args));
     this.root = splitLeaf(this.root, tileId, direction, newTile, crypto.randomUUID());
     this.focusedTileId = newTile.id;
   }

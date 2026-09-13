@@ -47,6 +47,12 @@ export function killPty(id: string): Promise<void> {
   return invoke("pty_kill", { id });
 }
 
+/** Resident memory of the console's shell plus every process running under
+ * it, in bytes — or null once its process has already exited. */
+export function getPtyMemory(id: string): Promise<number | null> {
+  return invoke("pty_memory", { id });
+}
+
 export function listShells(): Promise<ShellInfo[]> {
   return invoke("list_shells");
 }

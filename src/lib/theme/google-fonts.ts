@@ -55,8 +55,10 @@ export function injectFontFace(family: string, localPath: string): void {
   if (document.getElementById(styleId)) return;
 
   const assetUrl = convertFileSrc(localPath);
+  // Google Fonts installs are woff2; the Nerd Font install is a ttf.
+  const format = localPath.toLowerCase().endsWith(".ttf") ? "truetype" : "woff2";
   const style = document.createElement("style");
   style.id = styleId;
-  style.textContent = `@font-face { font-family: "${family}"; src: url("${assetUrl}") format("woff2"); font-display: swap; }`;
+  style.textContent = `@font-face { font-family: "${family}"; src: url("${assetUrl}") format("${format}"); font-display: swap; }`;
   document.head.appendChild(style);
 }

@@ -14,15 +14,24 @@ impl PtyManager {
         &self,
         shell_path: &str,
         shell_args: &[String],
+        env: &[(&str, String)],
         cwd: Option<&str>,
         cols: u16,
         rows: u16,
         channel: Channel<PtyEvent>,
     ) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(shell_path, shell_args, cwd, cols, rows, channel)?;
+        let session = PtySession::spawn(shell_path, shell_args, env, cwd, cols, rows, channel)?;
         let id = session.id;
         self.sessions.insert(id, session);
         Ok(id)
+    }
+
+    pub fn pid(&self, id: Uuid) -> anyhow::Result<Option<u32>> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        Ok(session.pid())
     }
 
     pub fn write(&self, id: Uuid, data: &[u8]) -> anyhow::Result<()> {
