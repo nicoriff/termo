@@ -33,6 +33,7 @@ pub fn run() {
             commands::window_commands::close_window,
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
+            commands::window_commands::set_background_blur,
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,
             commands::agent_hook_commands::uninstall_agent_hooks,

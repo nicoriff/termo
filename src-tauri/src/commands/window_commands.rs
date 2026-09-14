@@ -70,3 +70,41 @@ pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
     crate::commands::window_shape::attach(&window);
     Ok(())
 }
+
+/// Native blur behind the window's translucent areas: macOS HUD vibrancy
+/// (corner radius matching the window's 10px CSS radius) or Windows Acrylic.
+/// Tauri's own `set_effects(None)` never removes vibrancy on macOS (its
+/// clear path only exists for Windows), so macOS clears it through
+/// window-vibrancy directly — also before applying, so repeated applies
+/// don't stack effect views. AppKit requires this on the main thread.
+#[tauri::command]
+pub fn set_background_blur(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    use tauri::window::{Effect, EffectState, EffectsBuilder};
+
+    let target = window.clone();
+    window
+        .run_on_main_thread(move || {
+            #[cfg(target_os = "macos")]
+            let _ = window_vibrancy::clear_vibrancy(&target);
+            #[cfg(not(target_os = "macos"))]
+            if !enabled {
+                let _ = target.set_effects(None::<tauri::utils::config::WindowEffectsConfig>);
+            }
+
+            if enabled {
+                let effect = if cfg!(target_os = "macos") {
+                    Effect::HudWindow
+                } else {
+                    Effect::Acrylic
+                };
+                let _ = target.set_effects(
+                    EffectsBuilder::new()
+                        .effect(effect)
+                        .state(EffectState::Active)
+                        .radius(10.0)
+                        .build(),
+                );
+            }
+        })
+        .map_err(|err| err.to_string())
+}

@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Effect, EffectState, getCurrentWindow } from "@tauri-apps/api/window";
-import { isMac } from "./platform";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalSize } from "@tauri-apps/api/dpi";
 
 export function minimizeWindow(): Promise<void> {
@@ -23,17 +22,12 @@ export function isWindowMaximized(): Promise<boolean> {
   return invoke("is_maximized");
 }
 
-/** Native blur behind the window's translucent areas: macOS vibrancy (HUD
- * material, corner radius matching the window's 10px CSS radius) or Windows
- * Acrylic. Tauri has no Linux support, so the call rejects there. */
+/** Native blur behind this window's translucent areas (macOS vibrancy,
+ * Windows Acrylic; no-op on Linux). Goes through a Rust command rather than
+ * the JS setEffects/clearEffects API: clearEffects never removes vibrancy
+ * on macOS — see set_background_blur in window_commands.rs. */
 export function setBackgroundBlur(enabled: boolean): Promise<void> {
-  const window = getCurrentWindow();
-  if (!enabled) return window.clearEffects();
-  return window.setEffects({
-    effects: [isMac ? Effect.HudWindow : Effect.Acrylic],
-    state: EffectState.Active,
-    radius: 10,
-  });
+  return invoke("set_background_blur", { enabled });
 }
 
 /** App icon badge (macOS Dock, some Linux docks); unsupported on Windows. */
