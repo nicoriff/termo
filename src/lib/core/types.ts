@@ -30,6 +30,8 @@ export interface ShortcutsConfig {
   ai_error_other: string | null;
   ai_finished_mac: string | null;
   ai_finished_other: string | null;
+  ai_next_pending_mac: string | null;
+  ai_next_pending_other: string | null;
 }
 
 export interface AppConfig {
@@ -39,6 +41,7 @@ export interface AppConfig {
   font_family_override: string | null;
   installed_font_path: string | null;
   background_opacity: number;
+  background_blur: boolean;
   output_highlighting: boolean;
   psreadline_menu_complete: boolean;
   bash_prompt_colors: boolean;
@@ -46,6 +49,10 @@ export interface AppConfig {
   oh_my_posh_theme: string;
   zsh_menu_complete: boolean;
   ai_mode_enabled: boolean;
+  ai_notify_awaiting: boolean;
+  ai_notify_error: boolean;
+  ai_notify_finished: boolean;
+  ai_dock_badge: boolean;
   window: WindowConfig;
   shortcuts: ShortcutsConfig;
 }

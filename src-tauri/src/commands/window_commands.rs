@@ -40,7 +40,7 @@ pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
         return window.set_focus().map_err(|err| err.to_string());
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         &app,
         "preferences",
         tauri::WebviewUrl::App("/#preferences".into()),
@@ -50,10 +50,22 @@ pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
     .min_inner_size(640.0, 420.0)
     .resizable(true)
     .maximizable(false)
-    .decorations(false)
-    .transparent(true)
-    .build()
-    .map_err(|err| err.to_string())?;
+    .transparent(true);
+
+    // macOS gets the native window controls drawn over the web title bar,
+    // matching the main window's tauri.macos.conf.json (keep the traffic
+    // light position in sync with it); elsewhere the web title bar draws
+    // its own controls on an undecorated window.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .decorations(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(14.0, 16.0));
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.decorations(false);
+
+    let window = builder.build().map_err(|err| err.to_string())?;
 
     crate::commands::window_shape::attach(&window);
     Ok(())

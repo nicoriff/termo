@@ -68,11 +68,13 @@
     background: var(--titlebar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     border-top: 1px solid var(--tabbar-border, #2a2a2a);
-    opacity: 0.85;
   }
 
+  /* Dimmed text only — dimming the whole bar would also lighten its
+     background below the opacity setting. */
   .status-item {
     white-space: nowrap;
+    opacity: 0.85;
   }
 
   .status-memory {

@@ -3,6 +3,7 @@
   import { slide } from "svelte/transition";
   import TitleBar from "$lib/titlebar/TitleBar.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { setBackgroundBlur } from "$lib/core/window-client";
   import AppearanceSection from "./sections/AppearanceSection.svelte";
   import FontSection from "./sections/FontSection.svelte";
   import ConsoleSection from "./sections/ConsoleSection.svelte";
@@ -61,6 +62,11 @@
 
   onMount(() => {
     void appConfigStore.init({ restoreWindowSize: false });
+  });
+
+  $effect(() => {
+    if (!appConfigStore.loaded) return;
+    void setBackgroundBlur(appConfigStore.backgroundBlur).catch(() => {});
   });
 </script>
 
@@ -134,7 +140,9 @@
     flex-direction: column;
     width: 100vw;
     height: 100vh;
-    background: var(--terminal-bg, #1e1e1e);
+    /* No background here: title bar, sidebar and detail pane each paint
+       theirs once, so all of them match the opacity setting (see the same
+       note on MainWindow's .window-chrome). */
     color: var(--titlebar-fg, #d4d4d4);
     /* Neutral translucent gray rather than a theme color, so the edge stays
        visible over both light and dark windows behind this one. */
@@ -238,6 +246,7 @@
   .detail {
     flex: 1;
     min-width: 0;
+    background: var(--terminal-bg, #1e1e1e);
     overflow-y: auto;
     padding: 16px 20px;
     box-sizing: border-box;

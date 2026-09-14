@@ -9,12 +9,15 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { onWindowResized } from "$lib/core/window-client";
+  import { onWindowResized, setBackgroundBlur, setBadgeCount } from "$lib/core/window-client";
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+  import { startAgentAttention } from "$lib/ai-mode/attention";
   import { resolveDefaultShell } from "$lib/core/default-shell";
 
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
+    const stopAgentAttention = startAgentAttention();
 
     (async () => {
       await appConfigStore.init();
@@ -31,7 +34,23 @@
     return () => {
       clearTimeout(resizeDebounce);
       unlisten?.();
+      stopAgentAttention();
     };
+  });
+
+  // Re-runs when Preferences changes the setting (synced via config-updated).
+  $effect(() => {
+    if (!appConfigStore.loaded) return;
+    void setBackgroundBlur(appConfigStore.backgroundBlur).catch(() => {});
+  });
+
+  // App icon badge: Modo IA sessions waiting on the user.
+  $effect(() => {
+    const pending =
+      appConfigStore.aiModeEnabled && appConfigStore.aiDockBadge
+        ? aiStatusStore.counts.awaiting + aiStatusStore.counts.error
+        : 0;
+    void setBadgeCount(pending > 0 ? pending : undefined).catch(() => {});
   });
 
   // Ctrl+Alt: hold to show the tile overview map (arrows/mouse to pick a
@@ -146,7 +165,10 @@
     flex-direction: column;
     width: 100vw;
     height: 100vh;
-    background: var(--terminal-bg, transparent);
+    /* No background here: every region (title bar, panels, tab strips,
+       consoles, status bar) paints its own translucent background exactly
+       once. Stacking a second translucent layer under them made each region
+       more opaque than the "Opacidad del fondo" setting says. */
     border-radius: 10px;
     overflow: hidden;
   }

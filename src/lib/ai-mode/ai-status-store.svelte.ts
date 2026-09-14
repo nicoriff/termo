@@ -1,18 +1,64 @@
 import type { AiSessionStatus, ClassifyResult } from "./classifier";
+import type { ToolId } from "./pattern-table";
 
 export interface AiSessionEntry extends ClassifyResult {
   /** When `status` last changed (ms since epoch). */
   since: number;
+  /** The status came from the tool's own lifecycle hooks. */
+  fromHook: boolean;
 }
+
+export type StatusChangeListener = (
+  sessionId: string,
+  entry: AiSessionEntry,
+  prev: AiSessionEntry | undefined,
+) => void;
 
 class AiStatusStore {
   byId = $state<Record<string, AiSessionEntry>>({});
+  private listeners = new Set<StatusChangeListener>();
 
+  /** Screen classification. Once a session's hooks report, they own its
+   * status; the screen can still flag an error, notice the tool exited, or
+   * see work resume after a permission prompt was answered — no hook fires
+   * for that until the approved tool call finishes. */
   set(sessionId: string, result: ClassifyResult): void {
     const prev = this.byId[sessionId];
-    if (prev?.tool === result.tool && prev?.status === result.status) return;
+    if (prev?.fromHook) {
+      const allowed =
+        result.tool === null ||
+        result.status === "error" ||
+        (prev.status === "awaiting" && result.status === "running");
+      if (!allowed) return;
+    }
+    this.apply(sessionId, result, false);
+  }
+
+  /** `status: null` means the agent session ended. */
+  setFromHook(sessionId: string, tool: ToolId, status: AiSessionStatus | null): void {
+    if (status === null) {
+      this.remove(sessionId);
+      return;
+    }
+    this.apply(sessionId, { tool, status }, true);
+  }
+
+  onStatusChange(listener: StatusChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private apply(sessionId: string, result: ClassifyResult, fromHook: boolean): void {
+    const prev = this.byId[sessionId];
+    const keepsHook = result.tool !== null && (fromHook || (prev?.fromHook ?? false));
+    if (prev?.tool === result.tool && prev?.status === result.status) {
+      if (keepsHook && !prev.fromHook) this.byId = { ...this.byId, [sessionId]: { ...prev, fromHook: true } };
+      return;
+    }
     const since = prev && prev.status === result.status ? prev.since : Date.now();
-    this.byId = { ...this.byId, [sessionId]: { ...result, since } };
+    const entry: AiSessionEntry = { ...result, since, fromHook: keepsHook };
+    this.byId = { ...this.byId, [sessionId]: entry };
+    for (const listener of this.listeners) listener(sessionId, entry, prev);
   }
 
   remove(sessionId: string): void {

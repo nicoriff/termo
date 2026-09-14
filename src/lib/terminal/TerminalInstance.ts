@@ -65,7 +65,7 @@ export class TerminalInstance {
     this.term = new Terminal({
       allowProposedApi: true,
       cursorBlink: true,
-      theme: toXtermTheme(theme, themeStore.backgroundOpacity / 100),
+      theme: toXtermTheme(theme),
       fontFamily: withMonospaceFallback(themeStore.effectiveFontFamily),
       fontSize: themeStore.effectiveFontSize,
       lineHeight: theme.font.lineHeight,
@@ -195,7 +195,7 @@ export class TerminalInstance {
 
   applyTheme(theme: Theme, options: ThemeApplyOptions): void {
     if (this.disposed) return;
-    this.term.options.theme = toXtermTheme(theme, options.backgroundOpacity / 100);
+    this.term.options.theme = toXtermTheme(theme);
     this.term.options.fontFamily = withMonospaceFallback(options.fontFamilyOverride ?? theme.font.family);
     this.term.options.fontSize = options.fontSizeOverride ?? theme.font.size;
     this.term.options.lineHeight = theme.font.lineHeight;

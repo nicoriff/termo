@@ -39,6 +39,8 @@ pub struct ShortcutsConfig {
     pub ai_error_other: Option<String>,
     pub ai_finished_mac: Option<String>,
     pub ai_finished_other: Option<String>,
+    pub ai_next_pending_mac: Option<String>,
+    pub ai_next_pending_other: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -54,6 +56,9 @@ pub struct AppConfig {
     pub installed_font_path: Option<String>,
     /// Window/terminal background opacity, 0 (fully transparent) to 100 (opaque).
     pub background_opacity: u8,
+    /// Native blur of whatever is behind the window's translucent areas
+    /// (macOS vibrancy, Windows Acrylic); no effect on Linux.
+    pub background_blur: bool,
     /// Whether terminal output gets colorized after the fact (IPs, URLs,
     /// paths, errors, etc.) — see src/lib/terminal/output-highlighter.ts.
     pub output_highlighting: bool,
@@ -77,6 +82,12 @@ pub struct AppConfig {
     /// error/finished) via terminal screen-buffer pattern matching, shown
     /// in a top panel, per-tab status dots, and the app status bar.
     pub ai_mode_enabled: bool,
+    /// Modo IA system notifications, per status transition.
+    pub ai_notify_awaiting: bool,
+    pub ai_notify_error: bool,
+    pub ai_notify_finished: bool,
+    /// App icon badge with the number of sessions waiting on the user.
+    pub ai_dock_badge: bool,
     pub window: WindowConfig,
     pub shortcuts: ShortcutsConfig,
 }
@@ -90,6 +101,7 @@ impl Default for AppConfig {
             font_family_override: None,
             installed_font_path: None,
             background_opacity: 100,
+            background_blur: false,
             output_highlighting: true,
             psreadline_menu_complete: false,
             bash_prompt_colors: false,
@@ -97,6 +109,10 @@ impl Default for AppConfig {
             oh_my_posh_theme: "jandedobbeleer".into(),
             zsh_menu_complete: false,
             ai_mode_enabled: false,
+            ai_notify_awaiting: true,
+            ai_notify_error: true,
+            ai_notify_finished: true,
+            ai_dock_badge: true,
             window: WindowConfig::default(),
             shortcuts: ShortcutsConfig::default(),
         }

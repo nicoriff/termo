@@ -23,6 +23,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   ai_error_other: null,
   ai_finished_mac: null,
   ai_finished_other: null,
+  ai_next_pending_mac: null,
+  ai_next_pending_other: null,
 };
 
 const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; other: keyof ShortcutsConfig }> = {
@@ -33,6 +35,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   aiAwaiting: { mac: "ai_awaiting_mac", other: "ai_awaiting_other" },
   aiError: { mac: "ai_error_mac", other: "ai_error_other" },
   aiFinished: { mac: "ai_finished_mac", other: "ai_finished_other" },
+  aiNextPending: { mac: "ai_next_pending_mac", other: "ai_next_pending_other" },
 };
 
 interface InitOptions {
@@ -48,7 +51,12 @@ class AppConfigStore {
   ohMyPoshEnabled = $state(false);
   ohMyPoshTheme = $state("jandedobbeleer");
   zshMenuComplete = $state(false);
+  backgroundBlur = $state(false);
   aiModeEnabled = $state(false);
+  aiNotifyAwaiting = $state(true);
+  aiNotifyError = $state(true);
+  aiNotifyFinished = $state(true);
+  aiDockBadge = $state(true);
   shortcuts = $state<ShortcutsConfig>(EMPTY_SHORTCUTS);
   loaded = $state(false);
 
@@ -93,7 +101,12 @@ class AppConfigStore {
     this.ohMyPoshEnabled = config.oh_my_posh_enabled;
     this.ohMyPoshTheme = config.oh_my_posh_theme;
     this.zshMenuComplete = config.zsh_menu_complete;
+    this.backgroundBlur = config.background_blur;
     this.aiModeEnabled = config.ai_mode_enabled;
+    this.aiNotifyAwaiting = config.ai_notify_awaiting;
+    this.aiNotifyError = config.ai_notify_error;
+    this.aiNotifyFinished = config.ai_notify_finished;
+    this.aiDockBadge = config.ai_dock_badge;
     this.shortcuts = config.shortcuts;
     this.installedFontPath = config.installed_font_path;
     // Kept current even in Preferences (which never resizes to it) so its
@@ -142,8 +155,33 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setBackgroundBlur(enabled: boolean): void {
+    this.backgroundBlur = enabled;
+    void this.persist();
+  }
+
   setAiModeEnabled(enabled: boolean): void {
     this.aiModeEnabled = enabled;
+    void this.persist();
+  }
+
+  setAiNotifyAwaiting(enabled: boolean): void {
+    this.aiNotifyAwaiting = enabled;
+    void this.persist();
+  }
+
+  setAiNotifyError(enabled: boolean): void {
+    this.aiNotifyError = enabled;
+    void this.persist();
+  }
+
+  setAiNotifyFinished(enabled: boolean): void {
+    this.aiNotifyFinished = enabled;
+    void this.persist();
+  }
+
+  setAiDockBadge(enabled: boolean): void {
+    this.aiDockBadge = enabled;
     void this.persist();
   }
 
@@ -200,7 +238,12 @@ class AppConfigStore {
       oh_my_posh_enabled: this.ohMyPoshEnabled,
       oh_my_posh_theme: this.ohMyPoshTheme,
       zsh_menu_complete: this.zshMenuComplete,
+      background_blur: this.backgroundBlur,
       ai_mode_enabled: this.aiModeEnabled,
+      ai_notify_awaiting: this.aiNotifyAwaiting,
+      ai_notify_error: this.aiNotifyError,
+      ai_notify_finished: this.aiNotifyFinished,
+      ai_dock_badge: this.aiDockBadge,
       font_size_override: themeStore.fontSizeOverride,
       font_family_override: themeStore.fontFamilyOverride,
       installed_font_path: this.installedFontPath,

@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { isLinux } from "$lib/core/platform";
 
   function onOpacityInput(event: Event) {
     themeStore.setBackgroundOpacity(Number((event.currentTarget as HTMLInputElement).value));
@@ -55,6 +56,18 @@
     oninput={onOpacityInput}
     class="opacity-slider"
   />
+  <label class="toggle-row" class:disabled={isLinux}>
+    <span>Desenfocar lo que está detrás</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.backgroundBlur}
+      disabled={isLinux}
+      onchange={(e) => appConfigStore.setBackgroundBlur(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">
+    {isLinux ? "No disponible en Linux." : "Se nota más con la opacidad del fondo por debajo de 85%."}
+  </p>
 </section>
 
 <style>
@@ -120,5 +133,32 @@
     width: 100%;
     margin-top: 8px;
     accent-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .toggle-row.disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .toggle-row input {
+    accent-color: var(--pane-active-border, #3a6df0);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .setting-hint {
+    margin: 6px 0 0;
+    font-size: 10px;
+    opacity: 0.6;
   }
 </style>

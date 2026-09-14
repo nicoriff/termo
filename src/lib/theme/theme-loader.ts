@@ -16,10 +16,13 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function toXtermTheme(theme: Theme, opacity = 1): ITheme {
+/** xterm's own background stays fully transparent: the terminal's container
+ * already paints the translucent console background, and a second
+ * translucent layer here made consoles more opaque than the setting. */
+export function toXtermTheme(theme: Theme): ITheme {
   return {
     ...theme.colors,
-    background: hexToRgba(theme.colors.background, opacity),
+    background: hexToRgba(theme.colors.background, 0),
   };
 }
 

@@ -17,7 +17,7 @@
     <span>{SHORTCUT_LABELS.zoomTile}</span>
     <ShortcutRecorder action="zoomTile" mode="zoom" />
   </div>
-  {#each ["aiRunning", "aiAwaiting", "aiError", "aiFinished"] as const as action (action)}
+  {#each ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"] as const as action (action)}
     <div class="shortcut-row">
       <span>{SHORTCUT_LABELS[action]}</span>
       <ShortcutRecorder {action} />

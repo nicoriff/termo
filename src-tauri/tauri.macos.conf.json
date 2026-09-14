@@ -1,0 +1,18 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "termini",
+        "width": 1000,
+        "height": 640,
+        "minWidth": 480,
+        "minHeight": 320,
+        "decorations": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 14, "y": 16 }
+      }
+    ]
+  }
+}

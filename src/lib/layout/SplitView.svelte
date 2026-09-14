@@ -56,7 +56,7 @@
   }
 </script>
 
-<div class="split-container" bind:this={containerEl}>
+<div class="split-container" class:zoomed={workspaceStore.zoomedTileId !== null} bind:this={containerEl}>
   {#if workspaceStore.zoomedTileId}
     <div class="zoom-backdrop" transition:fade={{ duration: 140 }}></div>
   {/if}
@@ -118,6 +118,13 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
+  }
+
+  /* While a tile is zoomed the other tiles aren't rendered, and the window
+     itself has no background, so without this the area around the zoomed
+     tile would show straight through to the desktop. */
+  .split-container.zoomed {
+    background: var(--terminal-bg, transparent);
   }
 
   .session-slot {

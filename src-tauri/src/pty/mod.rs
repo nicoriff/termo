@@ -1,5 +1,7 @@
 #[cfg(unix)]
 mod foreground;
+mod agent_events;
+pub mod agent_hooks;
 mod bash_colors;
 mod manager;
 mod memory;

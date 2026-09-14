@@ -95,6 +95,20 @@ class WorkspaceStore {
     this.zoomedTileId = tiles.length > 1 ? tile.id : null;
   }
 
+  /** The active tab of the focused tile. */
+  get focusedSessionId(): string | null {
+    if (!this.root || !this.focusedTileId) return null;
+    return collectTiles(this.root).find((t) => t.id === this.focusedTileId)?.activeSessionId ?? null;
+  }
+
+  /** Whether a tab is currently on screen: its tile's active tab, and not
+   * hidden behind another tile's zoom. */
+  isSessionVisible(sessionId: string): boolean {
+    if (!this.root) return false;
+    const tile = collectTiles(this.root).find((t) => t.activeSessionId === sessionId);
+    return !!tile && (this.zoomedTileId === null || this.zoomedTileId === tile.id);
+  }
+
   /** Ctrl+Tab / Ctrl+Shift+Tab: cycle the active tab within the focused
    * tile, wrapping around at either end. No-op with 0-1 tabs or no focus. */
   cycleTab(direction: 1 | -1): void {

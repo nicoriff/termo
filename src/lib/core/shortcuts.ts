@@ -23,7 +23,8 @@ export type ShortcutAction =
   | "aiRunning"
   | "aiAwaiting"
   | "aiError"
-  | "aiFinished";
+  | "aiFinished"
+  | "aiNextPending";
 
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newTab",
@@ -33,6 +34,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "aiAwaiting",
   "aiError",
   "aiFinished",
+  "aiNextPending",
 ];
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -43,6 +45,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   aiAwaiting: "Modo IA: Esperando",
   aiError: "Modo IA: Error",
   aiFinished: "Modo IA: Listo",
+  aiNextPending: "Modo IA: siguiente pendiente",
 };
 
 export type ModifierName = "alt" | "ctrl" | "meta" | "shift";
@@ -169,6 +172,7 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   aiAwaiting: { mac: "meta+2", other: "ctrl+2" },
   aiError: { mac: "meta+3", other: "ctrl+3" },
   aiFinished: { mac: "meta+4", other: "ctrl+4" },
+  aiNextPending: { mac: "meta+shift+a", other: "ctrl+shift+a" },
 };
 
 export function getDefaultKeybinding(action: ShortcutAction, isMacPlatform: boolean): string {

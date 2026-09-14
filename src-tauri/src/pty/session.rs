@@ -57,6 +57,10 @@ impl PtySession {
         for (key, value) in env {
             cmd.env(key, value);
         }
+        // Lets agent hooks running inside this console report back to its
+        // tab (see pty/agent_hooks.rs).
+        let id = Uuid::new_v4();
+        cmd.env("TERMINI_SESSION_ID", id.to_string());
 
         // Also strip anything identifying the process that launched Termini
         // itself (e.g. running `tauri dev` from inside an agent/CI shell
@@ -94,7 +98,6 @@ impl PtySession {
 
         let reader = pair.master.try_clone_reader()?;
         let writer = pair.master.take_writer()?;
-        let id = Uuid::new_v4();
         let child = Arc::new(Mutex::new(child));
         let master_arc: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(pair.master));
         let stop = Arc::new(AtomicBool::new(false));
@@ -197,5 +200,49 @@ impl PtySession {
         self.stop.store(true, Ordering::Relaxed);
         self.child.lock().unwrap().kill()?;
         Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn console_sees_its_session_id_and_extra_env() {
+        let (tx, rx) = mpsc::channel::<String>();
+        let tx = Mutex::new(tx);
+        let channel = Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
+                let _ = tx.lock().unwrap().send(json);
+            }
+            Ok(())
+        });
+
+        let session = PtySession::spawn(
+            "/bin/sh",
+            &["-c".into(), r#"printf '%s|%s' "$TERMINI_SESSION_ID" "$TERMINI_TEST_VAR""#.into()],
+            &[("TERMINI_TEST_VAR", "hello".to_string())],
+            None,
+            80,
+            24,
+            channel,
+        )
+        .unwrap();
+
+        let mut output = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while let Ok(json) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            let event: serde_json::Value = serde_json::from_str(&json).unwrap();
+            match event["type"].as_str() {
+                Some("data") => output.extend(STANDARD.decode(event["data"].as_str().unwrap()).unwrap()),
+                Some("exit") => break,
+                _ => {}
+            }
+        }
+        let text = String::from_utf8_lossy(&output);
+        let _ = session.kill();
+        assert!(text.contains(&format!("{}|hello", session.id)), "console output: {text:?}");
     }
 }

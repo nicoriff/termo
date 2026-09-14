@@ -3,7 +3,9 @@ use tauri::Manager;
 use uuid::Uuid;
 
 use crate::config::store;
-use crate::pty::{bash_color_env, default_shell, list_shells as detect_shells, oh_my_posh, zsh_init, PtyEvent, ShellInfo};
+use crate::pty::{
+    agent_hooks, bash_color_env, default_shell, list_shells as detect_shells, oh_my_posh, zsh_init, PtyEvent, ShellInfo,
+};
 use crate::state::AppState;
 
 fn parse_id(id: &str) -> Result<Uuid, String> {
@@ -34,6 +36,9 @@ pub fn pty_spawn(
     let config = store::load(&app);
     let mut args = args;
     let mut env = bash_color_env(&path, config.bash_prompt_colors);
+    if let Ok(dir) = agent_hooks::events_dir(&app) {
+        env.push(("TERMINI_EVENTS_DIR", dir.to_string_lossy().into_owned()));
+    }
     let mut zsh_lines: Vec<String> = Vec::new();
     if config.zsh_menu_complete {
         zsh_lines.extend(zsh_init::MENU_COMPLETE_LINES.iter().map(|line| line.to_string()));
@@ -89,8 +94,9 @@ pub fn pty_resize(
 }
 
 #[tauri::command]
-pub fn pty_kill(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+pub fn pty_kill(app: tauri::AppHandle, state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
     let id = parse_id(&id)?;
+    agent_hooks::forget_session(&app, id);
     state.pty.kill(id).map_err(|err| err.to_string())
 }
 

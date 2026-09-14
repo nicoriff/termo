@@ -81,7 +81,25 @@
   // before xterm's own key handling, so these keys never reach the shell.
   // Keyboard focus stays in the terminal the whole time — the list is
   // driven from here instead of moving focus into it.
+  // Sessions waiting on the user, longest-waiting first; repeated presses
+  // walk through them.
+  function focusNextPending() {
+    const pending = [...aiStatusStore.entriesWith("awaiting"), ...aiStatusStore.entriesWith("error")]
+      .map((entry) => entry.sessionId)
+      .filter((id) => sessionsById.has(id));
+    if (pending.length === 0) return;
+    const current = pending.indexOf(workspaceStore.focusedSessionId ?? "");
+    workspaceStore.focusSession(pending[(current + 1) % pending.length]);
+  }
+
   function onKeydown(event: KeyboardEvent) {
+    if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("aiNextPending"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      openStatus = null;
+      focusNextPending();
+      return;
+    }
     const status = STATUSES.find((s) =>
       eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut(SHORTCUT_BY_STATUS[s])),
     );

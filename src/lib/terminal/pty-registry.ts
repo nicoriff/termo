@@ -14,3 +14,10 @@ export function unregisterPty(tabId: string): void {
 export function getPtyId(tabId: string): string | undefined {
   return ptyIdByTab.get(tabId);
 }
+
+export function getTabId(ptyId: string): string | undefined {
+  for (const [tabId, id] of ptyIdByTab) {
+    if (id === ptyId) return tabId;
+  }
+  return undefined;
+}

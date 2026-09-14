@@ -2,12 +2,14 @@
   import { onDestroy, onMount } from "svelte";
   import {
     closeWindow,
+    isWindowFullscreen,
     isWindowMaximized,
     minimizeWindow,
     onWindowResized,
     openPreferencesWindow,
     toggleMaximizeWindow,
   } from "$lib/core/window-client";
+  import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
 
   let {
@@ -21,11 +23,15 @@
   } = $props();
 
   let maximized = $state(false);
+  let fullscreen = $state(false);
   let unlisten: (() => void) | null = null;
 
   async function refreshMaximized() {
     maximized = await isWindowMaximized();
     uiState.setMaximized(maximized);
+    // macOS hides its window controls in fullscreen, so the space reserved
+    // for them has to go away too.
+    if (isMac) fullscreen = await isWindowFullscreen();
   }
 
   async function toggleMaximize() {
@@ -48,8 +54,18 @@
   }
 </script>
 
+<!-- On macOS the window uses the native close/minimize/zoom buttons, drawn
+     by the OS over this bar (titleBarStyle "Overlay" — see
+     tauri.macos.conf.json and open_preferences_window), so this bar only
+     reserves room for them on the left instead of drawing its own. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="titlebar" data-tauri-drag-region ondblclick={handleDoubleClick}>
+<div
+  class="titlebar"
+  class:mac={isMac}
+  class:mac-fullscreen={isMac && fullscreen}
+  data-tauri-drag-region
+  ondblclick={handleDoubleClick}
+>
   <div class="titlebar-brand" data-tauri-drag-region>
     <img class="titlebar-icon" src="/app-icon.png" alt="" />
     <span class="titlebar-title">{title}</span>
@@ -74,46 +90,48 @@
         </svg>
       </button>
     {/if}
-    <button
-      class="titlebar-button"
-      aria-label="Minimizar"
-      onclick={() => void minimizeWindow()}
-    >
-      <svg viewBox="0 0 10 10" width="10" height="10">
-        <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
-      </svg>
-    </button>
-    {#if showMaximizeButton}
+    {#if !isMac}
       <button
         class="titlebar-button"
-        aria-label={maximized ? "Restaurar" : "Maximizar"}
-        onclick={() => void toggleMaximize()}
+        aria-label="Minimizar"
+        onclick={() => void minimizeWindow()}
       >
-        {#if maximized}
-          <svg viewBox="0 0 10 10" width="10" height="10">
-            <path
-              d="M2 0h8v8h-2M0 2h8v8H0z"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1"
-            />
-          </svg>
-        {:else}
-          <svg viewBox="0 0 10 10" width="10" height="10">
-            <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
-          </svg>
-        {/if}
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
+      {#if showMaximizeButton}
+        <button
+          class="titlebar-button"
+          aria-label={maximized ? "Restaurar" : "Maximizar"}
+          onclick={() => void toggleMaximize()}
+        >
+          {#if maximized}
+            <svg viewBox="0 0 10 10" width="10" height="10">
+              <path
+                d="M2 0h8v8h-2M0 2h8v8H0z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+              />
+            </svg>
+          {:else}
+            <svg viewBox="0 0 10 10" width="10" height="10">
+              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+            </svg>
+          {/if}
+        </button>
+      {/if}
+      <button
+        class="titlebar-button titlebar-close"
+        aria-label="Cerrar"
+        onclick={() => void closeWindow()}
+      >
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
+        </svg>
       </button>
     {/if}
-    <button
-      class="titlebar-button titlebar-close"
-      aria-label="Cerrar"
-      onclick={() => void closeWindow()}
-    >
-      <svg viewBox="0 0 10 10" width="10" height="10">
-        <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
-      </svg>
-    </button>
   </div>
 </div>
 
@@ -176,5 +194,50 @@
   .titlebar-close:hover {
     background: var(--titlebar-close-hover-bg, #e81123);
     color: #fff;
+  }
+
+  /* macOS: room for the native traffic lights on the left, a centered
+     title in the system font, and a compact rounded settings button. */
+  .titlebar.mac {
+    position: relative;
+    padding-left: 78px;
+  }
+
+  .titlebar.mac-fullscreen {
+    padding-left: 0;
+  }
+
+  .titlebar.mac .titlebar-brand {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-50%);
+    gap: 6px;
+    padding: 0;
+    pointer-events: none;
+  }
+
+  .titlebar.mac .titlebar-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .titlebar.mac .titlebar-title {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: normal;
+  }
+
+  .titlebar.mac .titlebar-controls {
+    align-items: center;
+    padding-right: 8px;
+  }
+
+  .titlebar.mac .titlebar-button {
+    width: 28px;
+    height: 24px;
+    border-radius: 6px;
   }
 </style>
