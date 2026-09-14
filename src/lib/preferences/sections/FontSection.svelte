@@ -34,7 +34,7 @@
       <span class="font-size-value">{themeStore.effectiveFontSize}px</span>
       <button onclick={increaseFontSize} aria-label="Agrandar fuente">+</button>
       {#if themeStore.fontSizeOverride !== null}
-        <button class="reset-btn" onclick={resetFontSize}>restablecer</button>
+        <button class="reset-btn" onclick={resetFontSize}>Restablecer</button>
       {/if}
     </div>
   </div>
@@ -86,10 +86,16 @@
     text-align: center;
   }
 
-  .reset-btn {
-    width: auto !important;
-    padding: 0 6px;
-    font-size: 10px;
-    opacity: 0.75;
+  .font-controls button:hover {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  /* Same look as the other Preferences buttons (e.g. Instalar/Quitar),
+     just sized to the 22px row of the −/+ controls. */
+  .font-controls .reset-btn {
+    width: auto;
+    margin-left: 4px;
+    padding: 0 10px;
+    font-size: 11px;
   }
 </style>

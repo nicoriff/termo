@@ -85,7 +85,7 @@
     </svg>
   </button>
   {#if themeStore.fontFamilyOverride !== null}
-    <button class="reset-btn" onclick={resetFont}>restablecer</button>
+    <button class="reset-btn" onclick={resetFont}>Restablecer</button>
   {/if}
 
   {#if open}
@@ -156,6 +156,24 @@
   }
 
   .font-picker-trigger:hover {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  /* Same look as the other Preferences buttons, stretched to the trigger's
+     height so the row lines up. */
+  .reset-btn {
+    align-self: stretch;
+    flex-shrink: 0;
+    padding: 0 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .reset-btn:hover {
     border-color: var(--pane-active-border, #3a6df0);
   }
 
