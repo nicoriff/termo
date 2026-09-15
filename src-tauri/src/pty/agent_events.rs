@@ -1,13 +1,13 @@
 //! Translates Claude Code / Codex lifecycle hook events into Modo IA
-//! session statuses. Both tools run the Termini hook script (see
-//! agent_hooks.rs) on each event; the script appends one line per event to
+//! session statuses. Both tools run `termini --agent-hook` (see
+//! agent_hooks.rs) on each event, which appends one line per event to
 //! `<TERMINI_EVENTS_DIR>/<TERMINI_SESSION_ID>.jsonl`:
 //!
 //! `<tool>\t<event>\t<detail>`
 //!
 //! where `detail` is Claude's `notification_type` for Notification events
-//! and empty otherwise. Everything else in the hook payload is dropped in
-//! the script, so large payloads (tool results) never touch the file.
+//! and empty otherwise. Everything else in the hook payload is dropped by
+//! the hook, so large payloads (tool results) never touch the file.
 
 use serde::Serialize;
 

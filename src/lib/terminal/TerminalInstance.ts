@@ -28,6 +28,12 @@ function withMonospaceFallback(family: string): string {
   return family.includes(",") ? family : `"${family}", monospace`;
 }
 
+// How long the container size must stay put before the PTY hears about it.
+// Each PTY resize makes the shell (and ConPTY on Windows) reflow and redraw
+// its whole screen, so a split drag or the 140ms zoom animation, which
+// resize many times in a row, would otherwise scramble the output.
+const PTY_RESIZE_SETTLE_MS = 100;
+
 export interface ThemeApplyOptions {
   fontSizeOverride: number | null;
   fontFamilyOverride: string | null;
@@ -58,6 +64,10 @@ export class TerminalInstance {
   private readonly classifyState: ClassifyState = { detectedTool: null };
   // Unix only — stays null forever on Windows (see PtyEvent::ForegroundProcess).
   private lastForegroundProcessPath: string | null = null;
+
+  private container: HTMLElement | null = null;
+  private lastPtySize: { cols: number; rows: number } | null = null;
+  private ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(tabId: string) {
     this.tabId = tabId;
@@ -120,9 +130,9 @@ export class TerminalInstance {
         return false;
       }
 
-      // The exclude guard keeps the tile-overview chord (Ctrl+Alt, which
-      // stays Ctrl-based on every platform) from also opening a tab, no
-      // matter what the user remaps "new tab" to.
+      // The exclude guard keeps AltGr chords (reported as Ctrl+Alt on
+      // Spanish/Latin keyboard layouts) from also opening a tab, no matter
+      // what the user remaps "new tab" to.
       if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("newTab"), { exclude: ["alt"] })) {
         event.preventDefault();
         workspaceStore.newTabLikeFocused();
@@ -161,14 +171,15 @@ export class TerminalInstance {
   }
 
   async mount(container: HTMLElement, shellPath?: string, shellArgs?: string[]): Promise<void> {
+    this.container = container;
     this.term.open(container);
     this.fit.fit();
 
+    const spawnSize = { cols: this.term.cols, rows: this.term.rows };
     this.sessionId = await spawnPty({
       shellPath,
       shellArgs,
-      cols: this.term.cols,
-      rows: this.term.rows,
+      ...spawnSize,
       onForegroundProcess: (path) => {
         this.lastForegroundProcessPath = path;
         tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
@@ -180,6 +191,7 @@ export class TerminalInstance {
       onExit: (code) => this.onExit?.(code),
     });
     registerPty(this.tabId, this.sessionId);
+    this.lastPtySize = spawnSize;
 
     // resize() no-ops while sessionId is still null, so a ResizeObserver
     // tick landing during the spawnPty() await above (e.g. surrounding
@@ -190,7 +202,7 @@ export class TerminalInstance {
     // but shows up as misplaced/overlapping redraws in full-screen TUIs
     // (e.g. claude) that position output based on their believed terminal
     // size. Re-sync once a session exists to correct any such drift.
-    this.resize();
+    this.resize({ immediate: true });
   }
 
   applyTheme(theme: Theme, options: ThemeApplyOptions): void {
@@ -202,10 +214,36 @@ export class TerminalInstance {
     this.resize();
   }
 
-  resize(): void {
+  /** Fits xterm to its container and, once the size settles, tells the PTY.
+   * Skipped while the pane is hidden: an inactive tab is `display: none`, so
+   * its container measures nothing and fitting would shrink the session to a
+   * few columns, making the shell reflow its whole screen into garbage by
+   * the time the tab is shown again. */
+  resize(options?: { immediate?: boolean }): void {
     if (this.disposed) return;
+    if (this.container && (this.container.clientWidth === 0 || this.container.clientHeight === 0)) return;
     this.fit.fit();
-    if (this.sessionId) void resizePty(this.sessionId, this.term.cols, this.term.rows);
+    if (!this.sessionId) return;
+    if (this.ptyResizeTimer) clearTimeout(this.ptyResizeTimer);
+    this.ptyResizeTimer = null;
+    if (options?.immediate) {
+      this.syncPtySize();
+      return;
+    }
+    this.ptyResizeTimer = setTimeout(() => {
+      this.ptyResizeTimer = null;
+      this.syncPtySize();
+    }, PTY_RESIZE_SETTLE_MS);
+  }
+
+  /** Only a real change in cols/rows reaches the PTY: re-showing a tab or a
+   * repaint at the same size must not make the shell redraw. */
+  private syncPtySize(): void {
+    if (this.disposed || !this.sessionId) return;
+    const { cols, rows } = this.term;
+    if (this.lastPtySize?.cols === cols && this.lastPtySize.rows === rows) return;
+    this.lastPtySize = { cols, rows };
+    void resizePty(this.sessionId, cols, rows);
   }
 
   focus(): void {
@@ -215,6 +253,7 @@ export class TerminalInstance {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.ptyResizeTimer) clearTimeout(this.ptyResizeTimer);
     this.renderSub?.dispose();
     this.renderSub = null;
     // Also covers teardown paths that don't go through workspaceStore's

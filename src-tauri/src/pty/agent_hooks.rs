@@ -3,15 +3,17 @@
 //!
 //! Installing adds one hook entry per lifecycle event to the tool's user
 //! hooks file (entries from every settings level merge, so the user's own
-//! hooks stay untouched). Each entry runs Termini's hook script, which is a
-//! no-op outside Termini: consoles spawned by Termini carry
-//! TERMINI_SESSION_ID and TERMINI_EVENTS_DIR, and the script appends the
-//! event to that session's file, which a watcher thread turns into
-//! `agent-event` app events (see agent_events.rs for the line format).
+//! hooks stay untouched). Each entry runs Termini's own executable as
+//! `termini --agent-hook <tool> <event>` (see `run_hook_cli`), so it behaves
+//! the same on macOS, Linux and Windows without a shell script. It is a no-op
+//! outside Termini: consoles spawned by Termini carry TERMINI_SESSION_ID and
+//! TERMINI_EVENTS_DIR, the hook appends the event to that session's file, and
+//! a watcher thread turns new lines into `agent-event` app events (see
+//! agent_events.rs for the line format).
 
 use std::collections::HashMap;
-use std::fs;
-use std::io::{Read, Seek, SeekFrom};
+use std::fs::{self, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -22,25 +24,12 @@ use uuid::Uuid;
 
 use super::agent_events::{parse_line, AgentUpdate};
 
-const SCRIPT_NAME: &str = "termini-agent-hook";
+/// First argument that switches the executable into hook mode.
+pub const HOOK_FLAG: &str = "--agent-hook";
 
-const SCRIPT: &str = r#"#!/bin/sh
-# Installed by Termini. Reports this agent's lifecycle events to the Termini
-# tab it runs in; outside Termini these variables are unset and it does
-# nothing. Always exits 0, so it can never block the agent.
-if [ -z "$TERMINI_EVENTS_DIR" ] || [ -z "$TERMINI_SESSION_ID" ]; then
-  cat >/dev/null
-  exit 0
-fi
-detail=""
-if [ "$2" = "Notification" ]; then
-  detail=$(tr -d '\n\r' | sed -n 's/.*"notification_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-else
-  cat >/dev/null
-fi
-printf '%s\t%s\t%s\n' "$1" "$2" "$detail" >> "$TERMINI_EVENTS_DIR/$TERMINI_SESSION_ID.jsonl" 2>/dev/null
-exit 0
-"#;
+/// The POSIX sh script earlier builds installed as the hook. Entries still
+/// pointing at it count as Termini's, so they get migrated or removed.
+const LEGACY_SCRIPT_NAME: &str = "termini-agent-hook";
 
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -50,6 +39,8 @@ pub enum AgentTool {
 }
 
 impl AgentTool {
+    const ALL: [AgentTool; 2] = [AgentTool::Claude, AgentTool::Codex];
+
     fn name(self) -> &'static str {
         match self {
             AgentTool::Claude => "claude",
@@ -86,7 +77,8 @@ impl AgentTool {
     }
 
     fn hooks_file(self) -> anyhow::Result<PathBuf> {
-        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HomeDirNotFound)))?;
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HomeDirNotFound)))?;
         Ok(match self {
             AgentTool::Claude => home.join(".claude").join("settings.json"),
             AgentTool::Codex => std::env::var_os("CODEX_HOME")
@@ -101,42 +93,45 @@ pub fn events_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     Ok(app.path().app_data_dir()?.join("agent-events"))
 }
 
-fn script_path(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    Ok(app.path().app_data_dir()?.join("hooks").join(SCRIPT_NAME))
+fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
+    format!("{} {HOOK_FLAG} {} {event}", quote_executable(exe), tool.name())
 }
 
-/// (Re)writes the hook script, so installed hooks always run the script
-/// version matching this Termini build.
-pub fn write_script(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let path = script_path(app)?;
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
+/// Hook commands run through `sh -c` on macOS/Linux and Git Bash on Windows,
+/// so the path is quoted for a POSIX shell.
+#[cfg(not(windows))]
+fn quote_executable(exe: &Path) -> String {
+    format!("'{}'", exe.to_string_lossy().replace('\'', r"'\''"))
+}
+
+/// Double quotes around a forward-slash path: a backslash is an escape
+/// character in bash, while Windows accepts `/` as a separator.
+#[cfg(windows)]
+fn quote_executable(exe: &Path) -> String {
+    let mut quoted = String::from("\"");
+    for c in exe.to_string_lossy().replace('\\', "/").chars() {
+        if matches!(c, '"' | '$' | '`') {
+            quoted.push('\\');
+        }
+        quoted.push(c);
     }
-    fs::write(&path, SCRIPT)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
-    }
-    Ok(path)
+    quoted.push('"');
+    quoted
 }
 
-fn sh_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
-}
-
-fn is_our_group(group: &Value) -> bool {
+fn group_commands(group: &Value) -> impl Iterator<Item = &str> {
     group
         .get("hooks")
         .and_then(Value::as_array)
-        .is_some_and(|hooks| {
-            !hooks.is_empty()
-                && hooks.iter().all(|hook| {
-                    hook.get("command")
-                        .and_then(Value::as_str)
-                        .is_some_and(|command| command.contains(SCRIPT_NAME))
-                })
-        })
+        .into_iter()
+        .flatten()
+        .filter_map(|hook| hook.get("command").and_then(Value::as_str))
+}
+
+fn is_our_group(group: &Value) -> bool {
+    let mut commands = group_commands(group).peekable();
+    commands.peek().is_some()
+        && commands.all(|command| command.contains(HOOK_FLAG) || command.contains(LEGACY_SCRIPT_NAME))
 }
 
 fn read_root(file: &Path) -> anyhow::Result<Map<String, Value>> {
@@ -175,7 +170,7 @@ fn strip_ours(hooks: &mut Map<String, Value>) {
     hooks.retain(|_, entries| !entries.as_array().is_some_and(Vec::is_empty));
 }
 
-fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, script: &Path) -> anyhow::Result<()> {
+fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, exe: &Path) -> anyhow::Result<()> {
     let hooks = root
         .entry("hooks")
         .or_insert_with(|| json!({}))
@@ -183,13 +178,12 @@ fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, script: &Path) -> an
         .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HooksNotAnObject)))?;
     strip_ours(hooks);
     for event in tool.events() {
-        let command = format!("{} {} {}", sh_quote(&script.to_string_lossy()), tool.name(), event);
         hooks
             .entry(*event)
             .or_insert_with(|| json!([]))
             .as_array_mut()
             .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HooksEventNotAList(event))))?
-            .push(json!({ "hooks": [{ "type": "command", "command": command }] }));
+            .push(json!({ "hooks": [{ "type": "command", "command": hook_command(exe, tool, event) }] }));
     }
     Ok(())
 }
@@ -215,8 +209,17 @@ fn has_ours(root: &Map<String, Value>, tool: AgentTool) -> bool {
     })
 }
 
-pub fn install(app: &tauri::AppHandle, tool: AgentTool) -> anyhow::Result<()> {
-    let script = write_script(app)?;
+fn has_any_ours(root: &Map<String, Value>) -> bool {
+    root.get("hooks").and_then(Value::as_object).is_some_and(|hooks| {
+        hooks
+            .values()
+            .filter_map(Value::as_array)
+            .any(|entries| entries.iter().any(is_our_group))
+    })
+}
+
+pub fn install(tool: AgentTool) -> anyhow::Result<()> {
+    let exe = std::env::current_exe()?;
     let file = tool.hooks_file()?;
     let mut root = read_root(&file)?;
     // One-time safety copy of the user's file before Termini first edits it.
@@ -224,7 +227,7 @@ pub fn install(app: &tauri::AppHandle, tool: AgentTool) -> anyhow::Result<()> {
     if file.exists() && !backup.exists() {
         fs::copy(&file, &backup)?;
     }
-    add_ours(&mut root, tool, &script)?;
+    add_ours(&mut root, tool, &exe)?;
     write_root(&file, &root)
 }
 
@@ -242,6 +245,72 @@ pub fn is_installed(tool: AgentTool) -> bool {
     tool.hooks_file()
         .and_then(|file| read_root(&file))
         .is_ok_and(|root| has_ours(&root, tool))
+}
+
+/// Points already-installed hooks at this executable (it moves between dev
+/// and installed builds, or on update) and migrates entries left by the old
+/// shell-script hook. Files without Termini hooks are never touched, and a
+/// file is only rewritten when something actually changes.
+pub fn refresh_installed(app: &tauri::AppHandle) {
+    if let Ok(dir) = app.path().app_data_dir() {
+        let legacy = dir.join("hooks");
+        let _ = fs::remove_file(legacy.join(LEGACY_SCRIPT_NAME));
+        let _ = fs::remove_dir(legacy);
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    for tool in AgentTool::ALL {
+        let Ok(file) = tool.hooks_file() else {
+            continue;
+        };
+        let Ok(root) = read_root(&file) else {
+            continue;
+        };
+        if !has_any_ours(&root) {
+            continue;
+        }
+        let mut updated = root.clone();
+        if add_ours(&mut updated, tool, &exe).is_ok() && updated != root {
+            let _ = write_root(&file, &updated);
+        }
+    }
+}
+
+/// `termini --agent-hook <tool> <event>`, run by the agent for each lifecycle
+/// event with the event's JSON on stdin. Never fails: whatever happens it
+/// returns normally (exit code 0), so it can never block the agent.
+pub fn run_hook_cli(tool: &str, event: &str) {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    let (Some(dir), Ok(session)) = (std::env::var_os("TERMINI_EVENTS_DIR"), std::env::var("TERMINI_SESSION_ID"))
+    else {
+        return;
+    };
+    let _ = append_event(Path::new(&dir), &session, tool, event, &input);
+}
+
+fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str) -> std::io::Result<()> {
+    // Session ids are UUIDs; anything else must not name a path outside `dir`.
+    if session.is_empty() || !session.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Ok(());
+    }
+    // Only Notification needs a field from the payload; large payloads (tool
+    // results) never touch the file.
+    let detail = if event == "Notification" {
+        serde_json::from_str::<Value>(input)
+            .ok()
+            .and_then(|payload| payload.get("notification_type")?.as_str().map(str::to_owned))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let field = |value: &str| value.replace(['\t', '\r', '\n'], " ");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(format!("{session}.jsonl")))?;
+    writeln!(file, "{}\t{}\t{}", field(tool), field(event), field(&detail))
 }
 
 pub fn forget_session(app: &tauri::AppHandle, id: Uuid) {
@@ -322,9 +391,20 @@ fn read_new_lines(path: &Path, offset: &mut u64) -> Vec<AgentUpdate> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::agent_events::AgentStatus;
     use super::*;
 
-    const SCRIPT_PATH: &str = "/Users/me/Library/Application Support/com.termini.app/hooks/termini-agent-hook";
+    const EXE: &str = "/Applications/Termini.app/Contents/MacOS/termini";
+
+    fn exe() -> &'static Path {
+        Path::new(EXE)
+    }
+
+    fn temp_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("termini-hook-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
     #[test]
     fn install_keeps_user_hooks_and_is_idempotent() {
@@ -333,26 +413,22 @@ mod tests {
             "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] }
         }))
         .unwrap();
-        let script = Path::new(SCRIPT_PATH);
 
-        add_ours(&mut root, AgentTool::Claude, script).unwrap();
-        add_ours(&mut root, AgentTool::Claude, script).unwrap();
+        add_ours(&mut root, AgentTool::Claude, exe()).unwrap();
+        add_ours(&mut root, AgentTool::Claude, exe()).unwrap();
 
         assert!(has_ours(&root, AgentTool::Claude));
         let stop = root["hooks"]["Stop"].as_array().unwrap();
         assert_eq!(stop.len(), 2, "user hook plus exactly one Termini hook");
         assert_eq!(stop[0]["hooks"][0]["command"], "say done");
-        assert_eq!(
-            stop[1]["hooks"][0]["command"],
-            format!("'{SCRIPT_PATH}' claude Stop")
-        );
+        assert_eq!(stop[1]["hooks"][0]["command"], hook_command(exe(), AgentTool::Claude, "Stop"));
         assert_eq!(root["theme"], "dark");
     }
 
     #[test]
     fn uninstall_removes_only_termini_entries() {
         let mut root = Map::new();
-        add_ours(&mut root, AgentTool::Codex, Path::new(SCRIPT_PATH)).unwrap();
+        add_ours(&mut root, AgentTool::Codex, exe()).unwrap();
         assert!(has_ours(&root, AgentTool::Codex));
         remove_ours(&mut root);
         assert!(!root.contains_key("hooks"));
@@ -361,47 +437,87 @@ mod tests {
             "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] }
         }))
         .unwrap();
-        add_ours(&mut with_user, AgentTool::Codex, Path::new(SCRIPT_PATH)).unwrap();
+        add_ours(&mut with_user, AgentTool::Codex, exe()).unwrap();
         remove_ours(&mut with_user);
         assert_eq!(with_user["hooks"]["Stop"].as_array().unwrap().len(), 1);
         assert!(with_user["hooks"].get("SessionStart").is_none());
     }
 
     #[test]
-    fn script_reports_events_for_termini_consoles_only() {
-        let dir = std::env::temp_dir().join(format!("termini-hook-test-{}", Uuid::new_v4()));
-        fs::create_dir_all(&dir).unwrap();
-        let script = dir.join(SCRIPT_NAME);
-        fs::write(&script, SCRIPT).unwrap();
+    fn migrates_entries_from_the_legacy_script() {
+        let mut root: Map<String, Value> = serde_json::from_value(json!({
+            "hooks": { "Stop": [{ "hooks": [{
+                "type": "command",
+                "command": "'/Users/me/Library/Application Support/com.termini.app/hooks/termini-agent-hook' claude Stop"
+            }] }] }
+        }))
+        .unwrap();
+        assert!(has_any_ours(&root));
 
-        let run = |event: &str, stdin: &str, with_env: bool| {
-            use std::io::Write;
-            let mut command = std::process::Command::new("sh");
-            command.arg(&script).args(["claude", event]).stdin(std::process::Stdio::piped());
-            command.env_remove("TERMINI_EVENTS_DIR").env_remove("TERMINI_SESSION_ID");
-            if with_env {
-                command.env("TERMINI_EVENTS_DIR", &dir).env("TERMINI_SESSION_ID", "s1");
-            }
-            let mut child = command.spawn().unwrap();
-            child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
-            assert!(child.wait().unwrap().success());
-        };
+        add_ours(&mut root, AgentTool::Claude, exe()).unwrap();
 
-        run("Stop", r#"{"hook_event_name":"Stop"}"#, false);
-        assert!(!dir.join("s1.jsonl").exists(), "no-op outside Termini");
+        let stop = root["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1, "the legacy entry is replaced, not kept alongside");
+        assert_eq!(stop[0]["hooks"][0]["command"], hook_command(exe(), AgentTool::Claude, "Stop"));
+    }
 
-        run("Notification", "{\n \"notification_type\": \"permission_prompt\",\n \"message\": \"x\"\n}", true);
-        run("Stop", r#"{"last_assistant_message":"done"}"#, true);
+    #[test]
+    fn files_without_termini_hooks_are_not_ours() {
+        let root: Map<String, Value> = serde_json::from_value(json!({
+            "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] }
+        }))
+        .unwrap();
+        assert!(!has_any_ours(&root));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn command_quotes_a_windows_path_for_bash() {
+        assert_eq!(
+            hook_command(Path::new(r"C:\Program Files\Termini\termini.exe"), AgentTool::Claude, "Stop"),
+            "\"C:/Program Files/Termini/termini.exe\" --agent-hook claude Stop"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn command_quotes_a_unix_path_for_sh() {
+        assert_eq!(
+            hook_command(Path::new("/opt/Ter'mini/termini"), AgentTool::Codex, "Stop"),
+            r"'/opt/Ter'\''mini/termini' --agent-hook codex Stop"
+        );
+    }
+
+    #[test]
+    fn hook_events_become_status_updates() {
+        let dir = temp_dir();
+        append_event(
+            &dir,
+            "s1",
+            "claude",
+            "Notification",
+            "{\n \"notification_type\": \"permission_prompt\",\n \"message\": \"x\"\n}",
+        )
+        .unwrap();
+        append_event(&dir, "s1", "claude", "Stop", r#"{"last_assistant_message":"done"}"#).unwrap();
 
         let mut offset = 0;
         let updates = read_new_lines(&dir.join("s1.jsonl"), &mut offset);
         let _ = fs::remove_dir_all(&dir);
         assert_eq!(
             updates.iter().map(|u| u.status).collect::<Vec<_>>(),
-            [
-                Some(super::super::agent_events::AgentStatus::Awaiting),
-                Some(super::super::agent_events::AgentStatus::Finished)
-            ]
+            [Some(AgentStatus::Awaiting), Some(AgentStatus::Finished)]
         );
+    }
+
+    #[test]
+    fn ignores_session_ids_that_could_escape_the_events_dir() {
+        let base = temp_dir();
+        let dir = base.join("events");
+        fs::create_dir_all(&dir).unwrap();
+        append_event(&dir, "../escaped", "claude", "Stop", "{}").unwrap();
+        let escaped = base.join("escaped.jsonl").exists();
+        let _ = fs::remove_dir_all(&base);
+        assert!(!escaped);
     }
 }

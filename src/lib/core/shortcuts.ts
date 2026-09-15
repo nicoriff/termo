@@ -100,8 +100,8 @@ export function parseKeybinding(binding: string): ParsedBinding {
 export interface MatchOptions {
   /** Modifiers that must NOT be active on the event, regardless of whether
    * the binding itself requires them — e.g. Alt for "newTab", so that
-   * whatever the user remaps it to, Ctrl+Alt (the tile-overview chord) can
-   * never also be interpreted as "new tab". */
+   * whatever the user remaps it to, an AltGr chord (reported as Ctrl+Alt)
+   * can never also be interpreted as "new tab". */
   exclude?: ModifierName[];
   /** Modifiers excluded from the modifier-set comparison entirely, on both
    * sides — e.g. Shift for "cycleTab", which flips direction (forward vs.

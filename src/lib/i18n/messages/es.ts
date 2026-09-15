@@ -42,7 +42,7 @@ export const es = {
     labels: {
       newTab: "Nueva pestaña",
       cycleTab: "Ciclar pestañas",
-      zoomTile: "Zoom / restaurar tile",
+      zoomTile: "Zoom (↑) / restaurar o selector de tiles (↓)",
       aiRunning: "Modo IA: Corriendo",
       aiAwaiting: "Modo IA: Esperando",
       aiError: "Modo IA: Error",
@@ -127,7 +127,6 @@ export const es = {
       dockBadge: "Contador de pendientes en el ícono de la app",
       noticesHint: "Solo notifica si Termini no tiene el foco o esa pestaña no está a la vista.",
       hooks: "Detección precisa con hooks",
-      hooksUnsupported: "Disponible en macOS y Linux.",
       installed: "Instalado",
       notInstalled: "No instalado",
       install: "Instalar",

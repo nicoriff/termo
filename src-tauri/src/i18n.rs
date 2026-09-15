@@ -30,7 +30,6 @@ pub fn current() -> Lang {
 
 pub enum Msg<'a> {
     PreferencesTitle,
-    HooksUnsupportedPlatform,
     HomeDirNotFound,
     NotAJsonObject(&'a str),
     HooksNotAnObject,
@@ -51,9 +50,6 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
     match (msg, lang) {
         (PreferencesTitle, Es) => "Preferencias".into(),
         (PreferencesTitle, En) => "Preferences".into(),
-
-        (HooksUnsupportedPlatform, Es) => "La integración con hooks solo está disponible en macOS y Linux".into(),
-        (HooksUnsupportedPlatform, En) => "The hooks integration is only available on macOS and Linux".into(),
 
         (HomeDirNotFound, Es) => "No se encontró el directorio home".into(),
         (HomeDirNotFound, En) => "Couldn't find the home directory".into(),
@@ -85,7 +81,6 @@ mod tests {
     fn all_messages() -> Vec<Msg<'static>> {
         vec![
             Msg::PreferencesTitle,
-            Msg::HooksUnsupportedPlatform,
             Msg::HomeDirNotFound,
             Msg::NotAJsonObject("settings.json"),
             Msg::HooksNotAnObject,

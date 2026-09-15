@@ -93,11 +93,19 @@ pub fn pty_resize(
         .map_err(|err| err.to_string())
 }
 
+/// Async and off the main thread: dropping the session closes the PTY, and on
+/// Windows ClosePseudoConsole blocks until the console's output is drained.
+/// Run as a sync command (which executes on the main thread) that froze the
+/// whole app whenever the drain stalled, e.g. when a frontend reload tore
+/// down every terminal at once.
 #[tauri::command]
-pub fn pty_kill(app: tauri::AppHandle, state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn pty_kill(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let id = parse_id(&id)?;
     agent_hooks::forget_session(&app, id);
-    state.pty.kill(id).map_err(|err| err.to_string())
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.kill(id))
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
 }
 
 /// Refreshing the whole process table takes tens of ms, so it runs off the

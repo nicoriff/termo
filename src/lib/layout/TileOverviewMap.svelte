@@ -9,6 +9,32 @@
   // to be zoomed right now.
   const layout = $derived(root ? computeLayout(root) : new Map());
   const tiles = $derived(root ? collectTiles(root) : []);
+
+  // Hover only selects once the mouse really moves. The map opens under a
+  // resting pointer, and the browser reports that as entering whichever tile
+  // ends up under it, which would steal the preselected (focused) tile. The
+  // same applies after an arrow-key move: a tiny jitter mustn't undo it
+  // before Enter confirms.
+  const HOVER_THRESHOLD_PX = 4;
+  let pointerOrigin: { x: number; y: number } | null = null;
+  let selectingByHover = false;
+
+  $effect(() => {
+    void workspaceStore.overviewSelectedTileId;
+    if (!selectingByHover) pointerOrigin = null;
+    selectingByHover = false;
+  });
+
+  function hover(event: PointerEvent, tileId: string) {
+    if (!pointerOrigin) {
+      pointerOrigin = { x: event.clientX, y: event.clientY };
+      return;
+    }
+    if (Math.hypot(event.clientX - pointerOrigin.x, event.clientY - pointerOrigin.y) < HOVER_THRESHOLD_PX) return;
+    if (workspaceStore.overviewSelectedTileId === tileId) return;
+    selectingByHover = true;
+    workspaceStore.setOverviewSelection(tileId);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -27,7 +53,7 @@
             100}%"
           role="button"
           tabindex="0"
-          onpointerenter={() => workspaceStore.setOverviewSelection(tile.id)}
+          onpointermove={(e) => hover(e, tile.id)}
           onclick={() => workspaceStore.confirmOverview()}
           onkeydown={(e) => {
             if (e.key === "Enter" || e.key === " ") workspaceStore.confirmOverview();

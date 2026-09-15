@@ -3,8 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 export type AgentTool = "claude" | "codex";
 
 export interface AgentHooksStatus {
-  /** False on Windows: the hook script is POSIX sh. */
-  supported: boolean;
   claude: boolean;
   codex: boolean;
 }

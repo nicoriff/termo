@@ -19,16 +19,19 @@ class AiStatusStore {
   private listeners = new Set<StatusChangeListener>();
 
   /** Screen classification. Once a session's hooks report, they own its
-   * status; the screen can still flag an error, notice the tool exited, or
-   * see work resume after a permission prompt was answered — no hook fires
-   * for that until the approved tool call finishes. */
+   * status; the screen can still flag an error, or see work resume after a
+   * permission prompt was answered — no hook fires for that until the
+   * approved tool call finishes. It can't clear a hook-owned session: a null
+   * tool only means the screen never recognized the tool (always the case on
+   * Windows, which has no foreground-process signal), so clearing on it made
+   * the status flicker back to nothing between hook events. The SessionEnd
+   * hook or closing the tab clears it instead. */
   set(sessionId: string, result: ClassifyResult): void {
     const prev = this.byId[sessionId];
     if (prev?.fromHook) {
       const allowed =
-        result.tool === null ||
-        result.status === "error" ||
-        (prev.status === "awaiting" && result.status === "running");
+        result.tool !== null &&
+        (result.status === "error" || (prev.status === "awaiting" && result.status === "running"));
       if (!allowed) return;
     }
     this.apply(sessionId, result, false);

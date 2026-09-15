@@ -44,7 +44,7 @@ export const en: Messages = {
     labels: {
       newTab: "New tab",
       cycleTab: "Cycle tabs",
-      zoomTile: "Zoom / restore tile",
+      zoomTile: "Zoom (↑) / restore or tile picker (↓)",
       aiRunning: "AI Mode: Running",
       aiAwaiting: "AI Mode: Waiting",
       aiError: "AI Mode: Error",
@@ -129,7 +129,6 @@ export const en: Messages = {
       dockBadge: "Pending count on the app icon",
       noticesHint: "Only notifies when Termini isn't focused or that tab isn't visible.",
       hooks: "Precise detection with hooks",
-      hooksUnsupported: "Available on macOS and Linux.",
       installed: "Installed",
       notInstalled: "Not installed",
       install: "Install",

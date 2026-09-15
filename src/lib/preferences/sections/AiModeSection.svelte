@@ -93,10 +93,7 @@
 
 <section>
   <h3>{t("preferences.aiMode.hooks")}</h3>
-  {#if hooks && !hooks.supported}
-    <p class="setting-hint">{t("preferences.aiMode.hooksUnsupported")}</p>
-  {:else}
-    {#each TOOLS as { tool, label } (tool)}
+  {#each TOOLS as { tool, label } (tool)}
       {@const installed = hooks?.[tool] ?? false}
       <div class="hook-row">
         <span>{label}</span>
@@ -111,7 +108,6 @@
     <p class="setting-hint">
       {t("preferences.aiMode.hooksHint", { claudeFile: TOOLS[0].file, codexFile: TOOLS[1].file })}
     </p>
-  {/if}
   {#if error}
     <p class="error">{error}</p>
   {/if}

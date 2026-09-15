@@ -78,7 +78,7 @@
     workspaceStore.focusSession(sessionId);
   }
 
-  // Capture phase at window level, like the Ctrl+Alt tile overview: runs
+  // Capture phase at window level, like the tile overview shortcut: runs
   // before xterm's own key handling, so these keys never reach the shell.
   // Keyboard focus stays in the terminal the whole time — the list is
   // driven from here instead of moving focus into it.

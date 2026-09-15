@@ -7,6 +7,19 @@ mod state;
 use state::AppState;
 use tauri::Manager;
 
+/// Handles `termini --agent-hook <tool> <event>` (see pty/agent_hooks.rs) and
+/// returns true, or returns false for a normal launch.
+pub fn run_agent_hook_from_args() -> bool {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.as_slice() {
+        [flag, tool, event, ..] if flag == pty::agent_hooks::HOOK_FLAG => {
+            pty::agent_hooks::run_hook_cli(tool, event);
+            true
+        }
+        _ => false,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -27,8 +40,7 @@ pub fn run() {
                 });
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
-            // Keeps already-installed hooks running this build's script.
-            let _ = pty::agent_hooks::write_script(app.handle());
+            pty::agent_hooks::refresh_installed(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

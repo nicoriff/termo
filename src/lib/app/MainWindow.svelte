@@ -13,6 +13,7 @@
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { startAgentAttention } from "$lib/ai-mode/attention";
   import { resolveDefaultShell } from "$lib/core/default-shell";
+  import { eventMatchesKeybinding } from "$lib/core/shortcuts";
 
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
@@ -53,41 +54,33 @@
     void setBadgeCount(pending > 0 ? pending : undefined).catch(() => {});
   });
 
-  // Ctrl+Alt: hold to show the tile overview map (arrows/mouse to pick a
-  // tile, release Ctrl or Alt to focus it — Alt-Tab style). Registered at
-  // window level in the capture phase so it runs ahead of xterm's own
-  // keydown handling (TerminalInstance.attachCustomKeyEventHandler), which
-  // otherwise would forward these keystrokes to the shell. This is also the
-  // only place in the app that reacts to keyup, since the overview needs to
-  // know when either modifier is released.
-  //
-  // getModifierState("AltGraph") guards against AltGr (right Alt) on
-  // Spanish/Latin keyboard layouts, which the OS reports as ctrlKey+altKey
-  // both true — without this, typing "@", "#", etc. would pop the overview
-  // open instead of inserting the character.
+  // The zoom shortcut's ↓ (Alt+↓, Cmd+↓ on macOS, or whatever it's remapped
+  // to) restores a zoomed tile; with nothing zoomed it opens the tile
+  // overview instead. The overview stays open on its own: arrows/mouse move
+  // the selection, Enter or a click focuses that tile, and Escape, the zoom
+  // shortcut's ↑ or a click outside cancels. Registered at window level in the capture phase so it
+  // runs ahead of xterm's own keydown handling
+  // (TerminalInstance.attachCustomKeyEventHandler), which handles the zoom
+  // shortcut itself whenever this doesn't take it.
   function handleOverviewKeyDown(event: KeyboardEvent) {
-    // Safety net: if the overview is open but Ctrl+Alt aren't BOTH still
-    // held, the keyup that should have closed it (below) never arrived —
-    // e.g. focus briefly left the window while a key was down, which drops
-    // the keyup for whichever key was down at the time. Without this, the
-    // overview would stay open forever and this handler would keep
-    // swallowing every keystroke app-wide. Close it now and fall through
-    // to treat this keystroke normally instead.
-    if (workspaceStore.overviewOpen && !(event.ctrlKey && event.altKey)) {
-      workspaceStore.confirmOverview();
-    }
-
-    const isRealCtrlAlt = event.ctrlKey && event.altKey && !event.getModifierState("AltGraph");
-    if (isRealCtrlAlt && !workspaceStore.overviewOpen) {
+    if (!workspaceStore.overviewOpen) {
+      const opensOverview =
+        event.key === "ArrowDown" &&
+        workspaceStore.zoomedTileId === null &&
+        eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("zoomTile"));
+      if (!opensOverview) return;
       event.preventDefault();
       event.stopPropagation();
       workspaceStore.openOverview();
       return;
     }
-    if (!workspaceStore.overviewOpen) return;
 
     event.preventDefault();
     event.stopPropagation();
+    if (event.key === "ArrowUp" && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("zoomTile"))) {
+      workspaceStore.cancelOverview();
+      return;
+    }
     switch (event.key) {
       case "Escape":
         workspaceStore.cancelOverview();
@@ -110,37 +103,9 @@
     }
   }
 
-  function handleOverviewKeyUp(event: KeyboardEvent) {
-    if (!workspaceStore.overviewOpen) return;
-    if (event.key === "Control" || event.key === "Alt") {
-      event.preventDefault();
-      event.stopPropagation();
-      workspaceStore.confirmOverview();
-    }
-  }
-
-  // Backstop for the keyup above: WebKit can swallow a modifier-only keyup
-  // while a <textarea> has focus, which is exactly xterm.js's hidden input
-  // — the same class of bug already worked around for Cmd elsewhere in this
-  // app. Without this, releasing Ctrl/Alt over the overview silently does
-  // nothing and only an explicit Enter (a real keydown, never dropped)
-  // confirms the selection. Picking a tile is inherently a mouse-moving
-  // gesture, so checking live modifier state on every pointer move catches
-  // the release just as fast as a real keyup would, without replacing it.
-  function handleOverviewPointerMove(event: PointerEvent) {
-    if (!workspaceStore.overviewOpen) return;
-    if (!event.getModifierState("Control") || !event.getModifierState("Alt")) {
-      workspaceStore.confirmOverview();
-    }
-  }
 </script>
 
-<svelte:window
-  onkeydowncapture={handleOverviewKeyDown}
-  onkeyupcapture={handleOverviewKeyUp}
-  onpointermove={handleOverviewPointerMove}
-  onblur={() => workspaceStore.cancelOverview()}
-/>
+<svelte:window onkeydowncapture={handleOverviewKeyDown} onblur={() => workspaceStore.cancelOverview()} />
 
 <div class="window-chrome" class:maximized={uiState.maximized}>
   <ResizeBorders />

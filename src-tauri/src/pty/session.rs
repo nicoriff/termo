@@ -112,13 +112,18 @@ impl PtySession {
         std::thread::spawn(move || {
             let mut reader = reader;
             let mut buf = [0u8; 8192];
+            // Once the webview side is gone (tab closed, frontend reloaded) the
+            // output is discarded, but reading continues until EOF: on Windows,
+            // closing the PTY blocks until its output pipe is drained, so a
+            // reader that stopped here would hang whoever closes the session.
+            let mut forwarding = true;
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let data = STANDARD.encode(&buf[..n]);
-                        if reader_channel.send(PtyEvent::Data { data }).is_err() {
-                            break;
+                        if forwarding {
+                            let data = STANDARD.encode(&buf[..n]);
+                            forwarding = reader_channel.send(PtyEvent::Data { data }).is_ok();
                         }
                     }
                     Err(_) => break,
@@ -132,7 +137,9 @@ impl PtySession {
                 .ok()
                 .map(|status| status.exit_code() as i32)
                 .unwrap_or(-1);
-            let _ = reader_channel.send(PtyEvent::Exit { code });
+            if forwarding {
+                let _ = reader_channel.send(PtyEvent::Exit { code });
+            }
         });
 
         // Confirming signal for Modo IA's tool detection: which process is
