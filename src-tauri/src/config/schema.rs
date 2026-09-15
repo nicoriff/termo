@@ -46,6 +46,8 @@ pub struct ShortcutsConfig {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppConfig {
+    /// UI language: "system" (follow the OS), "es" or "en".
+    pub language: String,
     pub theme: String,
     pub default_shell_id: Option<String>,
     pub font_size_override: Option<u16>,
@@ -95,6 +97,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            language: "system".into(),
             theme: "Dark".into(),
             default_shell_id: None,
             font_size_override: None,

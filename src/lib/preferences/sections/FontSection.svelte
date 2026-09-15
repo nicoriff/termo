@@ -3,6 +3,7 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import FontPicker from "../FontPicker.svelte";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   function decreaseFontSize() {
     themeStore.setFontSize(Math.max(9, themeStore.effectiveFontSize - 1));
@@ -26,22 +27,22 @@
 </script>
 
 <section>
-  <h3>Tamaño</h3>
+  <h3>{t("preferences.font.size")}</h3>
   <div class="font-row">
-    <span>Tamaño de la fuente</span>
+    <span>{t("preferences.font.sizeLabel")}</span>
     <div class="font-controls">
-      <button onclick={decreaseFontSize} aria-label="Reducir fuente">-</button>
+      <button onclick={decreaseFontSize} aria-label={t("preferences.font.decrease")}>-</button>
       <span class="font-size-value">{themeStore.effectiveFontSize}px</span>
-      <button onclick={increaseFontSize} aria-label="Agrandar fuente">+</button>
+      <button onclick={increaseFontSize} aria-label={t("preferences.font.increase")}>+</button>
       {#if themeStore.fontSizeOverride !== null}
-        <button class="reset-btn" onclick={resetFontSize}>Restablecer</button>
+        <button class="reset-btn" onclick={resetFontSize}>{t("preferences.font.reset")}</button>
       {/if}
     </div>
   </div>
 </section>
 
 <section>
-  <h3>Fuente</h3>
+  <h3>{t("preferences.font.family")}</h3>
   <FontPicker />
 </section>
 

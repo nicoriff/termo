@@ -75,7 +75,7 @@ pub fn install_google_font(app: tauri::AppHandle, family: String) -> Result<Stri
         .or_else(|| css.split("@font-face").last())
         .and_then(|block| block.split("url(").nth(1))
         .and_then(|part| part.split(')').next())
-        .ok_or_else(|| format!("No se encontro el archivo de fuente para \"{family}\""))?
+        .ok_or_else(|| crate::i18n::tr(crate::i18n::Msg::FontFileNotFound(&family)))?
         .to_string();
 
     let resp = ureq::get(&font_url)

@@ -10,6 +10,7 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
   import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
@@ -218,7 +219,7 @@
           class="tile-tab-close"
           role="button"
           tabindex="-1"
-          aria-label="Cerrar pestaña"
+          aria-label={t("tabs.close")}
           onclick={(e) => closeTab(e, session.id)}
           onkeydown={(e) => {
             if (e.key === "Enter" || e.key === " ") closeTab(e, session.id);
@@ -232,7 +233,7 @@
     {/each}
     <button
       class="tile-tab-add"
-      aria-label="Nueva pestaña"
+      aria-label={t("tabs.new")}
       bind:this={addButtonEl}
       onclick={toggleShellPicker}
     >
@@ -251,28 +252,28 @@
           <button class="shell-picker-item" onclick={() => pickShell(shell)}>{shell.display_name}</button>
         {/each}
         {#if shells.length === 0}
-          <p class="shell-picker-empty">Cargando...</p>
+          <p class="shell-picker-empty">{t("tabs.loadingShells")}</p>
         {/if}
       </div>
     </div>
   {/if}
 
   <div class="tile-toolbar">
-    <button title="Dividir verticalmente" onclick={() => void split("row")}>
+    <button title={t("tabs.splitVertical")} onclick={() => void split("row")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
         <line x1="6" y1="0.5" x2="6" y2="11.5" stroke="currentColor" />
       </svg>
     </button>
-    <button title="Dividir horizontalmente" onclick={() => void split("col")}>
+    <button title={t("tabs.splitHorizontal")} onclick={() => void split("col")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
         <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />
       </svg>
     </button>
     <button
-      title={workspaceStore.zoomedTileId === tile.id ? "Restaurar pestaña" : "Ampliar pestaña"}
-      aria-label={workspaceStore.zoomedTileId === tile.id ? "Restaurar pestaña" : "Ampliar pestaña"}
+      title={t(workspaceStore.zoomedTileId === tile.id ? "tabs.restore" : "tabs.zoom")}
+      aria-label={t(workspaceStore.zoomedTileId === tile.id ? "tabs.restore" : "tabs.zoom")}
       onclick={() => workspaceStore.toggleZoom(tile.id)}
     >
       {#if workspaceStore.zoomedTileId === tile.id}

@@ -13,6 +13,7 @@
     OH_MY_POSH_THEMES,
     type OhMyPoshStatus,
   } from "$lib/core/oh-my-posh-client";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let status = $state<OhMyPoshStatus | null>(null);
   let busy = $state<"binary" | "theme" | "font" | null>(null);
@@ -73,32 +74,29 @@
 <svelte:window onfocus={() => void refresh()} />
 
 <section>
-  <h3>Instalación</h3>
+  <h3>{t("preferences.ohMyPosh.installation")}</h3>
   {#if status === null}
-    <p class="setting-hint">Buscando Oh My Posh...</p>
+    <p class="setting-hint">{t("preferences.ohMyPosh.searching")}</p>
   {:else if status.path}
     <p class="status-line">
-      Instalado{status.managed ? " por Termini" : ""}
+      {t(status.managed ? "preferences.ohMyPosh.installedByTermini" : "preferences.ohMyPosh.installed")}
       <code>{status.path}</code>
     </p>
   {:else}
     <div class="row">
-      <span>No está instalado</span>
+      <span>{t("preferences.ohMyPosh.notInstalled")}</span>
       <button class="action-btn" onclick={install} disabled={busy !== null}>
-        {busy === "binary" ? "Descargando..." : "Instalar"}
+        {t(busy === "binary" ? "preferences.ohMyPosh.downloading" : "preferences.ohMyPosh.install")}
       </button>
     </div>
-    <p class="setting-hint">
-      Descarga el binario oficial desde cdn.ohmyposh.dev a la carpeta de Termini. No modifica tu PATH ni tus archivos
-      de configuración.
-    </p>
+    <p class="setting-hint">{t("preferences.ohMyPosh.installHint")}</p>
   {/if}
 </section>
 
 <section>
-  <h3>Prompt</h3>
+  <h3>{t("preferences.ohMyPosh.prompt")}</h3>
   <label class="toggle-row">
-    <span>Usar Oh My Posh en sesiones nuevas</span>
+    <span>{t("preferences.ohMyPosh.enable")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.ohMyPoshEnabled}
@@ -107,7 +105,7 @@
     />
   </label>
   <div class="row">
-    <span>Tema</span>
+    <span>{t("preferences.ohMyPosh.theme")}</span>
     <select value={appConfigStore.ohMyPoshTheme} onchange={pickTheme} disabled={busy !== null || !status?.path}>
       {#each OH_MY_POSH_THEMES as theme (theme)}
         <option value={theme}>{theme}</option>
@@ -115,25 +113,29 @@
     </select>
   </div>
   <p class="setting-hint">
-    Funciona en PowerShell, zsh y bash 4.2 o superior.{isMac
-      ? " El bash que trae macOS (3.2) no es compatible: elegí zsh en Consola."
-      : ""} Solo afecta sesiones nuevas.
+    {[
+      t("preferences.ohMyPosh.promptHint"),
+      isMac ? t("preferences.ohMyPosh.promptHintMac") : "",
+      t("preferences.ohMyPosh.onlyNewSessions"),
+    ]
+      .filter(Boolean)
+      .join(" ")}
   </p>
 </section>
 
 <section>
-  <h3>Fuente con íconos</h3>
+  <h3>{t("preferences.ohMyPosh.nerdFont")}</h3>
   <div class="row">
     <span>{NERD_FONT_FAMILY}</span>
     {#if themeStore.fontFamilyOverride === NERD_FONT_FAMILY}
-      <span class="setting-hint">En uso</span>
+      <span class="setting-hint">{t("preferences.ohMyPosh.inUse")}</span>
     {:else}
       <button class="action-btn" onclick={useNerdFont} disabled={busy !== null}>
-        {busy === "font" ? "Descargando..." : "Instalar y usar"}
+        {t(busy === "font" ? "preferences.ohMyPosh.downloading" : "preferences.ohMyPosh.installAndUse")}
       </button>
     {/if}
   </div>
-  <p class="setting-hint">Los temas usan íconos de Nerd Fonts; sin esta fuente se ven como cuadraditos.</p>
+  <p class="setting-hint">{t("preferences.ohMyPosh.nerdFontHint")}</p>
 </section>
 
 {#if error}

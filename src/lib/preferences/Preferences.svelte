@@ -12,8 +12,11 @@
   import OhMyPoshSection from "./sections/OhMyPoshSection.svelte";
   import AiModeSection from "./sections/AiModeSection.svelte";
   import PlatformSection from "./sections/PlatformSection.svelte";
+  import GeneralSection from "./sections/GeneralSection.svelte";
+  import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
 
   type SectionId =
+    | "general"
     | "appearance"
     | "font"
     | "console"
@@ -24,41 +27,67 @@
     | "windows"
     | "linux";
 
+  /** Sidebar groups that only hold subsections and have no page of their own. */
+  type GroupId = "integrations";
+
   interface SectionNode {
-    id: SectionId;
-    label: string;
-    children?: { id: SectionId; label: string }[];
+    id: SectionId | GroupId;
+    label: MessageKey;
+    children?: { id: SectionId; label: MessageKey }[];
   }
 
   const TREE: SectionNode[] = [
-    { id: "appearance", label: "Apariencia", children: [{ id: "font", label: "Fuente" }] },
+    { id: "general", label: "preferences.sidebar.general" },
+    {
+      id: "appearance",
+      label: "preferences.sidebar.appearance",
+      children: [{ id: "font", label: "preferences.sidebar.font" }],
+    },
     {
       id: "console",
-      label: "Consola",
+      label: "preferences.sidebar.console",
       children: [
-        { id: "oh-my-posh", label: "Oh My Posh" },
-        { id: "ai-mode", label: "IA Mode" },
-        { id: "mac", label: "macOS" },
-        { id: "windows", label: "Windows" },
-        { id: "linux", label: "Linux" },
+        { id: "ai-mode", label: "preferences.sidebar.aiMode" },
+        { id: "mac", label: "preferences.sidebar.mac" },
+        { id: "windows", label: "preferences.sidebar.windows" },
+        { id: "linux", label: "preferences.sidebar.linux" },
       ],
     },
-    { id: "shortcuts", label: "Shortcuts" },
+    {
+      id: "integrations",
+      label: "preferences.sidebar.integrations",
+      children: [{ id: "oh-my-posh", label: "preferences.sidebar.ohMyPosh" }],
+    },
+    { id: "shortcuts", label: "preferences.sidebar.shortcuts" },
   ];
 
-  let selected = $state<SectionId>("appearance");
-  let expanded = $state<Partial<Record<SectionId, boolean>>>({ appearance: true, console: true });
+  let selected = $state<SectionId>("general");
+  let expanded = $state<Partial<Record<SectionNode["id"], boolean>>>({
+    appearance: true,
+    console: true,
+    integrations: true,
+  });
+
+  function hasPage(node: SectionNode): node is SectionNode & { id: SectionId } {
+    return node.id !== "integrations";
+  }
+
+  function containsSelected(node: SectionNode): boolean {
+    return !!node.children?.some((child) => child.id === selected);
+  }
 
   function select(node: SectionNode) {
-    selected = node.id;
+    if (hasPage(node)) selected = node.id;
+    else if (node.children?.length) selected = node.children[0].id;
     if (node.children) expanded = { ...expanded, [node.id]: true };
   }
 
   function toggle(node: SectionNode) {
     const open = !expanded[node.id];
     expanded = { ...expanded, [node.id]: open };
-    // Don't leave the selection on a subsection that's no longer visible.
-    if (!open && node.children?.some((child) => child.id === selected)) selected = node.id;
+    // Don't leave the selection on a subsection that's no longer visible; a
+    // group without a page keeps it and highlights its own row instead.
+    if (!open && hasPage(node) && containsSelected(node)) selected = node.id;
   }
 
   onMount(() => {
@@ -80,16 +109,19 @@
 {/snippet}
 
 <div class="window-chrome" class:bordered={!isWindows}>
-  <TitleBar title="Preferencias" showSettingsButton={false} showMaximizeButton={false} />
+  <TitleBar title={t("preferences.title")} showSettingsButton={false} showMaximizeButton={false} />
   <div class="body">
     <nav class="sidebar">
       {#each TREE as node (node.id)}
-        <div class="sidebar-row" class:selected={selected === node.id}>
+        <div
+          class="sidebar-row"
+          class:selected={selected === node.id || (!expanded[node.id] && containsSelected(node))}
+        >
           {#if node.children}
             <button
               class="sidebar-chevron"
               class:expanded={expanded[node.id]}
-              aria-label={expanded[node.id] ? `Colapsar ${node.label}` : `Expandir ${node.label}`}
+              aria-label={t(expanded[node.id] ? "preferences.collapse" : "preferences.expand", { name: t(node.label) })}
               aria-expanded={!!expanded[node.id]}
               onclick={() => toggle(node)}
             >
@@ -100,7 +132,7 @@
           {:else}
             {@render chevronSpacer()}
           {/if}
-          <button class="sidebar-item" onclick={() => select(node)}>{node.label}</button>
+          <button class="sidebar-item" onclick={() => select(node)}>{t(node.label)}</button>
         </div>
 
         {#if node.children && expanded[node.id]}
@@ -108,7 +140,7 @@
             {#each node.children as child (child.id)}
               <div class="sidebar-row child" class:selected={selected === child.id}>
                 {@render chevronSpacer()}
-                <button class="sidebar-item" onclick={() => (selected = child.id)}>{child.label}</button>
+                <button class="sidebar-item" onclick={() => (selected = child.id)}>{t(child.label)}</button>
               </div>
             {/each}
           </div>
@@ -116,7 +148,9 @@
       {/each}
     </nav>
     <div class="detail">
-      {#if selected === "appearance"}
+      {#if selected === "general"}
+        <GeneralSection />
+      {:else if selected === "appearance"}
         <AppearanceSection />
       {:else if selected === "font"}
         <FontSection />

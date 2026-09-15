@@ -86,7 +86,7 @@ impl AgentTool {
     }
 
     fn hooks_file(self) -> anyhow::Result<PathBuf> {
-        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No se encontró el directorio home"))?;
+        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HomeDirNotFound)))?;
         Ok(match self {
             AgentTool::Claude => home.join(".claude").join("settings.json"),
             AgentTool::Codex => std::env::var_os("CODEX_HOME")
@@ -149,7 +149,9 @@ fn read_root(file: &Path) -> anyhow::Result<Map<String, Value>> {
     }
     match serde_json::from_str::<Value>(&text)? {
         Value::Object(map) => Ok(map),
-        _ => anyhow::bail!("{} no contiene un objeto JSON", file.display()),
+        _ => anyhow::bail!(crate::i18n::tr(crate::i18n::Msg::NotAJsonObject(
+            &file.display().to_string()
+        ))),
     }
 }
 
@@ -178,7 +180,7 @@ fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, script: &Path) -> an
         .entry("hooks")
         .or_insert_with(|| json!({}))
         .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("\"hooks\" no es un objeto"))?;
+        .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HooksNotAnObject)))?;
     strip_ours(hooks);
     for event in tool.events() {
         let command = format!("{} {} {}", sh_quote(&script.to_string_lossy()), tool.name(), event);
@@ -186,7 +188,7 @@ fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, script: &Path) -> an
             .entry(*event)
             .or_insert_with(|| json!([]))
             .as_array_mut()
-            .ok_or_else(|| anyhow::anyhow!("\"hooks.{event}\" no es una lista"))?
+            .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HooksEventNotAList(event))))?
             .push(json!({ "hooks": [{ "type": "command", "command": command }] }));
     }
     Ok(())

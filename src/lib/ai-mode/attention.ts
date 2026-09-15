@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { appConfigStore } from "../core/app-config.svelte";
+import { t } from "../i18n/i18n.svelte";
 import { collectSessions } from "../layout/split-tree";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { getTabId } from "../terminal/pty-registry";
@@ -36,12 +37,12 @@ function tabTitle(sessionId: string): string {
 function notificationText(entry: AiSessionEntry, prev: AiSessionEntry | undefined): string | null {
   switch (entry.status) {
     case "awaiting":
-      return appConfigStore.aiNotifyAwaiting ? "Necesita tu respuesta" : null;
+      return appConfigStore.aiNotifyAwaiting ? t("aiMode.notify.awaiting") : null;
     case "error":
-      return appConfigStore.aiNotifyError ? "Terminó con un error" : null;
+      return appConfigStore.aiNotifyError ? t("aiMode.notify.error") : null;
     case "finished":
       // A turn that actually ran, not a session first detected as idle.
-      return appConfigStore.aiNotifyFinished && prev?.status === "running" ? "Terminó" : null;
+      return appConfigStore.aiNotifyFinished && prev?.status === "running" ? t("aiMode.notify.finished") : null;
     default:
       return null;
   }

@@ -3,6 +3,7 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isLinux } from "$lib/core/platform";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   function onOpacityInput(event: Event) {
     themeStore.setBackgroundOpacity(Number((event.currentTarget as HTMLInputElement).value));
@@ -20,7 +21,7 @@
 </script>
 
 <section>
-  <h3>Tema</h3>
+  <h3>{t("preferences.appearance.theme")}</h3>
   <div class="theme-grid">
     {#each themeStore.themes as theme (theme.name)}
       <button
@@ -42,9 +43,9 @@
 </section>
 
 <section>
-  <h3>Transparencia</h3>
+  <h3>{t("preferences.appearance.transparency")}</h3>
   <div class="setting-row">
-    <span>Opacidad del fondo</span>
+    <span>{t("preferences.appearance.opacity")}</span>
     <span class="setting-value">{themeStore.backgroundOpacity}%</span>
   </div>
   <input
@@ -57,7 +58,7 @@
     class="opacity-slider"
   />
   <label class="toggle-row" class:disabled={isLinux}>
-    <span>Desenfocar lo que está detrás</span>
+    <span>{t("preferences.appearance.blur")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.backgroundBlur}
@@ -66,7 +67,7 @@
     />
   </label>
   <p class="setting-hint">
-    {isLinux ? "No disponible en Linux." : "Se nota más con la opacidad del fondo por debajo de 85%."}
+    {t(isLinux ? "preferences.appearance.blurUnavailableLinux" : "preferences.appearance.blurHint")}
   </p>
 </section>
 

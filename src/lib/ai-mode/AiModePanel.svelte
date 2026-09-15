@@ -9,13 +9,14 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
+  import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
 
   const STATUSES: AiSessionStatus[] = ["running", "awaiting", "error", "finished"];
-  const LABELS: Record<AiSessionStatus, string> = {
-    running: "Corriendo",
-    awaiting: "Esperando",
-    error: "Error",
-    finished: "Listo",
+  const LABEL_KEYS: Record<AiSessionStatus, MessageKey> = {
+    running: "aiMode.status.running",
+    awaiting: "aiMode.status.awaiting",
+    error: "aiMode.status.error",
+    finished: "aiMode.status.finished",
   };
   const SHORTCUT_BY_STATUS: Record<AiSessionStatus, ShortcutAction> = {
     running: "aiRunning",
@@ -139,7 +140,7 @@
         onclick={() => toggle(status)}
       >
         <i style="background:{statusColor(status)}"></i>
-        {LABELS[status]}
+        {t(LABEL_KEYS[status])}
         {aiStatusStore.counts[status]}
       </button>
       {#if openStatus === status}
@@ -154,10 +155,10 @@
               onclick={() => pick(entry.sessionId)}
             >
               <span class="ai-mode-item-title">{entry.title}</span>
-              <span class="ai-mode-item-time">hace {formatElapsed(now - entry.since)}</span>
+              <span class="ai-mode-item-time">{t("aiMode.ago", { time: formatElapsed(now - entry.since) })}</span>
             </button>
           {:else}
-            <p class="ai-mode-empty">Ninguna pestaña en este estado</p>
+            <p class="ai-mode-empty">{t("aiMode.empty")}</p>
           {/each}
         </div>
       {/if}

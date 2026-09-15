@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod i18n;
 mod pty;
 mod state;
 
@@ -43,6 +44,7 @@ pub fn run() {
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
             commands::window_commands::preferences_ready,
+            commands::window_commands::set_ui_language,
             commands::window_commands::set_background_blur,
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,

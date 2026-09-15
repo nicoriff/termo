@@ -11,6 +11,7 @@
   } from "$lib/core/window-client";
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let {
     title = "Termini",
@@ -77,7 +78,7 @@
     {#if showSettingsButton}
       <button
         class="titlebar-button"
-        aria-label="Configuración"
+        aria-label={t("titlebar.settings")}
         onclick={() => void openPreferencesWindow()}
       >
         <svg viewBox="0 0 14 14" width="13" height="13">
@@ -93,7 +94,7 @@
     {#if !isMac}
       <button
         class="titlebar-button"
-        aria-label="Minimizar"
+        aria-label={t("titlebar.minimize")}
         onclick={() => void minimizeWindow()}
       >
         <svg viewBox="0 0 10 10" width="10" height="10">
@@ -103,7 +104,7 @@
       {#if showMaximizeButton}
         <button
           class="titlebar-button"
-          aria-label={maximized ? "Restaurar" : "Maximizar"}
+          aria-label={t(maximized ? "titlebar.restore" : "titlebar.maximize")}
           onclick={() => void toggleMaximize()}
         >
           {#if maximized}
@@ -124,7 +125,7 @@
       {/if}
       <button
         class="titlebar-button titlebar-close"
-        aria-label="Cerrar"
+        aria-label={t("titlebar.close")}
         onclick={() => void closeWindow()}
       >
         <svg viewBox="0 0 10 10" width="10" height="10">

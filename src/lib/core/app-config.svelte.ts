@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getConfig, saveConfig } from "./config-client";
 import { getWindowSize, setWindowSize } from "./window-client";
 import { themeStore } from "../theme/theme-store.svelte";
+import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
 import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
@@ -45,6 +46,7 @@ interface InitOptions {
 }
 
 class AppConfigStore {
+  language = $state<LanguagePreference>("system");
   defaultShellId = $state<string | null>(null);
   psreadlineMenuComplete = $state(false);
   bashPromptColors = $state(false);
@@ -95,6 +97,8 @@ class AppConfigStore {
    * that reacting to another window's change never triggers a save of our
    * own. Setters below are the only paths that persist. */
   private applyFields(config: AppConfig): void {
+    this.language = config.language === "es" || config.language === "en" ? config.language : "system";
+    i18n.setPreference(this.language);
     this.defaultShellId = config.default_shell_id;
     this.psreadlineMenuComplete = config.psreadline_menu_complete;
     this.bashPromptColors = config.bash_prompt_colors;
@@ -123,6 +127,12 @@ class AppConfigStore {
     themeStore.setFontFamily(config.font_family_override);
     themeStore.setBackgroundOpacity(config.background_opacity);
     themeStore.setOutputHighlighting(config.output_highlighting);
+  }
+
+  setLanguage(language: LanguagePreference): void {
+    this.language = language;
+    i18n.setPreference(language);
+    void this.persist();
   }
 
   setDefaultShell(id: string): void {
@@ -231,6 +241,7 @@ class AppConfigStore {
   async persist(): Promise<void> {
     if (!this.loaded) return;
     await saveConfig({
+      language: this.language,
       theme: themeStore.current.name,
       default_shell_id: this.defaultShellId,
       psreadline_menu_complete: this.psreadlineMenuComplete,

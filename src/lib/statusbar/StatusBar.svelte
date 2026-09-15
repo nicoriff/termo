@@ -4,6 +4,7 @@
   import { collectTiles } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { getPtyId } from "$lib/terminal/pty-registry";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   const MEMORY_POLL_MS = 2000;
 
@@ -49,10 +50,12 @@
 </script>
 
 <div class="status-bar">
-  <span class="status-item">Modo IA: {appConfigStore.aiModeEnabled ? "activado" : "desactivado"}</span>
+  <span class="status-item">
+    {t("statusBar.aiMode", { state: t(appConfigStore.aiModeEnabled ? "statusBar.aiOn" : "statusBar.aiOff") })}
+  </span>
   {#if memoryBytes !== null}
-    <span class="status-item status-memory" title="Memoria de la consola activa y de los procesos que corren en ella">
-      Memoria: {formatBytes(memoryBytes)}
+    <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
+      {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
     </span>
   {/if}
 </div>

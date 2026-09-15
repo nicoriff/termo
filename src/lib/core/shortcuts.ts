@@ -16,6 +16,8 @@
  * fired is read straight off the event by the caller, not decided here.
  */
 
+import type { MessageKey } from "../i18n/translate";
+
 export type ShortcutAction =
   | "newTab"
   | "cycleTab"
@@ -37,15 +39,17 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "aiNextPending",
 ];
 
-export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
-  newTab: "Nueva pestaña",
-  cycleTab: "Ciclar pestañas",
-  zoomTile: "Zoom / restaurar tile",
-  aiRunning: "Modo IA: Corriendo",
-  aiAwaiting: "Modo IA: Esperando",
-  aiError: "Modo IA: Error",
-  aiFinished: "Modo IA: Listo",
-  aiNextPending: "Modo IA: siguiente pendiente",
+/** Catalog keys (translated by the UI with `t()`), keeping this module free of
+ * the reactive i18n store so it stays testable in plain Node. */
+export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
+  newTab: "shortcuts.labels.newTab",
+  cycleTab: "shortcuts.labels.cycleTab",
+  zoomTile: "shortcuts.labels.zoomTile",
+  aiRunning: "shortcuts.labels.aiRunning",
+  aiAwaiting: "shortcuts.labels.aiAwaiting",
+  aiError: "shortcuts.labels.aiError",
+  aiFinished: "shortcuts.labels.aiFinished",
+  aiNextPending: "shortcuts.labels.aiNextPending",
 };
 
 export type ModifierName = "alt" | "ctrl" | "meta" | "shift";
@@ -151,15 +155,15 @@ export function normalizeEventToBinding(event: KeyLike): string | null {
 
 /** Like `normalizeEventToBinding`, but for the zoom/restore row: only an
  * arrow key is a legal recording (any other key is rejected with a message
- * the recorder UI can show as-is), and at least one modifier is required so
+ * key the recorder UI translates), and at least one modifier is required so
  * plain arrow keys keep doing whatever they already do (e.g. scrollback). */
-export function normalizeEventToZoomBinding(event: KeyLike): { binding: string } | { error: string } {
+export function normalizeEventToZoomBinding(event: KeyLike): { binding: string } | { errorKey: MessageKey } {
   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-    return { error: "Grabá con una flecha ↑ o ↓" };
+    return { errorKey: "shortcuts.zoomNeedsArrow" };
   }
   const mods = activeModifiers(event);
   if (mods.size === 0) {
-    return { error: "Grabá la combinación con al menos un modificador" };
+    return { errorKey: "shortcuts.zoomNeedsModifier" };
   }
   return { binding: serializeKeybinding(mods, ARROW_KEY) };
 }

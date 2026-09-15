@@ -4,6 +4,7 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let shells = $state<ShellInfo[]>([]);
 
@@ -24,7 +25,7 @@
 </script>
 
 <section>
-  <h3>Consola por defecto</h3>
+  <h3>{t("preferences.console.defaultShell")}</h3>
   <div class="shell-list">
     {#each shells as shell (shell.id)}
       <button
@@ -36,15 +37,15 @@
       </button>
     {/each}
     {#if shells.length === 0}
-      <p class="setting-hint">Buscando consolas disponibles...</p>
+      <p class="setting-hint">{t("preferences.console.searching")}</p>
     {/if}
   </div>
 </section>
 
 <section>
-  <h3>Salida de la consola</h3>
+  <h3>{t("preferences.console.output")}</h3>
   <label class="toggle-row">
-    <span>Resaltar IPs, URLs, rutas, errores...</span>
+    <span>{t("preferences.console.highlight")}</span>
     <input
       type="checkbox"
       checked={themeStore.outputHighlightingEnabled}

@@ -34,7 +34,7 @@ pub fn oh_my_posh_status(app: tauri::AppHandle) -> OhMyPoshStatus {
 pub async fn install_oh_my_posh(app: tauri::AppHandle) -> Result<String, String> {
     blocking(move || {
         let url = oh_my_posh::download_url()
-            .ok_or_else(|| anyhow::anyhow!("Oh My Posh no tiene un binario para esta plataforma"))?;
+            .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::OhMyPoshNoBinary)))?;
         let target = oh_my_posh::managed_binary(&app)?;
         download_to(&url, &target)?;
         #[cfg(unix)]
@@ -50,7 +50,7 @@ pub async fn install_oh_my_posh(app: tauri::AppHandle) -> Result<String, String>
 #[tauri::command]
 pub async fn install_oh_my_posh_theme(app: tauri::AppHandle, theme: String) -> Result<(), String> {
     if !oh_my_posh::is_valid_theme_name(&theme) {
-        return Err(format!("Nombre de tema inválido: {theme}"));
+        return Err(crate::i18n::tr(crate::i18n::Msg::InvalidThemeName(&theme)));
     }
     blocking(move || {
         let url = format!("https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/{theme}.omp.json");

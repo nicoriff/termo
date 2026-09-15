@@ -65,6 +65,21 @@ pub async fn preferences_ready(window: tauri::WebviewWindow) -> Result<(), Strin
     Ok(())
 }
 
+/// Called by each window with its resolved UI language ("es" or "en"), so
+/// backend-generated messages and the Preferences window title follow it.
+#[tauri::command]
+pub async fn set_ui_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
+    use crate::i18n::{self, Lang, Msg};
+
+    i18n::set(if language == "en" { Lang::En } else { Lang::Es });
+    if let Some(window) = app.get_webview_window(PREFERENCES) {
+        window
+            .set_title(&i18n::tr(Msg::PreferencesTitle))
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(())
+}
+
 /// Registered with `Builder::on_page_load`: preloads Preferences once the
 /// main window has loaded (so it doesn't compete with startup), and marks
 /// Preferences not ready whenever its page (re)loads.
@@ -130,7 +145,7 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
         PREFERENCES,
         tauri::WebviewUrl::App("/#preferences".into()),
     )
-    .title("Preferencias")
+    .title(crate::i18n::tr(crate::i18n::Msg::PreferencesTitle))
     .inner_size(760.0, 480.0)
     .min_inner_size(640.0, 420.0)
     .resizable(true)

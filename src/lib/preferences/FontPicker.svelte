@@ -4,6 +4,7 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { installGoogleFont, injectPreviewStylesheet, listMonospaceGoogleFonts } from "$lib/theme/google-fonts";
   import { hasNerdFontVersion } from "$lib/theme/nerd-fonts";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let googleFonts = $state<string[]>([]);
   let fontsLoadFailed = $state(false);
@@ -85,7 +86,7 @@
     </svg>
   </button>
   {#if themeStore.fontFamilyOverride !== null}
-    <button class="reset-btn" onclick={resetFont}>Restablecer</button>
+    <button class="reset-btn" onclick={resetFont}>{t("preferences.font.reset")}</button>
   {/if}
 
   {#if open}
@@ -95,7 +96,7 @@
     <div class="font-picker-panel" onpointerdown={(e) => e.stopPropagation()}>
       <input
         class="font-picker-search"
-        placeholder="Buscar fuente..."
+        placeholder={t("preferences.font.search")}
         bind:value={query}
         bind:this={searchInput}
         onkeydown={onSearchKeydown}
@@ -110,12 +111,12 @@
           >
             <span class="font-picker-name">{family}</span>
             {#if hasNerdFontVersion(family)}
-              <span class="nerd-font-badge" title="Existe una versión Nerd Font de esta fuente, con íconos">Nerd Font</span>
+              <span class="nerd-font-badge" title={t("preferences.font.nerdFontBadgeHint")}>Nerd Font</span>
             {/if}
           </button>
         {/each}
         {#if filtered.length === 0}
-          <p class="font-picker-empty">Sin resultados</p>
+          <p class="font-picker-empty">{t("preferences.font.noResults")}</p>
         {/if}
       </div>
     </div>
@@ -123,11 +124,11 @@
 </div>
 
 {#if installState === "installing"}
-  <p class="font-status">Instalando fuente...</p>
+  <p class="font-status">{t("preferences.font.installing")}</p>
 {:else if installState === "error"}
-  <p class="font-status error">No se pudo instalar: {installError}</p>
+  <p class="font-status error">{t("preferences.font.installFailed", { error: installError })}</p>
 {:else if fontsLoadFailed}
-  <p class="font-status error">No se pudo obtener el listado de Google Fonts</p>
+  <p class="font-status error">{t("preferences.font.listFailed")}</p>
 {/if}
 
 <style>

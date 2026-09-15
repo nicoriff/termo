@@ -22,7 +22,7 @@ pub fn agent_hooks_status() -> AgentHooksStatus {
 #[tauri::command]
 pub fn install_agent_hooks(app: tauri::AppHandle, tool: AgentTool) -> Result<(), String> {
     if !cfg!(unix) {
-        return Err("La integración con hooks solo está disponible en macOS y Linux".into());
+        return Err(crate::i18n::tr(crate::i18n::Msg::HooksUnsupportedPlatform));
     }
     agent_hooks::install(&app, tool).map_err(|err| err.to_string())
 }

@@ -97,13 +97,13 @@ describe("normalizeEventToBinding", () => {
 describe("normalizeEventToZoomBinding", () => {
   it("rejects a non-arrow key", () => {
     expect(normalizeEventToZoomBinding(key({ key: "t", metaKey: true }))).toEqual({
-      error: "Grabá con una flecha ↑ o ↓",
+      errorKey: "shortcuts.zoomNeedsArrow",
     });
   });
 
   it("rejects an arrow with no modifier", () => {
     expect(normalizeEventToZoomBinding(key({ key: "ArrowUp" }))).toEqual({
-      error: "Grabá la combinación con al menos un modificador",
+      errorKey: "shortcuts.zoomNeedsModifier",
     });
   });
 

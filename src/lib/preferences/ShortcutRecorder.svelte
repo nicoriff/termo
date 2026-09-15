@@ -6,9 +6,10 @@
     formatKeybindingLabel,
     normalizeEventToBinding,
     normalizeEventToZoomBinding,
-    SHORTCUT_LABELS,
+    SHORTCUT_LABEL_KEYS,
     type ShortcutAction,
   } from "$lib/core/shortcuts";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let { action, mode = "combo" }: { action: ShortcutAction; mode?: "combo" | "zoom" } = $props();
 
@@ -32,7 +33,7 @@
   function apply(binding: string) {
     const conflict = findConflict(binding, action, appConfigStore.allShortcutOverrides, isMac);
     if (conflict) {
-      message = `Ya lo usa "${SHORTCUT_LABELS[conflict]}" — elegí otra combinación.`;
+      message = t("shortcuts.conflict", { action: t(SHORTCUT_LABEL_KEYS[conflict]) });
       recording = false;
       return;
     }
@@ -53,8 +54,8 @@
 
     if (mode === "zoom") {
       const result = normalizeEventToZoomBinding(event);
-      if ("error" in result) {
-        message = result.error;
+      if ("errorKey" in result) {
+        message = t(result.errorKey);
         return;
       }
       apply(result.binding);
@@ -81,10 +82,10 @@
     onkeydown={onKeydown}
     onblur={stopRecording}
   >
-    {recording ? "Presioná una combinación..." : label}
+    {recording ? t("shortcuts.recording") : label}
   </button>
   {#if hasOverride}
-    <button class="reset-btn" onclick={resetToDefault}>restablecer</button>
+    <button class="reset-btn" onclick={resetToDefault}>{t("shortcuts.reset")}</button>
   {/if}
 </div>
 {#if message}

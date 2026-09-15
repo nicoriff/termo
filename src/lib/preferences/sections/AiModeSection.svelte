@@ -8,6 +8,7 @@
     type AgentHooksStatus,
     type AgentTool,
   } from "$lib/core/agent-hooks-client";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   const TOOLS: { tool: AgentTool; label: string; file: string }[] = [
     { tool: "claude", label: "Claude Code", file: "~/.claude/settings.json" },
@@ -41,24 +42,22 @@
 </script>
 
 <section>
-  <h3>Modo IA</h3>
+  <h3>{t("preferences.aiMode.title")}</h3>
   <label class="toggle-row">
-    <span>Detectar estado de Claude Code / Codex en las pestañas</span>
+    <span>{t("preferences.aiMode.detect")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.aiModeEnabled}
       onchange={(e) => appConfigStore.setAiModeEnabled(e.currentTarget.checked)}
     />
   </label>
-  <p class="setting-hint">
-    Muestra un panel con conteos, un punto de estado por pestaña y el modo actual en la barra de estado.
-  </p>
+  <p class="setting-hint">{t("preferences.aiMode.detectHint")}</p>
 </section>
 
 <section>
-  <h3>Avisos</h3>
+  <h3>{t("preferences.aiMode.notices")}</h3>
   <label class="toggle-row">
-    <span>Notificar cuando necesita tu respuesta</span>
+    <span>{t("preferences.aiMode.notifyAwaiting")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.aiNotifyAwaiting}
@@ -66,7 +65,7 @@
     />
   </label>
   <label class="toggle-row">
-    <span>Notificar cuando termina</span>
+    <span>{t("preferences.aiMode.notifyFinished")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.aiNotifyFinished}
@@ -74,7 +73,7 @@
     />
   </label>
   <label class="toggle-row">
-    <span>Notificar errores</span>
+    <span>{t("preferences.aiMode.notifyError")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.aiNotifyError}
@@ -82,37 +81,35 @@
     />
   </label>
   <label class="toggle-row">
-    <span>Contador de pendientes en el ícono de la app</span>
+    <span>{t("preferences.aiMode.dockBadge")}</span>
     <input
       type="checkbox"
       checked={appConfigStore.aiDockBadge}
       onchange={(e) => appConfigStore.setAiDockBadge(e.currentTarget.checked)}
     />
   </label>
-  <p class="setting-hint">
-    Solo notifica si Termini no tiene el foco o esa pestaña no está a la vista.
-  </p>
+  <p class="setting-hint">{t("preferences.aiMode.noticesHint")}</p>
 </section>
 
 <section>
-  <h3>Detección precisa con hooks</h3>
+  <h3>{t("preferences.aiMode.hooks")}</h3>
   {#if hooks && !hooks.supported}
-    <p class="setting-hint">Disponible en macOS y Linux.</p>
+    <p class="setting-hint">{t("preferences.aiMode.hooksUnsupported")}</p>
   {:else}
     {#each TOOLS as { tool, label } (tool)}
       {@const installed = hooks?.[tool] ?? false}
       <div class="hook-row">
         <span>{label}</span>
-        <span class="hook-state" class:on={installed}>{installed ? "Instalado" : "No instalado"}</span>
+        <span class="hook-state" class:on={installed}>
+          {t(installed ? "preferences.aiMode.installed" : "preferences.aiMode.notInstalled")}
+        </span>
         <button class="action-btn" disabled={!hooks || busy !== null} onclick={() => toggleHooks(tool, installed)}>
-          {busy === tool ? "..." : installed ? "Quitar" : "Instalar"}
+          {busy === tool ? "..." : t(installed ? "preferences.aiMode.remove" : "preferences.aiMode.install")}
         </button>
       </div>
     {/each}
     <p class="setting-hint">
-      Agrega a {TOOLS[0].file} y {TOOLS[1].file} hooks que le informan a Termini el estado exacto de cada sesión
-      (pide permiso, trabaja, terminó), en lugar de deducirlo de la pantalla. Fuera de Termini no hacen nada. Antes
-      del primer cambio se guarda una copia del archivo.
+      {t("preferences.aiMode.hooksHint", { claudeFile: TOOLS[0].file, codexFile: TOOLS[1].file })}
     </p>
   {/if}
   {#if error}

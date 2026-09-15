@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isMac, isWindows } from "$lib/core/platform";
+  import { t } from "$lib/i18n/i18n.svelte";
 
   let { os }: { os: "mac" | "windows" | "linux" } = $props();
 
@@ -11,7 +12,9 @@
 <div class="platform-section" class:disabled={!active}>
   {#if !active}
     <p class="setting-hint">
-      Solo se puede editar esta sección en {os === "mac" ? "macOS" : os === "windows" ? "Windows" : "Linux"}.
+      {t("preferences.platform.onlyEditableOn", {
+        os: os === "mac" ? "macOS" : os === "windows" ? "Windows" : "Linux",
+      })}
     </p>
   {/if}
 
@@ -19,7 +22,7 @@
     <section>
       <h3>PowerShell</h3>
       <label class="toggle-row">
-        <span>Menú de autocompletado (Tab, Tab)</span>
+        <span>{t("preferences.platform.menuComplete")}</span>
         <input
           type="checkbox"
           checked={appConfigStore.psreadlineMenuComplete}
@@ -27,13 +30,13 @@
           onchange={(e) => appConfigStore.setPsReadlineMenuComplete(e.currentTarget.checked)}
         />
       </label>
-      <p class="setting-hint">Solo afecta sesiones nuevas de PowerShell/pwsh abiertas desde Termini.</p>
+      <p class="setting-hint">{t("preferences.platform.psreadlineHint")}</p>
     </section>
   {:else}
     <section>
       <h3>zsh</h3>
       <label class="toggle-row">
-        <span>Menú de autocompletado (Tab, Tab)</span>
+        <span>{t("preferences.platform.menuComplete")}</span>
         <input
           type="checkbox"
           checked={appConfigStore.zshMenuComplete}
@@ -41,16 +44,13 @@
           onchange={(e) => appConfigStore.setZshMenuComplete(e.currentTarget.checked)}
         />
       </label>
-      <p class="setting-hint">
-        Tab muestra las opciones y un segundo Tab abre un menú que se recorre con las flechas. Solo afecta sesiones
-        nuevas de zsh; no modifica tu ~/.zshrc.
-      </p>
+      <p class="setting-hint">{t("preferences.platform.zshHint")}</p>
     </section>
 
     <section>
       <h3>Bash</h3>
       <label class="toggle-row">
-        <span>Prompt con colores (usuario, carpeta y rama de git)</span>
+        <span>{t("preferences.platform.bashColors")}</span>
         <input
           type="checkbox"
           checked={appConfigStore.bashPromptColors}
@@ -59,8 +59,9 @@
         />
       </label>
       <p class="setting-hint">
-        {os === "mac" ? "También activa colores en ls y oculta el aviso de zsh. " : ""}Solo afecta sesiones nuevas
-        de bash; si tu ~/.bashrc define su propio prompt, se usa ese.
+        {os === "mac"
+          ? `${t("preferences.platform.bashMacExtra")} ${t("preferences.platform.bashHint")}`
+          : t("preferences.platform.bashHint")}
       </p>
     </section>
   {/if}
