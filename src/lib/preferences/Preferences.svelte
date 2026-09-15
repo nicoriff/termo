@@ -3,7 +3,8 @@
   import { slide } from "svelte/transition";
   import TitleBar from "$lib/titlebar/TitleBar.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { setBackgroundBlur } from "$lib/core/window-client";
+  import { preferencesReady, setBackgroundBlur } from "$lib/core/window-client";
+  import { isWindows } from "$lib/core/platform";
   import AppearanceSection from "./sections/AppearanceSection.svelte";
   import FontSection from "./sections/FontSection.svelte";
   import ConsoleSection from "./sections/ConsoleSection.svelte";
@@ -61,7 +62,11 @@
   }
 
   onMount(() => {
-    void appConfigStore.init({ restoreWindowSize: false });
+    // The window is preloaded hidden; the backend shows it only once the real
+    // config has been applied and painted, so it never flashes the defaults.
+    void appConfigStore
+      .init({ restoreWindowSize: false })
+      .finally(() => requestAnimationFrame(() => requestAnimationFrame(() => void preferencesReady())));
   });
 
   $effect(() => {
@@ -74,7 +79,7 @@
   <span class="chevron-spacer"></span>
 {/snippet}
 
-<div class="window-chrome">
+<div class="window-chrome" class:bordered={!isWindows}>
   <TitleBar title="Preferencias" showSettingsButton={false} showMaximizeButton={false} />
   <div class="body">
     <nav class="sidebar">
@@ -144,12 +149,17 @@
        theirs once, so all of them match the opacity setting (see the same
        note on MainWindow's .window-chrome). */
     color: var(--titlebar-fg, #d4d4d4);
-    /* Neutral translucent gray rather than a theme color, so the edge stays
-       visible over both light and dark windows behind this one. */
-    border: 1px solid rgba(128, 128, 128, 0.45);
     box-sizing: border-box;
     border-radius: 10px;
     overflow: hidden;
+  }
+
+  /* Neutral translucent gray rather than a theme color, so the edge stays
+     visible over both light and dark windows behind this one. Not on
+     Windows: the native rounded window region (window_shape.rs) clips it
+     into a broken-looking frame at the corners. */
+  .window-chrome.bordered {
+    border: 1px solid rgba(128, 128, 128, 0.45);
   }
 
   .body {

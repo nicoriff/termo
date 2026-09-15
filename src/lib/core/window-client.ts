@@ -18,6 +18,12 @@ export function openPreferencesWindow(): Promise<void> {
   return invoke("open_preferences_window");
 }
 
+/** Tells the backend the (preloaded, hidden) Preferences page has applied its
+ * config and painted, so it can be shown without flashing defaults. */
+export function preferencesReady(): Promise<void> {
+  return invoke("preferences_ready");
+}
+
 export function isWindowMaximized(): Promise<boolean> {
   return invoke("is_maximized");
 }

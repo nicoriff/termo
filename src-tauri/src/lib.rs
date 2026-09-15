@@ -12,9 +12,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
+        .on_page_load(commands::window_commands::on_page_load)
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 commands::window_shape::attach(&window);
+                // The preloaded Preferences window only hides on close and
+                // would otherwise keep the app running without a main window.
+                let handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::Destroyed) {
+                        handle.exit(0);
+                    }
+                });
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
             // Keeps already-installed hooks running this build's script.
@@ -33,6 +42,7 @@ pub fn run() {
             commands::window_commands::close_window,
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
+            commands::window_commands::preferences_ready,
             commands::window_commands::set_background_blur,
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,

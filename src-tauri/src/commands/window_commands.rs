@@ -25,24 +25,109 @@ pub fn is_maximized(window: tauri::Window) -> Result<bool, String> {
     window.is_maximized().map_err(|err| err.to_string())
 }
 
-/// Opens the Preferences window, or focuses it if already open — this app
-/// is a single-page SPA (adapter-static, `ssr = false`), so rather than a
-/// second SvelteKit route (which adapter-static's prerendering doesn't
-/// cleanly produce as a standalone second HTML entry point), this points at
-/// the app root with a `#preferences` fragment; the frontend branches on
+const PREFERENCES: &str = "preferences";
+
+/// Set by the Preferences page once its config is applied and painted; reset
+/// whenever that page (re)starts loading.
+static PREFERENCES_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// An open request that arrived before the page was ready.
+static PREFERENCES_SHOW_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+const PRELOAD_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Shows the Preferences window. It is normally preloaded hidden shortly
+/// after startup and only hidden on close, so this just reveals it; if the
+/// page isn't ready yet, `preferences_ready` shows it as soon as it is.
+///
+/// Must stay `async`: on Windows, building a webview window from a sync
+/// command deadlocks (WebView2), leaving a blank window and a hung app.
+#[tauri::command]
+pub async fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
+    use std::sync::atomic::Ordering::SeqCst;
+
+    let window = ensure_preferences_window(&app)?;
+    PREFERENCES_SHOW_PENDING.store(true, SeqCst);
+    if PREFERENCES_READY.load(SeqCst) && PREFERENCES_SHOW_PENDING.swap(false, SeqCst) {
+        show_and_focus(&window)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn preferences_ready(window: tauri::WebviewWindow) -> Result<(), String> {
+    use std::sync::atomic::Ordering::SeqCst;
+
+    PREFERENCES_READY.store(true, SeqCst);
+    if PREFERENCES_SHOW_PENDING.swap(false, SeqCst) {
+        show_and_focus(&window)?;
+    }
+    Ok(())
+}
+
+/// Registered with `Builder::on_page_load`: preloads Preferences once the
+/// main window has loaded (so it doesn't compete with startup), and marks
+/// Preferences not ready whenever its page (re)loads.
+pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoadPayload<'_>) {
+    use tauri::webview::PageLoadEvent;
+
+    match (webview.label(), payload.event()) {
+        (PREFERENCES, PageLoadEvent::Started) => {
+            PREFERENCES_READY.store(false, std::sync::atomic::Ordering::SeqCst)
+        }
+        ("main", PageLoadEvent::Finished) => {
+            let app = webview.app_handle().clone();
+            // Off the main thread: this callback runs on it, and building a
+            // webview window there deadlocks on Windows.
+            std::thread::spawn(move || {
+                std::thread::sleep(PRELOAD_DELAY);
+                let _ = ensure_preferences_window(&app);
+            });
+        }
+        _ => {}
+    }
+}
+
+/// Windows build 22523+ has DWMWA_SYSTEMBACKDROP_TYPE, which window-vibrancy
+/// uses for a smooth Acrylic.
+fn windows_has_backdrop_api() -> bool {
+    sysinfo::System::kernel_version()
+        .and_then(|build| build.trim().parse::<u32>().ok())
+        .is_some_and(|build| build >= 22523)
+}
+
+fn show_and_focus(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if window.is_minimized().unwrap_or(false) {
+        window.unminimize().map_err(|err| err.to_string())?;
+    }
+    window.show().map_err(|err| err.to_string())?;
+    window.set_focus().map_err(|err| err.to_string())
+}
+
+/// Returns the Preferences window, creating it hidden if needed. This app is
+/// a single-page SPA (adapter-static, `ssr = false`), so rather than a second
+/// SvelteKit route (which adapter-static's prerendering doesn't cleanly
+/// produce as a standalone second HTML entry point), it points at the app
+/// root with a `#preferences` fragment; the frontend branches on
 /// `location.hash` to decide what to render. Note: the path must be `/`, not
 /// `index.html` — in `tauri dev` this resolves against the Vite dev server,
 /// which serves `/` but has no literal `/index.html` route (that file only
 /// exists post-build), so `index.html#preferences` 404s in dev.
-#[tauri::command]
-pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("preferences") {
-        return window.set_focus().map_err(|err| err.to_string());
+///
+/// Must not be called on the main thread (see `open_preferences_window`).
+fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
+    // The preload thread and an open request can race to create it.
+    static CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = CREATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    if let Some(window) = app.get_webview_window(PREFERENCES) {
+        return Ok(window);
     }
+    PREFERENCES_READY.store(false, std::sync::atomic::Ordering::SeqCst);
 
     let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        "preferences",
+        app,
+        PREFERENCES,
         tauri::WebviewUrl::App("/#preferences".into()),
     )
     .title("Preferencias")
@@ -50,7 +135,10 @@ pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
     .min_inner_size(640.0, 420.0)
     .resizable(true)
     .maximizable(false)
-    .transparent(true);
+    .transparent(true)
+    // Revealed by show_and_focus once the page is ready; showing it earlier
+    // flashes a white, natively framed window and then the default config.
+    .visible(false);
 
     // macOS gets the native window controls drawn over the web title bar,
     // matching the main window's tauri.macos.conf.json (keep the traffic
@@ -67,8 +155,23 @@ pub fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
 
     let window = builder.build().map_err(|err| err.to_string())?;
 
-    crate::commands::window_shape::attach(&window);
-    Ok(())
+    // Window subclassing only works from the thread that owns the HWND, and
+    // this runs off the main thread.
+    let shaped = window.clone();
+    window
+        .run_on_main_thread(move || crate::commands::window_shape::attach(&shaped))
+        .map_err(|err| err.to_string())?;
+
+    // Keep it alive so the next open is instant.
+    let hidden = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = hidden.hide();
+        }
+    });
+
+    Ok(window)
 }
 
 /// Native blur behind the window's translucent areas: macOS HUD vibrancy
@@ -94,6 +197,11 @@ pub fn set_background_blur(window: tauri::WebviewWindow, enabled: bool) -> Resul
             if enabled {
                 let effect = if cfg!(target_os = "macos") {
                     Effect::HudWindow
+                } else if cfg!(target_os = "windows") && !windows_has_backdrop_api() {
+                    // Before build 22523 Acrylic goes through
+                    // SetWindowCompositionAttribute, which makes dragging and
+                    // resizing the window lag badly; plain blur doesn't.
+                    Effect::Blur
                 } else {
                     Effect::Acrylic
                 };

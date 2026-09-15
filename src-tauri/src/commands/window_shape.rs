@@ -35,7 +35,25 @@ unsafe extern "system" fn subclass_proc(
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows_sys::Win32::UI::Shell::DefSubclassProc;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{IsZoomed, NCCALCSIZE_PARAMS, WM_NCCALCSIZE};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        IsZoomed, NCCALCSIZE_PARAMS, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT,
+    };
+
+    // tao keeps WS_CAPTION | WS_SYSMENU on undecorated windows, so the default
+    // non-client painting draws classic caption buttons and frame edges over
+    // the (zero-size) frame, showing through the translucent title bar.
+    // lParam -1 makes DefWindowProc skip that repaint while tao still sees the
+    // activation change.
+    if msg == WM_NCACTIVATE {
+        return DefSubclassProc(hwnd, msg, wparam, -1);
+    }
+    // WM_NCUAHDRAWCAPTION / WM_NCUAHDRAWFRAME: undocumented theme messages
+    // that repaint the caption directly (e.g. while dragging the title bar).
+    const WM_NCUAHDRAWCAPTION: u32 = 0x00AE;
+    const WM_NCUAHDRAWFRAME: u32 = 0x00AF;
+    if msg == WM_NCPAINT || msg == WM_NCUAHDRAWCAPTION || msg == WM_NCUAHDRAWFRAME {
+        return 0;
+    }
 
     if msg == WM_NCCALCSIZE && wparam != 0 {
         if IsZoomed(hwnd) != 0 {
@@ -68,11 +86,25 @@ unsafe extern "system" fn subclass_proc(
 #[cfg(target_os = "windows")]
 pub fn remove_nonclient_frame(window: &tauri::WebviewWindow) {
     use windows_sys::Win32::UI::Shell::SetWindowSubclass;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    };
 
     let Ok(hwnd) = window.hwnd() else { return };
     let hwnd = hwnd.0 as windows_sys::Win32::Foundation::HWND;
     unsafe {
         SetWindowSubclass(hwnd, Some(subclass_proc), 1, 0);
+        // Forces a WM_NCCALCSIZE now; otherwise the native frame lingers
+        // until the window's first resize.
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
     }
 }
 
