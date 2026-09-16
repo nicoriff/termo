@@ -7,13 +7,18 @@ mod state;
 use state::AppState;
 use tauri::Manager;
 
-/// Handles `termini --agent-hook <tool> <event>` (see pty/agent_hooks.rs) and
-/// returns true, or returns false for a normal launch.
-pub fn run_agent_hook_from_args() -> bool {
+/// Handles the two ways agents invoke this executable instead of launching the
+/// app — `termini --agent-hook <tool> <event>` (pty/agent_hooks.rs) and
+/// `termini --statusline` (pty/status_line.rs) — returning true when it did.
+pub fn run_cli_mode_from_args() -> bool {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [flag, tool, event, ..] if flag == pty::agent_hooks::HOOK_FLAG => {
             pty::agent_hooks::run_hook_cli(tool, event);
+            true
+        }
+        [flag, ..] if flag == pty::status_line::STATUS_LINE_FLAG => {
+            pty::status_line::run_status_line_cli();
             true
         }
         _ => false,
@@ -41,6 +46,8 @@ pub fn run() {
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
             pty::agent_hooks::refresh_installed(app.handle());
+            pty::status_line::start_watcher(app.handle().clone());
+            pty::status_line::refresh_installed(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -61,6 +68,9 @@ pub fn run() {
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,
             commands::agent_hook_commands::uninstall_agent_hooks,
+            commands::agent_hook_commands::status_line_installed,
+            commands::agent_hook_commands::install_status_line,
+            commands::agent_hook_commands::uninstall_status_line,
             commands::config_commands::get_config,
             commands::config_commands::save_config,
             commands::font_commands::list_google_monospace_fonts,

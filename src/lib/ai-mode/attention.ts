@@ -7,6 +7,7 @@ import { workspaceStore } from "../layout/workspace-store.svelte";
 import { getTabId } from "../terminal/pty-registry";
 import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { aiStatusStore, type AiSessionEntry } from "./ai-status-store.svelte";
+import { agentStatusStore, type AgentStatus } from "./agent-status-store.svelte";
 import type { AiSessionStatus } from "./classifier";
 import type { ToolId } from "./pattern-table";
 
@@ -67,8 +68,16 @@ export function startAgentAttention(): () => void {
     const tabId = getTabId(payload.sessionId);
     if (tabId) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
   });
+  // Plan usage / context / cost, from Claude Code's status line. Independent of
+  // Modo IA being on: it's just information about the console's session.
+  const unlistenStatus = listen<{ sessionId: string } & AgentStatus>("agent-status", ({ payload }) => {
+    const { sessionId, ...status } = payload;
+    const tabId = getTabId(sessionId);
+    if (tabId) agentStatusStore.set(tabId, status);
+  });
   return () => {
     stopNotifying();
     void unlisten.then((stop) => stop());
+    void unlistenStatus.then((stop) => stop());
   };
 }

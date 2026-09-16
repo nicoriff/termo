@@ -117,6 +117,8 @@ describe("getDefaultKeybinding / resolveKeybinding", () => {
   it("differs by platform", () => {
     expect(getDefaultKeybinding("newTab", true)).toBe("meta+t");
     expect(getDefaultKeybinding("newTab", false)).toBe("ctrl+t");
+    expect(getDefaultKeybinding("commandPalette", true)).toBe("meta+shift+p");
+    expect(getDefaultKeybinding("commandPalette", false)).toBe("ctrl+shift+p");
   });
 
   it("falls back to the default when there's no override", () => {
@@ -154,6 +156,11 @@ describe("findConflict", () => {
 
   it("returns null when there's no conflict", () => {
     expect(findConflict("ctrl+shift+n", "newTab", {}, false)).toBeNull();
+  });
+
+  it("covers the command palette's own default binding", () => {
+    expect(findConflict("ctrl+shift+p", "newTab", {}, false)).toBe("commandPalette");
+    expect(findConflict("meta+shift+p", "newTab", {}, true)).toBe("commandPalette");
   });
 
   it("never reports a conflict against the action's own current binding", () => {

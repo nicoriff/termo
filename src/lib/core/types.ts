@@ -22,6 +22,8 @@ export interface ShortcutsConfig {
   cycle_tab_other: string | null;
   zoom_tile_mac: string | null;
   zoom_tile_other: string | null;
+  command_palette_mac: string | null;
+  command_palette_other: string | null;
   ai_running_mac: string | null;
   ai_running_other: string | null;
   ai_awaiting_mac: string | null;
@@ -54,6 +56,9 @@ export interface AppConfig {
   ai_notify_error: boolean;
   ai_notify_finished: boolean;
   ai_dock_badge: boolean;
+  /** The user's own Claude Code statusLine command, saved when Termini chained
+   * onto it. Never edited here — carried through so saving doesn't drop it. */
+  status_line_wrapped: string | null;
   window: WindowConfig;
   shortcuts: ShortcutsConfig;
 }

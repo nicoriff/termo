@@ -8,6 +8,7 @@ mod memory;
 pub mod oh_my_posh;
 mod session;
 mod shell_detect;
+pub mod status_line;
 pub mod zsh_init;
 
 pub use bash_colors::bash_color_env;

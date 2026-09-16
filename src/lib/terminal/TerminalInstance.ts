@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
+import { agentStatusStore } from "../ai-mode/agent-status-store.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
@@ -260,6 +261,7 @@ export class TerminalInstance {
     // closeTab (e.g. closing the whole window/tile) — remove() is an
     // idempotent no-op if that already fired.
     aiStatusStore.remove(this.tabId);
+    agentStatusStore.remove(this.tabId);
     unregisterPty(this.tabId);
     tabTitleStore.remove(this.tabId);
     if (this.sessionId) void killPty(this.sessionId);

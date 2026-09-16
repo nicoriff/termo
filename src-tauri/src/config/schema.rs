@@ -31,6 +31,8 @@ pub struct ShortcutsConfig {
     pub cycle_tab_other: Option<String>,
     pub zoom_tile_mac: Option<String>,
     pub zoom_tile_other: Option<String>,
+    pub command_palette_mac: Option<String>,
+    pub command_palette_other: Option<String>,
     pub ai_running_mac: Option<String>,
     pub ai_running_other: Option<String>,
     pub ai_awaiting_mac: Option<String>,
@@ -90,6 +92,9 @@ pub struct AppConfig {
     pub ai_notify_finished: bool,
     /// App icon badge with the number of sessions waiting on the user.
     pub ai_dock_badge: bool,
+    /// The user's own Claude Code `statusLine` command, saved when Termini
+    /// chained onto it so uninstalling can put it back (pty/status_line.rs).
+    pub status_line_wrapped: Option<String>,
     pub window: WindowConfig,
     pub shortcuts: ShortcutsConfig,
 }
@@ -116,6 +121,7 @@ impl Default for AppConfig {
             ai_notify_error: true,
             ai_notify_finished: true,
             ai_dock_badge: true,
+            status_line_wrapped: None,
             window: WindowConfig::default(),
             shortcuts: ShortcutsConfig::default(),
         }

@@ -4,6 +4,7 @@
   import TitleBar from "$lib/titlebar/TitleBar.svelte";
   import SplitView from "$lib/layout/SplitView.svelte";
   import TileOverviewMap from "$lib/layout/TileOverviewMap.svelte";
+  import CommandPalette from "$lib/commands/CommandPalette.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -63,6 +64,16 @@
   // (TerminalInstance.attachCustomKeyEventHandler), which handles the zoom
   // shortcut itself whenever this doesn't take it.
   function handleOverviewKeyDown(event: KeyboardEvent) {
+    // The palette owns the keyboard while it's open (it handles its own keys
+    // on the input), and it can't be opened on top of the tile picker.
+    if (uiState.commandPaletteOpen) return;
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("commandPalette"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.openCommandPalette();
+      return;
+    }
+
     if (!workspaceStore.overviewOpen) {
       const opensOverview =
         event.key === "ArrowDown" &&
@@ -119,6 +130,9 @@
     {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />
+    {/if}
+    {#if uiState.commandPaletteOpen}
+      <CommandPalette />
     {/if}
   </main>
   <StatusBar />

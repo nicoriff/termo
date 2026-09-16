@@ -10,6 +10,8 @@
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
+  import { uiState } from "$lib/core/ui-state.svelte";
+  import { focusNextPending } from "./next-pending";
 
   const STATUSES: AiSessionStatus[] = ["running", "awaiting", "error", "finished"];
   const LABEL_KEYS: Record<AiSessionStatus, MessageKey> = {
@@ -82,18 +84,9 @@
   // before xterm's own key handling, so these keys never reach the shell.
   // Keyboard focus stays in the terminal the whole time — the list is
   // driven from here instead of moving focus into it.
-  // Sessions waiting on the user, longest-waiting first; repeated presses
-  // walk through them.
-  function focusNextPending() {
-    const pending = [...aiStatusStore.entriesWith("awaiting"), ...aiStatusStore.entriesWith("error")]
-      .map((entry) => entry.sessionId)
-      .filter((id) => sessionsById.has(id));
-    if (pending.length === 0) return;
-    const current = pending.indexOf(workspaceStore.focusedSessionId ?? "");
-    workspaceStore.focusSession(pending[(current + 1) % pending.length]);
-  }
-
   function onKeydown(event: KeyboardEvent) {
+    // The command palette owns the keyboard while it's open.
+    if (uiState.commandPaletteOpen) return;
     if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("aiNextPending"))) {
       event.preventDefault();
       event.stopPropagation();

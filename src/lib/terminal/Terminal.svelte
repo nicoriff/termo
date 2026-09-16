@@ -3,6 +3,7 @@
   import { onDestroy, onMount } from "svelte";
   import { TerminalInstance } from "./TerminalInstance";
   import { themeStore } from "$lib/theme/theme-store.svelte";
+  import { uiState } from "$lib/core/ui-state.svelte";
 
   let {
     sessionId,
@@ -40,6 +41,9 @@
   // would go nowhere until you clicked the pane. Isolated from the theme
   // effect above so it only reruns when `active` itself changes.
   $effect(() => {
+    // Also re-runs when something that stole focus (the command palette) asks
+    // for it back, since `active` itself doesn't change in that case.
+    void uiState.terminalFocusNonce;
     if (active) instance?.focus();
   });
 

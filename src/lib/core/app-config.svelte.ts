@@ -16,6 +16,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   cycle_tab_other: null,
   zoom_tile_mac: null,
   zoom_tile_other: null,
+  command_palette_mac: null,
+  command_palette_other: null,
   ai_running_mac: null,
   ai_running_other: null,
   ai_awaiting_mac: null,
@@ -32,6 +34,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
   zoomTile: { mac: "zoom_tile_mac", other: "zoom_tile_other" },
+  commandPalette: { mac: "command_palette_mac", other: "command_palette_other" },
   aiRunning: { mac: "ai_running_mac", other: "ai_running_other" },
   aiAwaiting: { mac: "ai_awaiting_mac", other: "ai_awaiting_other" },
   aiError: { mac: "ai_error_mac", other: "ai_error_other" },
@@ -59,6 +62,9 @@ class AppConfigStore {
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
   aiDockBadge = $state(true);
+  /** Set by the backend when it chains onto the user's Claude Code status
+   * line; kept here only so persisting doesn't drop it. */
+  private statusLineWrapped: string | null = null;
   shortcuts = $state<ShortcutsConfig>(EMPTY_SHORTCUTS);
   loaded = $state(false);
 
@@ -111,6 +117,7 @@ class AppConfigStore {
     this.aiNotifyError = config.ai_notify_error;
     this.aiNotifyFinished = config.ai_notify_finished;
     this.aiDockBadge = config.ai_dock_badge;
+    this.statusLineWrapped = config.status_line_wrapped;
     this.shortcuts = config.shortcuts;
     this.installedFontPath = config.installed_font_path;
     // Kept current even in Preferences (which never resizes to it) so its
@@ -255,6 +262,7 @@ class AppConfigStore {
       ai_notify_error: this.aiNotifyError,
       ai_notify_finished: this.aiNotifyFinished,
       ai_dock_badge: this.aiDockBadge,
+      status_line_wrapped: this.statusLineWrapped,
       font_size_override: themeStore.fontSizeOverride,
       font_family_override: themeStore.fontFamilyOverride,
       installed_font_path: this.installedFontPath,

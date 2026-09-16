@@ -5,6 +5,7 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { getPtyId } from "$lib/terminal/pty-registry";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
 
   const MEMORY_POLL_MS = 2000;
 
@@ -43,6 +44,20 @@
     };
   });
 
+  // Claude Code's plan windows for the active console, when it reports them.
+  const planUsage = $derived.by(() => {
+    const status = activeTabId ? agentStatusStore.byTab[activeTabId] : null;
+    if (!status) return null;
+    const parts: string[] = [];
+    if (status.fiveHourPercentage !== null) {
+      parts.push(t("statusBar.fiveHour", { percent: Math.round(status.fiveHourPercentage) }));
+    }
+    if (status.sevenDayPercentage !== null) {
+      parts.push(t("statusBar.sevenDay", { percent: Math.round(status.sevenDayPercentage) }));
+    }
+    return parts.length > 0 ? t("statusBar.plan", { usage: parts.join(" · ") }) : null;
+  });
+
   function formatBytes(bytes: number): string {
     const mb = bytes / (1024 * 1024);
     return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
@@ -53,6 +68,9 @@
   <span class="status-item">
     {t("statusBar.aiMode", { state: t(appConfigStore.aiModeEnabled ? "statusBar.aiOn" : "statusBar.aiOff") })}
   </span>
+  {#if planUsage}
+    <span class="status-item status-plan" title={t("statusBar.planHint")}>{planUsage}</span>
+  {/if}
   {#if memoryBytes !== null}
     <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
       {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
@@ -78,6 +96,10 @@
   .status-item {
     white-space: nowrap;
     opacity: 0.85;
+  }
+
+  .status-plan {
+    margin-left: 12px;
   }
 
   .status-memory {

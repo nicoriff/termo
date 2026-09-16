@@ -18,6 +18,10 @@
     <span>{t(SHORTCUT_LABEL_KEYS.zoomTile)}</span>
     <ShortcutRecorder action="zoomTile" mode="zoom" />
   </div>
+  <div class="shortcut-row">
+    <span>{t(SHORTCUT_LABEL_KEYS.commandPalette)}</span>
+    <ShortcutRecorder action="commandPalette" />
+  </div>
   {#each ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"] as const as action (action)}
     <div class="shortcut-row">
       <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>

@@ -9,6 +9,7 @@
     type AgentTool,
   } from "$lib/core/agent-hooks-client";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { installStatusLine, isStatusLineInstalled, uninstallStatusLine } from "$lib/core/status-line-client";
 
   const TOOLS: { tool: AgentTool; label: string; file: string }[] = [
     { tool: "claude", label: "Claude Code", file: "~/.claude/settings.json" },
@@ -16,11 +17,26 @@
   ];
 
   let hooks = $state<AgentHooksStatus | null>(null);
-  let busy = $state<AgentTool | null>(null);
+  let statusLine = $state<boolean | null>(null);
+  let busy = $state<AgentTool | "statusLine" | null>(null);
   let error = $state<string | null>(null);
 
   async function refresh() {
     hooks = await getAgentHooksStatus();
+    statusLine = await isStatusLineInstalled();
+  }
+
+  async function toggleStatusLine(installed: boolean) {
+    busy = "statusLine";
+    error = null;
+    try {
+      await (installed ? uninstallStatusLine() : installStatusLine());
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = null;
+    }
   }
 
   onMount(() => {
@@ -108,6 +124,22 @@
     <p class="setting-hint">
       {t("preferences.aiMode.hooksHint", { claudeFile: TOOLS[0].file, codexFile: TOOLS[1].file })}
     </p>
+
+  <div class="hook-row">
+    <span>{t("preferences.aiMode.statusLine")}</span>
+    <span class="hook-state" class:on={statusLine}>
+      {t(statusLine ? "preferences.aiMode.installed" : "preferences.aiMode.notInstalled")}
+    </span>
+    <button
+      class="action-btn"
+      disabled={statusLine === null || busy !== null}
+      onclick={() => toggleStatusLine(statusLine ?? false)}
+    >
+      {busy === "statusLine" ? "..." : t(statusLine ? "preferences.aiMode.remove" : "preferences.aiMode.install")}
+    </button>
+  </div>
+  <p class="setting-hint">{t("preferences.aiMode.statusLineHint")}</p>
+
   {#if error}
     <p class="error">{error}</p>
   {/if}

@@ -22,6 +22,7 @@ export type ShortcutAction =
   | "newTab"
   | "cycleTab"
   | "zoomTile"
+  | "commandPalette"
   | "aiRunning"
   | "aiAwaiting"
   | "aiError"
@@ -32,6 +33,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newTab",
   "cycleTab",
   "zoomTile",
+  "commandPalette",
   "aiRunning",
   "aiAwaiting",
   "aiError",
@@ -45,6 +47,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newTab: "shortcuts.labels.newTab",
   cycleTab: "shortcuts.labels.cycleTab",
   zoomTile: "shortcuts.labels.zoomTile",
+  commandPalette: "shortcuts.labels.commandPalette",
   aiRunning: "shortcuts.labels.aiRunning",
   aiAwaiting: "shortcuts.labels.aiAwaiting",
   aiError: "shortcuts.labels.aiError",
@@ -172,6 +175,7 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   newTab: { mac: "meta+t", other: "ctrl+t" },
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
+  commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },
   aiRunning: { mac: "meta+1", other: "ctrl+1" },
   aiAwaiting: { mac: "meta+2", other: "ctrl+2" },
   aiError: { mac: "meta+3", other: "ctrl+3" },

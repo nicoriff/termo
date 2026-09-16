@@ -100,14 +100,14 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
 /// Hook commands run through `sh -c` on macOS/Linux and Git Bash on Windows,
 /// so the path is quoted for a POSIX shell.
 #[cfg(not(windows))]
-fn quote_executable(exe: &Path) -> String {
+pub(super) fn quote_executable(exe: &Path) -> String {
     format!("'{}'", exe.to_string_lossy().replace('\'', r"'\''"))
 }
 
 /// Double quotes around a forward-slash path: a backslash is an escape
 /// character in bash, while Windows accepts `/` as a separator.
 #[cfg(windows)]
-fn quote_executable(exe: &Path) -> String {
+pub(super) fn quote_executable(exe: &Path) -> String {
     let mut quoted = String::from("\"");
     for c in exe.to_string_lossy().replace('\\', "/").chars() {
         if matches!(c, '"' | '$' | '`') {
@@ -134,7 +134,7 @@ fn is_our_group(group: &Value) -> bool {
         && commands.all(|command| command.contains(HOOK_FLAG) || command.contains(LEGACY_SCRIPT_NAME))
 }
 
-fn read_root(file: &Path) -> anyhow::Result<Map<String, Value>> {
+pub(super) fn read_root(file: &Path) -> anyhow::Result<Map<String, Value>> {
     if !file.exists() {
         return Ok(Map::new());
     }
@@ -150,7 +150,7 @@ fn read_root(file: &Path) -> anyhow::Result<Map<String, Value>> {
     }
 }
 
-fn write_root(file: &Path, root: &Map<String, Value>) -> anyhow::Result<()> {
+pub(super) fn write_root(file: &Path, root: &Map<String, Value>) -> anyhow::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
