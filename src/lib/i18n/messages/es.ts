@@ -148,6 +148,10 @@ export const es = {
       languageLabel: "Idioma de la app",
       system: "Sistema",
       languageHint: "\"Sistema\" usa el idioma de tu sistema operativo.",
+      startup: "Inicio",
+      defaultLayout: "Layout al abrir",
+      noLayout: "Ninguno",
+      defaultLayoutHint: "Al iniciar, Termini abre este layout en lugar de una sola consola.",
     },
     appearance: {
       theme: "Tema",

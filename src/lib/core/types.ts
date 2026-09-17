@@ -59,6 +59,8 @@ export interface AppConfig {
   /** The user's own Claude Code statusLine command, saved when Termini chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;
+  /** Saved layout to open on launch, or null for a single console. */
+  default_layout: string | null;
   window: WindowConfig;
   shortcuts: ShortcutsConfig;
 }

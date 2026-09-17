@@ -95,6 +95,10 @@ pub struct AppConfig {
     /// The user's own Claude Code `statusLine` command, saved when Termini
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
+    /// Name of the saved layout to open on launch (see layouts.rs), or None
+    /// to start with a single console. A name that no longer exists is
+    /// ignored rather than treated as an error.
+    pub default_layout: Option<String>,
     pub window: WindowConfig,
     pub shortcuts: ShortcutsConfig,
 }
@@ -122,6 +126,7 @@ impl Default for AppConfig {
             ai_notify_finished: true,
             ai_dock_badge: true,
             status_line_wrapped: None,
+            default_layout: None,
             window: WindowConfig::default(),
             shortcuts: ShortcutsConfig::default(),
         }

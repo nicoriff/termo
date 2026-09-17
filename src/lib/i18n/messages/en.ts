@@ -150,6 +150,10 @@ export const en: Messages = {
       languageLabel: "App language",
       system: "System",
       languageHint: "\"System\" uses your operating system's language.",
+      startup: "Startup",
+      defaultLayout: "Layout on launch",
+      noLayout: "None",
+      defaultLayoutHint: "On launch, Termini opens this layout instead of a single console.",
     },
     appearance: {
       theme: "Theme",

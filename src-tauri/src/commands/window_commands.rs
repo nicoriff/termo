@@ -160,6 +160,9 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
     .resizable(true)
     .maximizable(false)
     .transparent(true)
+    // It's a settings window for the console behind it: sending it behind that
+    // console while you read it is never what you wanted.
+    .always_on_top(true)
     // Revealed by show_and_focus once the page is ready; showing it earlier
     // flashes a white, natively framed window and then the default config.
     .visible(false);

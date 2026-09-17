@@ -62,6 +62,8 @@ class AppConfigStore {
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
   aiDockBadge = $state(true);
+  /** Saved layout to open on launch, or null for a single console. */
+  defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
    * line; kept here only so persisting doesn't drop it. */
   private statusLineWrapped: string | null = null;
@@ -117,6 +119,7 @@ class AppConfigStore {
     this.aiNotifyError = config.ai_notify_error;
     this.aiNotifyFinished = config.ai_notify_finished;
     this.aiDockBadge = config.ai_dock_badge;
+    this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.shortcuts = config.shortcuts;
     this.installedFontPath = config.installed_font_path;
@@ -202,6 +205,12 @@ class AppConfigStore {
     void this.persist();
   }
 
+  /** Null means launching into a single console, as before. */
+  setDefaultLayout(name: string | null): void {
+    this.defaultLayout = name;
+    void this.persist();
+  }
+
   /** Records that `family` was downloaded to `localPath` so it can be
    * restored offline on the next launch. Pass localPath = null when the
    * user switches to a plain system font instead of a Google Font. */
@@ -262,6 +271,7 @@ class AppConfigStore {
       ai_notify_error: this.aiNotifyError,
       ai_notify_finished: this.aiNotifyFinished,
       ai_dock_badge: this.aiDockBadge,
+      default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       font_size_override: themeStore.fontSizeOverride,
       font_family_override: themeStore.fontFamilyOverride,

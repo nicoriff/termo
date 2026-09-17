@@ -28,9 +28,19 @@
     (async () => {
       await appConfigStore.init();
 
-      const shell = await resolveDefaultShell();
-      workspaceStore.initRoot(shell.path, shell.args, shell.title);
-      void layoutsStore.load();
+      await layoutsStore.load();
+      // Launching straight into the chosen layout, rather than opening a
+      // console and replacing it a moment later. A name that no longer exists
+      // just falls through to the normal single console.
+      const preset = appConfigStore.defaultLayout
+        ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
+        : undefined;
+      if (preset) {
+        layoutsStore.apply(preset);
+      } else {
+        const shell = await resolveDefaultShell();
+        workspaceStore.initRoot(shell.path, shell.args, shell.title);
+      }
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);
