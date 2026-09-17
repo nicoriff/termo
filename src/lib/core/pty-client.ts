@@ -53,6 +53,12 @@ export function getPtyMemory(id: string): Promise<number | null> {
   return invoke("pty_memory", { id });
 }
 
+/** How many consoles have a process running under their shell — a command in
+ * progress, rather than a prompt sitting idle. */
+export function busyConsoles(): Promise<number> {
+  return invoke("busy_consoles");
+}
+
 export function listShells(): Promise<ShellInfo[]> {
   return invoke("list_shells");
 }

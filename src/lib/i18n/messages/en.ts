@@ -49,6 +49,14 @@ export const en: Messages = {
       finished: "Finished",
     },
   },
+  quit: {
+    title: "Quit Termini",
+    busyConsoles: "Consoles with something running: {count}",
+    busyAgents: "Active AI sessions: {count}",
+    warning: "Quitting closes them all and loses whatever they are doing.",
+    cancel: "Cancel",
+    confirm: "Quit anyway",
+  },
   layouts: {
     save: "Save layout...",
     restore: "Restore layout",

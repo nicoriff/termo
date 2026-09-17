@@ -11,6 +11,9 @@ class UiState {
   restoreLayoutTarget = $state<SavedLayout | null>(null);
   /** The "saved layouts" window, where they're picked and deleted. */
   layoutManagerOpen = $state(false);
+  /** What quitting would interrupt, when it's worth asking about (see
+   * app/quit.ts). Null while no such question is on screen. */
+  quitPrompt = $state<{ consoles: number; agents: number } | null>(null);
   /** Bumped to ask the focused terminal to take keyboard focus back after an
    * overlay (the command palette) had it — Terminal.svelte only focuses on its
    * own when the active tab changes, which doesn't happen here. */
@@ -23,7 +26,8 @@ class UiState {
       this.commandPaletteOpen ||
       this.saveLayoutPromptOpen ||
       this.layoutManagerOpen ||
-      this.restoreLayoutTarget !== null
+      this.restoreLayoutTarget !== null ||
+      this.quitPrompt !== null
     );
   }
 
@@ -55,6 +59,14 @@ class UiState {
 
   cancelRestoreLayout(): void {
     this.restoreLayoutTarget = null;
+  }
+
+  askBeforeQuit(counts: { consoles: number; agents: number }): void {
+    this.quitPrompt = counts;
+  }
+
+  cancelQuit(): void {
+    this.quitPrompt = null;
   }
 
   openLayoutManager(): void {

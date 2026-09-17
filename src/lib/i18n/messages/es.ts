@@ -47,6 +47,14 @@ export const es = {
       finished: "Terminó",
     },
   },
+  quit: {
+    title: "Salir de Termini",
+    busyConsoles: "Consolas con algo corriendo: {count}",
+    busyAgents: "Sesiones de IA activas: {count}",
+    warning: "Si salís se cierran todas y se pierde lo que estén haciendo.",
+    cancel: "Cancelar",
+    confirm: "Salir igual",
+  },
   layouts: {
     save: "Guardar layout...",
     restore: "Restaurar layout",

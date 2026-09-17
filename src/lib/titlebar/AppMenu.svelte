@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { openPreferencesWindow, quitApp } from "$lib/core/window-client";
+  import { openPreferencesWindow } from "$lib/core/window-client";
+  import { requestQuit } from "$lib/app/quit";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -68,7 +69,8 @@
 
   function quit() {
     onclose();
-    void quitApp();
+    // Asks first if anything is still running (see app/quit.ts).
+    void requestQuit();
   }
 </script>
 

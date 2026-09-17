@@ -32,6 +32,33 @@ impl MemorySampler {
         let tree = tree_pids(processes.iter().map(|(pid, process)| (*pid, process.parent())), root);
         Some(tree.iter().filter_map(|pid| processes.get(pid)).map(|p| p.memory()).sum())
     }
+
+    /// Which of `roots` have something running under them — a command in
+    /// progress, as opposed to a shell sitting at its prompt. Asked before
+    /// quitting, so the app only interrupts when there's work to lose. One
+    /// refresh for all of them: the process table is the expensive part.
+    pub fn busy_roots(&self, roots: &[u32]) -> Vec<u32> {
+        let mut system = self.0.lock().unwrap();
+        system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        busy_from_table(
+            system.processes().iter().map(|(pid, process)| (*pid, process.parent())),
+            roots,
+        )
+    }
+}
+
+fn busy_from_table(parents: impl Iterator<Item = (Pid, Option<Pid>)>, roots: &[u32]) -> Vec<u32> {
+    let mut children: HashMap<Pid, Vec<Pid>> = HashMap::new();
+    for (pid, parent) in parents {
+        if let Some(parent) = parent {
+            children.entry(parent).or_default().push(pid);
+        }
+    }
+    roots
+        .iter()
+        .copied()
+        .filter(|root| children.get(&Pid::from_u32(*root)).is_some_and(|kids| !kids.is_empty()))
+        .collect()
 }
 
 fn tree_pids(parents: impl Iterator<Item = (Pid, Option<Pid>)>, root: Pid) -> HashSet<Pid> {
@@ -72,6 +99,20 @@ mod tests {
         ];
         let tree = tree_pids(table.into_iter(), pid(10));
         assert_eq!(tree, HashSet::from([pid(10), pid(11), pid(12)]));
+    }
+
+    /// A shell with a command running under it is busy; one sitting at its
+    /// prompt, with no children, is not.
+    #[test]
+    fn only_roots_with_something_under_them_are_busy() {
+        let table = vec![
+            (pid(1), None),
+            (pid(10), Some(pid(1))),
+            (pid(11), Some(pid(10))),
+            (pid(20), Some(pid(1))),
+        ];
+        assert_eq!(busy_from_table(table.clone().into_iter(), &[10, 20]), vec![10]);
+        assert!(busy_from_table(table.into_iter(), &[20]).is_empty());
     }
 
     #[test]

@@ -126,6 +126,19 @@ pub async fn pty_memory(app: tauri::AppHandle, id: String) -> Result<Option<u64>
     .map_err(|err| err.to_string())
 }
 
+/// How many consoles have something running under their shell. Off the main
+/// thread for the same reason as pty_memory: it refreshes the process table.
+#[tauri::command]
+pub async fn busy_consoles(app: tauri::AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let pids = state.pty.pids();
+        state.memory.busy_roots(&pids).len()
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 pub fn list_shells() -> Vec<ShellInfo> {
     detect_shells()

@@ -26,6 +26,12 @@ impl PtyManager {
         Ok(id)
     }
 
+    /// Every live console's process id, for the "something is still running"
+    /// check when quitting.
+    pub fn pids(&self) -> Vec<u32> {
+        self.sessions.iter().filter_map(|session| session.pid()).collect()
+    }
+
     pub fn pid(&self, id: Uuid) -> anyhow::Result<Option<u32>> {
         let session = self
             .sessions

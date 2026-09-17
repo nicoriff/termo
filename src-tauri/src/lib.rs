@@ -73,6 +73,7 @@ pub fn run() {
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::forget_agent_session,
             commands::window_commands::quit_app,
+            commands::pty_commands::busy_consoles,
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,

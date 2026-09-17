@@ -9,10 +9,16 @@
     openPreferencesWindow,
     toggleMaximizeWindow,
   } from "$lib/core/window-client";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { requestQuit } from "$lib/app/quit";
   import AppMenu from "./AppMenu.svelte";
+
+  // This bar is also the Preferences window's, where closing just hides it —
+  // only the main window's X ends the app, so only it asks first.
+  const isMainWindow = getCurrentWindow().label === "main";
 
   let {
     title = "Termini",
@@ -134,7 +140,7 @@
       <button
         class="titlebar-button titlebar-close"
         aria-label={t("titlebar.close")}
-        onclick={() => void closeWindow()}
+        onclick={() => void (isMainWindow ? requestQuit() : closeWindow())}
       >
         <svg viewBox="0 0 10 10" width="10" height="10">
           <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
