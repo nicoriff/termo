@@ -8,6 +8,7 @@
   const GROUP_LABEL_KEYS: Record<CommandGroup, MessageKey> = {
     navigation: "commands.groups.navigation",
     tabs: "commands.groups.tabs",
+    layouts: "commands.groups.layouts",
     appearance: "commands.groups.appearance",
     aiMode: "commands.groups.aiMode",
   };

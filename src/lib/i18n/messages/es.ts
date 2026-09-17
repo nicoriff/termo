@@ -1,7 +1,9 @@
 /** Spanish catalog. Source of truth for the key structure: `en.ts` must match it exactly. */
 export const es = {
   titlebar: {
-    settings: "Configuración",
+    menu: "Menú",
+    systemPreferences: "Preferencias del sistema",
+    quit: "Salir",
     minimize: "Minimizar",
     maximize: "Maximizar",
     restore: "Restaurar",
@@ -45,6 +47,32 @@ export const es = {
       finished: "Terminó",
     },
   },
+  layouts: {
+    save: "Guardar layout...",
+    restore: "Restaurar layout",
+    empty: "Sin layouts guardados",
+    nameTitle: "Guardar layout",
+    namePlaceholder: "Nombre del layout",
+    nameHint: "Se guardan las consolas abiertas, de qué tipo son y cómo están divididas.",
+    nameTaken: "Ya existe un layout con ese nombre: se va a reemplazar.",
+    saveSessions: "Guardar también las sesiones de IA ({count})",
+    saveSessionsHint: "Al restaurar, cada consola reanuda su conversación.",
+    aiPill: "IA",
+    manage: "Gestionar layouts...",
+    manageTitle: "Layouts guardados",
+    manageHint: "Doble clic para restaurar. Supr elimina el seleccionado.",
+    savedAgo: "hace {time}",
+    delete: "Eliminar",
+    deleteConfirm: "Confirmar",
+    deleteWarning: "Se elimina «{name}» para siempre.",
+    close: "Cerrar",
+    restoreTitle: "Restaurar layout",
+    restoreWarning:
+      "Se van a cerrar las consolas abiertas y los procesos que corren en ellas, y en su lugar se abre «{name}». ¿Querés continuar?",
+    restoreConfirm: "Restaurar",
+    cancel: "Cancelar",
+    confirm: "Guardar",
+  },
   shortcuts: {
     labels: {
       newTab: "Nueva pestaña",
@@ -70,6 +98,7 @@ export const es = {
     groups: {
       navigation: "Ir a",
       tabs: "Pestañas y splits",
+      layouts: "Layouts",
       appearance: "Apariencia",
       aiMode: "Modo IA",
     },
@@ -80,6 +109,10 @@ export const es = {
     closeTab: "Cerrar la pestaña actual",
     splitVertical: "Dividir verticalmente",
     splitHorizontal: "Dividir horizontalmente",
+    saveLayout: "Guardar el layout actual...",
+    manageLayouts: "Gestionar layouts",
+    restoreLayout: "Restaurar layout: {name}",
+    deleteLayout: "Eliminar layout: {name}",
     zoomTile: "Ampliar el tile actual",
     restoreTile: "Restaurar el tile ampliado",
     setTheme: "Tema: {theme}",

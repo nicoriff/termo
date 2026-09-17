@@ -4,7 +4,9 @@ import { canRestore, restoreSession, sessionLabel } from "../ai-mode/restore-ses
 import { appConfigStore } from "../core/app-config.svelte";
 import { resolveDefaultShell } from "../core/default-shell";
 import { openPreferencesWindow } from "../core/window-client";
+import { uiState } from "../core/ui-state.svelte";
 import { t } from "../i18n/i18n.svelte";
+import { layoutsStore } from "../layout/layouts-store.svelte";
 import { collectSessions, collectTiles } from "../layout/split-tree";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { tabTitleStore } from "../terminal/tab-title-store.svelte";
@@ -89,6 +91,37 @@ export function buildCommands(): Command[] {
         group: "tabs",
         label: t(workspaceStore.zoomedTileId === tile.id ? "commands.restoreTile" : "commands.zoomTile"),
         run: () => workspaceStore.toggleZoom(tile.id),
+      },
+    );
+  }
+
+  commands.push(
+    {
+      id: "layouts.save",
+      group: "layouts",
+      label: t("commands.saveLayout"),
+      run: () => uiState.openSaveLayoutPrompt(),
+    },
+    {
+      id: "layouts.manage",
+      group: "layouts",
+      label: t("commands.manageLayouts"),
+      run: () => uiState.openLayoutManager(),
+    },
+  );
+  for (const layout of layoutsStore.layouts) {
+    commands.push(
+      {
+        id: `layouts.restore.${layout.name}`,
+        group: "layouts",
+        label: t("commands.restoreLayout", { name: layout.name }),
+        run: () => uiState.requestRestoreLayout(layout),
+      },
+      {
+        id: `layouts.delete.${layout.name}`,
+        group: "layouts",
+        label: t("commands.deleteLayout", { name: layout.name }),
+        run: () => void layoutsStore.remove(layout.name),
       },
     );
   }

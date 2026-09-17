@@ -2,6 +2,7 @@ mod agent_sessions;
 mod commands;
 mod config;
 mod i18n;
+mod layouts;
 mod pty;
 mod state;
 
@@ -71,6 +72,10 @@ pub fn run() {
             commands::agent_hook_commands::uninstall_agent_hooks,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::forget_agent_session,
+            commands::window_commands::quit_app,
+            commands::layout_commands::list_layouts,
+            commands::layout_commands::save_layout,
+            commands::layout_commands::delete_layout,
             commands::agent_hook_commands::status_line_installed,
             commands::agent_hook_commands::install_status_line,
             commands::agent_hook_commands::uninstall_status_line,

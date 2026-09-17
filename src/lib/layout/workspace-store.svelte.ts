@@ -34,6 +34,17 @@ class WorkspaceStore {
     this.focusedTileId = tile.id;
   }
 
+  /** Swaps the whole tree for another one — restoring a saved layout. Every
+   * console currently open goes away with its tile (each <Terminal> unmounts
+   * and kills its PTY), and the incoming tiles spawn their own. */
+  replaceRoot(root: SplitNode): void {
+    this.root = root;
+    this.focusedTileId = collectTiles(root)[0]?.id ?? null;
+    this.zoomedTileId = null;
+    this.overviewOpen = false;
+    this.overviewSelectedTileId = null;
+  }
+
   /** Returns the new tab's id, so callers that need to talk to its console
    * (restoring an agent session types a command into it) can find it. */
   addTab(tileId: string, shellPath?: string, shellArgs?: string[], title = "Shell", cwd?: string): string | null {

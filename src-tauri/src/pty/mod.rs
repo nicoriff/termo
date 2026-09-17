@@ -3,6 +3,7 @@ mod foreground;
 mod agent_events;
 pub mod agent_hooks;
 mod bash_colors;
+pub mod cwd_report;
 mod manager;
 mod memory;
 pub mod oh_my_posh;

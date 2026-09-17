@@ -25,6 +25,15 @@ pub fn is_maximized(window: tauri::Window) -> Result<bool, String> {
     window.is_maximized().map_err(|err| err.to_string())
 }
 
+/// Ends the app outright. Closing the main window gets there too (lib.rs exits
+/// on its Destroyed event, which is what keeps the preloaded, hidden
+/// Preferences window from outliving it), but "Quit" shouldn't depend on that
+/// chain to mean what it says.
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 const PREFERENCES: &str = "preferences";
 
 /// Set by the Preferences page once its config is applied and painted; reset

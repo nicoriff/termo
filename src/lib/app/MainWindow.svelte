@@ -5,6 +5,10 @@
   import SplitView from "$lib/layout/SplitView.svelte";
   import TileOverviewMap from "$lib/layout/TileOverviewMap.svelte";
   import CommandPalette from "$lib/commands/CommandPalette.svelte";
+  import SaveLayoutDialog from "$lib/layout/SaveLayoutDialog.svelte";
+  import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
+  import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
+  import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -26,6 +30,7 @@
 
       const shell = await resolveDefaultShell();
       workspaceStore.initRoot(shell.path, shell.args, shell.title);
+      void layoutsStore.load();
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);
@@ -64,9 +69,9 @@
   // (TerminalInstance.attachCustomKeyEventHandler), which handles the zoom
   // shortcut itself whenever this doesn't take it.
   function handleOverviewKeyDown(event: KeyboardEvent) {
-    // The palette owns the keyboard while it's open (it handles its own keys
-    // on the input), and it can't be opened on top of the tile picker.
-    if (uiState.commandPaletteOpen) return;
+    // Overlays (the palette, the layout dialogs) own the keyboard while
+    // they're open, and the palette can't be opened on top of the tile picker.
+    if (uiState.overlayOpen) return;
     if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("commandPalette"))) {
       event.preventDefault();
       event.stopPropagation();
@@ -133,6 +138,15 @@
     {/if}
     {#if uiState.commandPaletteOpen}
       <CommandPalette />
+    {/if}
+    {#if uiState.saveLayoutPromptOpen}
+      <SaveLayoutDialog />
+    {/if}
+    {#if uiState.layoutManagerOpen}
+      <LayoutManagerDialog />
+    {/if}
+    {#if uiState.restoreLayoutTarget}
+      <RestoreLayoutDialog />
     {/if}
   </main>
   <StatusBar />

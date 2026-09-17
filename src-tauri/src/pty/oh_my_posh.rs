@@ -184,7 +184,8 @@ fn powershell_init(binary: &Path, config: &str) -> String {
 
 /// PowerShell accepts a single -Command, and the PSReadLine opt-in may
 /// already have added one — chain onto it rather than adding a second.
-fn append_powershell_command(args: &mut Vec<String>, script: &str) {
+/// Shared with cwd_report, which appends its prompt wrapper after this one.
+pub(super) fn append_powershell_command(args: &mut Vec<String>, script: &str) {
     if let Some(index) = args.iter().position(|arg| arg.eq_ignore_ascii_case("-Command")) {
         if let Some(existing) = args.get_mut(index + 1) {
             *existing = format!("{existing}; {script}");

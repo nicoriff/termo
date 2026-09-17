@@ -85,8 +85,9 @@
   // Keyboard focus stays in the terminal the whole time — the list is
   // driven from here instead of moving focus into it.
   function onKeydown(event: KeyboardEvent) {
-    // The command palette owns the keyboard while it's open.
-    if (uiState.commandPaletteOpen) return;
+    // Overlays own the keyboard while they're open — a name typed into a
+    // dialog must not toggle these panels.
+    if (uiState.overlayOpen) return;
     if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("aiNextPending"))) {
       event.preventDefault();
       event.stopPropagation();

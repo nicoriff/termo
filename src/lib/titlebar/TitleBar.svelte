@@ -12,6 +12,7 @@
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
+  import AppMenu from "./AppMenu.svelte";
 
   let {
     title = "Termini",
@@ -26,6 +27,8 @@
   let maximized = $state(false);
   let fullscreen = $state(false);
   let unlisten: (() => void) | null = null;
+  let menuOpen = $state(false);
+  let menuButtonEl = $state<HTMLButtonElement | undefined>(undefined);
 
   async function refreshMaximized() {
     maximized = await isWindowMaximized();
@@ -78,18 +81,23 @@
     {#if showSettingsButton}
       <button
         class="titlebar-button"
-        aria-label={t("titlebar.settings")}
-        onclick={() => void openPreferencesWindow()}
+        aria-label={t("titlebar.menu")}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        bind:this={menuButtonEl}
+        onclick={() => (menuOpen = !menuOpen)}
       >
+        <!-- A menu, not a settings button: the sliders glyph now belongs to
+             the "System preferences" item inside it. -->
         <svg viewBox="0 0 14 14" width="13" height="13">
-          <line x1="1" y1="3" x2="13" y2="3" stroke="currentColor" stroke-width="1" />
-          <circle cx="9" cy="3" r="1.5" fill="currentColor" />
-          <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1" />
-          <circle cx="5" cy="7" r="1.5" fill="currentColor" />
-          <line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1" />
-          <circle cx="10" cy="11" r="1.5" fill="currentColor" />
+          <line x1="2" y1="3.5" x2="12" y2="3.5" stroke="currentColor" stroke-width="1" />
+          <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="1" />
+          <line x1="2" y1="10.5" x2="12" y2="10.5" stroke="currentColor" stroke-width="1" />
         </svg>
       </button>
+      {#if menuOpen}
+        <AppMenu anchor={menuButtonEl} onclose={() => (menuOpen = false)} />
+      {/if}
     {/if}
     {#if !isMac}
       <button

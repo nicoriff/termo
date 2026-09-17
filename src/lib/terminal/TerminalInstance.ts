@@ -4,6 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import { agentStatusStore } from "../ai-mode/agent-status-store.svelte";
+import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
@@ -13,6 +14,8 @@ import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
 import { OutputHighlighter } from "./output-highlighter";
+import { parseOsc7 } from "./osc7";
+import { tabCwd } from "./tab-cwd.svelte";
 import { registerPty, unregisterPty } from "./pty-registry";
 import { tabTitleStore } from "./tab-title-store.svelte";
 
@@ -61,11 +64,15 @@ export class TerminalInstance {
   // id), which only exists once spawnPty() resolves inside mount().
   private readonly tabId: string;
   private renderSub: IDisposable | null = null;
+  private oscSub: IDisposable | null = null;
   private lastClassifyAt = 0;
   private readonly classifyState: ClassifyState = { detectedTool: null };
   // Unix only — stays null forever on Windows (see PtyEvent::ForegroundProcess).
   private lastForegroundProcessPath: string | null = null;
 
+  /** What xterm wanted to send before the PTY existed — see the onData
+   * handler in the constructor. */
+  private pendingInput: string[] = [];
   private container: HTMLElement | null = null;
   private lastPtySize: { cols: number; rows: number } | null = null;
   private ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -90,11 +97,30 @@ export class TerminalInstance {
     this.term.loadAddon(unicode11);
     this.term.unicode.activeVersion = "11";
 
+    // Buffered until the PTY id arrives rather than dropped. The console's
+    // output channel is wired before pty_spawn's reply comes back, so its very
+    // first bytes can reach xterm while `sessionId` is still null — and those
+    // bytes are ConPTY's cursor-position query (ESC[6n), which blocks the
+    // shell's startup until the terminal answers. Dropping that answer left
+    // the shell attached to a console it never finished initializing: alive,
+    // burning no CPU, printing nothing. It showed up when restoring a layout
+    // spawned several consoles at once, which widens that window.
     this.term.onData((data) => {
       if (this.sessionId) void writePty(this.sessionId, data);
+      else this.pendingInput.push(data);
     });
 
     this.term.onTitleChange((title) => tabTitleStore.setProgramTitle(this.tabId, title));
+
+    // The shell announces its directory on every prompt (see
+    // src-tauri/src/pty/cwd_report.rs) — the only way to know where a console
+    // actually is, since the tab only remembers where it was opened. Returning
+    // true marks the sequence handled so xterm doesn't pass it on as output.
+    this.oscSub = this.term.parser.registerOscHandler(7, (payload) => {
+      const dir = parseOsc7(payload);
+      if (dir) tabCwd.set(this.tabId, dir);
+      return true;
+    });
 
     // Reserve tile zoom, tab cycling and new-tab ahead of xterm's own key
     // handling — some shells/apps bind these to something else, so this has
@@ -177,21 +203,47 @@ export class TerminalInstance {
     this.fit.fit();
 
     const spawnSize = { cols: this.term.cols, rows: this.term.rows };
-    this.sessionId = await spawnPty({
+    const spawned = await spawnPty({
       shellPath,
       shellArgs,
       cwd,
       ...spawnSize,
+      // Every callback below bails once this instance is gone. A console being
+      // torn down keeps producing output (and finally an exit) for a moment,
+      // and writing that into an already-disposed xterm throws — inside the
+      // Tauri channel's message handler, which is the same dispatch every
+      // other console's output rides on. Restoring a layout is exactly when
+      // that matters: consoles are created while others are being killed.
       onForegroundProcess: (path) => {
+        if (this.disposed) return;
         this.lastForegroundProcessPath = path;
         tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
       },
       onData: (bytes) => {
+        if (this.disposed) return;
         const text = this.decoder.decode(bytes, { stream: true });
         this.term.write(themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text);
       },
-      onExit: (code) => this.onExit?.(code),
+      onExit: (code) => {
+        if (this.disposed) return;
+        this.onExit?.(code);
+      },
     });
+    // Disposed while the spawn was in flight (a layout restore replaces tiles
+    // faster than a console starts): adopt the session only to kill it, or it
+    // would outlive its terminal as an orphan shell.
+    if (this.disposed) {
+      void killPty(spawned);
+      return;
+    }
+    this.sessionId = spawned;
+    // Whatever xterm produced while the spawn was in flight goes out now, in
+    // order — ConPTY's cursor-position query arrives that early, and the shell
+    // does not finish starting until it is answered.
+    for (const data of this.pendingInput) {
+      void writePty(this.sessionId, data);
+    }
+    this.pendingInput = [];
     registerPty(this.tabId, this.sessionId);
     this.lastPtySize = spawnSize;
 
@@ -258,11 +310,15 @@ export class TerminalInstance {
     if (this.ptyResizeTimer) clearTimeout(this.ptyResizeTimer);
     this.renderSub?.dispose();
     this.renderSub = null;
+    this.oscSub?.dispose();
+    this.oscSub = null;
+    tabCwd.remove(this.tabId);
     // Also covers teardown paths that don't go through workspaceStore's
     // closeTab (e.g. closing the whole window/tile) — remove() is an
     // idempotent no-op if that already fired.
     aiStatusStore.remove(this.tabId);
     agentStatusStore.remove(this.tabId);
+    tabAgentSessions.remove(this.tabId);
     unregisterPty(this.tabId);
     tabTitleStore.remove(this.tabId);
     if (this.sessionId) void killPty(this.sessionId);

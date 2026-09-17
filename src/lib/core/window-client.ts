@@ -18,6 +18,12 @@ export function openPreferencesWindow(): Promise<void> {
   return invoke("open_preferences_window");
 }
 
+/** Ends the app. Not the same as closing this window: the hidden, preloaded
+ * Preferences window would keep the process alive (see quit_app). */
+export function quitApp(): Promise<void> {
+  return invoke("quit_app");
+}
+
 /** Tells the backend the (preloaded, hidden) Preferences page has applied its
  * config and painted, so it can be shown without flashing defaults. */
 export function preferencesReady(): Promise<void> {

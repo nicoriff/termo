@@ -3,6 +3,7 @@ import { writePty } from "$lib/core/pty-client";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { getPtyId } from "$lib/terminal/pty-registry";
 import type { AgentSession } from "$lib/core/agent-sessions-client";
+import type { ToolId } from "./pattern-table";
 import { resumeCommand } from "./resume-command";
 import { TOOL_DISPLAY_NAMES } from "./tool-names";
 
@@ -44,6 +45,15 @@ export async function restoreSession(session: AgentSession, targetTileId?: strin
   );
   if (!tabId) return;
 
+  const ptyId = await waitForConsole(tabId);
+  if (ptyId) await writePty(ptyId, `${command}\r`);
+}
+
+/** Reopens a conversation in a console that already exists — what restoring a
+ * layout saved with sessions does, tab by tab. */
+export async function resumeInTab(tabId: string, tool: ToolId, agentSessionId: string): Promise<void> {
+  const command = resumeCommand(tool, agentSessionId);
+  if (!command) return;
   const ptyId = await waitForConsole(tabId);
   if (ptyId) await writePty(ptyId, `${command}\r`);
 }

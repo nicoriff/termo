@@ -210,6 +210,11 @@ impl PtySession {
     }
 }
 
+// NOTE: a PtySession has no terminal of its own, and on Windows ConPTY holds
+// the shell's startup until the terminal answers its cursor-position query
+// (ESC[6n) — so a test that only spawns sessions here hangs by design. That
+// handshake is answered on the frontend; see TerminalInstance's onData handler.
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

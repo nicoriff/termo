@@ -10,6 +10,7 @@ import { aiStatusStore, type AiSessionEntry } from "./ai-status-store.svelte";
 import { agentStatusStore, type AgentStatus } from "./agent-status-store.svelte";
 import { TOOL_DISPLAY_NAMES } from "./tool-names";
 import { agentSessionsStore } from "./agent-sessions-store.svelte";
+import { tabAgentSessions } from "./tab-sessions.svelte";
 import type { AgentSession } from "$lib/core/agent-sessions-client";
 import type { AiSessionStatus } from "./classifier";
 import type { ToolId } from "./pattern-table";
@@ -19,6 +20,9 @@ interface AgentEventPayload {
   sessionId: string;
   tool: ToolId;
   status: AiSessionStatus | null;
+  /** The agent's own conversation id, when the hook reported one. */
+  agentSessionId?: string | null;
+  agentCwd?: string | null;
 }
 
 let permission: Promise<boolean> | null = null;
@@ -65,16 +69,28 @@ export function startAgentAttention(): () => void {
     void maybeNotify(sessionId, entry, prev);
   });
   const unlisten = listen<AgentEventPayload>("agent-event", ({ payload }) => {
-    if (!appConfigStore.aiModeEnabled) return;
     const tabId = getTabId(payload.sessionId);
-    if (tabId) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
+    if (!tabId) return;
+    // Recorded whether or not Modo IA is on: it says which conversation this
+    // console has open, which is what saving a layout with sessions needs.
+    if (payload.agentSessionId) {
+      tabAgentSessions.set(tabId, payload.tool, payload.agentSessionId, payload.agentCwd ?? undefined);
+    }
+    if (appConfigStore.aiModeEnabled) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
   });
   // Plan usage / context / cost, from Claude Code's status line. Independent of
   // Modo IA being on: it's just information about the console's session.
-  const unlistenStatus = listen<{ sessionId: string } & AgentStatus>("agent-status", ({ payload }) => {
-    const { sessionId, ...status } = payload;
+  const unlistenStatus = listen<
+    { sessionId: string; agentSessionId?: string | null; cwd?: string | null; projectDir?: string | null } & AgentStatus
+  >("agent-status", ({ payload }) => {
+    // cwd/projectDir/agentSessionId are about the conversation, not plan usage,
+    // so they're routed to tabAgentSessions instead of the status store.
+    const { sessionId, agentSessionId, cwd, projectDir, ...status } = payload;
     const tabId = getTabId(sessionId);
-    if (tabId) agentStatusStore.set(tabId, status);
+    if (!tabId) return;
+    agentStatusStore.set(tabId, status);
+    // The status line is Claude-only, so the tool is known.
+    if (agentSessionId) tabAgentSessions.set(tabId, "claude", agentSessionId, cwd ?? projectDir ?? undefined);
   });
   // Past conversations Modo IA can reopen, recorded by both channels.
   void agentSessionsStore.load();

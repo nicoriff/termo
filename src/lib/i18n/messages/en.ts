@@ -3,7 +3,9 @@ import type { Messages } from "../translate";
 /** English catalog. Typed against the Spanish one, so a missing or extra key fails `npm run check`. */
 export const en: Messages = {
   titlebar: {
-    settings: "Settings",
+    menu: "Menu",
+    systemPreferences: "System preferences",
+    quit: "Quit",
     minimize: "Minimize",
     maximize: "Maximize",
     restore: "Restore",
@@ -47,6 +49,32 @@ export const en: Messages = {
       finished: "Finished",
     },
   },
+  layouts: {
+    save: "Save layout...",
+    restore: "Restore layout",
+    empty: "No saved layouts",
+    nameTitle: "Save layout",
+    namePlaceholder: "Layout name",
+    nameHint: "Saves the open consoles, what type each one is and how they're split.",
+    nameTaken: "A layout with that name already exists: it will be replaced.",
+    saveSessions: "Also save the AI sessions ({count})",
+    saveSessionsHint: "On restore, each console resumes its conversation.",
+    aiPill: "AI",
+    manage: "Manage layouts...",
+    manageTitle: "Saved layouts",
+    manageHint: "Double-click to restore. Delete removes the selected one.",
+    savedAgo: "{time} ago",
+    delete: "Delete",
+    deleteConfirm: "Confirm",
+    deleteWarning: "\"{name}\" will be deleted for good.",
+    close: "Close",
+    restoreTitle: "Restore layout",
+    restoreWarning:
+      "The open consoles and the processes running in them will be closed, and \"{name}\" will open instead. Continue?",
+    restoreConfirm: "Restore",
+    cancel: "Cancel",
+    confirm: "Save",
+  },
   shortcuts: {
     labels: {
       newTab: "New tab",
@@ -72,6 +100,7 @@ export const en: Messages = {
     groups: {
       navigation: "Go to",
       tabs: "Tabs and splits",
+      layouts: "Layouts",
       appearance: "Appearance",
       aiMode: "AI Mode",
     },
@@ -82,6 +111,10 @@ export const en: Messages = {
     closeTab: "Close current tab",
     splitVertical: "Split vertically",
     splitHorizontal: "Split horizontally",
+    saveLayout: "Save current layout...",
+    manageLayouts: "Manage layouts",
+    restoreLayout: "Restore layout: {name}",
+    deleteLayout: "Delete layout: {name}",
     zoomTile: "Zoom current tile",
     restoreTile: "Restore zoomed tile",
     setTheme: "Theme: {theme}",
