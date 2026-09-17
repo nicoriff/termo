@@ -1,4 +1,6 @@
 import { focusNextPending } from "../ai-mode/next-pending";
+import { agentSessionsStore } from "../ai-mode/agent-sessions-store.svelte";
+import { canRestore, restoreSession, sessionLabel } from "../ai-mode/restore-session";
 import { appConfigStore } from "../core/app-config.svelte";
 import { resolveDefaultShell } from "../core/default-shell";
 import { openPreferencesWindow } from "../core/window-client";
@@ -148,6 +150,18 @@ export function buildCommands(): Command[] {
       label: t("commands.aiNextPending"),
       run: () => focusNextPending(),
     });
+
+    // Same rule as the "+" menu: recent sessions only surface while AI Mode
+    // is on, since that's what records them.
+    for (const session of agentSessionsStore.sessions) {
+      if (!canRestore(session)) continue;
+      commands.push({
+        id: `aiMode.resume.${session.agentSessionId}`,
+        group: "aiMode",
+        label: t("commands.resumeSession", { label: sessionLabel(session) }),
+        run: () => void restoreSession(session),
+      });
+    }
   }
 
   return commands;

@@ -6,6 +6,8 @@
   import { getPtyId } from "$lib/terminal/pty-registry";
   import { t } from "$lib/i18n/i18n.svelte";
   import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
 
   const MEMORY_POLL_MS = 2000;
 
@@ -44,19 +46,30 @@
     };
   });
 
+  // Which agent Modo IA detected in the active console, by hooks or by
+  // reading the screen. Null when there's none (or Modo IA is off, which is
+  // what stops both sources from reporting).
+  const activeTool = $derived(activeTabId ? (aiStatusStore.byId[activeTabId]?.tool ?? null) : null);
+
   // Claude Code's plan windows for the active console, when it reports them.
-  const planUsage = $derived.by(() => {
+  const planWindows = $derived.by(() => {
     const status = activeTabId ? agentStatusStore.byTab[activeTabId] : null;
-    if (!status) return null;
-    const parts: string[] = [];
+    if (!status) return [];
+    const windows: { label: string; percent: number }[] = [];
     if (status.fiveHourPercentage !== null) {
-      parts.push(t("statusBar.fiveHour", { percent: Math.round(status.fiveHourPercentage) }));
+      windows.push({ label: t("statusBar.fiveHour"), percent: status.fiveHourPercentage });
     }
     if (status.sevenDayPercentage !== null) {
-      parts.push(t("statusBar.sevenDay", { percent: Math.round(status.sevenDayPercentage) }));
+      windows.push({ label: t("statusBar.sevenDay"), percent: status.sevenDayPercentage });
     }
-    return parts.length > 0 ? t("statusBar.plan", { usage: parts.join(" · ") }) : null;
+    return windows;
   });
+
+  /** The gauge can't run past its track; the number still shows what was
+   * reported (a spend limit can go over 100%). */
+  function clamp(percent: number): number {
+    return Math.min(100, Math.max(0, percent));
+  }
 
   function formatBytes(bytes: number): string {
     const mb = bytes / (1024 * 1024);
@@ -68,8 +81,21 @@
   <span class="status-item">
     {t("statusBar.aiMode", { state: t(appConfigStore.aiModeEnabled ? "statusBar.aiOn" : "statusBar.aiOff") })}
   </span>
-  {#if planUsage}
-    <span class="status-item status-plan" title={t("statusBar.planHint")}>{planUsage}</span>
+  {#if activeTool}
+    <span class="status-item status-engine" title={t("statusBar.engineHint")}>{TOOL_DISPLAY_NAMES[activeTool]}</span>
+  {/if}
+  {#if planWindows.length > 0}
+    <span class="status-item status-plan" title={t("statusBar.planHint")}>
+      {t("statusBar.plan")}
+      {#each planWindows as usage (usage.label)}
+        <span class="plan-window">
+          <span class="plan-label">{usage.label}</span>
+          <span class="plan-gauge" style="--fill:{clamp(usage.percent)}%">
+            <span class="plan-gauge-text">{Math.round(usage.percent)}%</span>
+          </span>
+        </span>
+      {/each}
+    </span>
   {/if}
   {#if memoryBytes !== null}
     <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
@@ -98,8 +124,56 @@
     opacity: 0.85;
   }
 
+  .status-engine {
+    margin-left: 12px;
+  }
+
   .status-plan {
     margin-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .plan-window {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .plan-label {
+    opacity: 0.75;
+  }
+
+  .plan-gauge {
+    position: relative;
+    display: block;
+    width: 52px;
+    height: 13px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+
+  /* The fill sits behind the number, which stays centered on the whole
+     track so it doesn't move as the bar grows. */
+  .plan-gauge::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--fill);
+    background: var(--pane-active-border, #3a6df0);
+    opacity: 0.55;
+  }
+
+  .plan-gauge-text {
+    position: relative;
+    display: block;
+    text-align: center;
+    font-size: 10px;
+    line-height: 13px;
   }
 
   .status-memory {

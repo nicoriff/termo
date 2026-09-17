@@ -32,6 +32,11 @@ const SNAPSHOT_SUFFIX: &str = ".status.json";
 #[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusSnapshot {
+    /// Claude's own session id, cwd and project root: what Modo IA needs to
+    /// list this conversation and resume it later (agent_sessions.rs).
+    agent_session_id: Option<String>,
+    cwd: Option<String>,
+    project_dir: Option<String>,
     model: Option<String>,
     context_used_percentage: Option<f64>,
     cost_usd: Option<f64>,
@@ -47,7 +52,18 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
     let number = |pointer: &str| payload.pointer(pointer).and_then(Value::as_f64);
     let integer = |pointer: &str| payload.pointer(pointer).and_then(Value::as_i64);
 
+    let text = |pointer: &str| {
+        payload
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+
     Some(StatusSnapshot {
+        agent_session_id: text("/session_id"),
+        cwd: text("/cwd").or_else(|| text("/workspace/current_dir")),
+        project_dir: text("/workspace/project_dir"),
         model: payload
             .pointer("/model/display_name")
             .and_then(Value::as_str)
@@ -138,6 +154,16 @@ pub fn start_watcher(app: tauri::AppHandle) {
                 let Ok(snapshot) = serde_json::from_str::<StatusSnapshot>(&text) else {
                     continue;
                 };
+                if let Some(agent_session_id) = snapshot.agent_session_id.clone() {
+                    // The status line is Claude-only, so the tool is known.
+                    crate::agent_sessions::record(
+                        &app,
+                        crate::agent_sessions::AgentSession::new("claude", &agent_session_id)
+                            .with_cwd(snapshot.cwd.clone())
+                            .with_project_dir(snapshot.project_dir.clone())
+                            .with_model(snapshot.model.clone()),
+                    );
+                }
                 let _ = app.emit("agent-status", StatusEvent { session_id, snapshot });
             }
             seen.retain(|path, _| path.exists());

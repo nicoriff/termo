@@ -295,22 +295,41 @@ fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str)
     if session.is_empty() || !session.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Ok(());
     }
-    // Only Notification needs a field from the payload; large payloads (tool
-    // results) never touch the file.
-    let detail = if event == "Notification" {
-        serde_json::from_str::<Value>(input)
-            .ok()
-            .and_then(|payload| payload.get("notification_type")?.as_str().map(str::to_owned))
+    let payload = serde_json::from_str::<Value>(input).ok();
+    let string_at = |key: &str| {
+        payload
+            .as_ref()
+            .and_then(|value| value.get(key))
+            .and_then(Value::as_str)
             .unwrap_or_default()
+            .to_owned()
+    };
+    // Only Notification needs a field from the payload body; large payloads
+    // (tool results) never touch the file.
+    let detail = if event == "Notification" {
+        string_at("notification_type")
     } else {
         String::new()
     };
+    // Common hook fields: they identify the agent's own conversation, so Modo
+    // IA can list it and resume it later (agent_sessions.rs).
+    let agent_session_id = string_at("session_id");
+    let cwd = string_at("cwd");
+
     let field = |value: &str| value.replace(['\t', '\r', '\n'], " ");
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(dir.join(format!("{session}.jsonl")))?;
-    writeln!(file, "{}\t{}\t{}", field(tool), field(event), field(&detail))
+    writeln!(
+        file,
+        "{}\t{}\t{}\t{}\t{}",
+        field(tool),
+        field(event),
+        field(&detail),
+        field(&agent_session_id),
+        field(&cwd)
+    )
 }
 
 pub fn forget_session(app: &tauri::AppHandle, id: Uuid) {
@@ -353,6 +372,13 @@ pub fn start_watcher(app: tauri::AppHandle) {
                 };
                 let offset = offsets.entry(path.clone()).or_insert(0);
                 for update in read_new_lines(&path, offset) {
+                    if let Some(agent_session_id) = update.agent_session_id.clone() {
+                        crate::agent_sessions::record(
+                            &app,
+                            crate::agent_sessions::AgentSession::new(&update.tool, &agent_session_id)
+                                .with_cwd(update.agent_cwd.clone()),
+                        );
+                    }
                     let _ = app.emit(
                         "agent-event",
                         AgentEventPayload {

@@ -34,15 +34,20 @@ class WorkspaceStore {
     this.focusedTileId = tile.id;
   }
 
-  addTab(tileId: string, shellPath?: string, shellArgs?: string[], title = "Shell"): void {
-    if (!this.root) return;
-    const session = makeSession(title, shellPath, shellArgs);
+  /** Returns the new tab's id, so callers that need to talk to its console
+   * (restoring an agent session types a command into it) can find it. */
+  addTab(tileId: string, shellPath?: string, shellArgs?: string[], title = "Shell", cwd?: string): string | null {
+    if (!this.root) return null;
+    const session = makeSession(title, shellPath, shellArgs, cwd);
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],
       activeSessionId: session.id,
     }));
-    if (updated) this.root = updated;
+    if (!updated) return null;
+    this.root = updated;
+    this.focusedTileId = tileId;
+    return session.id;
   }
 
   /** Ctrl+T: opens a new tab in the focused tile, cloning the shell

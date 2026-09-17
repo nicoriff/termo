@@ -1,3 +1,4 @@
+mod agent_sessions;
 mod commands;
 mod config;
 mod i18n;
@@ -68,6 +69,8 @@ pub fn run() {
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,
             commands::agent_hook_commands::uninstall_agent_hooks,
+            commands::agent_session_commands::list_agent_sessions,
+            commands::agent_session_commands::forget_agent_session,
             commands::agent_hook_commands::status_line_installed,
             commands::agent_hook_commands::install_status_line,
             commands::agent_hook_commands::uninstall_status_line,

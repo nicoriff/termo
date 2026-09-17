@@ -5,6 +5,9 @@ export interface SessionTab {
   title: string;
   shellPath?: string;
   shellArgs?: string[];
+  /** Directory the console starts in. Only set when something asked for it
+   * (restoring an agent session); otherwise the shell's own default wins. */
+  cwd?: string;
 }
 
 export interface TileNode {
@@ -24,8 +27,8 @@ interface SplitBranch {
 
 export type SplitNode = TileNode | SplitBranch;
 
-export function makeSession(title = "Shell", shellPath?: string, shellArgs?: string[]): SessionTab {
-  return { id: crypto.randomUUID(), title, shellPath, shellArgs };
+export function makeSession(title = "Shell", shellPath?: string, shellArgs?: string[], cwd?: string): SessionTab {
+  return { id: crypto.randomUUID(), title, shellPath, shellArgs, cwd };
 }
 
 export function makeTile(session: SessionTab): TileNode {

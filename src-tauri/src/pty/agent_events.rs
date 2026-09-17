@@ -3,11 +3,14 @@
 //! agent_hooks.rs) on each event, which appends one line per event to
 //! `<TERMINI_EVENTS_DIR>/<TERMINI_SESSION_ID>.jsonl`:
 //!
-//! `<tool>\t<event>\t<detail>`
+//! `<tool>\t<event>\t<detail>\t<agent session id>\t<cwd>`
 //!
 //! where `detail` is Claude's `notification_type` for Notification events
-//! and empty otherwise. Everything else in the hook payload is dropped by
-//! the hook, so large payloads (tool results) never touch the file.
+//! and empty otherwise, and the last two come from the hook payload's common
+//! fields — they're what lets Modo IA list the session later and resume it
+//! (see agent_sessions.rs). Everything else in the payload is dropped by the
+//! hook, so large payloads (tool results) never touch the file. Lines written
+//! by older builds have only the first three fields and still parse.
 
 use serde::Serialize;
 
@@ -25,6 +28,12 @@ pub struct AgentUpdate {
     pub tool: String,
     /// `None` means the agent session ended and the tab's status clears.
     pub status: Option<AgentStatus>,
+    /// The agent's own session id, when the hook reported one. Named apart
+    /// from the PTY id the event payload already carries as `sessionId`.
+    #[serde(rename = "agentSessionId")]
+    pub agent_session_id: Option<String>,
+    #[serde(rename = "agentCwd")]
+    pub agent_cwd: Option<String>,
 }
 
 /// Notification types that mean the agent is blocked on the user.
@@ -36,10 +45,13 @@ const NEEDS_USER: &[&str] = &[
 ];
 
 pub fn parse_line(line: &str) -> Option<AgentUpdate> {
-    let mut parts = line.trim_end_matches(['\r', '\n']).splitn(3, '\t');
+    let mut parts = line.trim_end_matches(['\r', '\n']).splitn(5, '\t');
     let tool = parts.next()?;
     let event = parts.next()?;
     let detail = parts.next().unwrap_or("");
+    let optional = |value: Option<&str>| value.filter(|text| !text.is_empty()).map(str::to_owned);
+    let agent_session_id = optional(parts.next());
+    let agent_cwd = optional(parts.next());
     if tool != "claude" && tool != "codex" {
         return None;
     }
@@ -52,7 +64,12 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
         "SessionEnd" => None,
         _ => return None,
     };
-    Some(AgentUpdate { tool: tool.to_string(), status })
+    Some(AgentUpdate {
+        tool: tool.to_string(),
+        status,
+        agent_session_id,
+        agent_cwd,
+    })
 }
 
 #[cfg(test)]
@@ -78,6 +95,21 @@ mod tests {
         assert_eq!(status("claude\tNotification\tpermission_prompt"), Some(Some(AgentStatus::Awaiting)));
         assert_eq!(status("claude\tNotification\tidle_prompt"), None);
         assert_eq!(status("claude\tNotification\t"), None);
+    }
+
+    #[test]
+    fn reads_the_session_id_and_cwd_when_present() {
+        let update = parse_line("claude\tStop\t\tabc-123\tE:/Proyectos/Termini").unwrap();
+        assert_eq!(update.agent_session_id.as_deref(), Some("abc-123"));
+        assert_eq!(update.agent_cwd.as_deref(), Some("E:/Proyectos/Termini"));
+    }
+
+    #[test]
+    fn lines_from_older_builds_still_parse() {
+        let update = parse_line("claude\tStop\t").unwrap();
+        assert_eq!(update.status, Some(AgentStatus::Finished));
+        assert_eq!(update.agent_session_id, None);
+        assert_eq!(update.agent_cwd, None);
     }
 
     #[test]

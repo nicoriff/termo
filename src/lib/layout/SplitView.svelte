@@ -84,6 +84,7 @@
           sessionId={loc.session.id}
           shellPath={loc.session.shellPath}
           shellArgs={loc.session.shellArgs}
+          cwd={loc.session.cwd}
           active={workspaceStore.focusedTileId === loc.tileId &&
             tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
         />

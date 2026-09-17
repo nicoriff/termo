@@ -11,6 +11,9 @@
   import type { ShellInfo } from "$lib/core/types";
   import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
+  import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
+  import type { AgentSession } from "$lib/core/agent-sessions-client";
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
@@ -37,6 +40,8 @@
   const SHELL_PICKER_WIDTH = 200;
   const SHELL_PICKER_MAX_HEIGHT = 240;
   const SHELL_PICKER_MARGIN = 8;
+  // Wider than the picker: these rows carry an agent name plus a folder.
+  const RECENT_SUBMENU_WIDTH = 240;
 
   let shellPickerOpen = $state(false);
   let shellPickerPos = $state({ top: 0, left: 0 });
@@ -46,6 +51,7 @@
 
   function toggleShellPicker() {
     shellPickerOpen = !shellPickerOpen;
+    recentOpen = false;
     if (shellPickerOpen && addButtonEl) {
       // Rendered via position:fixed (not nested/absolute) because
       // .tile-tabstrip sets overflow-x:auto, which per the CSS spec forces
@@ -74,12 +80,47 @@
 
   function closeShellPicker() {
     shellPickerOpen = false;
+    recentOpen = false;
   }
 
   function pickShell(shell: ShellInfo) {
     const args = resolveShellArgs(shell.id, shell.args, appConfigStore.psreadlineMenuComplete);
     workspaceStore.addTab(tile.id, shell.path, args, shell.display_name);
     closeShellPicker();
+  }
+
+  /** Past agent conversations, reopened in THIS tile rather than the focused
+   * one — the picker belongs to this tile's "+" button. Only offered while AI
+   * Mode is on (it's what records them), and only those whose id is safe to
+   * type into a shell. */
+  const recentSessions = $derived(
+    appConfigStore.aiModeEnabled ? agentSessionsStore.sessions.filter(canRestore) : [],
+  );
+
+  let recentOpen = $state(false);
+  let recentPos = $state({ top: 0, left: 0 });
+  // $state (unlike addButtonEl): this row lives inside an {#if}, so bind:this
+  // reassigns it as the row appears and disappears.
+  let recentRowEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  /** Flies out beside the picker, flipping to its left when the window edge is
+   * too close — same clamping idea as the picker itself. */
+  function openRecent() {
+    if (!recentRowEl) return;
+    const box = recentRowEl.getBoundingClientRect();
+    const toTheRight = box.right + 4;
+    const left =
+      toTheRight + RECENT_SUBMENU_WIDTH + SHELL_PICKER_MARGIN > window.innerWidth
+        ? Math.max(SHELL_PICKER_MARGIN, box.left - 4 - RECENT_SUBMENU_WIDTH)
+        : toTheRight;
+    const top = Math.min(box.top, window.innerHeight - SHELL_PICKER_MAX_HEIGHT - SHELL_PICKER_MARGIN);
+    recentPos = { top, left };
+    recentOpen = true;
+  }
+
+  function pickRecent(session: AgentSession) {
+    closeShellPicker();
+    void restoreSession(session, tile.id);
   }
 
   async function split(direction: "row" | "col") {
@@ -249,12 +290,49 @@
       <div class="shell-picker-backdrop" onpointerdown={closeShellPicker}></div>
       <div class="shell-picker-panel" style="top:{shellPickerPos.top}px; left:{shellPickerPos.left}px" role="listbox">
         {#each shells as shell (shell.id)}
-          <button class="shell-picker-item" onclick={() => pickShell(shell)}>{shell.display_name}</button>
+          <button
+            class="shell-picker-item"
+            onmouseenter={() => (recentOpen = false)}
+            onclick={() => pickShell(shell)}
+          >
+            {shell.display_name}
+          </button>
         {/each}
         {#if shells.length === 0}
           <p class="shell-picker-empty">{t("tabs.loadingShells")}</p>
         {/if}
+        {#if recentSessions.length > 0}
+          <div class="shell-picker-divider"></div>
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={recentOpen}
+            bind:this={recentRowEl}
+            aria-haspopup="menu"
+            aria-expanded={recentOpen}
+            onmouseenter={openRecent}
+            onclick={() => (recentOpen ? (recentOpen = false) : openRecent())}
+          >
+            <span>{t("aiMode.recent")}</span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+        {/if}
       </div>
+      {#if recentOpen}
+        <div class="recent-submenu" style="top:{recentPos.top}px; left:{recentPos.left}px" role="menu">
+          {#each recentSessions as session (session.agentSessionId)}
+            <button
+              class="shell-picker-item"
+              role="menuitem"
+              title={session.cwd ?? session.projectDir ?? ""}
+              onclick={() => pickRecent(session)}
+            >
+              {sessionLabel(session)}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -474,6 +552,41 @@
     font-size: 11px;
     opacity: 0.6;
     margin: 0;
+  }
+
+  .shell-picker-divider {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--tabbar-border, #2a2a2a);
+    flex-shrink: 0;
+  }
+
+  .shell-picker-submenu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .shell-picker-submenu-row.open {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  /* Above the picker (200), which is above the backdrop (199). */
+  .recent-submenu {
+    position: fixed;
+    pointer-events: auto;
+    z-index: 201;
+    width: 240px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--tabbar-active-bg, #1e1e1e);
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
   }
 
   .tile-toolbar {

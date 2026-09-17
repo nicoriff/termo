@@ -171,7 +171,7 @@ export class TerminalInstance {
     });
   }
 
-  async mount(container: HTMLElement, shellPath?: string, shellArgs?: string[]): Promise<void> {
+  async mount(container: HTMLElement, shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
     this.container = container;
     this.term.open(container);
     this.fit.fit();
@@ -180,6 +180,7 @@ export class TerminalInstance {
     this.sessionId = await spawnPty({
       shellPath,
       shellArgs,
+      cwd,
       ...spawnSize,
       onForegroundProcess: (path) => {
         this.lastForegroundProcessPath = path;

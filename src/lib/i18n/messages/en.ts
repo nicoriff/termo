@@ -23,9 +23,10 @@ export const en: Messages = {
     aiOn: "on",
     aiOff: "off",
     memory: "Memory: {value}",
-    plan: "Plan usage: {usage}",
-    fiveHour: "{percent}% in 5h",
-    sevenDay: "{percent}% weekly",
+    engineHint: "AI agent detected in the active console",
+    plan: "Plan usage",
+    fiveHour: "5h",
+    sevenDay: "weekly",
     planHint:
         "Share of the Claude plan limit this console has already used, in the 5-hour and the weekly window",
     memoryHint: "Memory used by the active console and the processes running in it",
@@ -39,6 +40,7 @@ export const en: Messages = {
     },
     ago: "{time} ago",
     empty: "No tabs in this state",
+    recent: "Recent",
     notify: {
       awaiting: "Needs your input",
       error: "Finished with an error",
@@ -91,6 +93,7 @@ export const en: Messages = {
     aiModeOn: "Turn on AI Mode",
     aiModeOff: "Turn off AI Mode",
     aiNextPending: "Go to next pending session",
+    resumeSession: "Resume session: {label}",
   },
   preferences: {
     title: "Preferences",

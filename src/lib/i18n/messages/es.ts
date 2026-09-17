@@ -21,9 +21,10 @@ export const es = {
     aiOn: "activado",
     aiOff: "desactivado",
     memory: "Memoria: {value}",
-    plan: "Uso del plan: {usage}",
-    fiveHour: "{percent}% en 5 h",
-    sevenDay: "{percent}% semanal",
+    engineHint: "Agente de IA detectado en la consola activa",
+    plan: "Uso del plan",
+    fiveHour: "5 h",
+    sevenDay: "semanal",
     planHint:
         "Porcentaje del límite del plan de Claude ya consumido por esta consola, en la ventana de 5 horas y en la semanal",
     memoryHint: "Memoria de la consola activa y de los procesos que corren en ella",
@@ -37,6 +38,7 @@ export const es = {
     },
     ago: "hace {time}",
     empty: "Ninguna pestaña en este estado",
+    recent: "Recientes",
     notify: {
       awaiting: "Necesita tu respuesta",
       error: "Terminó con un error",
@@ -89,6 +91,7 @@ export const es = {
     aiModeOn: "Activar Modo IA",
     aiModeOff: "Desactivar Modo IA",
     aiNextPending: "Ir a la siguiente sesión pendiente",
+    resumeSession: "Reanudar sesión: {label}",
   },
   preferences: {
     title: "Preferencias",

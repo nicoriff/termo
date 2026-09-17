@@ -8,6 +8,9 @@ import { getTabId } from "../terminal/pty-registry";
 import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { aiStatusStore, type AiSessionEntry } from "./ai-status-store.svelte";
 import { agentStatusStore, type AgentStatus } from "./agent-status-store.svelte";
+import { TOOL_DISPLAY_NAMES } from "./tool-names";
+import { agentSessionsStore } from "./agent-sessions-store.svelte";
+import type { AgentSession } from "$lib/core/agent-sessions-client";
 import type { AiSessionStatus } from "./classifier";
 import type { ToolId } from "./pattern-table";
 
@@ -17,8 +20,6 @@ interface AgentEventPayload {
   tool: ToolId;
   status: AiSessionStatus | null;
 }
-
-const TOOL_NAMES: Record<ToolId, string> = { claude: "Claude Code", codex: "Codex" };
 
 let permission: Promise<boolean> | null = null;
 
@@ -54,7 +55,7 @@ async function maybeNotify(sessionId: string, entry: AiSessionEntry, prev: AiSes
   if (!text || !entry.tool) return;
   if (document.hasFocus() && workspaceStore.isSessionVisible(sessionId)) return;
   if (!(await canNotify())) return;
-  sendNotification({ title: `${TOOL_NAMES[entry.tool]}: ${text}`, body: tabTitle(sessionId) });
+  sendNotification({ title: `${TOOL_DISPLAY_NAMES[entry.tool]}: ${text}`, body: tabTitle(sessionId) });
 }
 
 /** Feeds hook events into Modo IA and notifies on status transitions.
@@ -75,9 +76,15 @@ export function startAgentAttention(): () => void {
     const tabId = getTabId(sessionId);
     if (tabId) agentStatusStore.set(tabId, status);
   });
+  // Past conversations Modo IA can reopen, recorded by both channels.
+  void agentSessionsStore.load();
+  const unlistenSessions = listen<AgentSession[]>("agent-sessions", ({ payload }) => {
+    agentSessionsStore.set(payload);
+  });
   return () => {
     stopNotifying();
     void unlisten.then((stop) => stop());
     void unlistenStatus.then((stop) => stop());
+    void unlistenSessions.then((stop) => stop());
   };
 }
