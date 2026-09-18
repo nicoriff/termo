@@ -76,6 +76,9 @@ export class TerminalInstance {
   private container: HTMLElement | null = null;
   private lastPtySize: { cols: number; rows: number } | null = null;
   private ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Identifies the most recent font whose load we're waiting on, so a
+   * quick succession of font changes only re-measures for the last one. */
+  private fontToken = 0;
 
   constructor(tabId: string) {
     this.tabId = tabId;
@@ -201,6 +204,9 @@ export class TerminalInstance {
     this.container = container;
     this.term.open(container);
     this.fit.fit();
+    void this.remeasureWhenFontLoads(
+      `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
+    );
 
     const spawnSize = { cols: this.term.cols, rows: this.term.rows };
     const spawned = await spawnPty({
@@ -261,11 +267,41 @@ export class TerminalInstance {
 
   applyTheme(theme: Theme, options: ThemeApplyOptions): void {
     if (this.disposed) return;
+    const fontFamily = withMonospaceFallback(options.fontFamilyOverride ?? theme.font.family);
+    const fontSize = options.fontSizeOverride ?? theme.font.size;
     this.term.options.theme = toXtermTheme(theme);
-    this.term.options.fontFamily = withMonospaceFallback(options.fontFamilyOverride ?? theme.font.family);
-    this.term.options.fontSize = options.fontSizeOverride ?? theme.font.size;
+    this.term.options.fontFamily = fontFamily;
+    this.term.options.fontSize = fontSize;
     this.term.options.lineHeight = theme.font.lineHeight;
     this.resize();
+    void this.remeasureWhenFontLoads(`${fontSize}px ${fontFamily}`);
+  }
+
+  /** xterm measures the character cell as soon as the font options are set and
+   * caches that one measurement. A font from the picker arrives through an
+   * @font-face with `font-display: swap` (see theme/google-fonts.ts), so the
+   * measurement can land on the fallback face and then never be revisited:
+   * every cell afterwards is drawn at a width the shell doesn't share, which
+   * is what leaves the cursor a few columns off and characters on screen that
+   * the shell believes it already erased. */
+  private async remeasureWhenFontLoads(fontSpec: string): Promise<void> {
+    const token = ++this.fontToken;
+    try {
+      await document.fonts.load(fontSpec);
+      await document.fonts.ready;
+    } catch {
+      // An unloadable family just keeps the fallback metrics, which are
+      // already what's on screen.
+      return;
+    }
+    if (this.disposed || token !== this.fontToken) return;
+    // OptionsService drops a write that equals the current value, so the cell
+    // is only re-measured if the family actually changes — hence the detour
+    // through a face that is never the configured one.
+    const family = this.term.options.fontFamily ?? "monospace";
+    this.term.options.fontFamily = family === "serif" ? "monospace" : "serif";
+    this.term.options.fontFamily = family;
+    this.resize({ immediate: true });
   }
 
   /** Fits xterm to its container and, once the size settles, tells the PTY.
