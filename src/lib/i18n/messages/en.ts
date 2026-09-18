@@ -75,6 +75,7 @@ export const en: Messages = {
     delete: "Delete",
     deleteConfirm: "Confirm",
     deleteWarning: "\"{name}\" will be deleted for good.",
+    deleteTitle: "Delete layout",
     close: "Close",
     restoreTitle: "Restore layout",
     restoreWarning:

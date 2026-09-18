@@ -7,6 +7,7 @@
   import CommandPalette from "$lib/commands/CommandPalette.svelte";
   import SaveLayoutDialog from "$lib/layout/SaveLayoutDialog.svelte";
   import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
+  import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -158,6 +159,9 @@
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />
+    {/if}
+    {#if uiState.deleteLayoutTarget}
+      <DeleteLayoutDialog />
     {/if}
     {#if uiState.quitPrompt}
       <QuitDialog />

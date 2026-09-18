@@ -9,6 +9,10 @@ class UiState {
   /** The layout waiting on its "this closes everything you have open"
    * confirmation, set from both places that can restore one. */
   restoreLayoutTarget = $state<SavedLayout | null>(null);
+  /** The layout waiting on its "this can't be undone" delete confirmation,
+   * set from the command palette (the layout manager has its own inline
+   * two-click confirm instead). */
+  deleteLayoutTarget = $state<SavedLayout | null>(null);
   /** The "saved layouts" window, where they're picked and deleted. */
   layoutManagerOpen = $state(false);
   /** What quitting would interrupt, when it's worth asking about (see
@@ -27,6 +31,7 @@ class UiState {
       this.saveLayoutPromptOpen ||
       this.layoutManagerOpen ||
       this.restoreLayoutTarget !== null ||
+      this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
     );
   }
@@ -59,6 +64,16 @@ class UiState {
 
   cancelRestoreLayout(): void {
     this.restoreLayoutTarget = null;
+  }
+
+  /** Deleting can't be undone, so the palette goes through a confirmation
+   * too, same as restoring. */
+  requestDeleteLayout(layout: SavedLayout): void {
+    this.deleteLayoutTarget = layout;
+  }
+
+  cancelDeleteLayout(): void {
+    this.deleteLayoutTarget = null;
   }
 
   askBeforeQuit(counts: { consoles: number; agents: number }): void {

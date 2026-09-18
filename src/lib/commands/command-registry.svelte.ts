@@ -121,7 +121,7 @@ export function buildCommands(): Command[] {
         id: `layouts.delete.${layout.name}`,
         group: "layouts",
         label: t("commands.deleteLayout", { name: layout.name }),
-        run: () => void layoutsStore.remove(layout.name),
+        run: () => uiState.requestDeleteLayout(layout),
       },
     );
   }

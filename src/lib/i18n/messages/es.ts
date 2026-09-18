@@ -73,6 +73,7 @@ export const es = {
     delete: "Eliminar",
     deleteConfirm: "Confirmar",
     deleteWarning: "Se elimina «{name}» para siempre.",
+    deleteTitle: "Eliminar layout",
     close: "Cerrar",
     restoreTitle: "Restaurar layout",
     restoreWarning:
