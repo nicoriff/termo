@@ -85,6 +85,19 @@ impl PtySession {
             "CLAUDE_CODE_EXECPATH",
             "CLAUDE_PID",
             "CLAUDE_EFFORT",
+            // EDITOR/VISUAL belong to the same class, and leak louder than
+            // they look: zsh reads them at startup and silently switches its
+            // line editor to vi mode when either contains "vi". A console
+            // that inherited `EDITOR=vi` from the shell `tauri dev` ran in
+            // answers Option+Backspace with "ESC = vi command mode, ^? = move
+            // left" instead of deleting the word, and the same goes for every
+            // other emacs-mode binding. Users who actually want vi mode set
+            // EDITOR in their own .zshenv, which zsh reads before it picks
+            // the keymap — so dropping it here restores the default without
+            // overriding anyone's choice, and their editor still gets set for
+            // git and friends by their own startup files.
+            "EDITOR",
+            "VISUAL",
         ] {
             cmd.env_remove(key);
         }
@@ -256,5 +269,52 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         let _ = session.kill();
         assert!(text.contains(&format!("{}|hello", session.id)), "console output: {text:?}");
+    }
+
+    /// Termini started from a shell that exports EDITOR (an agent's, a CI
+    /// one) must not pass it down: zsh reads it at startup and switches to
+    /// vi mode, which breaks Option+Backspace and every other emacs binding.
+    #[test]
+    fn console_does_not_inherit_the_launcher_editor() {
+        std::env::set_var("EDITOR", "vi");
+        std::env::set_var("VISUAL", "vi");
+
+        let (tx, rx) = mpsc::channel::<String>();
+        let tx = Mutex::new(tx);
+        let channel = Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
+                let _ = tx.lock().unwrap().send(json);
+            }
+            Ok(())
+        });
+
+        let session = PtySession::spawn(
+            "/bin/sh",
+            &["-c".into(), r#"printf 'EDITOR=[%s] VISUAL=[%s]' "$EDITOR" "$VISUAL""#.into()],
+            &[],
+            None,
+            80,
+            24,
+            channel,
+        )
+        .unwrap();
+
+        let mut output = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while let Ok(json) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            let event: serde_json::Value = serde_json::from_str(&json).unwrap();
+            match event["type"].as_str() {
+                Some("data") => output.extend(STANDARD.decode(event["data"].as_str().unwrap()).unwrap()),
+                Some("exit") => break,
+                _ => {}
+            }
+        }
+        let text = String::from_utf8_lossy(&output);
+        let _ = session.kill();
+
+        std::env::remove_var("EDITOR");
+        std::env::remove_var("VISUAL");
+
+        assert!(text.contains("EDITOR=[] VISUAL=[]"), "console output: {text:?}");
     }
 }

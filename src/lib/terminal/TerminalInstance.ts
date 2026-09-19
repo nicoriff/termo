@@ -169,6 +169,23 @@ export class TerminalInstance {
         }
       }
 
+      // The other half of the macOS text-editing convention: where Option is
+      // "by word", Cmd is "the whole line" — Cmd+Backspace erases the line
+      // being typed (^U), the same as in any native text field. No shortcut
+      // uses Cmd+Backspace, so this never takes a key away from the app.
+      if (
+        isMac &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        this.sessionId &&
+        (event.key === "Backspace" || event.code === "Backspace")
+      ) {
+        event.preventDefault();
+        void writePty(this.sessionId, "\x15");
+        return false;
+      }
+
       // Copy only takes the key when there IS a selection: with none, Ctrl+C
       // has to keep reaching the shell as the interrupt.
       if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("copy")) && this.term.hasSelection()) {
