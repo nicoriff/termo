@@ -23,6 +23,9 @@ export type ShortcutAction =
   | "cycleTab"
   | "zoomTile"
   | "commandPalette"
+  | "copy"
+  | "paste"
+  | "selectAll"
   | "aiRunning"
   | "aiAwaiting"
   | "aiError"
@@ -34,6 +37,9 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "cycleTab",
   "zoomTile",
   "commandPalette",
+  "copy",
+  "paste",
+  "selectAll",
   "aiRunning",
   "aiAwaiting",
   "aiError",
@@ -48,6 +54,9 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   cycleTab: "shortcuts.labels.cycleTab",
   zoomTile: "shortcuts.labels.zoomTile",
   commandPalette: "shortcuts.labels.commandPalette",
+  copy: "shortcuts.labels.copy",
+  paste: "shortcuts.labels.paste",
+  selectAll: "shortcuts.labels.selectAll",
   aiRunning: "shortcuts.labels.aiRunning",
   aiAwaiting: "shortcuts.labels.aiAwaiting",
   aiError: "shortcuts.labels.aiError",
@@ -176,6 +185,11 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
   commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },
+  // Ctrl+C/Ctrl+V belong to the shell everywhere but macOS, hence the Shift.
+  copy: { mac: "meta+c", other: "ctrl+shift+c" },
+  paste: { mac: "meta+v", other: "ctrl+shift+v" },
+  // Not Ctrl+Shift+A, the usual pick: aiNextPending already has it.
+  selectAll: { mac: "meta+a", other: "ctrl+shift+e" },
   aiRunning: { mac: "meta+1", other: "ctrl+1" },
   aiAwaiting: { mac: "meta+2", other: "ctrl+2" },
   aiError: { mac: "meta+3", other: "ctrl+3" },

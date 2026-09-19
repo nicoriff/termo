@@ -18,6 +18,10 @@ class UiState {
   /** What quitting would interrupt, when it's worth asking about (see
    * app/quit.ts). Null while no such question is on screen. */
   quitPrompt = $state<{ consoles: number; agents: number } | null>(null);
+  /** Where the console's right-click Edit menu is open, in window
+   * coordinates. Deliberately not part of `overlayOpen`: it never takes the
+   * keyboard from the console, so shortcuts keep working under it. */
+  terminalContextMenu = $state<{ x: number; y: number } | null>(null);
   /** Bumped to ask the focused terminal to take keyboard focus back after an
    * overlay (the command palette) had it — Terminal.svelte only focuses on its
    * own when the active tab changes, which doesn't happen here. */
@@ -90,6 +94,14 @@ class UiState {
 
   closeLayoutManager(): void {
     this.layoutManagerOpen = false;
+  }
+
+  openTerminalContextMenu(x: number, y: number): void {
+    this.terminalContextMenu = { x, y };
+  }
+
+  closeTerminalContextMenu(): void {
+    this.terminalContextMenu = null;
   }
 
   refocusTerminals(): void {

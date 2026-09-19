@@ -29,9 +29,9 @@ fn stem_is(shell_path: &str, names: &[&str]) -> bool {
         .is_some_and(|stem| names.iter().any(|name| stem.eq_ignore_ascii_case(name)))
 }
 
-/// Appends whatever this shell needs to report its directory. Unknown shells
-/// (and zsh, which configures its prompt through its own startup file) are
-/// left untouched — cwd tracking simply stays off for them.
+/// Appends whatever this shell needs to report its directory. zsh reports
+/// from its own startup file instead (zsh_init::CWD_REPORT_LINES); unknown
+/// shells are left untouched, so cwd tracking simply stays off for them.
 pub fn apply(shell_path: &str, args: &mut Vec<String>, env: &mut Vec<(&'static str, String)>) {
     if stem_is(shell_path, &["powershell", "pwsh"]) {
         super::oh_my_posh::append_powershell_command(args, POWERSHELL_PROMPT);

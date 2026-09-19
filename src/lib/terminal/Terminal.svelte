@@ -54,7 +54,18 @@
   });
 </script>
 
-<div class="terminal-container" bind:this={container}></div>
+<!-- Right-click opens the Edit menu instead of the webview's own, which in a
+     terminal offers nothing useful. The pane's pointerdown handler has
+     already focused this console by the time the menu opens. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="terminal-container"
+  bind:this={container}
+  oncontextmenu={(event) => {
+    event.preventDefault();
+    uiState.openTerminalContextMenu(event.clientX, event.clientY);
+  }}
+></div>
 
 <style>
   .terminal-container {

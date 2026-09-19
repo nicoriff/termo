@@ -57,6 +57,13 @@ export const en: Messages = {
     cancel: "Cancel",
     confirm: "Quit anyway",
   },
+  edit: {
+    title: "Edit",
+    copy: "Copy",
+    paste: "Paste",
+    selectAll: "Select all",
+    clear: "Clear console",
+  },
   layouts: {
     save: "Save layout...",
     restore: "Restore layout",
@@ -90,6 +97,9 @@ export const en: Messages = {
       cycleTab: "Cycle tabs",
       zoomTile: "Zoom (↑) / restore or tile picker (↓)",
       commandPalette: "Command palette",
+      copy: "Copy",
+      paste: "Paste",
+      selectAll: "Select all",
       aiRunning: "AI Mode: Running",
       aiAwaiting: "AI Mode: Waiting",
       aiError: "AI Mode: Error",

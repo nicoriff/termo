@@ -10,6 +10,7 @@
   import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
+  import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -165,6 +166,9 @@
     {/if}
     {#if uiState.quitPrompt}
       <QuitDialog />
+    {/if}
+    {#if uiState.terminalContextMenu}
+      <TerminalContextMenu />
     {/if}
   </main>
   <StatusBar />

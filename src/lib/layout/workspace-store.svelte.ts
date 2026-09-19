@@ -1,5 +1,6 @@
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import type { ShellLaunch } from "../core/default-shell";
+import { tabCwd } from "../terminal/tab-cwd.svelte";
 import {
   collectTiles,
   computeLayout,
@@ -69,7 +70,9 @@ class WorkspaceStore {
     const tile = collectTiles(this.root).find((t) => t.id === this.focusedTileId);
     const active = tile?.sessions.find((s) => s.id === tile.activeSessionId);
     if (!tile || !active) return;
-    this.addTab(tile.id, active.shellPath, active.shellArgs, active.title);
+    // Where that console is now (as it reported via OSC 7), not just where it
+    // was opened — a new tab should land in the directory you were working in.
+    this.addTab(tile.id, active.shellPath, active.shellArgs, active.title, tabCwd.byTab[active.id] ?? active.cwd);
   }
 
   closeTab(tileId: string, sessionId: string): void {

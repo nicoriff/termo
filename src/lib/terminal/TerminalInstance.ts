@@ -7,6 +7,7 @@ import { agentStatusStore } from "../ai-mode/agent-status-store.svelte";
 import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
+import { isMac } from "../core/platform";
 import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
 import { eventMatchesKeybinding } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
@@ -17,6 +18,8 @@ import { OutputHighlighter } from "./output-highlighter";
 import { parseOsc7 } from "./osc7";
 import { tabCwd } from "./tab-cwd.svelte";
 import { registerPty, unregisterPty } from "./pty-registry";
+import { registerTerminal, unregisterTerminal } from "./terminal-registry";
+import { copySelection, pasteClipboard } from "./terminal-clipboard";
 import { tabTitleStore } from "./tab-title-store.svelte";
 
 // How often the AI-mode classifier re-reads the terminal's rendered screen
@@ -144,6 +147,48 @@ export class TerminalInstance {
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
+      // macOS: Option is the shell's Meta for these keys — Option+Backspace
+      // kills the previous word, Option+arrows move by word. xterm only does
+      // that with macOptionIsMeta, which would also swallow Option+letter,
+      // i.e. how @, # and accents are typed on a Spanish Mac layout. So only
+      // these keys are translated, and Option keeps composing characters.
+      if (isMac && event.altKey && !event.ctrlKey && !event.metaKey && this.sessionId) {
+        const meta: Record<string, string> = {
+          Backspace: "\x1b\x7f",
+          Delete: "\x1bd",
+          ArrowLeft: "\x1bb",
+          ArrowRight: "\x1bf",
+        };
+        // `code` as well as `key`: with Option held, some layouts report the
+        // composed character in `key` rather than the key's own name.
+        const sequence = meta[event.key] ?? meta[event.code];
+        if (sequence) {
+          event.preventDefault();
+          void writePty(this.sessionId, sequence);
+          return false;
+        }
+      }
+
+      // Copy only takes the key when there IS a selection: with none, Ctrl+C
+      // has to keep reaching the shell as the interrupt.
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("copy")) && this.term.hasSelection()) {
+        event.preventDefault();
+        void copySelection();
+        return false;
+      }
+
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("paste"))) {
+        event.preventDefault();
+        void pasteClipboard();
+        return false;
+      }
+
+      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("selectAll"))) {
+        event.preventDefault();
+        this.term.selectAll();
+        return false;
+      }
+
       if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("zoomTile"))) {
         event.preventDefault();
         if (event.key === "ArrowUp") {
@@ -251,6 +296,17 @@ export class TerminalInstance {
     }
     this.pendingInput = [];
     registerPty(this.tabId, this.sessionId);
+    // What the Edit menu and the editing shortcuts act on (terminal-registry).
+    registerTerminal(this.tabId, {
+      hasSelection: () => this.term.hasSelection(),
+      selection: () => this.term.getSelection(),
+      write: (text) => {
+        if (this.sessionId) void writePty(this.sessionId, text);
+      },
+      selectAll: () => this.term.selectAll(),
+      clear: () => this.term.clear(),
+      focus: () => this.focus(),
+    });
     this.lastPtySize = spawnSize;
 
     // resize() no-ops while sessionId is still null, so a ResizeObserver
@@ -356,6 +412,7 @@ export class TerminalInstance {
     agentStatusStore.remove(this.tabId);
     tabAgentSessions.remove(this.tabId);
     unregisterPty(this.tabId);
+    unregisterTerminal(this.tabId);
     tabTitleStore.remove(this.tabId);
     if (this.sessionId) void killPty(this.sessionId);
     this.term.dispose();

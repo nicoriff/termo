@@ -60,7 +60,10 @@ pub fn pty_spawn(
             );
         }
     }
-    if zsh_init::is_zsh(&path) && !zsh_lines.is_empty() {
+    if zsh_init::is_zsh(&path) {
+        // Always written for zsh, even with every zsh option off: this is
+        // what makes the console report its directory (see CWD_REPORT_LINES).
+        zsh_lines.extend(zsh_init::CWD_REPORT_LINES.iter().map(|line| line.to_string()));
         let _ = zsh_init::apply(&app, &zsh_lines, &mut env);
     }
     // Last: its prompt wrapper has to call whatever prompt the steps above

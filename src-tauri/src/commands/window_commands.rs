@@ -44,6 +44,9 @@ static PREFERENCES_SHOW_PENDING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 const PRELOAD_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
+/// How long an open request waits for the page to report ready before
+/// showing the window regardless.
+const READY_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
 
 /// Shows the Preferences window. It is normally preloaded hidden shortly
 /// after startup and only hidden on close, so this just reveals it; if the
@@ -59,7 +62,16 @@ pub async fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String
     PREFERENCES_SHOW_PENDING.store(true, SeqCst);
     if PREFERENCES_READY.load(SeqCst) && PREFERENCES_SHOW_PENDING.swap(false, SeqCst) {
         show_and_focus(&window)?;
+        return Ok(());
     }
+    // Belt and braces: show it anyway if the page never reports ready (an
+    // error before the handshake, say), rather than leaving the click dead.
+    std::thread::spawn(move || {
+        std::thread::sleep(READY_GRACE);
+        if PREFERENCES_SHOW_PENDING.swap(false, SeqCst) {
+            let _ = show_and_focus(&window);
+        }
+    });
     Ok(())
 }
 

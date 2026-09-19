@@ -24,6 +24,12 @@ export interface ShortcutsConfig {
   zoom_tile_other: string | null;
   command_palette_mac: string | null;
   command_palette_other: string | null;
+  copy_mac: string | null;
+  copy_other: string | null;
+  paste_mac: string | null;
+  paste_other: string | null;
+  select_all_mac: string | null;
+  select_all_other: string | null;
   ai_running_mac: string | null;
   ai_running_other: string | null;
   ai_awaiting_mac: string | null;

@@ -32,6 +32,7 @@ base64 = "0.22"
 ureq = { version = "2", features = ["tls"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 tauri-plugin-notification = "2"
+tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

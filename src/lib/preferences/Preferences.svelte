@@ -93,9 +93,20 @@
   onMount(() => {
     // The window is preloaded hidden; the backend shows it only once the real
     // config has been applied and painted, so it never flashes the defaults.
-    void appConfigStore
-      .init({ restoreWindowSize: false })
-      .finally(() => requestAnimationFrame(() => requestAnimationFrame(() => void preferencesReady())));
+    // A window that was never shown doesn't paint, so its
+    // requestAnimationFrame callbacks never run there — without the timeout
+    // the preloaded window would report ready only after being shown, which
+    // is exactly what the report unblocks.
+    void appConfigStore.init({ restoreWindowSize: false }).finally(() => {
+      let reported = false;
+      const report = () => {
+        if (reported) return;
+        reported = true;
+        void preferencesReady();
+      };
+      requestAnimationFrame(() => requestAnimationFrame(report));
+      setTimeout(report, 200);
+    });
   });
 
   $effect(() => {

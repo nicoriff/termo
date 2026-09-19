@@ -7,6 +7,7 @@
   import { resolveShellArgs } from "$lib/core/shell-args";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
+  import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
   import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
@@ -85,7 +86,11 @@
 
   function pickShell(shell: ShellInfo) {
     const args = resolveShellArgs(shell.id, shell.args, appConfigStore.psreadlineMenuComplete);
-    workspaceStore.addTab(tile.id, shell.path, args, shell.display_name);
+    // Opens where this tile's active console is now, like the new-tab
+    // shortcut does (see workspaceStore.newTabLikeFocused).
+    const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
+    const cwd = active ? (tabCwd.byTab[active.id] ?? active.cwd) : undefined;
+    workspaceStore.addTab(tile.id, shell.path, args, shell.display_name, cwd);
     closeShellPicker();
   }
 

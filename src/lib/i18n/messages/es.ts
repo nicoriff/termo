@@ -55,6 +55,13 @@ export const es = {
     cancel: "Cancelar",
     confirm: "Salir igual",
   },
+  edit: {
+    title: "Edición",
+    copy: "Copiar",
+    paste: "Pegar",
+    selectAll: "Seleccionar todo",
+    clear: "Limpiar consola",
+  },
   layouts: {
     save: "Guardar layout...",
     restore: "Restaurar layout",
@@ -88,6 +95,9 @@ export const es = {
       cycleTab: "Ciclar pestañas",
       zoomTile: "Zoom (↑) / restaurar o selector de tiles (↓)",
       commandPalette: "Paleta de comandos",
+      copy: "Copiar",
+      paste: "Pegar",
+      selectAll: "Seleccionar todo",
       aiRunning: "Modo IA: Corriendo",
       aiAwaiting: "Modo IA: Esperando",
       aiError: "Modo IA: Error",

@@ -1,5 +1,15 @@
 <script lang="ts">
   import { openPreferencesWindow } from "$lib/core/window-client";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { isMac } from "$lib/core/platform";
+  import { formatKeybindingLabel, type ShortcutAction } from "$lib/core/shortcuts";
+  import {
+    clearConsole,
+    copySelection,
+    focusedHasSelection,
+    pasteClipboard,
+    selectAll,
+  } from "$lib/terminal/terminal-clipboard";
   import { requestQuit } from "$lib/app/quit";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -14,6 +24,8 @@
   const MENU_WIDTH = 230;
   const SUBMENU_WIDTH = 240;
   const SUBMENU_MAX_HEIGHT = 260;
+  /** Four rows and a divider — enough to keep the flyout on screen. */
+  const EDIT_SUBMENU_HEIGHT = 140;
   const MARGIN = 8;
 
   // Right-aligned under the button (it sits at the window's right edge), then
@@ -31,24 +43,60 @@
   let restorePos = $state({ top: 0, left: 0 });
   let restoreRowEl = $state<HTMLButtonElement | undefined>(undefined);
 
-  /** Flies out beside the menu, flipping to its left when the window edge is
-   * too close — which, up in the title bar's right corner, is the usual case. */
-  function openRestore() {
-    if (!restoreRowEl) return;
-    const box = restoreRowEl.getBoundingClientRect();
+  let editOpen = $state(false);
+  let editPos = $state({ top: 0, left: 0 });
+  let editRowEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  /** Only one flyout at a time, and every other row closes both. */
+  function closeSubmenus() {
+    restoreOpen = false;
+    editOpen = false;
+  }
+
+  /** Where a flyout for `row` fits: beside it, flipped to its left when the
+   * window edge is too close — up in the title bar's right corner, the usual
+   * case. */
+  function flyoutPos(row: HTMLButtonElement, height: number) {
+    const box = row.getBoundingClientRect();
     const toTheRight = box.right + 4;
     const left =
       toTheRight + SUBMENU_WIDTH + MARGIN > window.innerWidth
         ? Math.max(MARGIN, box.left - 4 - SUBMENU_WIDTH)
         : toTheRight;
-    const top = Math.min(box.top, window.innerHeight - SUBMENU_MAX_HEIGHT - MARGIN);
-    restorePos = { top, left };
+    return { top: Math.min(box.top, window.innerHeight - height - MARGIN), left };
+  }
+
+  function openRestore() {
+    if (!restoreRowEl) return;
+    editOpen = false;
+    restorePos = flyoutPos(restoreRowEl, SUBMENU_MAX_HEIGHT);
     restoreOpen = true;
+  }
+
+  function openEdit() {
+    if (!editRowEl) return;
+    restoreOpen = false;
+    editPos = flyoutPos(editRowEl, EDIT_SUBMENU_HEIGHT);
+    editOpen = true;
   }
 
   function preferences() {
     onclose();
     void openPreferencesWindow();
+  }
+
+  /** Read once: the menu is mounted fresh on every open, and clicking it
+   * doesn't change the console's selection (the title bar never takes focus
+   * from the terminal). */
+  const canCopy = focusedHasSelection();
+
+  function hint(action: ShortcutAction): string {
+    return formatKeybindingLabel(appConfigStore.getEffectiveShortcut(action), isMac);
+  }
+
+  function runEdit(action: () => void | Promise<unknown>) {
+    onclose();
+    void action();
   }
 
   function saveLayout() {
@@ -78,7 +126,7 @@
 <div class="app-menu-backdrop" onpointerdown={onclose}></div>
 
 <div class="app-menu" style="top:{pos.top}px; left:{pos.left}px" role="menu">
-  <button class="app-menu-item" role="menuitem" onmouseenter={() => (restoreOpen = false)} onclick={preferences}>
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={preferences}>
     <!-- Sliders: the app's established settings glyph (same as the title bar button). -->
     <svg class="app-menu-icon" viewBox="0 0 14 14" aria-hidden="true">
       <line x1="1" y1="3" x2="13" y2="3" stroke="currentColor" stroke-width="1" />
@@ -93,7 +141,30 @@
 
   <div class="app-menu-divider"></div>
 
-  <button class="app-menu-item" role="menuitem" onmouseenter={() => (restoreOpen = false)} onclick={saveLayout}>
+  <button
+    class="app-menu-item"
+    class:open={editOpen}
+    role="menuitem"
+    bind:this={editRowEl}
+    aria-haspopup="menu"
+    aria-expanded={editOpen}
+    onmouseenter={openEdit}
+    onclick={() => (editOpen ? (editOpen = false) : openEdit())}
+  >
+    <!-- Two sheets: the copy glyph everywhere, standing in for editing. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="6" height="7" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M4.5 10.5h6v-7" fill="none" stroke="currentColor" stroke-width="1" />
+    </svg>
+    <span class="app-menu-text">{t("edit.title")}</span>
+    <svg class="app-menu-chevron" viewBox="0 0 6 10" aria-hidden="true">
+      <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+    </svg>
+  </button>
+
+  <div class="app-menu-divider"></div>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={saveLayout}>
     <!-- Floppy: save. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M1.5 1.5h6.5l2.5 2.5v6.5h-9z" fill="none" stroke="currentColor" stroke-width="1" />
@@ -125,7 +196,7 @@
     </svg>
   </button>
 
-  <button class="app-menu-item" role="menuitem" onmouseenter={() => (restoreOpen = false)} onclick={manageLayouts}>
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={manageLayouts}>
     <!-- A stack: the saved ones, several of them. Not three lines — that's
          the menu button's own hamburger. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -137,7 +208,7 @@
 
   <div class="app-menu-divider"></div>
 
-  <button class="app-menu-item danger" role="menuitem" onmouseenter={() => (restoreOpen = false)} onclick={quit}>
+  <button class="app-menu-item danger" role="menuitem" onmouseenter={closeSubmenus} onclick={quit}>
     <!-- Power. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M3.2 3.4a4 4 0 1 0 5.6 0" fill="none" stroke="currentColor" stroke-width="1" />
@@ -146,6 +217,27 @@
     <span class="app-menu-text">{t("titlebar.quit")}</span>
   </button>
 </div>
+
+{#if editOpen}
+  <div class="app-submenu" style="top:{editPos.top}px; left:{editPos.left}px" role="menu">
+    <button class="app-menu-item" role="menuitem" disabled={!canCopy} onclick={() => runEdit(copySelection)}>
+      <span class="app-menu-text">{t("edit.copy")}</span>
+      <span class="app-menu-hint">{hint("copy")}</span>
+    </button>
+    <button class="app-menu-item" role="menuitem" onclick={() => runEdit(pasteClipboard)}>
+      <span class="app-menu-text">{t("edit.paste")}</span>
+      <span class="app-menu-hint">{hint("paste")}</span>
+    </button>
+    <button class="app-menu-item" role="menuitem" onclick={() => runEdit(selectAll)}>
+      <span class="app-menu-text">{t("edit.selectAll")}</span>
+      <span class="app-menu-hint">{hint("selectAll")}</span>
+    </button>
+    <div class="app-menu-divider"></div>
+    <button class="app-menu-item" role="menuitem" onclick={() => runEdit(clearConsole)}>
+      <span class="app-menu-text">{t("edit.clear")}</span>
+    </button>
+  </div>
+{/if}
 
 {#if restoreOpen}
   <div class="app-submenu" style="top:{restorePos.top}px; left:{restorePos.left}px" role="menu">
@@ -169,6 +261,20 @@
     position: fixed;
     inset: 0;
     z-index: 499;
+  }
+
+  /* Copy with nothing selected. */
+  .app-menu-item:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .app-menu-hint {
+    margin-left: auto;
+    padding-left: 12px;
+    font-size: 10px;
+    opacity: 0.5;
+    white-space: nowrap;
   }
 
   .app-menu {
