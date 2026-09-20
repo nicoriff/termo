@@ -15,6 +15,10 @@ pub struct PtySession {
     writer: Mutex<Box<dyn Write + Send>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     pid: Option<u32>,
+    // Keys that make this session's shell redraw its prompt at the current
+    // width, for the shells that have to be told (see prompt_redraw). None
+    // for everything else — zsh redraws off SIGWINCH on its own.
+    prompt_redraw: Option<Vec<u8>>,
     // Stops the foreground-process poller thread (see spawn()) once the
     // session is killed — otherwise it would keep polling a dead PTY forever.
     stop: Arc<AtomicBool>,
@@ -28,6 +32,7 @@ impl PtySession {
         cwd: Option<&str>,
         cols: u16,
         rows: u16,
+        prompt_redraw: Option<Vec<u8>>,
         channel: Channel<PtyEvent>,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
@@ -191,6 +196,7 @@ impl PtySession {
             writer: Mutex::new(writer),
             child,
             pid,
+            prompt_redraw,
             stop,
         })
     }
@@ -214,6 +220,25 @@ impl PtySession {
             pixel_height: 0,
         })?;
         Ok(())
+    }
+
+    /// Makes the shell re-render its prompt where the width it was drawn
+    /// against has changed — see oh_my_posh::POWERSHELL_REDRAW_HANDLER for
+    /// what this is fixing. A no-op for sessions whose shell needs no
+    /// nudging, so the caller doesn't have to know which shell it has.
+    ///
+    /// The nudge is delivered as keys, so it's only sent while the shell is
+    /// sitting at its prompt (`shell_is_idle`, given the shell's pid): with
+    /// a command running, whatever that command is — an editor, an agent, a
+    /// REPL — would be the one reading them.
+    pub fn prompt_redraw(&self, shell_is_idle: impl FnOnce(u32) -> bool) -> anyhow::Result<()> {
+        let Some(keys) = &self.prompt_redraw else {
+            return Ok(());
+        };
+        if !self.pid.is_some_and(shell_is_idle) {
+            return Ok(());
+        }
+        self.write(keys)
     }
 
     pub fn kill(&self) -> anyhow::Result<()> {
@@ -252,6 +277,7 @@ mod tests {
             None,
             80,
             24,
+            None,
             channel,
         )
         .unwrap();
@@ -295,6 +321,7 @@ mod tests {
             None,
             80,
             24,
+            None,
             channel,
         )
         .unwrap();

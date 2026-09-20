@@ -18,9 +18,10 @@ impl PtyManager {
         cwd: Option<&str>,
         cols: u16,
         rows: u16,
+        prompt_redraw: Option<Vec<u8>>,
         channel: Channel<PtyEvent>,
     ) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(shell_path, shell_args, env, cwd, cols, rows, channel)?;
+        let session = PtySession::spawn(shell_path, shell_args, env, cwd, cols, rows, prompt_redraw, channel)?;
         let id = session.id;
         self.sessions.insert(id, session);
         Ok(id)
@@ -54,6 +55,14 @@ impl PtyManager {
             .get(&id)
             .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
         session.resize(cols, rows)
+    }
+
+    pub fn prompt_redraw(&self, id: Uuid, shell_is_idle: impl FnOnce(u32) -> bool) -> anyhow::Result<()> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        session.prompt_redraw(shell_is_idle)
     }
 
     pub fn kill(&self, id: Uuid) -> anyhow::Result<()> {

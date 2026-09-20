@@ -57,6 +57,7 @@ pub fn run() {
             commands::pty_commands::pty_spawn,
             commands::pty_commands::pty_write,
             commands::pty_commands::pty_resize,
+            commands::pty_commands::pty_prompt_redraw,
             commands::pty_commands::pty_kill,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,

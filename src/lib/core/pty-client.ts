@@ -43,6 +43,12 @@ export function resizePty(id: string, cols: number, rows: number): Promise<void>
   return invoke("pty_resize", { id, cols, rows });
 }
 
+/** Asks the shell to redraw its prompt at the console's new size. A no-op
+ * for shells that redraw on their own, so callers can just always ask. */
+export function promptRedrawPty(id: string): Promise<void> {
+  return invoke("pty_prompt_redraw", { id });
+}
+
 export function killPty(id: string): Promise<void> {
   return invoke("pty_kill", { id });
 }

@@ -8,7 +8,7 @@ import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac } from "../core/platform";
-import { killPty, resizePty, spawnPty, writePty } from "../core/pty-client";
+import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
 import { eventMatchesKeybinding } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
@@ -406,7 +406,14 @@ export class TerminalInstance {
     const { cols, rows } = this.term;
     if (this.lastPtySize?.cols === cols && this.lastPtySize.rows === rows) return;
     this.lastPtySize = { cols, rows };
-    void resizePty(this.sessionId, cols, rows);
+    // A prompt drawn against the old width doesn't move on its own — the
+    // console just reflows the cells it already has, which is how
+    // oh-my-posh's right-hand block ends up wrapped onto a second row. The
+    // backend decides whether this shell needs (and can take) the nudge.
+    const id = this.sessionId;
+    void resizePty(id, cols, rows)
+      .then(() => promptRedrawPty(id))
+      .catch(() => {});
   }
 
   focus(): void {

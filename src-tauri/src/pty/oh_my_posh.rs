@@ -7,6 +7,33 @@ use tauri::Manager;
 
 pub const DEFAULT_THEME: &str = "jandedobbeleer";
 
+/// oh-my-posh bakes the right prompt's position into the line it renders —
+/// `ESC[nX` then `ESC[nC`, measured against the terminal width at the time —
+/// so a resize leaves the console reflowing stale cells, and a prompt that
+/// filled 120 columns spills onto a second row at 70. Re-running the prompt
+/// is the whole fix: oh-my-posh drops the right prompt when it no longer
+/// fits and repositions it when it does. The erase-below goes first, to
+/// clear whatever the reflow left on the rows underneath.
+///
+/// The redraw runs under UTF-8 and puts the console's encoding back after.
+/// Windows PowerShell leaves the console on the OEM code page (850, 437…),
+/// and while oh-my-posh sees to that for the prompts it draws itself, a
+/// redraw from here goes out in the OEM page — which has no Nerd Font
+/// icons, so every one of them came out as a `?`.
+const POWERSHELL_REDRAW_HANDLER: &str = "Set-PSReadLineKeyHandler -Chord 'Ctrl+Alt+F12' -ScriptBlock { \
+     $encoding = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8; \
+     try { [Console]::Write([char]27 + '[J'); [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() } \
+     finally { [Console]::OutputEncoding = $encoding } }";
+
+/// What to send a PowerShell console to trigger the handler above. A chord
+/// rather than a bare key so it can't collide with anything a user would
+/// plausibly press themselves.
+pub const POWERSHELL_REDRAW_KEY: &[u8] = b"\x1b[24;7~";
+
+/// zsh's half of the same fix, and it needs nothing from Termini: SIGWINCH
+/// already reaches the shell on every resize, so the trap alone is enough.
+const ZSH_REDRAW_LINE: &str = "TRAPWINCH() { zle && { zle reset-prompt; zle -R } }";
+
 fn exe_name() -> &'static str {
     if cfg!(windows) {
         "oh-my-posh.exe"
@@ -104,6 +131,9 @@ fn candidate_dirs() -> Vec<PathBuf> {
 /// shell is supported; unsupported shells are left untouched. Init files are
 /// written before `args`/`env` are modified, so a failed write leaves the
 /// launch exactly as it was.
+///
+/// Returns the keys this session has to be sent after a resize to redraw its
+/// prompt, for the shells that need telling (see POWERSHELL_REDRAW_HANDLER).
 pub fn apply(
     app: &tauri::AppHandle,
     binary: &Path,
@@ -113,21 +143,28 @@ pub fn apply(
     args: &mut Vec<String>,
     env: &mut Vec<(&'static str, String)>,
     zsh_lines: &mut Vec<String>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<&'static [u8]>> {
     let config = config_arg(app, theme);
     let shell = Path::new(shell_path)
         .file_stem()
         .map(|stem| stem.to_string_lossy().to_lowercase())
         .unwrap_or_default();
+    let mut redraw_key = None;
 
     match shell.as_str() {
-        "pwsh" | "powershell" => append_powershell_command(args, &powershell_init(binary, &config)),
+        "pwsh" | "powershell" => {
+            append_powershell_command(args, &powershell_init(binary, &config));
+            redraw_key = Some(POWERSHELL_REDRAW_KEY);
+        }
         // Written into the shared zsh startup wrapper by the caller.
-        "zsh" => zsh_lines.push(format!(
-            "eval \"$({} init zsh --config {})\"",
-            sh_quote(&binary.to_string_lossy()),
-            sh_quote(&config)
-        )),
+        "zsh" => {
+            zsh_lines.push(format!(
+                "eval \"$({} init zsh --config {})\"",
+                sh_quote(&binary.to_string_lossy()),
+                sh_quote(&config)
+            ));
+            zsh_lines.push(ZSH_REDRAW_LINE.to_string());
+        }
         // Git Bash on Windows relies on its own /etc startup files, which
         // --rcfile would bypass, so bash is only hooked on macOS/Linux.
         "bash" if !cfg!(windows) && bash_supports_oh_my_posh(shell_path) => {
@@ -135,7 +172,7 @@ pub fn apply(
             write_file(&file, &bash_init(binary, &config))?;
             args.splice(0..0, ["--rcfile".to_string(), file.to_string_lossy().into_owned()]);
         }
-        _ => return Ok(()),
+        _ => return Ok(None),
     }
 
     if managed {
@@ -150,7 +187,7 @@ pub fn apply(
             }
         }
     }
-    Ok(())
+    Ok(redraw_key)
 }
 
 /// A downloaded local theme file when there is one (fast, works offline);
@@ -176,7 +213,7 @@ fn sh_quote(value: &str) -> String {
 /// PowerShell 5.1 default) would block.
 fn powershell_init(binary: &Path, config: &str) -> String {
     format!(
-        "& {} init pwsh --eval --config {} | Invoke-Expression",
+        "& {} init pwsh --eval --config {} | Invoke-Expression; {POWERSHELL_REDRAW_HANDLER}",
         ps_quote(&binary.to_string_lossy()),
         ps_quote(config)
     )

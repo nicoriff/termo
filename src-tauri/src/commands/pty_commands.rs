@@ -46,9 +46,10 @@ pub fn pty_spawn(
     }
     // A broken shell integration must never keep the shell itself from
     // opening — on failure the session just starts without it.
+    let mut prompt_redraw = None;
     if config.oh_my_posh_enabled {
         if let Some((binary, managed)) = oh_my_posh::find(&app) {
-            let _ = oh_my_posh::apply(
+            prompt_redraw = oh_my_posh::apply(
                 &app,
                 &binary,
                 managed,
@@ -57,7 +58,9 @@ pub fn pty_spawn(
                 &mut args,
                 &mut env,
                 &mut zsh_lines,
-            );
+            )
+            .unwrap_or(None)
+            .map(<[u8]>::to_vec);
         }
     }
     if zsh_init::is_zsh(&path) {
@@ -72,9 +75,27 @@ pub fn pty_spawn(
 
     state
         .pty
-        .spawn(&path, &args, &env, cwd.as_deref(), cols, rows, on_event)
+        .spawn(&path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
         .map(|id| id.to_string())
         .map_err(|err| err.to_string())
+}
+
+/// Asks the console's shell to redraw its prompt at the size it now has,
+/// once a resize has settled. Nothing is sent while a command is running
+/// under the shell (see PtySession::prompt_redraw), nor to shells that need
+/// no nudge. Blocking work (it walks the process table), hence the thread.
+#[tauri::command]
+pub async fn pty_prompt_redraw(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state
+            .pty
+            .prompt_redraw(id, |pid| state.memory.busy_roots(&[pid]).is_empty())
+            .map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
