@@ -306,4 +306,39 @@
     padding: 16px 20px;
     box-sizing: border-box;
   }
+
+  /* Every scrolling area in this window — the detail pane, the sidebar, and
+     the lists inside the font picker and the dropdowns — rather than each
+     one styling its own. The engine's default draws a filled track and a
+     stepper arrow at each end, which is what read as dated next to a
+     console, where the same treatment as here is already applied to xterm's
+     viewport (see SplitView). Only the thumb shows; the track is the pane
+     it sits on, and the padding-box border keeps the thumb slim without
+     changing the gutter's width. Neutral gray so it holds up on a light
+     theme as well as a dark one. */
+  .window-chrome :global(::-webkit-scrollbar) {
+    width: 10px;
+    height: 10px;
+  }
+
+  .window-chrome :global(::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  .window-chrome :global(::-webkit-scrollbar-thumb) {
+    background: rgba(128, 128, 128, 0.45);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 5px;
+  }
+
+  .window-chrome :global(::-webkit-scrollbar-thumb:hover) {
+    background: rgba(128, 128, 128, 0.7);
+    background-clip: padding-box;
+  }
+
+  /* The square where the two bars meet, which would otherwise be filled. */
+  .window-chrome :global(::-webkit-scrollbar-corner) {
+    background: transparent;
+  }
 </style>
