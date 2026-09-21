@@ -1,15 +1,23 @@
-/** Claude Code status-line data for each console, as reported by the
- * `agent-status` event (see src-tauri/src/pty/status_line.rs). Every field is
- * optional: `rate_limits` only exists for claude.ai Pro/Max sessions and only
- * after the first API response, and the windows disappear when they reset. */
+/** One of the plan's rate-limit windows. `windowMinutes` is what names it,
+ * since the agents don't report the same windows: Claude has a 5-hour and a
+ * weekly one, Codex a primary and an optional secondary whose length depends
+ * on the plan (a free one is a single 30-day window). */
+export interface PlanWindow {
+  percentage: number;
+  windowMinutes: number | null;
+  resetsAt: number | null;
+}
+
+/** Plan usage for each console, as reported by the `agent-status` event —
+ * from Claude Code's status line, or read back from Codex's rollout (see
+ * src-tauri/src/pty/status_line.rs and codex_usage.rs). Everything is
+ * optional: no agent reports usage before its first response, Claude's
+ * windows need a Pro/Max subscription, and Codex reports no cost. */
 export interface AgentStatus {
   model: string | null;
   contextUsedPercentage: number | null;
   costUsd: number | null;
-  fiveHourPercentage: number | null;
-  fiveHourResetsAt: number | null;
-  sevenDayPercentage: number | null;
-  sevenDayResetsAt: number | null;
+  planWindows: PlanWindow[];
   spendLimitPercentage: number | null;
 }
 
@@ -31,8 +39,7 @@ class AgentStatusStore {
   /** True when there's a plan-usage window worth showing for this tab. */
   hasPlanUsage(tabId: string | null): boolean {
     if (!tabId) return false;
-    const status = this.byTab[tabId];
-    return !!status && (status.fiveHourPercentage !== null || status.sevenDayPercentage !== null);
+    return (this.byTab[tabId]?.planWindows.length ?? 0) > 0;
   }
 }
 

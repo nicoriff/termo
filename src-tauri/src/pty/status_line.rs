@@ -29,22 +29,37 @@ pub const STATUS_LINE_FLAG: &str = "--statusline";
 
 const SNAPSHOT_SUFFIX: &str = ".status.json";
 
+/// One of a plan's rate-limit windows. `window_minutes` is what names it in
+/// the UI (300 is the 5-hour window, 10080 the weekly one), since the tools
+/// don't agree on which windows a plan even has: Claude reports a 5-hour and
+/// a weekly one, Codex a primary and an optional secondary whose length
+/// depends on the plan — a free one is a single 30-day window.
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageWindow {
+    pub percentage: f64,
+    pub window_minutes: Option<i64>,
+    pub resets_at: Option<i64>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusSnapshot {
-    /// Claude's own session id, cwd and project root: what Modo IA needs to
-    /// list this conversation and resume it later (agent_sessions.rs).
-    agent_session_id: Option<String>,
-    cwd: Option<String>,
-    project_dir: Option<String>,
-    model: Option<String>,
-    context_used_percentage: Option<f64>,
-    cost_usd: Option<f64>,
-    five_hour_percentage: Option<f64>,
-    five_hour_resets_at: Option<i64>,
-    seven_day_percentage: Option<f64>,
-    seven_day_resets_at: Option<i64>,
-    spend_limit_percentage: Option<f64>,
+    /// Which agent this came from, so the watcher records the conversation
+    /// under the right tool. Absent in snapshots written before Codex
+    /// reported any, which were all Claude's.
+    pub tool: Option<String>,
+    /// The agent's own session id, cwd and project root: what Modo IA needs
+    /// to list this conversation and resume it later (agent_sessions.rs).
+    pub agent_session_id: Option<String>,
+    pub cwd: Option<String>,
+    pub project_dir: Option<String>,
+    pub model: Option<String>,
+    pub context_used_percentage: Option<f64>,
+    /// Claude only — Codex reports no cost for a subscription.
+    pub cost_usd: Option<f64>,
+    pub plan_windows: Vec<UsageWindow>,
+    pub spend_limit_percentage: Option<f64>,
 }
 
 fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
@@ -60,7 +75,18 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
             .map(str::to_owned)
     };
 
+    // Claude's two windows are fixed, so their length is known here rather
+    // than reported: 5 hours and 7 days, in minutes.
+    let window = |name: &str, minutes: i64| {
+        number(&format!("/rate_limits/{name}/used_percentage")).map(|percentage| UsageWindow {
+            percentage,
+            window_minutes: Some(minutes),
+            resets_at: integer(&format!("/rate_limits/{name}/resets_at")),
+        })
+    };
+
     Some(StatusSnapshot {
+        tool: Some("claude".to_string()),
         agent_session_id: text("/session_id"),
         cwd: text("/cwd").or_else(|| text("/workspace/current_dir")),
         project_dir: text("/workspace/project_dir"),
@@ -70,10 +96,10 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
             .map(str::to_owned),
         context_used_percentage: number("/context_window/used_percentage"),
         cost_usd: number("/cost/total_cost_usd"),
-        five_hour_percentage: number("/rate_limits/five_hour/used_percentage"),
-        five_hour_resets_at: integer("/rate_limits/five_hour/resets_at"),
-        seven_day_percentage: number("/rate_limits/seven_day/used_percentage"),
-        seven_day_resets_at: integer("/rate_limits/seven_day/resets_at"),
+        plan_windows: [window("five_hour", 300), window("seven_day", 7 * 24 * 60)]
+            .into_iter()
+            .flatten()
+            .collect(),
         spend_limit_percentage: number("/rate_limits/spend_limit/used_percentage"),
     })
 }
@@ -96,7 +122,7 @@ pub fn run_status_line_cli() {
     let _ = write_snapshot(Path::new(&dir), &session, &snapshot);
 }
 
-fn write_snapshot(dir: &Path, session: &str, snapshot: &StatusSnapshot) -> std::io::Result<()> {
+pub(super) fn write_snapshot(dir: &Path, session: &str, snapshot: &StatusSnapshot) -> std::io::Result<()> {
     // Session ids are UUIDs; anything else must not name a path outside `dir`.
     if session.is_empty() || !session.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Ok(());
@@ -155,10 +181,12 @@ pub fn start_watcher(app: tauri::AppHandle) {
                     continue;
                 };
                 if let Some(agent_session_id) = snapshot.agent_session_id.clone() {
-                    // The status line is Claude-only, so the tool is known.
+                    // Only the status line wrote these before Codex reported
+                    // its own usage, and that one is Claude's alone.
+                    let tool = snapshot.tool.clone().unwrap_or_else(|| "claude".to_string());
                     crate::agent_sessions::record(
                         &app,
-                        crate::agent_sessions::AgentSession::new("claude", &agent_session_id)
+                        crate::agent_sessions::AgentSession::new(&tool, &agent_session_id)
                             .with_cwd(snapshot.cwd.clone())
                             .with_project_dir(snapshot.project_dir.clone())
                             .with_model(snapshot.model.clone()),
@@ -284,9 +312,18 @@ mod tests {
     fn reads_the_fields_the_status_bar_shows() {
         let snapshot = snapshot_from(SAMPLE).unwrap();
         assert_eq!(snapshot.model.as_deref(), Some("Sonnet 5"));
-        assert_eq!(snapshot.five_hour_percentage, Some(23.5));
-        assert_eq!(snapshot.seven_day_resets_at, Some(1790000000));
         assert_eq!(snapshot.context_used_percentage, Some(8.4));
+        // Claude's windows are fixed, so their length is filled in here for
+        // the status bar to name them the same way it names Codex's.
+        let windows: Vec<_> = snapshot
+            .plan_windows
+            .iter()
+            .map(|window| (window.percentage, window.window_minutes, window.resets_at))
+            .collect();
+        assert_eq!(
+            windows,
+            [(23.5, Some(300), Some(1789500000)), (41.2, Some(10080), Some(1790000000))]
+        );
         // Absent for everyone without a spend limit.
         assert_eq!(snapshot.spend_limit_percentage, None);
     }
@@ -295,7 +332,7 @@ mod tests {
     fn tolerates_a_payload_without_rate_limits() {
         let snapshot = snapshot_from(r#"{"model":{"display_name":"Opus"}}"#).unwrap();
         assert_eq!(snapshot.model.as_deref(), Some("Opus"));
-        assert_eq!(snapshot.five_hour_percentage, None);
+        assert!(snapshot.plan_windows.is_empty());
         assert!(snapshot_from("not json").is_none());
     }
 

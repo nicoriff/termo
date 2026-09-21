@@ -7,6 +7,7 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+  import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
 
   const MEMORY_POLL_MS = 2000;
@@ -51,18 +52,14 @@
   // what stops both sources from reporting).
   const activeTool = $derived(activeTabId ? (aiStatusStore.byId[activeTabId]?.tool ?? null) : null);
 
-  // Claude Code's plan windows for the active console, when it reports them.
+  // The active console's plan windows, whichever agent reported them and
+  // whatever windows its plan has — named after how long each one runs.
   const planWindows = $derived.by(() => {
     const status = activeTabId ? agentStatusStore.byTab[activeTabId] : null;
-    if (!status) return [];
-    const windows: { label: string; percent: number }[] = [];
-    if (status.fiveHourPercentage !== null) {
-      windows.push({ label: t("statusBar.fiveHour"), percent: status.fiveHourPercentage });
-    }
-    if (status.sevenDayPercentage !== null) {
-      windows.push({ label: t("statusBar.sevenDay"), percent: status.sevenDayPercentage });
-    }
-    return windows;
+    return (status?.planWindows ?? []).map((usage) => {
+      const label = planWindowLabel(usage.windowMinutes);
+      return { label: t(label.key, label.params), percent: usage.percentage };
+    });
   });
 
   /** The gauge can't run past its track; the number still shows what was
@@ -84,7 +81,7 @@
   {#if activeTool}
     <span class="status-item status-engine" title={t("statusBar.engineHint")}>{TOOL_DISPLAY_NAMES[activeTool]}</span>
   {/if}
-  {#if planWindows.length > 0}
+  {#if activeTool || planWindows.length > 0}
     <span class="status-item status-plan" title={t("statusBar.planHint")}>
       {t("statusBar.plan")}
       {#each planWindows as usage (usage.label)}
@@ -94,6 +91,11 @@
             <span class="plan-gauge-text">{Math.round(usage.percent)}%</span>
           </span>
         </span>
+      {:else}
+        <!-- No agent reports usage until its first response, and Claude's
+             windows need a Pro/Max plan. Saying so beats the reading
+             vanishing from the bar as if the console had none. -->
+        <span class="plan-pending">{t("statusBar.planPending")}</span>
       {/each}
     </span>
   {/if}
@@ -143,6 +145,10 @@
 
   .plan-label {
     opacity: 0.75;
+  }
+
+  .plan-pending {
+    opacity: 0.6;
   }
 
   .plan-gauge {

@@ -29,8 +29,11 @@ export const en: Messages = {
     plan: "Plan usage",
     fiveHour: "5h",
     sevenDay: "weekly",
-    planHint:
-        "Share of the Claude plan limit this console has already used, in the 5-hour and the weekly window",
+    windowHours: "{hours}h",
+    windowDays: "{days}d",
+    planWindow: "used",
+    planPending: "no data yet",
+    planHint: "Share of the plan limit this console has already used, in each window the agent reports",
     memoryHint: "Memory used by the active console and the processes running in it",
   },
   aiMode: {

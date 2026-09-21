@@ -27,8 +27,12 @@ export const es = {
     plan: "Uso del plan",
     fiveHour: "5 h",
     sevenDay: "semanal",
+    windowHours: "{hours} h",
+    windowDays: "{days} d",
+    planWindow: "uso",
+    planPending: "sin datos todavía",
     planHint:
-        "Porcentaje del límite del plan de Claude ya consumido por esta consola, en la ventana de 5 horas y en la semanal",
+        "Porcentaje del límite del plan ya consumido por esta consola, en cada ventana que informa el agente",
     memoryHint: "Memoria de la consola activa y de los procesos que corren en ella",
   },
   aiMode: {

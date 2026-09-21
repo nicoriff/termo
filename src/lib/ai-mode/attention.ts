@@ -78,19 +78,29 @@ export function startAgentAttention(): () => void {
     }
     if (appConfigStore.aiModeEnabled) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
   });
-  // Plan usage / context / cost, from Claude Code's status line. Independent of
-  // Modo IA being on: it's just information about the console's session.
+  // Plan usage / context / cost, from Claude Code's status line or from
+  // Codex's rollout. Independent of Modo IA being on: it's just information
+  // about the console's session.
   const unlistenStatus = listen<
-    { sessionId: string; agentSessionId?: string | null; cwd?: string | null; projectDir?: string | null } & AgentStatus
+    {
+      sessionId: string;
+      tool?: ToolId | null;
+      agentSessionId?: string | null;
+      cwd?: string | null;
+      projectDir?: string | null;
+    } & AgentStatus
   >("agent-status", ({ payload }) => {
-    // cwd/projectDir/agentSessionId are about the conversation, not plan usage,
-    // so they're routed to tabAgentSessions instead of the status store.
-    const { sessionId, agentSessionId, cwd, projectDir, ...status } = payload;
+    // cwd/projectDir/agentSessionId/tool are about the conversation, not plan
+    // usage, so they're routed to tabAgentSessions instead of the status store.
+    const { sessionId, tool, agentSessionId, cwd, projectDir, ...status } = payload;
     const tabId = getTabId(sessionId);
     if (!tabId) return;
     agentStatusStore.set(tabId, status);
-    // The status line is Claude-only, so the tool is known.
-    if (agentSessionId) tabAgentSessions.set(tabId, "claude", agentSessionId, cwd ?? projectDir ?? undefined);
+    // Snapshots written before Codex reported any usage carry no tool, and
+    // the status line that wrote them is Claude's alone.
+    if (agentSessionId) {
+      tabAgentSessions.set(tabId, tool ?? "claude", agentSessionId, cwd ?? projectDir ?? undefined);
+    }
   });
   // Past conversations Modo IA can reopen, recorded by both channels.
   void agentSessionsStore.load();

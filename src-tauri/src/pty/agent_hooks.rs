@@ -311,7 +311,15 @@ pub fn run_hook_cli(tool: &str, event: &str) {
     else {
         return;
     };
-    let _ = append_event(Path::new(&dir), &session, tool, event, &input);
+    let dir = Path::new(&dir);
+    // Codex has no status line to chain onto, so its plan usage is read from
+    // the rollout each event points at (see codex_usage).
+    if tool == AgentTool::Codex.name() {
+        if let Ok(payload) = serde_json::from_str::<Value>(&input) {
+            super::codex_usage::record(dir, &session, &payload);
+        }
+    }
+    let _ = append_event(dir, &session, tool, event, &input);
 }
 
 fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str) -> std::io::Result<()> {
