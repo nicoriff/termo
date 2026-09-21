@@ -69,6 +69,16 @@ describe("applyProcessChange", () => {
     expect(resolveTabTitle(undefined, "zsh (default)")).toBe("zsh (default)");
   });
 
+  it("names the agent instead of the shell while one is running", () => {
+    const running = applyProgramTitle(EMPTY_TAB_TITLE, "✳ fixing the parser", 1_000);
+    expect(resolveTabTitle(running, "Claude Code", ["claude", "Claude Code"])).toBe("[Claude Code] ✳ fixing the parser");
+  });
+
+  it("doesn't repeat the agent's name when that's all the program reports", () => {
+    const running = applyProcessChange(EMPTY_TAB_TITLE, "codex", 1_000);
+    expect(resolveTabTitle(running, "Codex", ["codex", "Codex"])).toBe("Codex");
+  });
+
   it("is a no-op when the process didn't change", () => {
     const running = applyProcessChange(EMPTY_TAB_TITLE, "vim", 1_000);
     expect(applyProcessChange(running, "vim", 9_000)).toBe(running);

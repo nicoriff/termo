@@ -69,11 +69,21 @@ export function applyProcessChange(state: TabTitleState, processName: string | n
   };
 }
 
-/** `shellTitle` is the tab's original console title (e.g. "zsh (default)",
- * "PowerShell 7"). A program or process title is prefixed with the console
- * type, e.g. "[zsh] claude"; with neither, the console title stands alone. */
-export function resolveTabTitle(state: TabTitleState | undefined, shellTitle: string): string {
+/** `consoleLabel` is what the brackets say: the tab's console title (e.g.
+ * "zsh (default)", "PowerShell 7"), or the agent's name while one is running
+ * in it (see tab-title-store). A program or process title is prefixed with
+ * it, e.g. "[zsh] claude"; with neither, the label stands alone.
+ *
+ * `redundantTitles` are program titles the label already says — a Codex
+ * console would otherwise read "[Codex] codex". */
+export function resolveTabTitle(
+  state: TabTitleState | undefined,
+  consoleLabel: string,
+  redundantTitles: readonly string[] = [],
+): string {
+  const label = consoleLabel.replace(/\s*\(default\)$/, "");
   const title = state?.programTitle ?? state?.processName;
-  if (!title) return shellTitle;
-  return `[${shellTitle.replace(/\s*\(default\)$/, "")}] ${title}`;
+  if (!title) return consoleLabel;
+  if (redundantTitles.some((name) => name.toLowerCase() === title.toLowerCase())) return label;
+  return `[${label}] ${title}`;
 }

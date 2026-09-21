@@ -36,11 +36,16 @@ export async function restoreSession(session: AgentSession, targetTileId?: strin
   if (!command || !tileId) return;
 
   const shell = await resolveDefaultShell();
+  // Named after the shell, like any other console: the tab outlives the
+  // conversation it was opened for, so naming it "Claude Code" left that
+  // sitting in the title long after the session was over — and with Codex
+  // running in it. The automatic title (see tab-title.ts) says what is
+  // actually running at any moment.
   const tabId = workspaceStore.addTab(
     tileId,
     shell.path,
     shell.args,
-    TOOL_DISPLAY_NAMES[session.tool],
+    shell.title,
     session.cwd ?? session.projectDir ?? undefined,
   );
   if (!tabId) return;

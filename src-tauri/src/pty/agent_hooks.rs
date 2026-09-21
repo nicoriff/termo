@@ -94,7 +94,31 @@ pub fn events_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 }
 
 fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
-    format!("{} {HOOK_FLAG} {} {event}", quote_executable(exe), tool.name())
+    format!(
+        "{}{} {HOOK_FLAG} {} {event}",
+        call_prefix(tool),
+        quote_executable(exe),
+        tool.name()
+    )
+}
+
+/// Codex runs its hooks through PowerShell on Windows, and there a statement
+/// that opens with a quoted path is an expression, not a command: the
+/// arguments after it are a syntax error ("Unexpected token"), so the hook
+/// never ran and Modo IA never heard from Codex. The call operator makes it
+/// a command again. Claude Code runs its hooks through Git Bash instead,
+/// where a leading `&` would put the command in the background.
+#[cfg(windows)]
+fn call_prefix(tool: AgentTool) -> &'static str {
+    match tool {
+        AgentTool::Codex => "& ",
+        AgentTool::Claude => "",
+    }
+}
+
+#[cfg(not(windows))]
+fn call_prefix(_tool: AgentTool) -> &'static str {
+    ""
 }
 
 /// Hook commands run through `sh -c` on macOS/Linux and Git Bash on Windows,
@@ -503,6 +527,19 @@ mod tests {
             hook_command(Path::new(r"C:\Program Files\Termini\termini.exe"), AgentTool::Claude, "Stop"),
             "\"C:/Program Files/Termini/termini.exe\" --agent-hook claude Stop"
         );
+    }
+
+    /// Codex's PowerShell needs the call operator, and Claude's Git Bash must
+    /// not get it — without this Codex silently ran no hooks at all.
+    #[cfg(windows)]
+    #[test]
+    fn only_codex_gets_the_powershell_call_operator() {
+        let exe = Path::new(r"C:\Program Files\Termini\termini.exe");
+        assert_eq!(
+            hook_command(exe, AgentTool::Codex, "Stop"),
+            "& \"C:/Program Files/Termini/termini.exe\" --agent-hook codex Stop"
+        );
+        assert!(!hook_command(exe, AgentTool::Claude, "Stop").starts_with('&'));
     }
 
     #[cfg(not(windows))]
