@@ -24,9 +24,11 @@
   <h3>{t("preferences.appearance.theme")}</h3>
   <div class="theme-grid">
     {#each themeStore.themes as theme (theme.name)}
+      {@const selected = themeStore.current.name === theme.name}
       <button
         class="theme-swatch"
-        class:selected={themeStore.current.name === theme.name}
+        class:selected
+        aria-pressed={selected}
         style="background:{theme.colors.background}; color:{theme.colors.foreground}; --swatch-accent:{theme.ui
           .accent}"
         onclick={() => themeStore.setTheme(theme.name)}
@@ -36,7 +38,15 @@
           <i style="background:{theme.colors.green}"></i>
           <i style="background:{theme.colors.blue}"></i>
         </span>
-        {theme.name}
+        <span class="swatch-name">{theme.name}</span>
+        {#if selected}
+          <!-- Decorative: aria-pressed already tells a screen reader which
+               theme is on. -->
+          <svg class="swatch-check" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="8" />
+            <path d="M4.5 8.2 7 10.6l4.6-5" />
+          </svg>
+        {/if}
       </button>
     {/each}
   </div>
@@ -84,9 +94,11 @@
     margin: 0 0 8px;
   }
 
+  /* Two columns: with ten presets, one column pushed the rest of the
+     section a full screen down. */
   .theme-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -94,6 +106,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     padding: 8px 10px;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -102,12 +115,42 @@
     text-align: left;
   }
 
+  .swatch-name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A fixed green rather than the theme's own: it has to read as "this one"
+     on every swatch, light or dark, whatever the theme calls green. Pushed
+     to the far end of the row, clear of the name. */
+  .swatch-check {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .swatch-check circle {
+    fill: #22a55b;
+  }
+
+  .swatch-check path {
+    fill: none;
+    stroke: #ffffff;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .theme-swatch.selected {
     border-color: var(--swatch-accent);
   }
 
   .swatch-dots {
     display: flex;
+    flex-shrink: 0;
     gap: 3px;
   }
 
