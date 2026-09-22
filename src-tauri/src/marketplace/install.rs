@@ -274,14 +274,16 @@ fn server_config(request: &McpInstallRequest) -> Result<Value, String> {
 }
 
 pub fn install_mcp(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
-    if request.target != AgentTarget::Claude {
-        // Codex takes MCP servers too, but through its own config.toml
-        // rather than a CLI subcommand of its own — not wired up yet.
-        return Err(tr(Msg::McpCodexNotYetSupported));
-    }
     if !agent_cli::is_valid_component_name(&request.server_name) {
         return Err(tr(Msg::InvalidComponentName(&request.server_name)));
     }
+    match request.target {
+        AgentTarget::Claude => install_mcp_claude(request),
+        AgentTarget::Codex => install_mcp_codex(request),
+    }
+}
+
+fn install_mcp_claude(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
     let claude = agent_cli::require(AgentTarget::Claude, None)?;
     let config = server_config(request)?;
     let config_text = serde_json::to_string(&config).map_err(|err| tr(Msg::MarketplaceCommandFailed(&err.to_string())))?;
@@ -293,15 +295,74 @@ pub fn install_mcp(request: &McpInstallRequest) -> Result<InstallOutcome, String
     .map(|output| InstallOutcome::Installed { message: output.trim().to_string() })
 }
 
-pub fn uninstall_mcp(request: &McpInstallRequest) -> Result<(), String> {
-    if request.target != AgentTarget::Claude {
-        return Err(tr(Msg::McpCodexNotYetSupported));
+fn install_mcp_codex(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+    let codex = agent_cli::require(AgentTarget::Codex, None)?;
+    let args = codex_add_args(request)?;
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    agent_cli::run(&codex, &arg_refs).map(|output| InstallOutcome::Installed { message: output.trim().to_string() })
+}
+
+/// Builds the argv for `codex mcp add <name> ...` — Codex's own real
+/// subcommand, not the config.toml this code used to assume was the only
+/// way in. Its flag surface is narrower than `.mcp.json`, though: a stdio
+/// package translates one-to-one (command, args, one `--env` per variable),
+/// but a remote only ever takes a bearer token read from an *environment
+/// variable* at launch time, never a literal header value — so a remote
+/// whose registry entry needs a real header (an API key, a fixed
+/// `Authorization` value) can't be wired up this way without hand-editing
+/// config.toml, which this module deliberately never does.
+fn codex_add_args(request: &McpInstallRequest) -> Result<Vec<String>, String> {
+    let mut args = vec!["mcp".to_string(), "add".to_string(), request.server_name.clone()];
+
+    if let Some(remote) = request.remotes.first() {
+        let url = remote
+            .get("url")
+            .and_then(Value::as_str)
+            .ok_or_else(|| tr(Msg::MarketplaceCommandFailed("remote has no url")))?;
+        let headers = remote.get("headers").and_then(Value::as_array).cloned().unwrap_or_default();
+        if !filled_map(&headers, &request.params).is_empty() {
+            return Err(tr(Msg::McpCodexHeadersUnsupported));
+        }
+        args.push("--url".to_string());
+        args.push(url.to_string());
+        return Ok(args);
     }
+
+    if let Some(package) = request.packages.first() {
+        let (command, mut launch_args) = stdio_launch(package)
+            .ok_or_else(|| tr(Msg::MarketplaceCommandFailed("unsupported package registry")))?;
+        if let Some(extra) = package.get("runtimeArguments").and_then(Value::as_array) {
+            for arg in extra {
+                if let Some(value) = arg.get("value").and_then(Value::as_str) {
+                    launch_args.push(value.to_string());
+                }
+            }
+        }
+        let env_spec = package.get("environmentVariables").and_then(Value::as_array).cloned().unwrap_or_default();
+        for (key, value) in filled_map(&env_spec, &request.params) {
+            if let Value::String(value) = value {
+                args.push("--env".to_string());
+                args.push(format!("{key}={value}"));
+            }
+        }
+        args.push("--".to_string());
+        args.push(command);
+        args.extend(launch_args);
+        return Ok(args);
+    }
+
+    Err(tr(Msg::MarketplaceCommandFailed("no remote or package to install")))
+}
+
+pub fn uninstall_mcp(request: &McpInstallRequest) -> Result<(), String> {
     if !agent_cli::is_valid_component_name(&request.server_name) {
         return Err(tr(Msg::InvalidComponentName(&request.server_name)));
     }
-    let claude = agent_cli::require(AgentTarget::Claude, None)?;
-    agent_cli::run(&claude, &["mcp", "remove", request.server_name.as_str(), "-s", "user"]).map(|_| ())
+    let bin = agent_cli::require(request.target, None)?;
+    match request.target {
+        AgentTarget::Claude => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str(), "-s", "user"]).map(|_| ()),
+        AgentTarget::Codex => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str()]).map(|_| ()),
+    }
 }
 
 #[cfg(test)]
@@ -429,10 +490,59 @@ mod tests {
     }
 
     #[test]
-    fn an_mcp_server_is_never_installed_into_codex_yet() {
-        let mut request = mcp_request(vec![serde_json::json!({"type":"http","url":"https://x"})], vec![], &[]);
-        request.target = AgentTarget::Codex;
-        assert!(install_mcp(&request).is_err());
+    fn builds_a_codex_add_command_for_a_header_free_remote() {
+        let remote = serde_json::json!({ "type": "streamable-http", "url": "https://server.example/mcp" });
+        let request = mcp_request(vec![remote], vec![], &[]);
+        let args = codex_add_args(&request).unwrap();
+        assert_eq!(args, vec!["mcp", "add", "ai.smithery/example", "--url", "https://server.example/mcp"]);
+    }
+
+    #[test]
+    fn refuses_a_codex_remote_that_needs_a_real_header() {
+        let remote = serde_json::json!({
+            "type": "streamable-http",
+            "url": "https://server.smithery.ai/x/mcp",
+            "headers": [{ "name": "Authorization", "isRequired": true, "value": "Bearer {key}" }]
+        });
+        // Codex's `mcp add` has no flag for a literal header value, only a
+        // bearer token read from an env var — a filled-in header can't be
+        // expressed, so this must fail rather than silently drop it.
+        let request = mcp_request(vec![remote], vec![], &[("Authorization", "Bearer real-token")]);
+        let err = codex_add_args(&request).unwrap_err();
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn a_header_free_remote_still_installs_fine_into_codex() {
+        let remote = serde_json::json!({ "type": "streamable-http", "url": "https://server.example/mcp" });
+        let request = mcp_request(vec![remote], vec![], &[]);
+        assert!(codex_add_args(&request).is_ok());
+    }
+
+    #[test]
+    fn builds_a_codex_add_command_for_an_npx_stdio_package() {
+        let package = serde_json::json!({
+            "registryType": "npm",
+            "identifier": "remote-filesystem-mcp-server",
+            "version": "0.1.5",
+            "environmentVariables": [{ "name": "GCS_BUCKET", "isRequired": true }]
+        });
+        let request = mcp_request(vec![], vec![package], &[("GCS_BUCKET", "my-bucket")]);
+        let args = codex_add_args(&request).unwrap();
+        assert_eq!(
+            args,
+            vec![
+                "mcp",
+                "add",
+                "ai.smithery/example",
+                "--env",
+                "GCS_BUCKET=my-bucket",
+                "--",
+                "npx",
+                "-y",
+                "remote-filesystem-mcp-server@0.1.5",
+            ]
+        );
     }
 
     #[test]

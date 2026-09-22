@@ -37,23 +37,34 @@ pub fn candidate_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// Adds Windows' `.exe`, since a bare stem only resolves there through the
-/// shell's PATHEXT handling — which is not in play when spawning directly.
-pub fn exe_name(stem: &str) -> String {
-    if cfg!(windows) {
-        format!("{stem}.exe")
-    } else {
-        stem.to_string()
+/// The extensions worth trying for a bare stem on Windows, in PATHEXT's own
+/// order. A shell resolves `codex` to `codex.cmd` via PATHEXT automatically;
+/// spawning a process directly skips that, and plenty of npm-installed CLIs
+/// (codex among them) ship only a `.cmd` shim, never a `.exe`.
+#[cfg(windows)]
+const WINDOWS_EXTENSIONS: &[&str] = &["exe", "cmd", "bat"];
+
+/// The names worth trying for `stem` in a single directory, most likely
+/// first.
+fn candidate_names(stem: &str) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        WINDOWS_EXTENSIONS.iter().map(|ext| format!("{stem}.{ext}")).collect()
+    }
+    #[cfg(not(windows))]
+    {
+        vec![stem.to_string()]
     }
 }
 
-/// The first `stem` executable found in `candidate_dirs`, if any.
+/// The first `stem` executable found in `candidate_dirs`, if any — trying
+/// every extension in a directory before moving to the next, so PATH order
+/// still wins over extension order.
 pub fn find_binary(stem: &str) -> Option<PathBuf> {
-    let name = exe_name(stem);
+    let names = candidate_names(stem);
     candidate_dirs()
         .into_iter()
-        .map(|dir| dir.join(&name))
-        .find(|path| path.is_file())
+        .find_map(|dir| names.iter().map(|name| dir.join(name)).find(|path| path.is_file()))
 }
 
 #[cfg(test)]
@@ -73,5 +84,29 @@ mod tests {
     #[test]
     fn finds_nothing_for_a_name_that_cannot_exist() {
         assert!(find_binary("termini-no-such-binary-9f3a").is_none());
+    }
+
+    /// npm's Windows installer leaves a `.cmd` shim on PATH, never a
+    /// `.exe` — codex is exactly this shape, and this regression is why
+    /// `find_binary` used to report it as not installed.
+    #[test]
+    #[cfg(windows)]
+    fn finds_a_cmd_shim_on_windows() {
+        let dir = std::env::temp_dir().join("termini-bin-search-test-cmd-shim");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("termini-fake-cli.cmd");
+        std::fs::write(&shim, "@echo off\r\n").unwrap();
+
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths: Vec<PathBuf> = std::env::split_paths(&original_path).collect();
+        paths.insert(0, dir.clone());
+        std::env::set_var("PATH", std::env::join_paths(&paths).unwrap());
+
+        let found = find_binary("termini-fake-cli");
+
+        std::env::set_var("PATH", &original_path);
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(found, Some(shim));
     }
 }

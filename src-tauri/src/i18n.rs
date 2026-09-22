@@ -43,7 +43,7 @@ pub enum Msg<'a> {
     InvalidComponentName(&'a str),
     CodexHasNoPlugins,
     McpRegistryUnreachable(&'a str),
-    McpCodexNotYetSupported,
+    McpCodexHeadersUnsupported,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -97,8 +97,10 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (McpRegistryUnreachable(detail), Es) => format!("No se pudo consultar el registro de MCP: {detail}"),
         (McpRegistryUnreachable(detail), En) => format!("Couldn't reach the MCP registry: {detail}"),
 
-        (McpCodexNotYetSupported, Es) => "Instalar MCP servers en Codex todavía no está soportado desde Termini".into(),
-        (McpCodexNotYetSupported, En) => "Installing MCP servers into Codex isn't supported from Termini yet".into(),
+        (McpCodexHeadersUnsupported, Es) =>
+            "Este servidor necesita encabezados personalizados, y el CLI de Codex todavía no tiene forma de recibirlos (solo admite un token de portador leído de una variable de entorno)".into(),
+        (McpCodexHeadersUnsupported, En) =>
+            "This server needs custom headers, and the Codex CLI has no way to take them yet (it only accepts a bearer token read from an environment variable)".into(),
     }
 }
 
@@ -122,7 +124,7 @@ mod tests {
             Msg::InvalidComponentName("../x"),
             Msg::CodexHasNoPlugins,
             Msg::McpRegistryUnreachable("timeout"),
-            Msg::McpCodexNotYetSupported,
+            Msg::McpCodexHeadersUnsupported,
         ]
     }
 

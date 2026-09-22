@@ -24,12 +24,12 @@
    * on a single click. */
   let confirming = $state(false);
   /** Null until the user picks one, so the default follows the item rather
-   * than sticking to whatever the previously opened one supported. */
-  // Installing an MCP server into Codex isn't wired up yet (see
-  // marketplace/install.rs), so — unlike a plugin, which really can only
-  // ever go to Claude — the target picker is narrowed here rather than in
-  // the model, which still reports Codex as a valid target for the class.
-  const installableTargets = $derived<AgentTarget[]>(item.class === "mcp" ? ["claude"] : item.targets);
+   * than sticking to whatever the previously opened one supported. Codex is
+   * a real target for an MCP server now (`codex mcp add`), so this just
+   * follows what the model reports — a remote that needs a header Codex
+   * can't take shows that as an install error instead, same as any other
+   * command failure. */
+  const installableTargets = $derived<AgentTarget[]>(item.targets);
 
   let chosenTarget = $state<AgentTarget | null>(null);
   const target = $derived(
