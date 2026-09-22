@@ -109,6 +109,11 @@
     uiState.openLayoutManager();
   }
 
+  function browseExtensions() {
+    onclose();
+    uiState.openMarketplace();
+  }
+
   /** Asks first: restoring closes every console that's open. */
   function restore(layout: SavedLayout) {
     onclose();
@@ -204,6 +209,21 @@
       <path d="M8.5 10.5h-7v-7" fill="none" stroke="currentColor" stroke-width="1" />
     </svg>
     <span class="app-menu-text">{t("layouts.manage")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={browseExtensions}>
+    <!-- A puzzle piece: the usual mark for an extension. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M4.5 1.5h3v1.2a1 1 0 1 0 2 0V1.5h1v3h-1.2a1 1 0 1 0 0 2h1.2v3h-3v-1.2a1 1 0 1 0-2 0v1.2h-3v-3h1.2a1 1 0 1 0 0-2H1.5v-3h3z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="app-menu-text">{t("marketplace.open")}</span>
+    <span class="app-menu-hint">{hint("marketplace")}</span>
   </button>
 
   <div class="app-menu-divider"></div>

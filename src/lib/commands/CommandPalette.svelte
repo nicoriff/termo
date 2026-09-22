@@ -11,6 +11,7 @@
     layouts: "commands.groups.layouts",
     appearance: "commands.groups.appearance",
     aiMode: "commands.groups.aiMode",
+    extensions: "commands.groups.extensions",
   };
 
   let query = $state("");

@@ -43,6 +43,12 @@ export function buildCommands(): Command[] {
       label: t("commands.openTilePicker"),
       run: () => workspaceStore.openOverview(),
     },
+    {
+      id: "extensions.browse",
+      group: "extensions",
+      label: t("commands.openMarketplace"),
+      run: () => uiState.openMarketplace(),
+    },
   ];
 
   const root = workspaceStore.root;

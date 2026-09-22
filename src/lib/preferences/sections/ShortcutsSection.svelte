@@ -22,6 +22,10 @@
     <span>{t(SHORTCUT_LABEL_KEYS.commandPalette)}</span>
     <ShortcutRecorder action="commandPalette" />
   </div>
+  <div class="shortcut-row">
+    <span>{t(SHORTCUT_LABEL_KEYS.marketplace)}</span>
+    <ShortcutRecorder action="marketplace" />
+  </div>
   {#each ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"] as const as action (action)}
     <div class="shortcut-row">
       <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>

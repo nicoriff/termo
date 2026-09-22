@@ -91,40 +91,10 @@ pub fn find(app: &tauri::AppHandle) -> Option<(PathBuf, bool)> {
             return Some((managed, true));
         }
     }
-    candidate_dirs()
-        .into_iter()
-        .map(|dir| dir.join(exe_name()))
-        .find(|path| path.exists())
-        .map(|path| (path, false))
-}
-
-fn candidate_dirs() -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).collect())
-        .unwrap_or_default();
     // A GUI app's inherited PATH usually lacks the per-user and package
-    // manager dirs, which is exactly where oh-my-posh tends to be installed.
-    #[cfg(windows)]
-    if let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
-        dirs.push(local.join("Programs").join("oh-my-posh").join("bin"));
-        dirs.push(local.join("Microsoft").join("WindowsApps"));
-    }
-    #[cfg(not(windows))]
-    {
-        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-            dirs.push(home.join(".local").join("bin"));
-            dirs.push(home.join("bin"));
-        }
-        for dir in [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/opt/local/bin",
-            "/home/linuxbrew/.linuxbrew/bin",
-        ] {
-            dirs.push(PathBuf::from(dir));
-        }
-    }
-    dirs
+    // manager dirs, which is exactly where oh-my-posh tends to be installed
+    // (see pty/bin_search.rs).
+    super::bin_search::find_binary("oh-my-posh").map(|path| (path, false))
 }
 
 /// Hooks oh-my-posh's prompt into a new session of `shell_path`, if that

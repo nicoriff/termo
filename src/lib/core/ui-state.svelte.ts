@@ -15,6 +15,10 @@ class UiState {
   deleteLayoutTarget = $state<SavedLayout | null>(null);
   /** The "saved layouts" window, where they're picked and deleted. */
   layoutManagerOpen = $state(false);
+  /** The extensions browser, sliding in from the right. Part of
+   * `overlayOpen` below: it owns a search box, so every window-level
+   * shortcut has to stand down while it's up. */
+  marketplaceOpen = $state(false);
   /** What quitting would interrupt, when it's worth asking about (see
    * app/quit.ts). Null while no such question is on screen. */
   quitPrompt = $state<{ consoles: number; agents: number } | null>(null);
@@ -34,6 +38,7 @@ class UiState {
       this.commandPaletteOpen ||
       this.saveLayoutPromptOpen ||
       this.layoutManagerOpen ||
+      this.marketplaceOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
@@ -94,6 +99,16 @@ class UiState {
 
   closeLayoutManager(): void {
     this.layoutManagerOpen = false;
+  }
+
+  openMarketplace(): void {
+    this.marketplaceOpen = true;
+  }
+
+  closeMarketplace(): void {
+    this.marketplaceOpen = false;
+    // The search box took focus away from the console; hand it back.
+    this.refocusTerminals();
   }
 
   openTerminalContextMenu(x: number, y: number): void {

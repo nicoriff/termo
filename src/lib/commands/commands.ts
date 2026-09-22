@@ -4,10 +4,10 @@
  * Labels arrive already translated; `command-registry.svelte.ts` builds them.
  */
 
-export type CommandGroup = "navigation" | "tabs" | "layouts" | "appearance" | "aiMode";
+export type CommandGroup = "navigation" | "tabs" | "layouts" | "appearance" | "aiMode" | "extensions";
 
 /** Display order of the groups in the palette. */
-export const COMMAND_GROUPS: CommandGroup[] = ["navigation", "tabs", "layouts", "appearance", "aiMode"];
+export const COMMAND_GROUPS: CommandGroup[] = ["navigation", "tabs", "layouts", "appearance", "aiMode", "extensions"];
 
 export interface Command {
   id: string;

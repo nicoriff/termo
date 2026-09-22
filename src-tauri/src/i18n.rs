@@ -37,6 +37,13 @@ pub enum Msg<'a> {
     OhMyPoshNoBinary,
     InvalidThemeName(&'a str),
     FontFileNotFound(&'a str),
+    ClaudeCliNotFound,
+    CodexCliNotFound,
+    MarketplaceCommandFailed(&'a str),
+    InvalidComponentName(&'a str),
+    CodexHasNoPlugins,
+    McpRegistryUnreachable(&'a str),
+    McpCodexNotYetSupported,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -71,6 +78,27 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (FontFileNotFound(family), Es) => format!("No se encontró el archivo de fuente para \"{family}\""),
         (FontFileNotFound(family), En) => format!("Couldn't find the font file for \"{family}\""),
+
+        (ClaudeCliNotFound, Es) => "No se encontró el CLI de Claude Code".into(),
+        (ClaudeCliNotFound, En) => "Couldn't find the Claude Code CLI".into(),
+
+        (CodexCliNotFound, Es) => "No se encontró el CLI de Codex".into(),
+        (CodexCliNotFound, En) => "Couldn't find the Codex CLI".into(),
+
+        (MarketplaceCommandFailed(detail), Es) => format!("Falló el comando: {detail}"),
+        (MarketplaceCommandFailed(detail), En) => format!("The command failed: {detail}"),
+
+        (InvalidComponentName(name), Es) => format!("Nombre de componente inválido: \"{name}\""),
+        (InvalidComponentName(name), En) => format!("Invalid component name: \"{name}\""),
+
+        (CodexHasNoPlugins, Es) => "Codex no tiene sistema de plugins".into(),
+        (CodexHasNoPlugins, En) => "Codex has no plugin system".into(),
+
+        (McpRegistryUnreachable(detail), Es) => format!("No se pudo consultar el registro de MCP: {detail}"),
+        (McpRegistryUnreachable(detail), En) => format!("Couldn't reach the MCP registry: {detail}"),
+
+        (McpCodexNotYetSupported, Es) => "Instalar MCP servers en Codex todavía no está soportado desde Termini".into(),
+        (McpCodexNotYetSupported, En) => "Installing MCP servers into Codex isn't supported from Termini yet".into(),
     }
 }
 
@@ -88,6 +116,13 @@ mod tests {
             Msg::OhMyPoshNoBinary,
             Msg::InvalidThemeName("x"),
             Msg::FontFileNotFound("Fira Code"),
+            Msg::ClaudeCliNotFound,
+            Msg::CodexCliNotFound,
+            Msg::MarketplaceCommandFailed("exit 1"),
+            Msg::InvalidComponentName("../x"),
+            Msg::CodexHasNoPlugins,
+            Msg::McpRegistryUnreachable("timeout"),
+            Msg::McpCodexNotYetSupported,
         ]
     }
 

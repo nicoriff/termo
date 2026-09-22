@@ -11,6 +11,7 @@
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
+  import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -91,6 +92,15 @@
       uiState.openCommandPalette();
       return;
     }
+    if (
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("marketplace"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.openMarketplace();
+      return;
+    }
 
     if (!workspaceStore.overviewOpen) {
       const opensOverview =
@@ -166,6 +176,9 @@
     {/if}
     {#if uiState.quitPrompt}
       <QuitDialog />
+    {/if}
+    {#if uiState.marketplaceOpen}
+      <MarketplacePanel />
     {/if}
     {#if uiState.terminalContextMenu}
       <TerminalContextMenu />

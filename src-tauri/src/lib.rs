@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod i18n;
 mod layouts;
+mod marketplace;
 mod pty;
 mod state;
 
@@ -79,6 +80,14 @@ pub fn run() {
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,
+            commands::marketplace_commands::marketplace_status,
+            commands::marketplace_commands::list_catalog,
+            commands::marketplace_commands::install_item,
+            commands::marketplace_commands::uninstall_item,
+            commands::marketplace_commands::invalidate_catalog,
+            commands::marketplace_commands::search_mcp_registry,
+            commands::marketplace_commands::install_mcp_item,
+            commands::marketplace_commands::uninstall_mcp_item,
             commands::agent_hook_commands::status_line_installed,
             commands::agent_hook_commands::install_status_line,
             commands::agent_hook_commands::uninstall_status_line,
