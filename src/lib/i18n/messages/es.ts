@@ -103,7 +103,6 @@ export const es = {
     installWarning: "Instalar descarga y ejecuta código de terceros en tu máquina.",
     paramsTitle: "Parámetros de conexión",
     paramRequired: "obligatorio",
-    codexMcpComingSoon: "Instalar MCP servers en Codex todavía no está soportado desde Termini.",
     loadingMcp: "Buscando en el registro de MCP...",
     loadMoreMcp: "Cargar más MCP servers",
     approvalTitle: "Este marketplace pide ejecutar un comando",

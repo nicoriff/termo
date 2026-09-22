@@ -104,7 +104,6 @@ export const en: Messages = {
     installWarning: "Installing downloads and runs third-party code on your machine.",
     paramsTitle: "Connection parameters",
     paramRequired: "required",
-    codexMcpComingSoon: "Installing MCP servers into Codex isn't supported from Termini yet.",
     loadingMcp: "Searching the MCP registry...",
     loadMoreMcp: "Load more MCP servers",
     approvalTitle: "This marketplace asks to run a command",

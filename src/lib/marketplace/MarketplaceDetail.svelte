@@ -137,8 +137,6 @@
   />
   {#if item.class === "plugin"}
     <p class="hint">{t("marketplace.codexHasNoPlugins")}</p>
-  {:else if item.class === "mcp"}
-    <p class="hint">{t("marketplace.codexMcpComingSoon")}</p>
   {/if}
 
   {#if item.class === "mcp" && paramSpecs.length > 0 && !approval}
