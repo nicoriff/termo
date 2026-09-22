@@ -52,6 +52,10 @@ libc = "0.2"
 window-vibrancy = "0.6"
 
 
+# Full debuginfo made target/debug grow past 15 GB; file:line in backtraces is enough.
+[profile.dev]
+debug = "line-tables-only"
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
