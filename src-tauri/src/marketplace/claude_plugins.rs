@@ -169,8 +169,11 @@ fn string_list(entry: Option<&Value>, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// `installed` entries are matched by id when they carry one and by name
-/// otherwise — the CLI has used both shapes.
+/// `installed` entries are matched by `<name>@<marketplace>` id — what the
+/// CLI actually calls `id` here (`available` entries call the same shape
+/// `pluginId`; the two arrays don't agree on a field name). `pluginId` and a
+/// bare string are also accepted, for older CLI versions that used one of
+/// those instead.
 fn installed_ids(cli: &Value) -> Vec<String> {
     cli.get("installed")
         .and_then(Value::as_array)
@@ -179,7 +182,8 @@ fn installed_ids(cli: &Value) -> Vec<String> {
                 .iter()
                 .filter_map(|item| {
                     item.as_str().map(str::to_string).or_else(|| {
-                        item.get("pluginId")
+                        item.get("id")
+                            .or_else(|| item.get("pluginId"))
                             .or_else(|| item.get("name"))
                             .and_then(Value::as_str)
                             .map(str::to_string)
@@ -194,7 +198,35 @@ fn installed_ids(cli: &Value) -> Vec<String> {
 /// join is testable without a `claude` binary or a real marketplace clone.
 pub fn merge_catalog(cli: &Value, manifests: &HashMap<String, Value>) -> Vec<CatalogItem> {
     let installed = installed_ids(cli);
-    let available = cli.get("available").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut available = cli.get("available").and_then(Value::as_array).cloned().unwrap_or_default();
+
+    // `available` leaves out whatever is already installed, so those only
+    // exist in `installed` — which carries no name or marketplace of its
+    // own, just the `<name>@<marketplace>` id. Rebuilt into the `available`
+    // shape here; the manifest on disk fills in the description and the rest.
+    let listed: Vec<String> = available
+        .iter()
+        .filter_map(|entry| entry.get("pluginId").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    for id in &installed {
+        if listed.contains(id) {
+            continue;
+        }
+        let Some((name, marketplace)) = id.split_once('@') else { continue };
+        let version = cli
+            .get("installed")
+            .and_then(Value::as_array)
+            .and_then(|items| items.iter().find(|item| item.get("id").and_then(Value::as_str) == Some(id)))
+            .and_then(|item| item.get("version"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        available.push(serde_json::json!({
+            "pluginId": id,
+            "name": name,
+            "marketplaceName": marketplace,
+            "version": version,
+        }));
+    }
 
     available
         .iter()
@@ -294,7 +326,11 @@ mod tests {
 
     fn cli_fixture() -> Value {
         json!({
-            "installed": [{ "pluginId": "box@claude-plugins-official", "name": "box" }],
+            // The real CLI's installed entries carry `id`, never `pluginId`
+            // or `name` — only `available` entries use those. Mismatching
+            // this field name is exactly what made every plugin show as
+            // never installed (see installed_ids's doc comment).
+            "installed": [{ "id": "box@claude-plugins-official", "version": "abc123", "scope": "user", "enabled": true }],
             "available": [
                 {
                     "pluginId": "box@claude-plugins-official",
@@ -415,6 +451,52 @@ mod tests {
         assert!(solo.installed_in.is_empty());
         // No plugin is ever installable into Codex.
         assert_eq!(box_item.targets, vec![AgentTarget::Claude]);
+    }
+
+    #[test]
+    fn an_installed_plugin_missing_from_available_is_still_listed() {
+        // The real CLI drops installed plugins from `available` entirely, so
+        // without this they'd vanish from the panel the moment they're
+        // installed, and never show as installed at all.
+        let cli = json!({
+            "installed": [{ "id": "box@claude-plugins-official", "version": "abc123" }],
+            "available": [{
+                "pluginId": "solo-cli@claude-plugins-official",
+                "name": "solo-cli",
+                "marketplaceName": "claude-plugins-official"
+            }]
+        });
+        let items = merge_catalog(&cli, &manifest_fixture());
+
+        assert_eq!(items.len(), 2);
+        let box_item = items.iter().find(|item| item.name == "box").unwrap();
+        assert_eq!(box_item.installed_in, vec![AgentTarget::Claude]);
+        assert_eq!(box_item.id, "plugin:box@claude-plugins-official");
+        assert_eq!(box_item.version.as_deref(), Some("abc123"));
+        // Nothing in `installed` describes it; the manifest does.
+        assert_eq!(box_item.description, "desde el manifiesto");
+        assert_eq!(box_item.category.as_deref(), Some("productivity"));
+    }
+
+    #[test]
+    fn reads_the_installed_ids_shape_the_real_cli_uses() {
+        // `claude plugin list --json --available` calls this field `id`,
+        // never `pluginId` or `name` (those only appear on `available`
+        // entries) — this regression is exactly why nothing ever showed as
+        // installed.
+        assert_eq!(
+            installed_ids(&json!({ "installed": [{ "id": "box@official", "version": "1", "enabled": true }] })),
+            vec!["box@official".to_string()]
+        );
+    }
+
+    #[test]
+    fn also_accepts_the_older_installed_id_shapes() {
+        assert_eq!(
+            installed_ids(&json!({ "installed": [{ "pluginId": "box@official", "name": "box" }] })),
+            vec!["box@official".to_string()]
+        );
+        assert_eq!(installed_ids(&json!({ "installed": ["box@official"] })), vec!["box@official".to_string()]);
     }
 
     #[test]
