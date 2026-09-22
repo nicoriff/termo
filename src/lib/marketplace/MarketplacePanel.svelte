@@ -21,8 +21,22 @@
   ];
 
   let query = $state("");
+  /** What the list is actually showing results for — set from `query` on Enter. */
+  let submittedQuery = $state("");
   let highlighted = $state(0);
-  let selected = $state<CatalogItem | null>(null);
+  // By id, not by object: install/uninstall replace catalogStore.items with
+  // fresh objects (see refreshAfterChange in catalog-store.svelte.ts), so
+  // holding the object itself would leave the open detail view stuck
+  // showing pre-install state (still-empty installedIn) even though the
+  // install went through — looking closed but actually just stale.
+  let selectedId = $state<string | null>(null);
+  const selected = $derived<CatalogItem | null>(
+    selectedId === null
+      ? null
+      : (catalogStore.items.find((item) => item.id === selectedId) ??
+          catalogStore.mcpItems.find((item) => item.id === selectedId) ??
+          null),
+  );
   let classFilter = $state<ComponentClass | null>(null);
   let installedOnly = $state(false);
   let withSkillsOnly = $state(false);
@@ -42,30 +56,34 @@
   // registry already filtered its results server-side, so those are only
   // run through the facet checks, never re-scored against the query text —
   // its own idea of a match doesn't have to agree with scoreItem's.
-  const localMatches = $derived(matchItems(catalogStore.items, query, facets, sort));
+  const localMatches = $derived(matchItems(catalogStore.items, submittedQuery, facets, sort));
   const mcpVisible = $derived(showsMcp ? catalogStore.mcpItems.filter((item) => matchesFacets(item, facets)) : []);
   const matches = $derived([...localMatches, ...mcpVisible]);
   const groups = $derived(groupItems(matches));
 
   void catalogStore.load();
 
-  // Searched fresh on every query, debounced — the registry is a live
-  // network call, not something to hit on every keystroke. An empty query
-  // fetches immediately (the "browse everything" first page, on open).
+  // Both the local filter and the registry search run on what was submitted
+  // with Enter, not on every keystroke. Starts empty, so opening the panel
+  // still fetches the "browse everything" first page right away.
   $effect(() => {
-    const q = query;
-    const timer = setTimeout(() => void catalogStore.searchMcp(q), q === "" ? 0 : 250);
-    return () => clearTimeout(timer);
+    void catalogStore.searchMcp(submittedQuery);
+  });
+
+  // Clearing the box is the one change that doesn't wait for Enter: there's
+  // nothing left to type, so it goes straight back to the full list.
+  $effect(() => {
+    if (query.trim() === "") submittedQuery = "";
   });
 
   $effect(() => {
     if (!selected) inputEl?.focus();
   });
 
-  // Typing restarts the selection at the top, so Enter always opens the best
-  // match rather than whatever row the previous query left highlighted.
+  // A new search restarts the selection at the top, so Enter always opens the
+  // best match rather than whatever row the previous query left highlighted.
   $effect(() => {
-    void query;
+    void submittedQuery;
     void classFilter;
     highlighted = 0;
   });
@@ -80,7 +98,7 @@
     event.stopPropagation();
     if (event.key === "Escape") {
       // Escape backs out one level at a time: detail, then list, then shut.
-      if (selected) selected = null;
+      if (selected) selectedId = null;
       else close();
     } else if (selected) {
       return;
@@ -89,8 +107,14 @@
     } else if (event.key === "ArrowUp") {
       highlighted = matches.length === 0 ? 0 : (highlighted - 1 + matches.length) % matches.length;
     } else if (event.key === "Enter") {
-      const item = matches[highlighted];
-      if (item) selected = item;
+      // Enter searches what's typed; once that's what the list shows, the
+      // next Enter opens the highlighted result.
+      if (query.trim() !== submittedQuery) {
+        submittedQuery = query.trim();
+      } else {
+        const item = matches[highlighted];
+        if (item) selectedId = item.id;
+      }
     } else {
       return;
     }
@@ -128,7 +152,7 @@
       <MarketplaceDetail
         item={selected}
         canInstall={catalogStore.claudeCliAvailable}
-        onback={() => (selected = null)}
+        onback={() => (selectedId = null)}
       />
     {/key}
   {:else}
@@ -187,7 +211,7 @@
       <MarketplaceResults
         {groups}
         {highlighted}
-        onpick={(item) => (selected = item)}
+        onpick={(item) => (selectedId = item.id)}
         onhighlight={(index) => (highlighted = index)}
       />
     {/if}
