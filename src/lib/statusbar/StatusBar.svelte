@@ -62,6 +62,16 @@
     });
   });
 
+  // Claude only: Codex reports no cost for a subscription, so the item
+  // simply isn't there for it.
+  const costUsd = $derived(activeTabId ? (agentStatusStore.byTab[activeTabId]?.costUsd ?? null) : null);
+
+  /** Cents are enough for a session total, but a session that has only
+   * just started would read "$0.00" as if it were free. */
+  function formatUsd(value: number): string {
+    return value > 0 && value < 0.01 ? "<$0.01" : `$${value.toFixed(2)}`;
+  }
+
   /** The gauge can't run past its track; the number still shows what was
    * reported (a spend limit can go over 100%). */
   function clamp(percent: number): number {
@@ -97,6 +107,11 @@
              vanishing from the bar as if the console had none. -->
         <span class="plan-pending">{t("statusBar.planPending")}</span>
       {/each}
+    </span>
+  {/if}
+  {#if costUsd !== null}
+    <span class="status-item status-cost" title={t("statusBar.costHint")}>
+      {t("statusBar.cost", { value: formatUsd(costUsd) })}
     </span>
   {/if}
   {#if memoryBytes !== null}
@@ -180,6 +195,10 @@
     text-align: center;
     font-size: 10px;
     line-height: 13px;
+  }
+
+  .status-cost {
+    margin-left: 12px;
   }
 
   .status-memory {

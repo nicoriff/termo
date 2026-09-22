@@ -31,6 +31,8 @@ export const es = {
     windowDays: "{days} d",
     planWindow: "uso",
     planPending: "sin datos todavía",
+    cost: "Costo: {value}",
+    costHint: "Costo en USD de la sesión de Claude Code en la consola activa, según lo informa Claude Code",
     planHint:
         "Porcentaje del límite del plan ya consumido por esta consola, en cada ventana que informa el agente",
     memoryHint: "Memoria de la consola activa y de los procesos que corren en ella",

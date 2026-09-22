@@ -33,6 +33,8 @@ export const en: Messages = {
     windowDays: "{days}d",
     planWindow: "used",
     planPending: "no data yet",
+    cost: "Cost: {value}",
+    costHint: "USD cost of the Claude Code session in the active console, as reported by Claude Code",
     planHint: "Share of the plan limit this console has already used, in each window the agent reports",
     memoryHint: "Memory used by the active console and the processes running in it",
   },
