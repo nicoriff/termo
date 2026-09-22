@@ -276,11 +276,11 @@
 
 <style>
   /* position:fixed, above everything the content area draws (tiles sit at
-     z-index 8, the palette at 400). */
+     z-index 8, the palette at 400, the marketplace panel at 599/600). */
   .app-menu-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 499;
+    z-index: 601;
   }
 
   /* Copy with nothing selected. */
@@ -299,7 +299,7 @@
 
   .app-menu {
     position: fixed;
-    z-index: 500;
+    z-index: 602;
     width: 230px;
     display: flex;
     flex-direction: column;
@@ -313,7 +313,7 @@
 
   .app-submenu {
     position: fixed;
-    z-index: 501;
+    z-index: 603;
     width: 240px;
     max-height: 260px;
     overflow-y: auto;
