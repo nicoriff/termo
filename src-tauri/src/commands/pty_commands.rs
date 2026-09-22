@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::config::store;
 use crate::pty::{
-    agent_hooks, bash_color_env, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, zsh_init,
+    agent_hooks, bash_color_env, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys, zsh_init,
     PtyEvent, ShellInfo,
 };
 use crate::state::AppState;
@@ -69,6 +69,7 @@ pub fn pty_spawn(
         zsh_lines.extend(zsh_init::CWD_REPORT_LINES.iter().map(|line| line.to_string()));
         let _ = zsh_init::apply(&app, &zsh_lines, &mut env);
     }
+    powershell_keys::apply(&path, &mut args);
     // Last: its prompt wrapper has to call whatever prompt the steps above
     // installed (see cwd_report).
     cwd_report::apply(&path, &mut args, &mut env);

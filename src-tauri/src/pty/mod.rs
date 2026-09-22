@@ -9,6 +9,7 @@ pub mod cwd_report;
 mod manager;
 mod memory;
 pub mod oh_my_posh;
+pub mod powershell_keys;
 mod session;
 mod shell_detect;
 pub mod status_line;
