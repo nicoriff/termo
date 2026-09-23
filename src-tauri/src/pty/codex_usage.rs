@@ -9,9 +9,9 @@
 //! numbers are already on disk — this reads the last one back on every hook
 //! event and records it as that console's snapshot.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -23,18 +23,41 @@ use super::status_line::{write_snapshot, StatusSnapshot, UsageWindow};
 /// reading a long conversation back in full.
 const TAIL_BYTES: u64 = 512 * 1024;
 
+/// Where Codex keeps its own state — `$CODEX_HOME`, or `~/.codex` when
+/// unset, exactly how `agent_hooks::AgentTool::Codex` resolves it.
+fn codex_home() -> Option<PathBuf> {
+    std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(".codex")))
+}
+
+/// Refuses a `transcript_path` outside `home`. Codex's own hook mechanism is
+/// the only thing that sets this field today, not a plugin or MCP server —
+/// but it's the one place this file opens and reads something named
+/// entirely by a JSON field, so it costs nothing to keep it inside Codex's
+/// own directory rather than trusting it as an arbitrary path to read.
+/// `canonicalize` also closes off a `..` component or a symlink pointing
+/// back out.
+fn is_within(path: &Path, home: &Path) -> bool {
+    let (Ok(home), Ok(resolved)) = (fs::canonicalize(home), fs::canonicalize(path)) else {
+        return false;
+    };
+    resolved.starts_with(home)
+}
+
 /// Records the usage Codex reported for `session`'s console, if its rollout
 /// has any yet. Called for every Codex hook event, and quietly does nothing
 /// when the payload has no transcript or the file has no usage in it: the
 /// hook must never fail (see agent_hooks::run_hook_cli).
 pub fn record(dir: &Path, session: &str, payload: &Value) {
-    let Some(snapshot) = snapshot_from(payload) else {
+    let Some(home) = codex_home() else { return };
+    let Some(snapshot) = snapshot_from(payload, &home) else {
         return;
     };
     let _ = write_snapshot(dir, session, &snapshot);
 }
 
-fn snapshot_from(payload: &Value) -> Option<StatusSnapshot> {
+fn snapshot_from(payload: &Value, codex_home: &Path) -> Option<StatusSnapshot> {
     let text = |key: &str| {
         payload
             .get(key)
@@ -43,6 +66,9 @@ fn snapshot_from(payload: &Value) -> Option<StatusSnapshot> {
             .map(str::to_owned)
     };
     let transcript = text("transcript_path")?;
+    if !is_within(Path::new(&transcript), codex_home) {
+        return None;
+    }
     let usage = last_token_count(Path::new(&transcript))?;
 
     let number = |pointer: &str| usage.pointer(pointer).and_then(Value::as_f64);
@@ -126,7 +152,7 @@ mod tests {
     #[test]
     fn reads_the_plan_window_codex_last_reported() {
         let (path, payload) = rollout(&[r#"{"type":"event_msg","payload":{"type":"agent_message"}}"#, TOKEN_COUNT]);
-        let snapshot = snapshot_from(&payload).unwrap();
+        let snapshot = snapshot_from(&payload, &std::env::temp_dir()).unwrap();
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(snapshot.tool.as_deref(), Some("codex"));
@@ -144,7 +170,7 @@ mod tests {
     fn the_newest_reading_wins() {
         let newer = TOKEN_COUNT.replace("18.0", "42.0");
         let (path, payload) = rollout(&[TOKEN_COUNT, &newer]);
-        let snapshot = snapshot_from(&payload).unwrap();
+        let snapshot = snapshot_from(&payload, &std::env::temp_dir()).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(snapshot.plan_windows[0].percentage, 42.0);
     }
@@ -154,13 +180,45 @@ mod tests {
     #[test]
     fn a_rollout_without_usage_reports_nothing() {
         let (path, payload) = rollout(&[r#"{"type":"event_msg","payload":{"type":"agent_message"}}"#]);
-        let snapshot = snapshot_from(&payload);
+        let snapshot = snapshot_from(&payload, &std::env::temp_dir());
         let _ = std::fs::remove_file(&path);
         assert!(snapshot.is_none());
     }
 
     #[test]
     fn a_payload_without_a_transcript_reports_nothing() {
-        assert!(snapshot_from(&serde_json::json!({ "session_id": "x" })).is_none());
+        assert!(snapshot_from(&serde_json::json!({ "session_id": "x" }), &std::env::temp_dir()).is_none());
+    }
+
+    /// The hook payload names its own transcript; Codex's own hook mechanism
+    /// is the only thing that sets this field today, but this is the one
+    /// place this file opens and reads something a JSON field named. A
+    /// rollout genuinely outside Codex's own directory is refused, however
+    /// well-formed its content otherwise is.
+    #[test]
+    fn refuses_a_transcript_path_outside_codex_home() {
+        let home = std::env::temp_dir().join(format!("termini-codexhome-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+
+        // rollout() writes under the bare system temp dir, not under `home`.
+        let (outside_path, payload) = rollout(&[TOKEN_COUNT]);
+        assert!(snapshot_from(&payload, &home).is_none(), "a transcript outside `home` must be refused");
+
+        // The identical content, now genuinely under `home`, is accepted.
+        let inside_path = home.join("session.jsonl");
+        fs::copy(&outside_path, &inside_path).unwrap();
+        let mut inside_payload = payload;
+        inside_payload["transcript_path"] = serde_json::json!(inside_path.to_string_lossy());
+        assert!(snapshot_from(&inside_payload, &home).is_some());
+
+        let _ = fs::remove_file(&outside_path);
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_transcript_path_that_does_not_exist_cannot_be_canonicalized_and_is_refused() {
+        let home = std::env::temp_dir();
+        let payload = serde_json::json!({ "transcript_path": home.join("no-such-file.jsonl").to_string_lossy() });
+        assert!(snapshot_from(&payload, &home).is_none());
     }
 }
