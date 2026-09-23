@@ -7,13 +7,14 @@ import { agentStatusStore } from "../ai-mode/agent-status-store.svelte";
 import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
-import { isMac } from "../core/platform";
+import { isMac, isWindows } from "../core/platform";
 import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
 import { eventMatchesKeybinding } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
+import { neutralizePaintedControls } from "./conpty-controls";
 import { OutputHighlighter } from "./output-highlighter";
 import { parseOsc7 } from "./osc7";
 import { tabCwd } from "./tab-cwd.svelte";
@@ -289,7 +290,8 @@ export class TerminalInstance {
       },
       onData: (bytes) => {
         if (this.disposed) return;
-        const text = this.decoder.decode(bytes, { stream: true });
+        const decoded = this.decoder.decode(bytes, { stream: true });
+        const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
         this.term.write(themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text);
       },
       onExit: (code) => {
