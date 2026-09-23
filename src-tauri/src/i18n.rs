@@ -44,6 +44,8 @@ pub enum Msg<'a> {
     CodexHasNoPlugins,
     McpRegistryUnreachable(&'a str),
     McpCodexHeadersUnsupported,
+    UnsafeMcpLaunchValue(&'a str),
+    UnsafeMcpRemoteUrl(&'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -101,6 +103,16 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
             "Este servidor necesita encabezados personalizados, y el CLI de Codex todavía no tiene forma de recibirlos (solo admite un token de portador leído de una variable de entorno)".into(),
         (McpCodexHeadersUnsupported, En) =>
             "This server needs custom headers, and the Codex CLI has no way to take them yet (it only accepts a bearer token read from an environment variable)".into(),
+
+        (UnsafeMcpLaunchValue(value), Es) =>
+            format!("El registro de MCP declaró un valor de lanzamiento con forma de opción de línea de comandos (\"{value}\"): no se instala, por seguridad"),
+        (UnsafeMcpLaunchValue(value), En) =>
+            format!("The MCP registry declared a launch value shaped like a command-line flag (\"{value}\"): not installing it, for safety"),
+
+        (UnsafeMcpRemoteUrl(url), Es) =>
+            format!("La URL de este servidor MCP no es http(s) (\"{url}\"): no se instala, por seguridad"),
+        (UnsafeMcpRemoteUrl(url), En) =>
+            format!("This MCP server's URL isn't http(s) (\"{url}\"): not installing it, for safety"),
     }
 }
 
@@ -125,6 +137,8 @@ mod tests {
             Msg::CodexHasNoPlugins,
             Msg::McpRegistryUnreachable("timeout"),
             Msg::McpCodexHeadersUnsupported,
+            Msg::UnsafeMcpLaunchValue("-c"),
+            Msg::UnsafeMcpRemoteUrl("file:///etc/passwd"),
         ]
     }
 
