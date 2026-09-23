@@ -111,6 +111,15 @@ pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoad
         (PREFERENCES, PageLoadEvent::Started) => {
             PREFERENCES_READY.store(false, std::sync::atomic::Ordering::SeqCst)
         }
+        // A reload (dev HMR full-reload, crash recovery) throws away every
+        // JS object that owned a PTY session — the tab tree, pty-registry.ts
+        // — with no chance for their normal teardown (TerminalInstance.dispose,
+        // which calls killPty) to run. Without this, each one orphans its
+        // shell process, and anything running under it, for the rest of the
+        // app's lifetime.
+        ("main", PageLoadEvent::Started) => {
+            webview.app_handle().state::<crate::state::AppState>().pty.kill_all();
+        }
         ("main", PageLoadEvent::Finished) => {
             let app = webview.app_handle().clone();
             // Off the main thread: this callback runs on it, and building a
