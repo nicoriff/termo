@@ -7,6 +7,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use tauri::ipc::Channel;
 use uuid::Uuid;
 
+use super::recorder::Recorder;
 use super::PtyEvent;
 
 pub struct PtySession {
@@ -22,6 +23,8 @@ pub struct PtySession {
     // Stops the foreground-process poller thread (see spawn()) once the
     // session is killed — otherwise it would keep polling a dead PTY forever.
     stop: Arc<AtomicBool>,
+    // Only when TERMINI_PTY_RECORD is set (see recorder.rs).
+    recorder: Option<Arc<Recorder>>,
 }
 
 impl PtySession {
@@ -119,6 +122,8 @@ impl PtySession {
         let child = Arc::new(Mutex::new(child));
         let master_arc: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(pair.master));
         let stop = Arc::new(AtomicBool::new(false));
+        let recorder = Recorder::from_env(id, cols, rows).map(Arc::new);
+        let reader_recorder = recorder.clone();
 
         // Cloned before the move below consumes `channel` — Channel<T> is a
         // cheap Clone (it's just a dispatcher handle), so both threads can
@@ -139,6 +144,9 @@ impl PtySession {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        if let Some(recorder) = &reader_recorder {
+                            recorder.output(&buf[..n]);
+                        }
                         if forwarding {
                             let data = STANDARD.encode(&buf[..n]);
                             forwarding = reader_channel.send(PtyEvent::Data { data }).is_ok();
@@ -198,6 +206,7 @@ impl PtySession {
             pid,
             prompt_redraw,
             stop,
+            recorder,
         })
     }
 
@@ -206,6 +215,9 @@ impl PtySession {
     }
 
     pub fn write(&self, data: &[u8]) -> anyhow::Result<()> {
+        if let Some(recorder) = &self.recorder {
+            recorder.input(data);
+        }
         let mut writer = self.writer.lock().unwrap();
         writer.write_all(data)?;
         writer.flush()?;
@@ -213,6 +225,9 @@ impl PtySession {
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
+        if let Some(recorder) = &self.recorder {
+            recorder.resize(cols, rows);
+        }
         self.master.lock().unwrap().resize(PtySize {
             rows,
             cols,
