@@ -126,6 +126,17 @@ export const es = {
     claudeCliMissing: "No se encontró el CLI de Claude Code, así que sólo se puede navegar el catálogo.",
     claudeCliFailed: "El CLI de Claude Code no respondió; se muestra lo que hay en disco.",
   },
+  about: {
+    open: "Acerca de Termini",
+    title: "Acerca de Termini",
+    description:
+      "Una terminal con pestañas y paneles divididos, pensada para trabajar con agentes de IA como Claude Code y Codex.",
+    version: "Versión {version}",
+    system: "Sistema",
+    copy: "Copiar información",
+    copied: "Copiado",
+    close: "Cerrar",
+  },
   layouts: {
     save: "Guardar layout...",
     restore: "Restaurar layout",

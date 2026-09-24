@@ -11,6 +11,17 @@ La app es bilingüe (español / inglés). **Todo texto visible nuevo tiene que e
 
 El idioma se elige en Preferencias → General (Sistema / Español / English) y se guarda en `AppConfig.language`.
 
+## Versión
+
+La versión de la app se define **solo** en `package.json` (semver: `MAYOR.MENOR.PARCHE`). `tauri.conf.json` la lee de ahí (`"version": "../package.json"`) y se muestra en Acerca de. Para subirla:
+
+```
+npm version patch   # arreglos        0.1.0 → 0.1.1
+npm version minor   # funciones nuevas 0.1.0 → 0.2.0
+```
+
+`npm version` corre `scripts/sync-version.mjs`, que copia la versión a `src-tauri/Cargo.toml` y `Cargo.lock`, y crea el commit y el tag `vX.Y.Z`. Requiere el árbol de trabajo limpio. No editar la versión a mano en `Cargo.toml` ni en `tauri.conf.json`.
+
 ## Entorno de desarrollo (Windows)
 
 Antes de `cargo` o `npm run tauri *`, hacer dot-source de `dev-env.ps1`.

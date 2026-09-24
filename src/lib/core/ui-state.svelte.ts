@@ -15,6 +15,8 @@ class UiState {
   deleteLayoutTarget = $state<SavedLayout | null>(null);
   /** The "saved layouts" window, where they're picked and deleted. */
   layoutManagerOpen = $state(false);
+  /** The "About Termini" window, opened from the title bar menu. */
+  aboutOpen = $state(false);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -38,6 +40,7 @@ class UiState {
       this.commandPaletteOpen ||
       this.saveLayoutPromptOpen ||
       this.layoutManagerOpen ||
+      this.aboutOpen ||
       this.marketplaceOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
@@ -99,6 +102,14 @@ class UiState {
 
   closeLayoutManager(): void {
     this.layoutManagerOpen = false;
+  }
+
+  openAbout(): void {
+    this.aboutOpen = true;
+  }
+
+  closeAbout(): void {
+    this.aboutOpen = false;
   }
 
   openMarketplace(): void {

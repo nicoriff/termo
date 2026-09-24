@@ -10,6 +10,7 @@
   import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
+  import AboutDialog from "./AboutDialog.svelte";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -167,6 +168,9 @@
     {/if}
     {#if uiState.layoutManagerOpen}
       <LayoutManagerDialog />
+    {/if}
+    {#if uiState.aboutOpen}
+      <AboutDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

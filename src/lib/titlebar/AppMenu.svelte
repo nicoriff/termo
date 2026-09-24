@@ -120,6 +120,11 @@
     uiState.requestRestoreLayout(layout);
   }
 
+  function about() {
+    onclose();
+    uiState.openAbout();
+  }
+
   function quit() {
     onclose();
     // Asks first if anything is still running (see app/quit.ts).
@@ -227,6 +232,16 @@
   </button>
 
   <div class="app-menu-divider"></div>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={about}>
+    <!-- An "i" in a circle: information about the app. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1" />
+      <line x1="6" y1="5" x2="6" y2="9" stroke="currentColor" stroke-width="1" />
+      <circle cx="6" cy="3.3" r="0.7" fill="currentColor" />
+    </svg>
+    <span class="app-menu-text">{t("about.open")}</span>
+  </button>
 
   <button class="app-menu-item danger" role="menuitem" onmouseenter={closeSubmenus} onclick={quit}>
     <!-- Power. -->

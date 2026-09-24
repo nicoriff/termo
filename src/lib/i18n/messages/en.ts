@@ -127,6 +127,16 @@ export const en: Messages = {
     claudeCliMissing: "The Claude Code CLI wasn't found, so the catalog is browse-only.",
     claudeCliFailed: "The Claude Code CLI didn't answer; showing what's on disk.",
   },
+  about: {
+    open: "About Termini",
+    title: "About Termini",
+    description: "A terminal with tabs and split panes, built for working with AI agents like Claude Code and Codex.",
+    version: "Version {version}",
+    system: "System",
+    copy: "Copy info",
+    copied: "Copied",
+    close: "Close",
+  },
   layouts: {
     save: "Save layout...",
     restore: "Restore layout",
