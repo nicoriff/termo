@@ -181,9 +181,6 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
     .resizable(true)
     .maximizable(false)
     .transparent(true)
-    // It's a settings window for the console behind it: sending it behind that
-    // console while you read it is never what you wanted.
-    .always_on_top(true)
     // Revealed by show_and_focus once the page is ready; showing it earlier
     // flashes a white, natively framed window and then the default config.
     .visible(false);
@@ -200,6 +197,15 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
         .traffic_light_position(tauri::LogicalPosition::new(14.0, 16.0));
     #[cfg(not(target_os = "macos"))]
     let builder = builder.decorations(false);
+
+    // It's a settings window for the console behind it, so it has to stay in
+    // front of that console — but only that one. always_on_top kept it over
+    // every other app too; owned by the main window, it stays above Termini
+    // alone and goes behind whatever window the user switches to.
+    let builder = match app.get_webview_window("main") {
+        Some(main) => builder.parent(&main).map_err(|err| err.to_string())?,
+        None => builder,
+    };
 
     let window = builder.build().map_err(|err| err.to_string())?;
 
