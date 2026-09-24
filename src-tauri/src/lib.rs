@@ -62,6 +62,8 @@ pub fn run() {
             commands::pty_commands::pty_kill,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
+            commands::folder_commands::list_folder_roots,
+            commands::folder_commands::list_folders,
             commands::window_commands::minimize_window,
             commands::window_commands::toggle_maximize,
             commands::window_commands::close_window,

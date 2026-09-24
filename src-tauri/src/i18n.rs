@@ -46,6 +46,8 @@ pub enum Msg<'a> {
     McpCodexHeadersUnsupported,
     UnsafeMcpLaunchValue(&'a str),
     UnsafeMcpRemoteUrl(&'a str),
+    /// (folder, OS error)
+    FolderUnreadable(&'a str, &'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -113,6 +115,9 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
             format!("La URL de este servidor MCP no es http(s) (\"{url}\"): no se instala, por seguridad"),
         (UnsafeMcpRemoteUrl(url), En) =>
             format!("This MCP server's URL isn't http(s) (\"{url}\"): not installing it, for safety"),
+
+        (FolderUnreadable(folder, error), Es) => format!("No se puede abrir {folder}: {error}"),
+        (FolderUnreadable(folder, error), En) => format!("Can't open {folder}: {error}"),
     }
 }
 
@@ -139,6 +144,7 @@ mod tests {
             Msg::McpCodexHeadersUnsupported,
             Msg::UnsafeMcpLaunchValue("-c"),
             Msg::UnsafeMcpRemoteUrl("file:///etc/passwd"),
+            Msg::FolderUnreadable("C:\\x", "access denied"),
         ]
     }
 

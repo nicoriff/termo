@@ -15,6 +15,11 @@
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
   import type { AgentSession } from "$lib/core/agent-sessions-client";
+  import { marketplaceStatus } from "$lib/core/marketplace-client";
+  import { uiState } from "$lib/core/ui-state.svelte";
+  import type { ToolId } from "$lib/ai-mode/pattern-table";
+  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
+  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
@@ -39,7 +44,7 @@
   // clamp against the window bounds deterministically, without waiting on a
   // post-render measurement of the panel's actual size.
   const SHELL_PICKER_WIDTH = 200;
-  const SHELL_PICKER_MAX_HEIGHT = 240;
+  const SHELL_PICKER_MAX_HEIGHT = 300;
   const SHELL_PICKER_MARGIN = 8;
   // Wider than the picker: these rows carry an agent name plus a folder.
   const RECENT_SUBMENU_WIDTH = 240;
@@ -77,6 +82,27 @@
         .then((list) => (shells = list))
         .catch(() => (shellsRequested = false));
     }
+    // Checked on every open, not once: installing Claude or Codex while
+    // Termini runs should light its entry up without a restart.
+    if (shellPickerOpen) {
+      marketplaceStatus()
+        .then((status) => (agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli }))
+        .catch(() => {});
+    }
+  }
+
+  /** Which agent CLIs are installed; null until the first check answers,
+   * during which both entries stay usable rather than flicker off. */
+  let agentClis = $state<Record<ToolId, boolean> | null>(null);
+  const AGENTS: ToolId[] = ["claude", "codex"];
+
+  /** Asks where to run it first (see AgentLaunchDialog), offering the folder
+   * this tile's console is in right now. */
+  function pickAgent(tool: ToolId) {
+    const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
+    const here = active ? (tabCwd.byTab[active.id] ?? active.cwd ?? null) : null;
+    closeShellPicker();
+    uiState.openAgentLaunch(tool, tile.id, here);
   }
 
   function closeShellPicker() {
@@ -350,12 +376,29 @@
             onmouseenter={() => (recentOpen = false)}
             onclick={() => pickShell(shell)}
           >
-            {shell.display_name}
+            <ConsoleIcon kind={shell.id} />
+            <span class="shell-picker-label">{shell.display_name}</span>
           </button>
         {/each}
         {#if shells.length === 0}
           <p class="shell-picker-empty">{t("tabs.loadingShells")}</p>
         {/if}
+        <div class="shell-picker-divider"></div>
+        {#each AGENTS as tool (tool)}
+          {@const installed = agentClis?.[tool] ?? true}
+          <button
+            class="shell-picker-item"
+            disabled={!installed}
+            onmouseenter={() => (recentOpen = false)}
+            onclick={() => pickAgent(tool)}
+          >
+            <ConsoleIcon kind={tool} />
+            <span class="shell-picker-label">{TOOL_DISPLAY_NAMES[tool]}</span>
+            {#if !installed}
+              <span class="shell-picker-note">{t("tabs.notInstalled")}</span>
+            {/if}
+          </button>
+        {/each}
         {#if recentSessions.length > 0}
           <div class="shell-picker-divider"></div>
           <button
@@ -597,7 +640,7 @@
     pointer-events: auto;
     z-index: 200;
     width: 200px;
-    max-height: 240px;
+    max-height: 300px;
     overflow-y: auto;
     background: var(--tabbar-active-bg, #1e1e1e);
     border: 1px solid var(--tabbar-border, #2a2a2a);
@@ -613,6 +656,9 @@
        rows: overflow:hidden lets a flex item shrink below its content, so
        without this a long "Recent" list crushed every row flat. */
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     text-align: left;
     padding: 7px 10px;
     border: none;
@@ -626,8 +672,26 @@
     text-overflow: ellipsis;
   }
 
-  .shell-picker-item:hover {
+  .shell-picker-item:hover:not(:disabled) {
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .shell-picker-item:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .shell-picker-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shell-picker-note {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 10px;
+    opacity: 0.8;
   }
 
   .shell-picker-empty {

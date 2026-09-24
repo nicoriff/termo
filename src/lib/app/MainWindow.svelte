@@ -11,6 +11,7 @@
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
   import AboutDialog from "./AboutDialog.svelte";
+  import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -171,6 +172,9 @@
     {/if}
     {#if uiState.aboutOpen}
       <AboutDialog />
+    {/if}
+    {#if uiState.agentLaunch}
+      <AgentLaunchDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

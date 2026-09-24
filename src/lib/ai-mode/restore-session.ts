@@ -63,7 +63,7 @@ export async function resumeInTab(tabId: string, tool: ToolId, agentSessionId: s
   if (ptyId) await writePty(ptyId, `${command}\r`);
 }
 
-function waitForConsole(tabId: string): Promise<string | null> {
+export function waitForConsole(tabId: string): Promise<string | null> {
   return new Promise((resolve) => {
     const deadline = Date.now() + WAIT_FOR_CONSOLE_MS;
     const check = () => {
