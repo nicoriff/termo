@@ -25,6 +25,10 @@ pub struct PtySession {
     stop: Arc<AtomicBool>,
     // Only when TERMINI_PTY_RECORD is set (see recorder.rs).
     recorder: Option<Arc<Recorder>>,
+    // The size the console should have, and whether it has been re-applied
+    // since startup (see write()).
+    size: Mutex<(u16, u16)>,
+    size_resent: AtomicBool,
 }
 
 impl PtySession {
@@ -207,6 +211,8 @@ impl PtySession {
             prompt_redraw,
             stop,
             recorder,
+            size: Mutex::new((cols, rows)),
+            size_resent: AtomicBool::new(false),
         })
     }
 
@@ -218,13 +224,31 @@ impl PtySession {
         if let Some(recorder) = &self.recorder {
             recorder.input(data);
         }
-        let mut writer = self.writer.lock().unwrap();
-        writer.write_all(data)?;
-        writer.flush()?;
+        {
+            let mut writer = self.writer.lock().unwrap();
+            writer.write_all(data)?;
+            writer.flush()?;
+        }
+        // ConPTY drops a resize that arrives while its console host is still
+        // starting — a window of a few milliseconds, which is exactly when a
+        // restored layout settles and the font's real metrics come in. The
+        // console then keeps its spawn size for good: Claude Code lays out
+        // for a width the terminal doesn't have, and its cursor lands off to
+        // the side. ConPTY's startup cursor-position query is answered once
+        // the host is up, so the size is sent again right after that answer.
+        if cfg!(windows) && contains_cursor_report(data) && !self.size_resent.swap(true, Ordering::Relaxed) {
+            let (cols, rows) = *self.size.lock().unwrap();
+            self.apply_size(cols, rows)?;
+        }
         Ok(())
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
+        *self.size.lock().unwrap() = (cols, rows);
+        self.apply_size(cols, rows)
+    }
+
+    fn apply_size(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
         if let Some(recorder) = &self.recorder {
             recorder.resize(cols, rows);
         }
@@ -260,6 +284,44 @@ impl PtySession {
         self.stop.store(true, Ordering::Relaxed);
         self.child.lock().unwrap().kill()?;
         Ok(())
+    }
+}
+
+/// Whether `data` carries a cursor position report (`ESC [ row ; col R`), the
+/// terminal's answer to ESC[6n.
+fn contains_cursor_report(data: &[u8]) -> bool {
+    data.windows(2).enumerate().any(|(start, pair)| {
+        if pair != b"\x1b[" {
+            return false;
+        }
+        let rest = &data[start + 2..];
+        let row = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+        let after_row = &rest[row..];
+        if row == 0 || after_row.first() != Some(&b';') {
+            return false;
+        }
+        let col = after_row[1..].iter().take_while(|b| b.is_ascii_digit()).count();
+        col > 0 && after_row.get(1 + col) == Some(&b'R')
+    })
+}
+
+#[cfg(test)]
+mod cursor_report_tests {
+    use super::contains_cursor_report;
+
+    #[test]
+    fn finds_the_answer_to_conptys_query() {
+        assert!(contains_cursor_report(b"\x1b[1;1R"));
+        assert!(contains_cursor_report(b"ls\x1b[12;40R"));
+    }
+
+    #[test]
+    fn ignores_keys_that_look_alike() {
+        // F12 with modifiers, an arrow, typed text.
+        assert!(!contains_cursor_report(b"\x1b[24;7~"));
+        assert!(!contains_cursor_report(b"\x1b[1;5D"));
+        assert!(!contains_cursor_report(b"claude --resume\r"));
+        assert!(!contains_cursor_report(b"\x1b[;1R"));
     }
 }
 
