@@ -609,6 +609,10 @@
   }
 
   .shell-picker-item {
+    /* Past the list's max-height the panel has to scroll, not squeeze its
+       rows: overflow:hidden lets a flex item shrink below its content, so
+       without this a long "Recent" list crushed every row flat. */
+    flex-shrink: 0;
     text-align: left;
     padding: 7px 10px;
     border: none;
