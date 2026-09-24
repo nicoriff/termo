@@ -142,11 +142,51 @@
     const startX = event.clientX;
     const startY = event.clientY;
     const sourceTileId = tile.id;
+    const sourceTab = event.currentTarget as HTMLElement;
     let dragging = false;
+    let ghost: HTMLElement | null = null;
+    // Where inside the tab it was grabbed, so the ghost stays under the
+    // pointer at that same spot instead of jumping to its corner.
+    let grabX = 0;
+    let grabY = 0;
 
-    function currentDropStrip(e: PointerEvent): HTMLElement | null {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      return el instanceof Element ? el.closest<HTMLElement>(".tile-tabstrip") : null;
+    /** A copy of the tab that follows the pointer. It keeps the tab's own
+     * classes (Svelte's scoping included) so it looks like the tab itself,
+     * and ignores the pointer so hit-testing sees what's underneath it. */
+    function createGhost() {
+      const box = sourceTab.getBoundingClientRect();
+      grabX = startX - box.left;
+      grabY = startY - box.top;
+      ghost = sourceTab.cloneNode(true) as HTMLElement;
+      ghost.classList.add("tab-drag-ghost");
+      ghost.removeAttribute("data-session-id");
+      ghost.style.width = `${box.width}px`;
+      ghost.style.height = `${box.height}px`;
+      document.body.appendChild(ghost);
+      sourceTab.classList.add("drag-source");
+    }
+
+    function moveGhost(e: PointerEvent) {
+      if (ghost) ghost.style.transform = `translate(${e.clientX - grabX}px, ${e.clientY - grabY}px)`;
+    }
+
+    /** The tile under the pointer, by geometry rather than hit-testing: most of
+     * a tile is its console, which belongs to SplitView rather than to this
+     * chrome, so the whole tile counts as a drop target this way. */
+    function currentDropTile(e: PointerEvent): HTMLElement | null {
+      for (const chrome of document.querySelectorAll<HTMLElement>(".tile-chrome")) {
+        const box = chrome.getBoundingClientRect();
+        if (
+          box.width > 0 &&
+          e.clientX >= box.left &&
+          e.clientX < box.right &&
+          e.clientY >= box.top &&
+          e.clientY < box.bottom
+        ) {
+          return chrome;
+        }
+      }
+      return null;
     }
 
     function currentDropTab(e: PointerEvent): HTMLElement | null {
@@ -155,7 +195,7 @@
     }
 
     function clearHighlight() {
-      document.querySelectorAll(".tile-tabstrip.drag-over").forEach((el) => el.classList.remove("drag-over"));
+      document.querySelectorAll(".tile-chrome.drag-over").forEach((el) => el.classList.remove("drag-over"));
       document
         .querySelectorAll(".tile-tab.drag-insert-before, .tile-tab.drag-insert-after")
         .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
@@ -175,10 +215,12 @@
       if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 4) {
         dragging = true;
         document.body.classList.add("termini-dragging-tab");
+        createGhost();
       }
       if (!dragging) return;
+      moveGhost(e);
       clearHighlight();
-      currentDropStrip(e)?.classList.add("drag-over");
+      currentDropTile(e)?.classList.add("drag-over");
       const insertion = hoveredInsertion(e);
       insertion?.tab.classList.add(insertion.before ? "drag-insert-before" : "drag-insert-after");
     }
@@ -188,11 +230,18 @@
       window.removeEventListener("pointerup", onUp);
       document.body.classList.remove("termini-dragging-tab");
       clearHighlight();
+      ghost?.remove();
+      ghost = null;
+      sourceTab.classList.remove("drag-source");
 
       if (dragging) {
-        const targetTileId = currentDropStrip(e)?.dataset.tileId;
-        if (targetTileId) {
-          const insertion = hoveredInsertion(e);
+        const targetTileId = currentDropTile(e)?.dataset.tileId;
+        const insertion = hoveredInsertion(e);
+        const overStrip = !!document.elementFromPoint(e.clientX, e.clientY)?.closest(".tile-tabstrip");
+        // Let go over itself, or over its own tile's console, the tab stays
+        // where it was: only the tab strip reorders a tile's own tabs.
+        const staysPut = currentDropTab(e) === sourceTab || (targetTileId === sourceTileId && !overStrip);
+        if (targetTileId && !staysPut) {
           let beforeSessionId: string | undefined;
           if (insertion) {
             beforeSessionId = insertion.before
@@ -235,6 +284,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="tile-chrome"
+  data-tile-id={tile.id}
   class:focused={workspaceStore.focusedTileId === tile.id}
   style="left:calc({rect.left * 100}% + {insets.left}px); top:calc({rect.top * 100}% + {insets.top}px); width:calc({rect.width *
     100}% - {insets.left + insets.right}px); height:calc({rect.height * 100}% - {insets.top + insets.bottom}px)"
@@ -375,12 +425,11 @@
 </div>
 
 <style>
-  :global(body.termini-dragging-tab) {
+  /* Every element, not just body: the console under the pointer sets its own
+     text cursor (xterm's), which would otherwise win over the dragging hand. */
+  :global(body.termini-dragging-tab),
+  :global(body.termini-dragging-tab *) {
     cursor: grabbing !important;
-  }
-
-  :global(body.termini-dragging-tab .tile-tab) {
-    cursor: grabbing;
   }
 
   .tile-chrome {
@@ -416,10 +465,35 @@
   }
 
   /* Toggled imperatively via classList (not a Svelte class: directive) since the
-     drop target is discovered by hit-testing during a manual pointer drag. */
-  :global(.tile-tabstrip.drag-over) {
-    outline: 2px dashed var(--pane-active-border, #3a6df0);
-    outline-offset: -2px;
+     drop target is discovered by geometry during a manual pointer drag. The
+     whole tile lights up: dropping anywhere on it moves the tab there. */
+  :global(.tile-chrome.drag-over)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 2px dashed var(--pane-active-border, #3a6df0);
+    background: color-mix(in srgb, var(--pane-active-border, #3a6df0) 8%, transparent);
+    pointer-events: none;
+  }
+
+  /* The tab being dragged, left behind as a placeholder. */
+  :global(.tile-tab.drag-source) {
+    opacity: 0.35;
+  }
+
+  /* The copy of the tab that follows the pointer (see createGhost). Moved
+     with transform, so its left/top stay at the origin. */
+  :global(.tile-tab.tab-drag-ghost) {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    pointer-events: none;
+    box-sizing: border-box;
+    opacity: 0.92;
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    cursor: grabbing;
   }
 
   :global(.tile-tab.drag-insert-before) {
