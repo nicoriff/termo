@@ -145,8 +145,36 @@ fn show_and_focus(window: &tauri::WebviewWindow) -> Result<(), String> {
     if window.is_minimized().unwrap_or(false) {
         window.unminimize().map_err(|err| err.to_string())?;
     }
+    // Opening it lands it over the console it configures. Already open, it
+    // stays wherever the user put it and just comes forward.
+    if !window.is_visible().unwrap_or(false) {
+        center_over_main(window);
+    }
     window.show().map_err(|err| err.to_string())?;
     window.set_focus().map_err(|err| err.to_string())
+}
+
+/// Centers `window` on the main window. Sizes go through logical units: the
+/// hidden window may still be measured on another monitor, at another scale,
+/// than the one it's about to appear on.
+fn center_over_main(window: &tauri::WebviewWindow) {
+    let Some(main) = window.app_handle().get_webview_window("main") else {
+        return;
+    };
+    let (Ok(main_pos), Ok(main_size), Ok(main_scale), Ok(size), Ok(scale)) = (
+        main.outer_position(),
+        main.outer_size(),
+        main.scale_factor(),
+        window.outer_size(),
+        window.scale_factor(),
+    ) else {
+        return;
+    };
+    let width = size.width as f64 / scale * main_scale;
+    let height = size.height as f64 / scale * main_scale;
+    let x = main_pos.x as f64 + (main_size.width as f64 - width) / 2.0;
+    let y = main_pos.y as f64 + (main_size.height as f64 - height) / 2.0;
+    let _ = window.set_position(tauri::PhysicalPosition::new(x.round() as i32, y.round() as i32));
 }
 
 /// Returns the Preferences window, creating it hidden if needed. This app is
