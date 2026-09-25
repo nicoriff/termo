@@ -17,7 +17,7 @@
   import { newTabOptions } from "./new-tab-options.svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { uiState } from "$lib/core/ui-state.svelte";
+  import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import type { ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
@@ -83,13 +83,10 @@
   const agentClis = $derived(newTabOptions.agentClis);
   const AGENTS: ToolId[] = ["claude", "codex"];
 
-  /** Asks where to run it first (see AgentLaunchDialog), offering the folder
-   * this tile's console is in right now. */
+  /** Asks where to run it first, in this tile rather than the focused one. */
   function pickAgent(tool: ToolId) {
-    const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
-    const here = active ? (tabCwd.byTab[active.id] ?? active.cwd ?? null) : null;
     closeShellPicker();
-    uiState.openAgentLaunch(tool, tile.id, here);
+    requestAgentLaunch(tool, tile.id);
   }
 
   function closeShellPicker() {

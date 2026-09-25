@@ -20,6 +20,8 @@ import type { MessageKey } from "../i18n/translate";
 
 export type ShortcutAction =
   | "newTab"
+  | "newClaude"
+  | "newCodex"
   | "cycleTab"
   | "zoomTile"
   | "commandPalette"
@@ -35,6 +37,8 @@ export type ShortcutAction =
 
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newTab",
+  "newClaude",
+  "newCodex",
   "cycleTab",
   "zoomTile",
   "commandPalette",
@@ -53,6 +57,8 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
  * the reactive i18n store so it stays testable in plain Node. */
 export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newTab: "shortcuts.labels.newTab",
+  newClaude: "shortcuts.labels.newClaude",
+  newCodex: "shortcuts.labels.newCodex",
   cycleTab: "shortcuts.labels.cycleTab",
   zoomTile: "shortcuts.labels.zoomTile",
   commandPalette: "shortcuts.labels.commandPalette",
@@ -185,6 +191,10 @@ export function normalizeEventToZoomBinding(event: KeyLike): { binding: string }
 
 const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }> = {
   newTab: { mac: "meta+t", other: "ctrl+t" },
+  // Not Ctrl+Alt: on Spanish and other layouts that's AltGr, which types @,
+  // # and friends.
+  newClaude: { mac: "meta+shift+l", other: "ctrl+shift+l" },
+  newCodex: { mac: "meta+shift+x", other: "ctrl+shift+x" },
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
   commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },

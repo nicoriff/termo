@@ -194,6 +194,8 @@ export const en: Messages = {
   shortcuts: {
     labels: {
       newTab: "New tab",
+      newClaude: "New Claude Code tab",
+      newCodex: "New Codex tab",
       cycleTab: "Cycle tabs",
       zoomTile: "Zoom (↑) / restore or tile picker (↓)",
       commandPalette: "Command palette",
@@ -230,6 +232,7 @@ export const en: Messages = {
     openMarketplace: "Open extensions",
     goToTab: "Go to tab: {title}",
     newTab: "New tab",
+    newAgent: "Start {tool} in a new tab",
     closeTab: "Close current tab",
     splitVertical: "Split vertically",
     splitHorizontal: "Split horizontally",

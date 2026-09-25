@@ -11,6 +11,9 @@ import { collectSessions, collectTiles } from "../layout/split-tree";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { themeStore } from "../theme/theme-store.svelte";
+import { requestAgentLaunch } from "../agent-launch/request-launch";
+import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
+import { newTabOptions } from "../layout/new-tab-options.svelte";
 import type { Command } from "./commands";
 
 /** themeStore's setters never persist on their own — the Preferences sections
@@ -67,6 +70,18 @@ export function buildCommands(): Command[] {
     label: t("commands.newTab"),
     run: () => workspaceStore.newTabLikeFocused(),
   });
+
+  // Left out when the CLI isn't installed: typing its command would only
+  // print an error.
+  for (const tool of ["claude", "codex"] as const) {
+    if (newTabOptions.agentClis?.[tool] === false) continue;
+    commands.push({
+      id: `tabs.newAgent.${tool}`,
+      group: "tabs",
+      label: t("commands.newAgent", { tool: TOOL_DISPLAY_NAMES[tool] }),
+      run: () => requestAgentLaunch(tool),
+    });
+  }
 
   const tile = focusedTile();
   if (tile) {

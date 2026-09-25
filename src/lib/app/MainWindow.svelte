@@ -13,6 +13,7 @@
   import AboutDialog from "./AboutDialog.svelte";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
+  import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -105,6 +106,19 @@
       event.stopPropagation();
       uiState.openMarketplace();
       return;
+    }
+    if (!workspaceStore.overviewOpen) {
+      for (const [action, tool] of [
+        ["newClaude", "claude"],
+        ["newCodex", "codex"],
+      ] as const) {
+        if (!eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut(action))) continue;
+        event.preventDefault();
+        event.stopPropagation();
+        // Not installed: typing its command would only print an error.
+        if (newTabOptions.agentClis?.[tool] !== false) requestAgentLaunch(tool);
+        return;
+      }
     }
 
     if (!workspaceStore.overviewOpen) {

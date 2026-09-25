@@ -10,6 +10,12 @@
     <span>{t(SHORTCUT_LABEL_KEYS.newTab)}</span>
     <ShortcutRecorder action="newTab" />
   </div>
+  {#each ["newClaude", "newCodex"] as const as action (action)}
+    <div class="shortcut-row">
+      <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
+      <ShortcutRecorder {action} />
+    </div>
+  {/each}
   <div class="shortcut-row">
     <span>{t(SHORTCUT_LABEL_KEYS.cycleTab)}</span>
     <ShortcutRecorder action="cycleTab" />

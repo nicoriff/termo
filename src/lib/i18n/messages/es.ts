@@ -194,6 +194,8 @@ export const es = {
   shortcuts: {
     labels: {
       newTab: "Nueva pestaña",
+      newClaude: "Nueva pestaña de Claude Code",
+      newCodex: "Nueva pestaña de Codex",
       cycleTab: "Ciclar pestañas",
       zoomTile: "Zoom (↑) / restaurar o selector de tiles (↓)",
       commandPalette: "Paleta de comandos",
@@ -230,6 +232,7 @@ export const es = {
     openMarketplace: "Abrir extensiones",
     goToTab: "Ir a la pestaña: {title}",
     newTab: "Nueva pestaña",
+    newAgent: "Iniciar {tool} en una pestaña nueva",
     closeTab: "Cerrar la pestaña actual",
     splitVertical: "Dividir verticalmente",
     splitHorizontal: "Dividir horizontalmente",
