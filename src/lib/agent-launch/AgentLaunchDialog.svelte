@@ -19,6 +19,8 @@
   const LEFT_PEEK = 120;
   const RIGHT_PEEK = 120;
   const COLUMN_GAP = 8;
+  /** Horizontal padding of the breadcrumb bar (matches .crumbs). */
+  const CRUMBS_PADDING = 10;
   /** The preview waits this long after the selection stops moving, so holding
    * an arrow key doesn't read every folder it passes. */
   const PREVIEW_DELAY_MS = 90;
@@ -440,8 +442,11 @@
               <span class="crumb current">{columnLabel(column.path!)}</span>
             {/if}
           {/each}
+          <!-- Right edge lined up with the current column's, not the dialog's:
+               it acts on that column, and past it sits the preview strip. -->
           <button
             class="new-folder"
+            style="margin-right:{RIGHT_PEEK + COLUMN_GAP - CRUMBS_PADDING}px"
             disabled={!canCreate}
             title={canCreate ? `${t("agentLaunch.newFolder")} (${NEW_FOLDER_KEY})` : t("agentLaunch.newFolderUnavailable")}
             onclick={startCreate}
