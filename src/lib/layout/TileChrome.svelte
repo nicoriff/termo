@@ -2,7 +2,6 @@
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import type { AiSessionStatus } from "$lib/ai-mode/classifier";
   import { workspaceStore } from "./workspace-store.svelte";
-  import { listShells } from "$lib/core/pty-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { resolveShellArgs } from "$lib/core/shell-args";
   import { resolveDefaultShell } from "$lib/core/default-shell";
@@ -15,7 +14,9 @@
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
   import type { AgentSession } from "$lib/core/agent-sessions-client";
-  import { marketplaceStatus } from "$lib/core/marketplace-client";
+  import { newTabOptions } from "./new-tab-options.svelte";
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
   import { uiState } from "$lib/core/ui-state.svelte";
   import type { ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
@@ -51,8 +52,6 @@
 
   let shellPickerOpen = $state(false);
   let shellPickerPos = $state({ top: 0, left: 0 });
-  let shells = $state<ShellInfo[]>([]);
-  let shellsRequested = false;
   let addButtonEl: HTMLButtonElement | undefined;
 
   function toggleShellPicker() {
@@ -76,24 +75,12 @@
       const top = Math.min(box.bottom + 4, window.innerHeight - SHELL_PICKER_MAX_HEIGHT - SHELL_PICKER_MARGIN);
       shellPickerPos = { top, left };
     }
-    if (shellPickerOpen && !shellsRequested) {
-      shellsRequested = true;
-      listShells()
-        .then((list) => (shells = list))
-        .catch(() => (shellsRequested = false));
-    }
-    // Checked on every open, not once: installing Claude or Codex while
-    // Termini runs should light its entry up without a restart.
-    if (shellPickerOpen) {
-      marketplaceStatus()
-        .then((status) => (agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli }))
-        .catch(() => {});
-    }
+    // Already loaded at startup; this only picks up changes, in the background.
+    if (shellPickerOpen) newTabOptions.refresh();
   }
 
-  /** Which agent CLIs are installed; null until the first check answers,
-   * during which both entries stay usable rather than flicker off. */
-  let agentClis = $state<Record<ToolId, boolean> | null>(null);
+  const shells = $derived(newTabOptions.shells);
+  const agentClis = $derived(newTabOptions.agentClis);
   const AGENTS: ToolId[] = ["claude", "codex"];
 
   /** Asks where to run it first (see AgentLaunchDialog), offering the folder
@@ -369,7 +356,12 @@
     <div use:portal>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="shell-picker-backdrop" onpointerdown={closeShellPicker}></div>
-      <div class="shell-picker-panel" style="top:{shellPickerPos.top}px; left:{shellPickerPos.left}px" role="listbox">
+      <div
+        class="shell-picker-panel"
+        style="top:{shellPickerPos.top}px; left:{shellPickerPos.left}px"
+        role="listbox"
+        in:fly={{ y: -4, duration: 120, easing: cubicOut }}
+      >
         {#each shells as shell (shell.id)}
           <button
             class="shell-picker-item"
@@ -418,7 +410,12 @@
         {/if}
       </div>
       {#if recentOpen}
-        <div class="recent-submenu" style="top:{recentPos.top}px; left:{recentPos.left}px" role="menu">
+        <div
+          class="recent-submenu"
+          style="top:{recentPos.top}px; left:{recentPos.left}px"
+          role="menu"
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
           {#each recentSessions as session (session.agentSessionId)}
             <button
               class="shell-picker-item"

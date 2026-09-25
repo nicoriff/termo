@@ -12,6 +12,7 @@
   import QuitDialog from "./QuitDialog.svelte";
   import AboutDialog from "./AboutDialog.svelte";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
+  import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
@@ -30,6 +31,8 @@
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
+    // So the first click on a tile's "+" finds its menu already filled.
+    newTabOptions.refresh();
 
     (async () => {
       await appConfigStore.init();
