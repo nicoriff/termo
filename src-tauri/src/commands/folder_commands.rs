@@ -38,6 +38,51 @@ pub async fn list_folders(path: String) -> Result<Vec<FolderEntry>, String> {
         .map_err(|err| err.to_string())?
 }
 
+/// Creates `name` inside `parent` — the browser's "new folder" — and returns
+/// it. Never reuses an existing folder: a name that's taken is an error, so a
+/// typo can't quietly land the agent in some other project.
+#[tauri::command]
+pub async fn create_folder(parent: String, name: String) -> Result<FolderEntry, String> {
+    tauri::async_runtime::spawn_blocking(move || new_folder(Path::new(&parent), &name))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+fn new_folder(parent: &Path, name: &str) -> Result<FolderEntry, String> {
+    use crate::i18n::{tr, Msg};
+
+    let name = name.trim();
+    if !is_valid_folder_name(name) {
+        return Err(tr(Msg::FolderNameInvalid(name)));
+    }
+    let path = parent.join(name);
+    match fs::create_dir(&path) {
+        Ok(()) => Ok(entry(name.to_string(), path)),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => Err(tr(Msg::FolderExists(name))),
+        Err(err) => Err(tr(Msg::FolderCreateFailed(name, &err.to_string()))),
+    }
+}
+
+/// A single path component every platform accepts: no separators or
+/// characters Windows forbids, not `.`/`..`, not a reserved device name
+/// (`CON`, `NUL`, `COM1`…), and no trailing dot or space, which Windows
+/// silently strips.
+fn is_valid_folder_name(name: &str) -> bool {
+    const FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+    const RESERVED: &[&str] = &["CON", "PRN", "AUX", "NUL"];
+    if name.is_empty() || name == "." || name == ".." || name.len() > 255 {
+        return false;
+    }
+    if name.chars().any(|c| FORBIDDEN.contains(&c) || c.is_control()) || name.ends_with(['.', ' ']) {
+        return false;
+    }
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    let numbered = (stem.starts_with("COM") || stem.starts_with("LPT"))
+        && stem.len() == 4
+        && stem.as_bytes()[3].is_ascii_digit();
+    !(RESERVED.contains(&stem.as_str()) || numbered)
+}
+
 fn folder_roots() -> FolderRoots {
     FolderRoots {
         drives: drives(),
@@ -127,6 +172,29 @@ mod tests {
     #[test]
     fn a_missing_folder_is_an_error_not_an_empty_list() {
         assert!(subfolders(Path::new("/definitely/not/here/termini")).is_err());
+    }
+
+    #[test]
+    fn creates_a_folder_and_refuses_to_reuse_one() {
+        let base = std::env::temp_dir().join(format!("termini-new-folder-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&base).unwrap();
+        let created = new_folder(&base, "  my-project  ");
+        let again = new_folder(&base, "my-project");
+        let exists = base.join("my-project").is_dir();
+        let _ = fs::remove_dir_all(&base);
+        assert_eq!(created.unwrap().name, "my-project");
+        assert!(exists);
+        assert!(again.is_err());
+    }
+
+    #[test]
+    fn rejects_names_that_are_not_a_plain_folder_name() {
+        for name in ["", ".", "..", "a/b", "a\\b", "what?", "C:", "trailing.", "trailing ", "CON", "nul.txt", "com1"] {
+            assert!(!is_valid_folder_name(name), "{name:?} should be rejected");
+        }
+        for name in ["project", "my project", "v1.2", "Console", "com10", ".config"] {
+            assert!(is_valid_folder_name(name), "{name:?} should be accepted");
+        }
     }
 
     #[test]

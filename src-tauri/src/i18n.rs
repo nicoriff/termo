@@ -48,6 +48,10 @@ pub enum Msg<'a> {
     UnsafeMcpRemoteUrl(&'a str),
     /// (folder, OS error)
     FolderUnreadable(&'a str, &'a str),
+    FolderNameInvalid(&'a str),
+    FolderExists(&'a str),
+    /// (folder name, OS error)
+    FolderCreateFailed(&'a str, &'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -118,6 +122,19 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (FolderUnreadable(folder, error), Es) => format!("No se puede abrir {folder}: {error}"),
         (FolderUnreadable(folder, error), En) => format!("Can't open {folder}: {error}"),
+
+        (FolderNameInvalid(name), Es) => {
+            format!("\"{name}\" no es un nombre de carpeta válido (sin / \\ : * ? \" < > | ni nombres reservados)")
+        }
+        (FolderNameInvalid(name), En) => {
+            format!("\"{name}\" isn't a valid folder name (no / \\ : * ? \" < > | or reserved names)")
+        }
+
+        (FolderExists(name), Es) => format!("Ya existe una carpeta \"{name}\" acá"),
+        (FolderExists(name), En) => format!("A folder named \"{name}\" already exists here"),
+
+        (FolderCreateFailed(name, error), Es) => format!("No se pudo crear \"{name}\": {error}"),
+        (FolderCreateFailed(name, error), En) => format!("Couldn't create \"{name}\": {error}"),
     }
 }
 
@@ -145,6 +162,9 @@ mod tests {
             Msg::UnsafeMcpLaunchValue("-c"),
             Msg::UnsafeMcpRemoteUrl("file:///etc/passwd"),
             Msg::FolderUnreadable("C:\\x", "access denied"),
+            Msg::FolderNameInvalid("a/b"),
+            Msg::FolderExists("project"),
+            Msg::FolderCreateFailed("project", "access denied"),
         ]
     }
 

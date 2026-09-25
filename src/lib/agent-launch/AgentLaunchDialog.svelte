@@ -3,7 +3,8 @@
   import { cubicOut } from "svelte/easing";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
-  import { listFolderRoots, listFolders } from "$lib/core/folder-client";
+  import { createFolder, listFolderRoots, listFolders } from "$lib/core/folder-client";
+  import { isMac } from "$lib/core/platform";
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "./ConsoleIcon.svelte";
@@ -57,6 +58,11 @@
   let depth = $state(0);
   let error = $state<string | null>(null);
   let dialogEl: HTMLDivElement | undefined = $state();
+  /** The "new folder" row at the top of the current column, while it's open. */
+  let creating = $state(false);
+  let newName = $state("");
+  let newNameEl: HTMLInputElement | undefined = $state();
+  const NEW_FOLDER_KEY = isMac ? "⌘N" : "Ctrl+N";
   let viewportWidth = $state(520);
 
   const columnWidth = $derived(Math.max(200, viewportWidth - LEFT_PEEK - RIGHT_PEEK - 2 * COLUMN_GAP));
@@ -194,12 +200,14 @@
       showError(preview.error ?? "");
       return;
     }
+    creating = false;
     depth += 1;
     schedulePreview();
   }
 
   function back() {
     enterWhenLoaded = false;
+    creating = false;
     if (depth === 0) {
       step = "choose";
       return;
@@ -236,10 +244,68 @@
     if (index !== null) select(index);
   }
 
+  /** New folders go inside the current one, so not among the starting
+   * places, which have no folder of their own. */
+  const canCreate = $derived(step === "browse" && !!current?.path && current.status === "ready");
+
+  function startCreate() {
+    if (!canCreate) return;
+    newName = "";
+    creating = true;
+    queueMicrotask(() => newNameEl?.focus());
+  }
+
+  function cancelCreate() {
+    creating = false;
+    dialogEl?.focus();
+  }
+
+  /** Creates it, lists the folder again with it in place, and selects it —
+   * ready for Enter to open the agent right there. */
+  async function commitCreate() {
+    const column = current;
+    const name = newName.trim();
+    if (!column?.path || !name) return cancelCreate();
+    try {
+      const created = await createFolder(column.path, name);
+      const items = await listFolders(column.path);
+      cache.set(column.path, items);
+      cache.set(created.path, []);
+      column.items = items;
+      creating = false;
+      dialogEl?.focus();
+      const index = items.findIndex((item) => samePath(item.path, created.path));
+      if (index >= 0) column.selected = index;
+      schedulePreview(0);
+    } catch (err) {
+      showError(String(err));
+      newNameEl?.focus();
+    }
+  }
+
+  function onNewNameKeydown(event: KeyboardEvent) {
+    // Typing a name mustn't move the selection or jump by letter.
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commitCreate();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelCreate();
+    }
+  }
+
   function onKeydown(event: KeyboardEvent) {
     // This dialog owns the keyboard while it's open (uiState.overlayOpen keeps
     // the window-level handlers out).
     event.stopPropagation();
+    // Ctrl/Cmd+N as asked, and +Shift too: that's "new folder" in Explorer
+    // and Finder, so it works from habit as well.
+    if ((isMac ? event.metaKey : event.ctrlKey) && event.key.toLowerCase() === "n") {
+      event.preventDefault();
+      startCreate();
+      return;
+    }
     if (step === "choose") {
       if (event.key === "ArrowUp" || event.key === "ArrowDown") choice = choice === 0 ? 1 : 0;
       else if (event.key === "Enter") choice === 0 ? start(launch.here ?? undefined) : void openBrowser();
@@ -374,6 +440,18 @@
               <span class="crumb current">{columnLabel(column.path!)}</span>
             {/if}
           {/each}
+          <button
+            class="new-folder"
+            disabled={!canCreate}
+            title={canCreate ? `${t("agentLaunch.newFolder")} (${NEW_FOLDER_KEY})` : t("agentLaunch.newFolderUnavailable")}
+            onclick={startCreate}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" />
+              <path d="M8 7v4M6 9h4" stroke="currentColor" />
+            </svg>
+            <span>{t("agentLaunch.newFolder")}</span>
+          </button>
         </nav>
 
         <div class="viewport" bind:clientWidth={viewportWidth}>
@@ -389,6 +467,26 @@
                 style="width:{columnWidth}px"
                 onclick={() => onColumnClick(index)}
               >
+                {#if creating && index === depth}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="folder new-folder-row" onclick={(e) => e.stopPropagation()}>
+                    <svg class="row-icon" viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" />
+                      <path d="M8 7v4M6 9h4" stroke="currentColor" />
+                    </svg>
+                    <input
+                      class="new-folder-input"
+                      bind:this={newNameEl}
+                      bind:value={newName}
+                      placeholder={t("agentLaunch.newFolderPlaceholder")}
+                      aria-label={t("agentLaunch.newFolderPlaceholder")}
+                      spellcheck="false"
+                      onkeydown={onNewNameKeydown}
+                      onblur={() => !newName.trim() && (creating = false)}
+                    />
+                  </div>
+                {/if}
                 {#each column.items as item, row (item.path)}
                   {#if item.tag === "recent" && column.items[row - 1]?.tag !== "recent"}
                     <div class="section-divider"></div>
@@ -396,7 +494,7 @@
                   {/if}
                   <button
                     class="folder"
-                    class:selected={index === depth && row === column.selected}
+                    class:selected={index === depth && !creating && row === column.selected}
                     tabindex="-1"
                     use:keepVisible={row === column.selected}
                     onclick={(e) => {
@@ -454,6 +552,9 @@
             <span><kbd>Ctrl+Enter</kbd> {t("agentLaunch.keyOpenHere")}</span>
           {/if}
           <span><kbd>a–z</kbd> {t("agentLaunch.keyType")}</span>
+          {#if canCreate}
+            <span><kbd>{NEW_FOLDER_KEY}</kbd> {t("agentLaunch.keyNewFolder")}</span>
+          {/if}
         </footer>
       </div>
     {/if}
@@ -629,6 +730,56 @@
 
   .crumb-sep {
     opacity: 0.35;
+  }
+
+  .new-folder {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .new-folder svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .new-folder:hover:not(:disabled) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .new-folder:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  /* Sits where the new folder will appear, drawn as a selected row so it's
+     clear that's where typing goes. */
+  .new-folder-row {
+    cursor: default;
+    background: rgba(58, 109, 240, 0.16);
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .new-folder-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    outline: none;
   }
 
   /* The carousel window: the current column in full, with the column behind

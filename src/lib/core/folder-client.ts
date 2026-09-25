@@ -22,3 +22,9 @@ export function listFolderRoots(): Promise<FolderRoots> {
 export function listFolders(path: string): Promise<FolderEntry[]> {
   return invoke("list_folders", { path });
 }
+
+/** Creates `name` inside `parent`. Rejects, with a message ready to show,
+ * when the name isn't valid or a folder by that name already exists. */
+export function createFolder(parent: string, name: string): Promise<FolderEntry> {
+  return invoke("create_folder", { parent, name });
+}
