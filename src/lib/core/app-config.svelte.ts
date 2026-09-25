@@ -8,16 +8,18 @@ import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
 import type { AppConfig, ShortcutsConfig } from "./types";
+import { DEFAULT_SOUNDS, isSoundChoice, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
+import type { ToolId } from "$lib/ai-mode/pattern-table";
 
 const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_tab_mac: null,
   new_tab_other: null,
-  cycle_tab_mac: null,
-  cycle_tab_other: null,
   new_claude_mac: null,
   new_claude_other: null,
   new_codex_mac: null,
   new_codex_other: null,
+  cycle_tab_mac: null,
+  cycle_tab_other: null,
   zoom_tile_mac: null,
   zoom_tile_other: null,
   command_palette_mac: null,
@@ -44,10 +46,10 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
 
 const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; other: keyof ShortcutsConfig }> = {
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
-  cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
-  zoomTile: { mac: "zoom_tile_mac", other: "zoom_tile_other" },
   newClaude: { mac: "new_claude_mac", other: "new_claude_other" },
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
+  cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
+  zoomTile: { mac: "zoom_tile_mac", other: "zoom_tile_other" },
   commandPalette: { mac: "command_palette_mac", other: "command_palette_other" },
   marketplace: { mac: "marketplace_mac", other: "marketplace_other" },
   copy: { mac: "copy_mac", other: "copy_other" },
@@ -79,6 +81,11 @@ class AppConfigStore {
   aiNotifyAwaiting = $state(true);
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
+  /** Whether each agent's sounds play at all. */
+  aiSoundsEnabled = $state<Record<ToolId, boolean>>({ claude: true, codex: true });
+  /** Per agent, so each can be told apart by ear. */
+  aiSounds = $state<Record<ToolId, Record<SoundEvent, SoundChoice>>>(structuredClone(DEFAULT_SOUNDS));
+  aiSoundVolume = $state(70);
   aiDockBadge = $state(true);
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
@@ -136,6 +143,21 @@ class AppConfigStore {
     this.aiNotifyAwaiting = config.ai_notify_awaiting;
     this.aiNotifyError = config.ai_notify_error;
     this.aiNotifyFinished = config.ai_notify_finished;
+    // A name no longer in the bank (or a hand-edited typo) falls back to the
+    // default rather than to silence.
+    this.aiSoundsEnabled = { claude: config.ai_sound_claude_enabled, codex: config.ai_sound_codex_enabled };
+    const sound = (value: string, fallback: SoundChoice) => (isSoundChoice(value) ? value : fallback);
+    this.aiSounds = {
+      claude: {
+        awaiting: sound(config.ai_sound_claude_awaiting, DEFAULT_SOUNDS.claude.awaiting),
+        finished: sound(config.ai_sound_claude_finished, DEFAULT_SOUNDS.claude.finished),
+      },
+      codex: {
+        awaiting: sound(config.ai_sound_codex_awaiting, DEFAULT_SOUNDS.codex.awaiting),
+        finished: sound(config.ai_sound_codex_finished, DEFAULT_SOUNDS.codex.finished),
+      },
+    };
+    this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
@@ -205,6 +227,21 @@ class AppConfigStore {
 
   setAiNotifyAwaiting(enabled: boolean): void {
     this.aiNotifyAwaiting = enabled;
+    void this.persist();
+  }
+
+  setAiSoundsEnabled(tool: ToolId, enabled: boolean): void {
+    this.aiSoundsEnabled = { ...this.aiSoundsEnabled, [tool]: enabled };
+    void this.persist();
+  }
+
+  setAiSound(tool: ToolId, event: SoundEvent, choice: SoundChoice): void {
+    this.aiSounds = { ...this.aiSounds, [tool]: { ...this.aiSounds[tool], [event]: choice } };
+    void this.persist();
+  }
+
+  setAiSoundVolume(volume: number): void {
+    this.aiSoundVolume = Math.round(Math.min(100, Math.max(0, volume)));
     void this.persist();
   }
 
@@ -288,6 +325,13 @@ class AppConfigStore {
       ai_notify_awaiting: this.aiNotifyAwaiting,
       ai_notify_error: this.aiNotifyError,
       ai_notify_finished: this.aiNotifyFinished,
+      ai_sound_claude_enabled: this.aiSoundsEnabled.claude,
+      ai_sound_codex_enabled: this.aiSoundsEnabled.codex,
+      ai_sound_claude_awaiting: this.aiSounds.claude.awaiting,
+      ai_sound_claude_finished: this.aiSounds.claude.finished,
+      ai_sound_codex_awaiting: this.aiSounds.codex.awaiting,
+      ai_sound_codex_finished: this.aiSounds.codex.finished,
+      ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,

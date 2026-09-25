@@ -11,6 +11,7 @@
   import ShortcutsSection from "./sections/ShortcutsSection.svelte";
   import OhMyPoshSection from "./sections/OhMyPoshSection.svelte";
   import AiModeSection from "./sections/AiModeSection.svelte";
+  import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import PlatformSection from "./sections/PlatformSection.svelte";
   import GeneralSection from "./sections/GeneralSection.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
@@ -23,6 +24,7 @@
     | "shortcuts"
     | "oh-my-posh"
     | "ai-mode"
+    | "ai-notifications"
     | "mac"
     | "windows"
     | "linux";
@@ -47,11 +49,15 @@
       id: "console",
       label: "preferences.sidebar.console",
       children: [
-        { id: "ai-mode", label: "preferences.sidebar.aiMode" },
         { id: "mac", label: "preferences.sidebar.mac" },
         { id: "windows", label: "preferences.sidebar.windows" },
         { id: "linux", label: "preferences.sidebar.linux" },
       ],
+    },
+    {
+      id: "ai-mode",
+      label: "preferences.sidebar.aiMode",
+      children: [{ id: "ai-notifications", label: "preferences.sidebar.aiNotifications" }],
     },
     {
       id: "integrations",
@@ -65,6 +71,7 @@
   let expanded = $state<Partial<Record<SectionNode["id"], boolean>>>({
     appearance: true,
     console: true,
+    "ai-mode": true,
     integrations: true,
   });
 
@@ -173,6 +180,8 @@
         <OhMyPoshSection />
       {:else if selected === "ai-mode"}
         <AiModeSection />
+      {:else if selected === "ai-notifications"}
+        <AiNotificationsSection />
       {:else if selected === "mac"}
         <PlatformSection os="mac" />
       {:else if selected === "windows"}

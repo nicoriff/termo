@@ -67,6 +67,13 @@ export interface AppConfig {
   ai_notify_awaiting: boolean;
   ai_notify_error: boolean;
   ai_notify_finished: boolean;
+  ai_sound_claude_enabled: boolean;
+  ai_sound_codex_enabled: boolean;
+  ai_sound_claude_awaiting: string;
+  ai_sound_claude_finished: string;
+  ai_sound_codex_awaiting: string;
+  ai_sound_codex_finished: string;
+  ai_sound_volume: number;
   ai_dock_badge: boolean;
   /** The user's own Claude Code statusLine command, saved when Termini chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */

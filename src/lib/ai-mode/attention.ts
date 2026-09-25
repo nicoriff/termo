@@ -14,6 +14,7 @@ import { tabAgentSessions } from "./tab-sessions.svelte";
 import type { AgentSession } from "$lib/core/agent-sessions-client";
 import type { AiSessionStatus } from "./classifier";
 import type { ToolId } from "./pattern-table";
+import { playSound, type SoundChoice } from "./sounds";
 
 interface AgentEventPayload {
   /** PTY id, as set in the console's TERMINI_SESSION_ID. */
@@ -54,10 +55,29 @@ function notificationText(entry: AiSessionEntry, prev: AiSessionEntry | undefine
   }
 }
 
+/** Its own setting, independent of the system notification's switch: some
+ * want the sound and no toast, or the other way around. Per agent, so each
+ * is told apart by ear. */
+function soundFor(tool: ToolId, entry: AiSessionEntry, prev: AiSessionEntry | undefined): SoundChoice {
+  if (!appConfigStore.aiSoundsEnabled[tool]) return "none";
+  switch (entry.status) {
+    case "awaiting":
+      return appConfigStore.aiSounds[tool].awaiting;
+    case "finished":
+      // Same rule as the notification: a turn that actually ran.
+      return prev?.status === "running" ? appConfigStore.aiSounds[tool].finished : "none";
+    default:
+      return "none";
+  }
+}
+
 async function maybeNotify(sessionId: string, entry: AiSessionEntry, prev: AiSessionEntry | undefined) {
-  const text = notificationText(entry, prev);
-  if (!text || !entry.tool) return;
+  if (!entry.tool) return;
+  // Nothing to announce about a console you're looking at.
   if (document.hasFocus() && workspaceStore.isSessionVisible(sessionId)) return;
+  playSound(soundFor(entry.tool, entry, prev), appConfigStore.aiSoundVolume);
+  const text = notificationText(entry, prev);
+  if (!text) return;
   if (!(await canNotify())) return;
   sendNotification({ title: `${TOOL_DISPLAY_NAMES[entry.tool]}: ${text}`, body: tabTitle(sessionId) });
 }

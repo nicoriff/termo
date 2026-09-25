@@ -102,6 +102,19 @@ pub struct AppConfig {
     pub ai_notify_awaiting: bool,
     pub ai_notify_error: bool,
     pub ai_notify_finished: bool,
+    /// Whether each agent's sounds play at all; switching them off keeps the
+    /// picks below for when they're switched back on.
+    pub ai_sound_claude_enabled: bool,
+    pub ai_sound_codex_enabled: bool,
+    /// Sound played when an agent's console starts waiting on the user /
+    /// finishes a turn, per agent so they can be told apart by ear: one of
+    /// the ids in src/lib/ai-mode/sounds.ts, or "none".
+    pub ai_sound_claude_awaiting: String,
+    pub ai_sound_claude_finished: String,
+    pub ai_sound_codex_awaiting: String,
+    pub ai_sound_codex_finished: String,
+    /// 0–100.
+    pub ai_sound_volume: u8,
     /// App icon badge with the number of sessions waiting on the user.
     pub ai_dock_badge: bool,
     /// The user's own Claude Code `statusLine` command, saved when Termini
@@ -136,6 +149,13 @@ impl Default for AppConfig {
             ai_notify_awaiting: true,
             ai_notify_error: true,
             ai_notify_finished: true,
+            ai_sound_claude_enabled: true,
+            ai_sound_codex_enabled: true,
+            ai_sound_claude_awaiting: "alert".into(),
+            ai_sound_claude_finished: "chime".into(),
+            ai_sound_codex_awaiting: "pop".into(),
+            ai_sound_codex_finished: "marimba".into(),
+            ai_sound_volume: 70,
             ai_dock_badge: true,
             status_line_wrapped: None,
             default_layout: None,

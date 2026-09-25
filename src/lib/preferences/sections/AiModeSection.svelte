@@ -10,7 +10,6 @@
   } from "$lib/core/agent-hooks-client";
   import { t } from "$lib/i18n/i18n.svelte";
   import { installStatusLine, isStatusLineInstalled, uninstallStatusLine } from "$lib/core/status-line-client";
-
   const TOOLS: { tool: AgentTool; label: string; file: string }[] = [
     { tool: "claude", label: "Claude Code", file: "~/.claude/settings.json" },
     { tool: "codex", label: "Codex", file: "~/.codex/hooks.json" },
@@ -68,43 +67,6 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.aiMode.detectHint")}</p>
-</section>
-
-<section>
-  <h3>{t("preferences.aiMode.notices")}</h3>
-  <label class="toggle-row">
-    <span>{t("preferences.aiMode.notifyAwaiting")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.aiNotifyAwaiting}
-      onchange={(e) => appConfigStore.setAiNotifyAwaiting(e.currentTarget.checked)}
-    />
-  </label>
-  <label class="toggle-row">
-    <span>{t("preferences.aiMode.notifyFinished")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.aiNotifyFinished}
-      onchange={(e) => appConfigStore.setAiNotifyFinished(e.currentTarget.checked)}
-    />
-  </label>
-  <label class="toggle-row">
-    <span>{t("preferences.aiMode.notifyError")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.aiNotifyError}
-      onchange={(e) => appConfigStore.setAiNotifyError(e.currentTarget.checked)}
-    />
-  </label>
-  <label class="toggle-row">
-    <span>{t("preferences.aiMode.dockBadge")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.aiDockBadge}
-      onchange={(e) => appConfigStore.setAiDockBadge(e.currentTarget.checked)}
-    />
-  </label>
-  <p class="setting-hint">{t("preferences.aiMode.noticesHint")}</p>
 </section>
 
 <section>
