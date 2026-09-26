@@ -3,13 +3,15 @@
   import type { AiSessionStatus } from "$lib/ai-mode/classifier";
   import { workspaceStore } from "./workspace-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { isMac } from "$lib/core/platform";
+  import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { resolveShellArgs } from "$lib/core/shell-args";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
-  import type { PaneInsets, PaneRect, TileNode } from "./split-tree";
+  import { dropZoneAt, type DropZone, type PaneInsets, type PaneRect, type TileNode } from "./split-tree";
   import { t } from "$lib/i18n/i18n.svelte";
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
@@ -17,7 +19,7 @@
   import { newTabOptions } from "./new-tab-options.svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
+  import { requestAgentLaunch, requestLaunch } from "$lib/agent-launch/request-launch";
   import type { ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
@@ -52,12 +54,20 @@
 
   let shellPickerOpen = $state(false);
   let shellPickerPos = $state({ top: 0, left: 0 });
-  let addButtonEl: HTMLButtonElement | undefined;
+  /** The "+ ˅" pair: the menu opens under it, right-aligned to it. */
+  let addGroupEl: HTMLDivElement | undefined;
+
+  /** The "+" half: one click, a console like the one this tile is showing —
+   * the same thing Ctrl+T does for the focused tile. */
+  function newTabHere() {
+    closeShellPicker();
+    workspaceStore.newTabLikeActive(tile.id);
+  }
 
   function toggleShellPicker() {
     shellPickerOpen = !shellPickerOpen;
     recentOpen = false;
-    if (shellPickerOpen && addButtonEl) {
+    if (shellPickerOpen && addGroupEl) {
       // Rendered via position:fixed (not nested/absolute) because
       // .tile-tabstrip sets overflow-x:auto, which per the CSS spec forces
       // overflow-y to auto too — a nested absolutely-positioned panel got
@@ -67,7 +77,7 @@
       // the window on both axes — in a narrow split tile (e.g. the left
       // pane of a side-by-side split), right-aligning unclamped could push
       // the panel's left edge past the window's left edge entirely.
-      const box = addButtonEl.getBoundingClientRect();
+      const box = addGroupEl.getBoundingClientRect();
       const left = Math.max(
         SHELL_PICKER_MARGIN,
         Math.min(box.right - SHELL_PICKER_WIDTH, window.innerWidth - SHELL_PICKER_WIDTH - SHELL_PICKER_MARGIN),
@@ -92,6 +102,28 @@
   function closeShellPicker() {
     shellPickerOpen = false;
     recentOpen = false;
+  }
+
+  /** Shift+click is the keyboard-hand's way to the folder icon. */
+  function onShellClick(event: MouseEvent, shell: ShellInfo) {
+    if (event.shiftKey) pickShellElsewhere(shell);
+    else pickShell(shell);
+  }
+
+  /** The row's folder icon: pick a folder first (see AgentLaunchDialog), then
+   * open this shell there. */
+  function pickShellElsewhere(shell: ShellInfo) {
+    closeShellPicker();
+    requestLaunch(
+      {
+        kind: "shell",
+        path: shell.path,
+        args: resolveShellArgs(shell.id, shell.args, appConfigStore.psreadlineMenuComplete),
+        name: shell.display_name,
+        iconId: shell.id,
+      },
+      tile.id,
+    );
   }
 
   function pickShell(shell: ShellInfo) {
@@ -152,6 +184,7 @@
     const startX = event.clientX;
     const startY = event.clientY;
     const sourceTileId = tile.id;
+    const sourceTabCount = tile.sessions.length;
     const sourceTab = event.currentTarget as HTMLElement;
     let dragging = false;
     let ghost: HTMLElement | null = null;
@@ -205,10 +238,75 @@
     }
 
     function clearHighlight() {
-      document.querySelectorAll(".tile-chrome.drag-over").forEach((el) => el.classList.remove("drag-over"));
       document
         .querySelectorAll(".tile-tab.drag-insert-before, .tile-tab.drag-insert-after")
         .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
+    }
+
+    /** What letting go right here would do — the preview and the drop both
+     * read it, so what's shown is always what happens. */
+    type Drop =
+      | { kind: "none" }
+      | { kind: "strip" | "tile"; tileId: string; chrome: HTMLElement }
+      | { kind: "split"; tileId: string; chrome: HTMLElement; side: Exclude<DropZone, "center"> };
+
+    function dropAt(e: PointerEvent): Drop {
+      const chrome = currentDropTile(e);
+      const tileId = chrome?.dataset.tileId;
+      if (!chrome || !tileId) return { kind: "none" };
+      if (document.elementFromPoint(e.clientX, e.clientY)?.closest(".tile-tabstrip")) {
+        // Over itself it stays put; anywhere else on a strip it's inserted.
+        return currentDropTab(e) === sourceTab ? { kind: "none" } : { kind: "strip", tileId, chrome };
+      }
+      // Measured on the console below the strip, where the edges are.
+      const box = chrome.getBoundingClientRect();
+      const stripBottom = chrome.querySelector(".tile-tabstrip")?.getBoundingClientRect().bottom ?? box.top;
+      const side = dropZoneAt((e.clientX - box.left) / box.width, (e.clientY - stripBottom) / (box.bottom - stripBottom));
+      const own = tileId === sourceTileId;
+      if (side !== "center") {
+        // A tile's only tab can't split it: there'd be nothing left beside it.
+        return own && sourceTabCount < 2 ? { kind: "none" } : { kind: "split", tileId, chrome, side };
+      }
+      // Its own console keeps it where it was: only the strip reorders.
+      return own ? { kind: "none" } : { kind: "tile", tileId, chrome };
+    }
+
+    /** The box that shows where the tab would land: the whole tile, or the
+     * half a new group would take. One element for the whole drag, so moving
+     * between zones animates it from one shape to the next. */
+    let preview: HTMLElement | null = null;
+
+    function showPreview(drop: Drop) {
+      if (drop.kind === "none") {
+        preview?.classList.remove("visible");
+        return;
+      }
+      const box = drop.chrome.getBoundingClientRect();
+      let { left, top, width, height } = box;
+      if (drop.kind === "split") {
+        if (drop.side === "left" || drop.side === "right") width /= 2;
+        else height /= 2;
+        if (drop.side === "right") left += width;
+        if (drop.side === "bottom") top += height;
+      }
+      if (!preview) {
+        preview = document.createElement("div");
+        preview.className = "tab-drop-preview";
+        preview.appendChild(document.createElement("span")).className = "tab-drop-label";
+        document.body.appendChild(preview);
+      }
+      // Appearing, it starts from where it's needed rather than sliding in
+      // from wherever it last was.
+      const appearing = !preview.classList.contains("visible");
+      if (appearing) preview.style.transition = "none";
+      Object.assign(preview.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+      preview.firstElementChild!.textContent = drop.kind === "split" ? t("tabs.newGroup") : "";
+      preview.classList.toggle("split", drop.kind === "split");
+      if (appearing) {
+        void preview.offsetWidth;
+        preview.style.transition = "";
+      }
+      preview.classList.add("visible");
     }
 
     // Which existing tab (if any) the pointer is currently over, and whether
@@ -230,7 +328,7 @@
       if (!dragging) return;
       moveGhost(e);
       clearHighlight();
-      currentDropTile(e)?.classList.add("drag-over");
+      showPreview(dropAt(e));
       const insertion = hoveredInsertion(e);
       insertion?.tab.classList.add(insertion.before ? "drag-insert-before" : "drag-insert-after");
     }
@@ -242,16 +340,16 @@
       clearHighlight();
       ghost?.remove();
       ghost = null;
+      preview?.remove();
+      preview = null;
       sourceTab.classList.remove("drag-source");
 
       if (dragging) {
-        const targetTileId = currentDropTile(e)?.dataset.tileId;
-        const insertion = hoveredInsertion(e);
-        const overStrip = !!document.elementFromPoint(e.clientX, e.clientY)?.closest(".tile-tabstrip");
-        // Let go over itself, or over its own tile's console, the tab stays
-        // where it was: only the tab strip reorders a tile's own tabs.
-        const staysPut = currentDropTab(e) === sourceTab || (targetTileId === sourceTileId && !overStrip);
-        if (targetTileId && !staysPut) {
+        const drop = dropAt(e);
+        if (drop.kind === "split") {
+          workspaceStore.splitWithSession(sourceTileId, drop.tileId, sessionId, drop.side);
+        } else if (drop.kind !== "none") {
+          const insertion = hoveredInsertion(e);
           let beforeSessionId: string | undefined;
           if (insertion) {
             beforeSessionId = insertion.before
@@ -260,7 +358,7 @@
                 ? insertion.tab.nextElementSibling.dataset.sessionId
                 : undefined;
           }
-          workspaceStore.moveSession(sourceTileId, targetTileId, sessionId, beforeSessionId);
+          workspaceStore.moveSession(sourceTileId, drop.tileId, sessionId, beforeSessionId);
         }
       } else {
         workspaceStore.setActiveSession(sourceTileId, sessionId);
@@ -337,16 +435,31 @@
         </span>
       </div>
     {/each}
-    <button
-      class="tile-tab-add"
-      aria-label={t("tabs.new")}
-      bind:this={addButtonEl}
-      onclick={toggleShellPicker}
-    >
-      <svg viewBox="0 0 10 10" width="10" height="10">
-        <path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1" />
-      </svg>
-    </button>
+    <!-- Split button: "+" opens a tab right away, "˅" the full menu. -->
+    <div class="tile-tab-add-group" class:open={shellPickerOpen} bind:this={addGroupEl}>
+      <button
+        class="tile-tab-add"
+        aria-label={t("tabs.new")}
+        title={`${t("tabs.new")} (${formatKeybindingLabel(appConfigStore.getEffectiveShortcut("newTab"), isMac)})`}
+        onclick={newTabHere}
+      >
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
+      <button
+        class="tile-tab-more"
+        aria-label={t("tabs.moreOptions")}
+        title={t("tabs.moreOptions")}
+        aria-haspopup="menu"
+        aria-expanded={shellPickerOpen}
+        onclick={toggleShellPicker}
+      >
+        <svg viewBox="0 0 10 6" width="8" height="5">
+          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.2" />
+        </svg>
+      </button>
+    </div>
   </div>
 
   {#if shellPickerOpen}
@@ -360,14 +473,24 @@
         in:fly={{ y: -4, duration: 120, easing: cubicOut }}
       >
         {#each shells as shell (shell.id)}
-          <button
-            class="shell-picker-item"
-            onmouseenter={() => (recentOpen = false)}
-            onclick={() => pickShell(shell)}
-          >
-            <ConsoleIcon kind={shell.id} />
-            <span class="shell-picker-label">{shell.display_name}</span>
-          </button>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="shell-picker-row" onmouseenter={() => (recentOpen = false)}>
+            <button class="shell-picker-item" onclick={(e) => onShellClick(e, shell)}>
+              <ConsoleIcon kind={shell.id} />
+              <span class="shell-picker-label">{shell.display_name}</span>
+            </button>
+            <button
+              class="shell-picker-elsewhere"
+              title={t("tabs.openElsewhere")}
+              aria-label={t("tabs.openElsewhereFor", { shell: shell.display_name })}
+              onclick={() => pickShellElsewhere(shell)}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" stroke-width="1.1" />
+                <path d="M7 9h4.5M9.5 7l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.1" />
+              </svg>
+            </button>
+          </div>
         {/each}
         {#if shells.length === 0}
           <p class="shell-picker-empty">{t("tabs.loadingShells")}</p>
@@ -501,16 +624,59 @@
     scrollbar-width: none;
   }
 
-  /* Toggled imperatively via classList (not a Svelte class: directive) since the
-     drop target is discovered by geometry during a manual pointer drag. The
-     whole tile lights up: dropping anywhere on it moves the tab there. */
-  :global(.tile-chrome.drag-over)::after {
-    content: "";
-    position: absolute;
-    inset: 0;
+  /* Where a dragged tab would land (see showPreview): the whole tile, or the
+     half a new group would take. Built imperatively, so global. It glides
+     between shapes as the pointer crosses zones, and fades in and out. */
+  :global(.tab-drop-preview) {
+    position: fixed;
+    z-index: 999;
+    box-sizing: border-box;
+    display: flex;
+    /* The label sits up top, clear of the dragged tab under the pointer. */
+    align-items: flex-start;
+    justify-content: center;
+    padding: 14px 4px;
     border: 2px dashed var(--pane-active-border, #3a6df0);
+    border-radius: 6px;
     background: color-mix(in srgb, var(--pane-active-border, #3a6df0) 8%, transparent);
+    color: var(--tabbar-active-fg, #f0f0f0);
+    font-size: 12px;
+    font-weight: 600;
     pointer-events: none;
+    opacity: 0;
+    transform: scale(0.98);
+    transition:
+      left 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      top 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      width 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      height 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      background 160ms ease,
+      opacity 120ms ease,
+      transform 120ms ease;
+  }
+
+  :global(.tab-drop-preview.visible) {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  :global(.tab-drop-label:empty) {
+    display: none;
+  }
+
+  :global(.tab-drop-label) {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  /* A new group reads as solid ground, not just a highlighted tile. */
+  :global(.tab-drop-preview.split) {
+    border-style: solid;
+    background: color-mix(in srgb, var(--pane-active-border, #3a6df0) 22%, transparent);
+    backdrop-filter: blur(1px);
   }
 
   /* The tab being dragged, left behind as a placeholder. */
@@ -602,20 +768,60 @@
     background: rgba(255, 255, 255, 0.12);
   }
 
-  .tile-tab-add {
+  /* The two halves share one outline on hover, split by a hairline, and each
+     lights up on its own so it's clear which one the click will hit. */
+  .tile-tab-add-group {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    margin: 4px 4px 4px 2px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    transition: border-color 100ms ease;
+  }
+
+  .tile-tab-add-group:hover,
+  .tile-tab-add-group.open {
+    border-color: var(--tabbar-border, #3a3a3a);
+  }
+
+  .tile-tab-add,
+  .tile-tab-more {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
     flex-shrink: 0;
+    padding: 0;
     border: none;
     background: transparent;
     color: var(--tabbar-fg, #9a9a9a);
     cursor: pointer;
+    transition:
+      background 100ms ease,
+      color 100ms ease;
   }
 
-  .tile-tab-add:hover {
+  .tile-tab-add {
+    width: 22px;
+    border-radius: 3px 0 0 3px;
+  }
+
+  .tile-tab-more {
+    width: 15px;
+    border-left: 1px solid transparent;
+    border-radius: 0 3px 3px 0;
+  }
+
+  .tile-tab-add-group:hover .tile-tab-more,
+  .tile-tab-add-group.open .tile-tab-more {
+    border-left-color: var(--tabbar-border, #3a3a3a);
+  }
+
+  .tile-tab-add:hover,
+  .tile-tab-more:hover,
+  .tile-tab-add-group.open .tile-tab-more {
     color: var(--tabbar-active-fg, #f0f0f0);
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 
   /* position:fixed with JS-computed coordinates, rendered as a sibling of
@@ -668,6 +874,58 @@
 
   .shell-picker-item:hover:not(:disabled) {
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  /* A shell's row: the shell itself, and at its end the folder icon that
+     asks where to open it. The icon only shows while the row is under the
+     pointer, so the menu stays as quiet as before. */
+  .shell-picker-row {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  .shell-picker-row .shell-picker-item {
+    flex: 1;
+    min-width: 0;
+    padding-right: 34px;
+  }
+
+  .shell-picker-elsewhere {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--tabbar-active-fg, #f0f0f0);
+    opacity: 0;
+    transform: translateY(-50%);
+    cursor: pointer;
+    transition:
+      opacity 100ms ease,
+      background 100ms ease;
+  }
+
+  .shell-picker-elsewhere svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .shell-picker-row:hover .shell-picker-elsewhere,
+  .shell-picker-elsewhere:focus-visible {
+    opacity: 0.75;
+  }
+
+  .shell-picker-elsewhere:hover {
+    opacity: 1;
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.12));
   }
 
   .shell-picker-item:disabled {

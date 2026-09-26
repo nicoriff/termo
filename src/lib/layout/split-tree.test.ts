@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDividers, makeSession, makeTile, type SplitNode } from "./split-tree";
+import { computeDividers, dropZoneAt, makeSession, makeTile, splitLeaf, type SplitNode } from "./split-tree";
 
 describe("computeDividers", () => {
   it("keeps a nested divider inside its own split region", () => {
@@ -34,5 +34,32 @@ describe("computeDividers", () => {
     expect(outer.regionLeft).toBe(0);
     expect(outer.regionWidth).toBe(1);
     expect(outer.top).toBe(0.5);
+  });
+});
+
+describe("splitLeaf", () => {
+  it("puts the new tile after the target by default, or before it with newFirst", () => {
+    const target = makeTile(makeSession());
+    const added = makeTile(makeSession());
+    const after = splitLeaf(target, target.id, "row", added, "s1");
+    const before = splitLeaf(target, target.id, "row", added, "s2", true);
+    expect(after.kind === "split" && after.children.map((child) => child.id)).toEqual([target.id, added.id]);
+    expect(before.kind === "split" && before.children.map((child) => child.id)).toEqual([added.id, target.id]);
+  });
+});
+
+describe("dropZoneAt", () => {
+  it("splits toward a side near its edge, and drops in the middle otherwise", () => {
+    expect(dropZoneAt(0.1, 0.5)).toBe("left");
+    expect(dropZoneAt(0.9, 0.5)).toBe("right");
+    expect(dropZoneAt(0.5, 0.05)).toBe("top");
+    expect(dropZoneAt(0.5, 0.95)).toBe("bottom");
+    expect(dropZoneAt(0.5, 0.5)).toBe("center");
+    expect(dropZoneAt(0.3, 0.7)).toBe("center");
+  });
+
+  it("lets the nearest side win in a corner", () => {
+    expect(dropZoneAt(0.05, 0.2)).toBe("left");
+    expect(dropZoneAt(0.2, 0.05)).toBe("top");
   });
 });

@@ -12,6 +12,10 @@ export const es = {
   tabs: {
     close: "Cerrar pestaña",
     new: "Nueva pestaña",
+    moreOptions: "Más opciones: otra consola, Claude Code, Codex, recientes",
+    newGroup: "Nuevo grupo",
+    openElsewhere: "Abrir en otra carpeta… (Shift+clic)",
+    openElsewhereFor: "Abrir {shell} en otra carpeta",
     splitVertical: "Dividir verticalmente",
     splitHorizontal: "Dividir horizontalmente",
     zoom: "Ampliar pestaña",

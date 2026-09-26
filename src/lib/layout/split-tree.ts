@@ -58,24 +58,49 @@ export function updateLeaf(
   return { ...root, children: [a, b] };
 }
 
+/** Splits the target tile in two, with `newTile` after it (right/below) or,
+ * with `newFirst`, before it (left/above). */
 export function splitLeaf(
   root: SplitNode,
   targetTileId: string,
   direction: SplitDirection,
   newTile: TileNode,
   newSplitId: string,
+  newFirst = false,
 ): SplitNode {
   if (root.kind === "leaf") {
     if (root.id !== targetTileId) return root;
-    return { kind: "split", id: newSplitId, direction, ratio: 0.5, children: [root, newTile] };
+    const children: [SplitNode, SplitNode] = newFirst ? [newTile, root] : [root, newTile];
+    return { kind: "split", id: newSplitId, direction, ratio: 0.5, children };
   }
   return {
     ...root,
     children: [
-      splitLeaf(root.children[0], targetTileId, direction, newTile, newSplitId),
-      splitLeaf(root.children[1], targetTileId, direction, newTile, newSplitId),
+      splitLeaf(root.children[0], targetTileId, direction, newTile, newSplitId, newFirst),
+      splitLeaf(root.children[1], targetTileId, direction, newTile, newSplitId, newFirst),
     ],
   };
+}
+
+/** Where a tab dropped on a tile goes: into it, or into a new tile split off
+ * one of its sides. */
+export type DropZone = "center" | "left" | "right" | "top" | "bottom";
+
+/**
+ * Which zone a point falls in, from its position within the tile as
+ * fractions (0–1) of the tile's width and height. The outer `edge` of each
+ * side splits toward it — the nearest side wins in a corner — and the rest
+ * drops into the tile itself.
+ */
+export function dropZoneAt(fx: number, fy: number, edge = 0.25): DropZone {
+  const distances: [DropZone, number][] = [
+    ["left", fx],
+    ["right", 1 - fx],
+    ["top", fy],
+    ["bottom", 1 - fy],
+  ];
+  const [side, distance] = distances.reduce((best, next) => (next[1] < best[1] ? next : best));
+  return distance < edge ? side : "center";
 }
 
 export function updateRatio(root: SplitNode, splitId: string, ratio: number): SplitNode {

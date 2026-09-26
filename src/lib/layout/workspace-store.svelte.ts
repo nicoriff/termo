@@ -10,6 +10,7 @@ import {
   splitLeaf,
   updateLeaf,
   updateRatio,
+  type DropZone,
   type SessionTab,
   type SplitDirection,
   type SplitNode,
@@ -66,8 +67,13 @@ class WorkspaceStore {
    * (path/args/title) of that tile's currently active tab — "same type of
    * console" the user is looking at, not whatever the app default is. */
   newTabLikeFocused(): void {
-    if (!this.root || !this.focusedTileId) return;
-    const tile = collectTiles(this.root).find((t) => t.id === this.focusedTileId);
+    if (this.focusedTileId) this.newTabLikeActive(this.focusedTileId);
+  }
+
+  /** The same for a given tile: what the "+" of each tile's tab strip does. */
+  newTabLikeActive(tileId: string): void {
+    if (!this.root) return;
+    const tile = collectTiles(this.root).find((t) => t.id === tileId);
     const active = tile?.sessions.find((s) => s.id === tile.activeSessionId);
     if (!tile || !active) return;
     // Where that console is now (as it reported via OSC 7), not just where it
@@ -235,6 +241,46 @@ class WorkspaceStore {
       return;
     }
 
+    const detached = this.detachSession(fromTileId, sessionId);
+    if (!detached) return;
+    const { base, moved } = detached;
+    const afterAdd = updateLeaf(base, toTileId, (tile) => {
+      const insertAt = beforeSessionId ? tile.sessions.findIndex((s) => s.id === beforeSessionId) : -1;
+      const sessions =
+        insertAt === -1
+          ? [...tile.sessions, moved!]
+          : [...tile.sessions.slice(0, insertAt), moved!, ...tile.sessions.slice(insertAt)];
+      return { ...tile, sessions, activeSessionId: moved!.id };
+    });
+    if (afterAdd) {
+      this.root = afterAdd;
+      this.focusedTileId = toTileId;
+    }
+  }
+
+  /**
+   * Drops a tab on the side of a tile: that tile splits in two and the tab
+   * becomes the whole of the new half, left/right or above/below it. A tile
+   * can't be split by its own only tab — there'd be nothing left beside it.
+   */
+  splitWithSession(fromTileId: string, targetTileId: string, sessionId: string, side: Exclude<DropZone, "center">): void {
+    if (!this.root) return;
+    if (fromTileId === targetTileId) {
+      const tile = collectTiles(this.root).find((t) => t.id === fromTileId);
+      if (!tile || tile.sessions.length < 2) return;
+    }
+    const detached = this.detachSession(fromTileId, sessionId);
+    if (!detached) return;
+    const newTile = makeTile(detached.moved);
+    const direction: SplitDirection = side === "left" || side === "right" ? "row" : "col";
+    this.root = splitLeaf(detached.base, targetTileId, direction, newTile, crypto.randomUUID(), side === "left" || side === "top");
+    this.focusedTileId = newTile.id;
+  }
+
+  /** Takes a tab out of its tile, dropping the tile if that was its last
+   * tab. Returns the tree without it, or null when there's no such tab. */
+  private detachSession(fromTileId: string, sessionId: string): { base: SplitNode; moved: SessionTab } | null {
+    if (!this.root) return null;
     let moved: SessionTab | undefined;
     let tileVanishes = false;
     const afterRemoval = updateLeaf(this.root, fromTileId, (tile) => {
@@ -249,22 +295,9 @@ class WorkspaceStore {
         tile.activeSessionId === sessionId ? remaining[remaining.length - 1].id : tile.activeSessionId;
       return { ...tile, sessions: remaining, activeSessionId };
     });
-    if (!moved) return;
+    if (!moved) return null;
     if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
-
-    const base = afterRemoval ?? this.root;
-    const afterAdd = updateLeaf(base, toTileId, (tile) => {
-      const insertAt = beforeSessionId ? tile.sessions.findIndex((s) => s.id === beforeSessionId) : -1;
-      const sessions =
-        insertAt === -1
-          ? [...tile.sessions, moved!]
-          : [...tile.sessions.slice(0, insertAt), moved!, ...tile.sessions.slice(insertAt)];
-      return { ...tile, sessions, activeSessionId: moved!.id };
-    });
-    if (afterAdd) {
-      this.root = afterAdd;
-      this.focusedTileId = toTileId;
-    }
+    return { base: afterRemoval ?? this.root, moved };
   }
 }
 

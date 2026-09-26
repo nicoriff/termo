@@ -1,5 +1,5 @@
 import type { SavedLayout } from "./layouts-client";
-import type { ToolId } from "$lib/ai-mode/pattern-table";
+import type { LaunchTarget } from "$lib/agent-launch/launch-target";
 
 class UiState {
   maximized = $state(false);
@@ -18,10 +18,10 @@ class UiState {
   layoutManagerOpen = $state(false);
   /** The "About Termini" window, opened from the title bar menu. */
   aboutOpen = $state(false);
-  /** The "where should this agent run" dialog, opened from a tile's new-tab
-   * menu: which agent, which tile gets the tab, and the folder that tile's
-   * console is in (null when it hasn't reported one). */
-  agentLaunch = $state<{ tool: ToolId; tileId: string; here: string | null } | null>(null);
+  /** The "where should this run" dialog, opened from a tile's new-tab menu:
+   * what to open (an agent or a shell), which tile gets the tab, and the
+   * folder that tile's console is in (null when it hasn't reported one). */
+  agentLaunch = $state<{ target: LaunchTarget; tileId: string; here: string | null } | null>(null);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -118,8 +118,8 @@ class UiState {
     this.aboutOpen = false;
   }
 
-  openAgentLaunch(tool: ToolId, tileId: string, here: string | null): void {
-    this.agentLaunch = { tool, tileId, here };
+  openAgentLaunch(target: LaunchTarget, tileId: string, here: string | null): void {
+    this.agentLaunch = { target, tileId, here };
   }
 
   closeAgentLaunch(): void {

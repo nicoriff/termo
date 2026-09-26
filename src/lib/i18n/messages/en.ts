@@ -14,6 +14,10 @@ export const en: Messages = {
   tabs: {
     close: "Close tab",
     new: "New tab",
+    moreOptions: "More options: another console, Claude Code, Codex, recent",
+    newGroup: "New group",
+    openElsewhere: "Open in another folder… (Shift+click)",
+    openElsewhereFor: "Open {shell} in another folder",
     splitVertical: "Split vertically",
     splitHorizontal: "Split horizontally",
     zoom: "Zoom tab",

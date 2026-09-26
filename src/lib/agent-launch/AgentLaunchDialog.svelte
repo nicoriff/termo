@@ -10,6 +10,7 @@
   import ConsoleIcon from "./ConsoleIcon.svelte";
   import { breadcrumbs, samePath, typeAheadIndex } from "./folder-nav";
   import { launchAgent } from "./launch-agent";
+  import { workspaceStore } from "$lib/layout/workspace-store.svelte";
 
   /** How the step change slides in. */
   const SLIDE_PX = 70;
@@ -45,7 +46,13 @@
   }
 
   const launch = $derived(uiState.agentLaunch!);
-  const toolName = $derived(TOOL_DISPLAY_NAMES[launch.tool]);
+  const target = $derived(launch.target);
+  const toolName = $derived(target.kind === "agent" ? TOOL_DISPLAY_NAMES[target.tool] : target.name);
+  const iconKind = $derived(target.kind === "agent" ? target.tool : target.iconId);
+  /** A shell arrives here from its folder icon in the "+" menu: another
+   * folder is the point, since a plain click on it already opens right here.
+   * So it goes straight to the browser, and backing out of it closes. */
+  const browseOnly = uiState.agentLaunch?.target.kind === "shell";
 
   let step = $state<"choose" | "browse">("choose");
   let choice = $state(0);
@@ -92,9 +99,10 @@
   }
 
   function start(cwd: string | undefined) {
-    const { tool, tileId } = launch;
+    const { target, tileId } = launch;
     close();
-    void launchAgent(tool, tileId, cwd);
+    if (target.kind === "agent") void launchAgent(target.tool, tileId, cwd);
+    else workspaceStore.addTab(tileId, target.path, target.args, target.name, cwd);
   }
 
   function showError(message: string) {
@@ -119,6 +127,8 @@
     }
     return items;
   }
+
+  if (browseOnly) void openBrowser();
 
   async function openBrowser() {
     step = "browse";
@@ -211,7 +221,8 @@
     enterWhenLoaded = false;
     creating = false;
     if (depth === 0) {
-      step = "choose";
+      if (browseOnly) close();
+      else step = "choose";
       return;
     }
     // The column being left stays right after the new current one: it's the
@@ -332,7 +343,10 @@
     } else if (event.key === "Enter") {
       const item = current?.items[selected];
       if (item) start(item.path);
-    } else if (event.key === "Escape") step = "choose";
+    } else if (event.key === "Escape") {
+      if (browseOnly) close();
+      else step = "choose";
+    }
     else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) typeAhead(event.key);
     else return;
     event.preventDefault();
@@ -386,7 +400,7 @@
     transition:fly={{ y: -16, duration: 140 }}
   >
     <header class="launch-header">
-      <ConsoleIcon kind={launch.tool} size={16} />
+      <ConsoleIcon kind={iconKind} size={16} />
       <h2>{t("agentLaunch.title", { tool: toolName })}</h2>
     </header>
 
