@@ -184,6 +184,9 @@ export const es = {
       folder: "Contiene cambios",
     },
   },
+  activityBar: {
+    label: "Barra de paneles",
+  },
   agents: {
     title: "Agentes",
     new: "Nuevo agente",
@@ -589,6 +592,7 @@ export const es = {
       console: "Consola",
       aiMode: "IA Mode",
       aiNotifications: "Notificaciones",
+      aiAgents: "Agentes",
       integrations: "Integraciones",
       ohMyPosh: "Oh My Posh",
       mac: "macOS",
@@ -643,6 +647,12 @@ export const es = {
       bashColors: "Prompt con colores (usuario, carpeta y rama de git)",
       bashMacExtra: "También activa colores en ls y oculta el aviso de zsh.",
       bashHint: "Solo afecta sesiones nuevas de bash; si tu ~/.bashrc define su propio prompt, se usa ese.",
+    },
+    agents: {
+      access: "Acceso",
+      inActivityBar: "Mostrar el botón de Agentes en la barra vertical",
+      inActivityBarHint:
+        "La barra vertical está en el borde izquierdo de la ventana. Aunque lo ocultes, el panel se sigue abriendo con {shortcut}, desde el menú ≡ o la paleta de comandos.",
     },
     aiMode: {
       title: "Modo IA",

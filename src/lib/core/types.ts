@@ -79,6 +79,7 @@ export interface AppConfig {
   ai_sound_codex_finished: string;
   ai_sound_volume: number;
   ai_dock_badge: boolean;
+  agents_in_activity_bar: boolean;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;

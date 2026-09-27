@@ -121,6 +121,8 @@ pub struct AppConfig {
     pub ai_sound_volume: u8,
     /// App icon badge with the number of sessions waiting on the user.
     pub ai_dock_badge: bool,
+    /// The Agents button in the window's vertical bar.
+    pub agents_in_activity_bar: bool,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -161,6 +163,7 @@ impl Default for AppConfig {
             ai_sound_codex_finished: "marimba".into(),
             ai_sound_volume: 70,
             ai_dock_badge: true,
+            agents_in_activity_bar: true,
             status_line_wrapped: None,
             default_layout: None,
             window: WindowConfig::default(),

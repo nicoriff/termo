@@ -15,6 +15,7 @@
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
+  import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { startAgentRunAttention } from "$lib/agents/agent-attention";
@@ -197,6 +198,10 @@
     <AiModePanel />
   {/if}
   <main class="content">
+    <!-- Only while it has something to show: Agents is its one button. -->
+    {#if appConfigStore.agentsInActivityBar}
+      <ActivityBar />
+    {/if}
     {#if agentsStore.open}
       <AgentsSidebar />
     {/if}

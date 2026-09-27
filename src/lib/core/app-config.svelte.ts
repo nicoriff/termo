@@ -93,6 +93,8 @@ class AppConfigStore {
   aiSounds = $state<Record<ToolId, Record<SoundEvent, SoundChoice>>>(structuredClone(DEFAULT_SOUNDS));
   aiSoundVolume = $state(70);
   aiDockBadge = $state(true);
+  /** The Agents button in the window's vertical bar. */
+  agentsInActivityBar = $state(true);
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
@@ -165,6 +167,7 @@ class AppConfigStore {
     };
     this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
+    this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.shortcuts = config.shortcuts;
@@ -266,6 +269,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setAgentsInActivityBar(visible: boolean): void {
+    this.agentsInActivityBar = visible;
+    void this.persist();
+  }
+
   /** Null means launching into a single console, as before. */
   setDefaultLayout(name: string | null): void {
     this.defaultLayout = name;
@@ -339,6 +347,7 @@ class AppConfigStore {
       ai_sound_codex_finished: this.aiSounds.codex.finished,
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
+      agents_in_activity_bar: this.agentsInActivityBar,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       font_size_override: themeStore.fontSizeOverride,

@@ -12,6 +12,7 @@
   import OhMyPoshSection from "./sections/OhMyPoshSection.svelte";
   import AiModeSection from "./sections/AiModeSection.svelte";
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
+  import AiAgentsSection from "./sections/AiAgentsSection.svelte";
   import PlatformSection from "./sections/PlatformSection.svelte";
   import GeneralSection from "./sections/GeneralSection.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
@@ -25,6 +26,7 @@
     | "oh-my-posh"
     | "ai-mode"
     | "ai-notifications"
+    | "ai-agents"
     | "mac"
     | "windows"
     | "linux";
@@ -57,7 +59,10 @@
     {
       id: "ai-mode",
       label: "preferences.sidebar.aiMode",
-      children: [{ id: "ai-notifications", label: "preferences.sidebar.aiNotifications" }],
+      children: [
+        { id: "ai-notifications", label: "preferences.sidebar.aiNotifications" },
+        { id: "ai-agents", label: "preferences.sidebar.aiAgents" },
+      ],
     },
     {
       id: "integrations",
@@ -182,6 +187,8 @@
         <AiModeSection />
       {:else if selected === "ai-notifications"}
         <AiNotificationsSection />
+      {:else if selected === "ai-agents"}
+        <AiAgentsSection />
       {:else if selected === "mac"}
         <PlatformSection os="mac" />
       {:else if selected === "windows"}

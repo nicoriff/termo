@@ -185,6 +185,9 @@ export const en: Messages = {
       folder: "Contains changes",
     },
   },
+  activityBar: {
+    label: "Panels bar",
+  },
   agents: {
     title: "Agents",
     new: "New agent",
@@ -588,6 +591,7 @@ export const en: Messages = {
       console: "Console",
       aiMode: "AI Mode",
       aiNotifications: "Notifications",
+      aiAgents: "Agents",
       integrations: "Integrations",
       ohMyPosh: "Oh My Posh",
       mac: "macOS",
@@ -642,6 +646,12 @@ export const en: Messages = {
       bashColors: "Colored prompt (user, folder and git branch)",
       bashMacExtra: "Also enables colors in ls and hides the zsh notice.",
       bashHint: "Only affects new bash sessions; if your ~/.bashrc defines its own prompt, that one is used.",
+    },
+    agents: {
+      access: "Access",
+      inActivityBar: "Show the Agents button in the vertical bar",
+      inActivityBarHint:
+        "The vertical bar is on the window's left edge. Even with the button hidden, the panel still opens with {shortcut}, from the ≡ menu or from the command palette.",
     },
     aiMode: {
       title: "AI Mode",
