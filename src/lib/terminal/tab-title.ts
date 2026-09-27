@@ -69,21 +69,42 @@ export function applyProcessChange(state: TabTitleState, processName: string | n
   };
 }
 
-/** `consoleLabel` is what the brackets say: the tab's console title (e.g.
- * "zsh (default)", "PowerShell 7"), or the agent's name while one is running
- * in it (see tab-title-store). A program or process title is prefixed with
- * it, e.g. "[zsh] claude"; with neither, the label stands alone.
+/** The console's own name, without the "(default)" marker the new-tab
+ * menu gives the default shell. */
+export function consoleLabel(title: string): string {
+  return title.replace(/\s*\(default\)$/, "");
+}
+
+/** A tab's title: what the program running in it says (or its process
+ * name), else the console's own name — `label`, the tab's console title or
+ * the agent's name while one runs in it (see tab-title-store). The console's
+ * type isn't spelled out here: the tab shows it as an icon (`consoleKind`)
+ * and the status bar names it.
  *
- * `redundantTitles` are program titles the label already says — a Codex
- * console would otherwise read "[Codex] codex". */
+ * `redundantTitles` are program titles the label already says, which read
+ * better as the label itself ("codex" → "Codex"). */
 export function resolveTabTitle(
   state: TabTitleState | undefined,
-  consoleLabel: string,
+  label: string,
   redundantTitles: readonly string[] = [],
 ): string {
-  const label = consoleLabel.replace(/\s*\(default\)$/, "");
+  const name = consoleLabel(label);
   const title = state?.programTitle ?? state?.processName;
-  if (!title) return consoleLabel;
-  if (redundantTitles.some((name) => name.toLowerCase() === title.toLowerCase())) return label;
-  return `[${label}] ${title}`;
+  if (!title) return name;
+  if (redundantTitles.some((redundant) => redundant.toLowerCase() === title.toLowerCase())) return name;
+  return title;
+}
+
+/** Which icon a console gets (see ConsoleIcon): the shell ids from
+ * src-tauri/src/pty/shell_detect.rs, told apart by the shell's path. */
+export function consoleKind(shellPath: string | undefined): string {
+  if (!shellPath) return "posix";
+  const path = shellPath.toLowerCase().replace(/\//g, "\\");
+  const name = baseName(path).toLowerCase();
+  if (name === "pwsh") return "pwsh";
+  if (name === "powershell") return "powershell";
+  if (name === "cmd") return "cmd";
+  if (name === "wsl") return "wsl-";
+  if (name === "bash" && path.includes("\\git\\")) return "git-bash";
+  return "posix";
 }

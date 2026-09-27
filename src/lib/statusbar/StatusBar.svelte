@@ -1,7 +1,9 @@
 <script lang="ts">
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { getPtyMemory } from "$lib/core/pty-client";
-  import { collectTiles } from "$lib/layout/split-tree";
+  import { collectTiles, isConsoleTab } from "$lib/layout/split-tree";
+  import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
+  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { getPtyId } from "$lib/terminal/pty-registry";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -12,11 +14,14 @@
 
   const MEMORY_POLL_MS = 2000;
 
-  const activeTabId = $derived.by(() => {
+  const activeSession = $derived.by(() => {
     if (!workspaceStore.root || !workspaceStore.focusedTileId) return null;
     const tile = collectTiles(workspaceStore.root).find((t) => t.id === workspaceStore.focusedTileId);
-    return tile?.activeSessionId ?? null;
+    return tile?.sessions.find((session) => session.id === tile.activeSessionId) ?? null;
   });
+  const activeTabId = $derived(activeSession?.id ?? null);
+  /** The active tab's console, when it is one (not a file or an agent's runs). */
+  const activeConsole = $derived(activeSession && isConsoleTab(activeSession) ? activeSession : null);
 
   let memoryBytes = $state<number | null>(null);
 
@@ -88,8 +93,12 @@
   <span class="status-item">
     {t("statusBar.aiMode", { state: t(appConfigStore.aiModeEnabled ? "statusBar.aiOn" : "statusBar.aiOff") })}
   </span>
-  {#if activeTool}
-    <span class="status-item status-engine" title={t("statusBar.engineHint")}>{TOOL_DISPLAY_NAMES[activeTool]}</span>
+  {#if activeConsole}
+    <!-- The console's type: the tab shows it only as an icon. -->
+    <span class="status-item status-engine" title={activeTool ? t("statusBar.engineHint") : t("statusBar.consoleHint")}>
+      <ConsoleIcon kind={tabTitleStore.kindFor(activeConsole)} size={11} />
+      {activeTool ? TOOL_DISPLAY_NAMES[activeTool] : tabTitleStore.typeFor(activeConsole)}
+    </span>
   {/if}
   {#if activeTool || planWindows.length > 0}
     <span class="status-item status-plan" title={t("statusBar.planHint")}>
@@ -143,6 +152,9 @@
 
   .status-engine {
     margin-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
 
   .status-plan {

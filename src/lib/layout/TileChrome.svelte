@@ -428,6 +428,8 @@
           <svg class="tile-tab-file" viewBox="0 0 12 14" aria-hidden="true">
             <path d="M1.5 1.5h6l3 3v8h-9z M7.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if !session.agentRun}
+          <span class="tile-tab-kind"><ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} /></span>
         {:else if session.agentRun}
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <rect x="2" y="4" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1" />
@@ -436,7 +438,10 @@
         {/if}
         <span
           class="tile-tab-title"
-          title={session.filePath ?? tabTitleStore.titleFor(session.id, session.title)}
+          title={session.filePath ??
+            (session.agentRun
+              ? tabTitleStore.titleFor(session.id, session.title)
+              : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >
           {tabTitleStore.titleFor(session.id, session.title)}
         </span>
@@ -798,6 +803,12 @@
     flex-shrink: 0;
     font-size: 10px;
     color: var(--pane-active-border, #3a6df0);
+  }
+
+  /* The console's type, as an icon in place of its name. */
+  .tile-tab-kind {
+    display: flex;
+    flex-shrink: 0;
   }
 
   .tile-tab-ai-dot {

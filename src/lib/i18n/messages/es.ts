@@ -28,6 +28,7 @@ export const es = {
     aiOn: "activado",
     aiOff: "desactivado",
     memory: "Memoria: {value}",
+    consoleHint: "El tipo de consola de la pestaña activa",
     engineHint: "Agente de IA detectado en la consola activa",
     plan: "Uso del plan",
     fiveHour: "5 h",

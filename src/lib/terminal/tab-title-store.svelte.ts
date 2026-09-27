@@ -1,9 +1,12 @@
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
 import { appConfigStore } from "../core/app-config.svelte";
+import type { SessionTab } from "../layout/split-tree";
 import {
   applyProcessChange,
   applyProgramTitle,
+  consoleKind,
+  consoleLabel,
   EMPTY_TAB_TITLE,
   processDisplayName,
   resolveTabTitle,
@@ -23,15 +26,31 @@ class TabTitleStore {
     this.update(tabId, (state) => applyProcessChange(state, processDisplayName(path, shellPath), Date.now()));
   }
 
-  /** While Modo IA has an agent session in this tab, the brackets name the
-   * agent ("[Claude Code] fixing the parser") rather than the shell it
-   * happens to run in — which is the thing you're actually looking for when
-   * scanning tabs. The store clears the session when the agent ends, so it
-   * falls back to the console's own title on its own. */
+  /** With nothing more specific from the program, a tab running an agent (as
+   * Modo IA sees it) is named after the agent rather than the shell it
+   * happens to run in. The store clears the session when the agent ends, so
+   * it falls back to the console's own title on its own. */
   titleFor(tabId: string, fallback: string): string {
     const tool = appConfigStore.aiModeEnabled ? aiStatusStore.byId[tabId]?.tool : null;
     if (!tool) return resolveTabTitle(this.byTab[tabId], fallback);
     return resolveTabTitle(this.byTab[tabId], TOOL_DISPLAY_NAMES[tool], [tool, TOOL_DISPLAY_NAMES[tool]]);
+  }
+
+  /** The agent Modo IA sees running in the tab, if any. */
+  private toolIn(tabId: string) {
+    return appConfigStore.aiModeEnabled ? (aiStatusStore.byId[tabId]?.tool ?? null) : null;
+  }
+
+  /** Which icon the tab gets: the agent running in it, else its shell. */
+  kindFor(session: SessionTab): string {
+    return this.toolIn(session.id) ?? consoleKind(session.shellPath);
+  }
+
+  /** The console's type, spelled out (the status bar, the tab's tooltip):
+   * the agent running in it, else the shell's own name. */
+  typeFor(session: SessionTab): string {
+    const tool = this.toolIn(session.id);
+    return tool ? TOOL_DISPLAY_NAMES[tool] : consoleLabel(session.title);
   }
 
   remove(tabId: string): void {

@@ -30,6 +30,7 @@ export const en: Messages = {
     aiOn: "on",
     aiOff: "off",
     memory: "Memory: {value}",
+    consoleHint: "The active tab's console type",
     engineHint: "AI agent detected in the active console",
     plan: "Plan usage",
     fiveHour: "5h",
