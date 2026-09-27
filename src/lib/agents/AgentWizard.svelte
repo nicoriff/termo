@@ -4,7 +4,19 @@
   import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
-  import { deleteAgent, onAgentRunEvent, type AgentAutonomy, type AgentEngine, type RunEvent } from "$lib/core/agents-client";
+  import {
+    deleteAgent,
+    draftAgent,
+    forgetAgentSecrets,
+    onAgentRunEvent,
+    type AgentAutonomy,
+    type AgentDraft,
+    type AgentEngine,
+    type McpServer,
+    type RunEvent,
+  } from "$lib/core/agents-client";
+  import IntegrationPicker from "./IntegrationPicker.svelte";
+  import { AGENT_TEMPLATES, applyTemplate, type AgentTemplate } from "./agent-templates";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { collectTiles } from "$lib/layout/split-tree";
@@ -14,6 +26,8 @@
   import {
     AGENT_ICONS,
     STEP_LABEL_KEYS,
+    applyDraft,
+    secretsOf,
     WIZARD_STEPS,
     newAgentSpec,
     specProblems,
@@ -79,6 +93,58 @@
 
   const installed = (engine: AgentEngine) => newTabOptions.agentClis?.[engine] !== false;
 
+  // "Build it with AI" (step "idea").
+  let drafting = $state(false);
+  let draftError = $state("");
+  /** The AI's word on its choices, shown until the user moves on. */
+  let draftNote = $state("");
+  let suggestions = $state<AgentDraft["integrations"]>([]);
+  let picking = $state(false);
+  /** Every secret stored while the wizard is open, kept or not. */
+  const addedSecrets: string[] = [];
+
+  async function buildWithAi() {
+    if (!spec.description.trim() || drafting) return;
+    drafting = true;
+    draftError = "";
+    try {
+      const draft = await draftAgent(spec.description.trim(), spec.workDir);
+      applyDraft(spec, draft);
+      suggestions = draft.integrations;
+      draftNote = draft.explanation;
+      direction = 1;
+      stepIndex = WIZARD_STEPS.indexOf("logic");
+    } catch (reason) {
+      draftError = String(reason);
+    } finally {
+      drafting = false;
+    }
+  }
+
+  function useTemplate(chosen: AgentTemplate) {
+    applyTemplate(spec, chosen, (key) => t(key), hereFolder);
+    draftNote = "";
+    direction = 1;
+    stepIndex = WIZARD_STEPS.indexOf("logic");
+  }
+
+  function addIntegration(server: McpServer, secrets: string[]) {
+    spec.tools.mcp = [...spec.tools.mcp.filter((existing) => existing.name !== server.name), server];
+    spec.secrets = [...new Set([...spec.secrets, ...secrets])];
+    addedSecrets.push(...secrets);
+    picking = false;
+  }
+
+  function removeIntegration(name: string) {
+    spec.tools.mcp = spec.tools.mcp.filter((server) => server.name !== name);
+    // Only dropped from the keychain once the agent is saved without it.
+    const gone = secretsOf(name, spec.secrets);
+    spec.secrets = spec.secrets.filter((secret) => !gone.includes(secret));
+  }
+
+  /** The secrets the agent had when the wizard opened. */
+  const savedSecrets = [...(target.spec?.secrets ?? [])];
+
   onMount(() => {
     newTabOptions.refresh();
     void tick().then(() => dialogEl?.querySelector<HTMLElement>("textarea, input")?.focus());
@@ -105,6 +171,7 @@
     if (step === "idea" && !spec.task.trim() && spec.description.trim()) spec.task = spec.description.trim();
     direction = index > stepIndex ? 1 : -1;
     showProblems = false;
+    if (step !== "idea") draftNote = "";
     stepIndex = index;
     void tick().then(() => dialogEl?.querySelector<HTMLElement>(".step-body textarea, .step-body input")?.focus());
   }
@@ -123,6 +190,9 @@
     if (isNew && testedOnce && !agentsStore.agents.some((agent) => agent.id === spec.id)) {
       void deleteAgent(spec.id).catch(() => {});
     }
+    // Secrets stored during this session that nothing saved refers to.
+    const created = [...new Set([...spec.secrets, ...addedSecrets])].filter((name) => !savedSecrets.includes(name));
+    void forgetAgentSecrets(spec.id, created).catch(() => {});
     uiState.closeAgentWizard();
   }
 
@@ -140,6 +210,8 @@
     try {
       spec.name = spec.name.trim();
       await agentsStore.save(spec);
+      const unused = [...new Set([...savedSecrets, ...addedSecrets])].filter((name) => !spec.secrets.includes(name));
+      void forgetAgentSecrets(spec.id, unused).catch(() => {});
       agentsStore.setOpen(true);
       uiState.closeAgentWizard();
     } catch (reason) {
@@ -243,7 +315,38 @@
               rows="5"
               placeholder={t("agents.wizard.idea.placeholder")}
               bind:value={spec.description}
+              disabled={drafting}
             ></textarea>
+            <div class="row">
+              <button
+                class="button primary"
+                disabled={drafting || !spec.description.trim() || !installed("claude")}
+                onclick={() => void buildWithAi()}
+              >
+                ✨ {t("agents.wizard.idea.buildWithAi")}
+              </button>
+              <span class="hint" class:working={drafting}>
+                {drafting
+                  ? t("agents.wizard.idea.thinking")
+                  : installed("claude")
+                    ? t("agents.wizard.idea.aiHint")
+                    : t("agents.wizard.idea.aiNeedsClaude")}
+              </span>
+            </div>
+            {#if draftError}<p class="error">{draftError}</p>{/if}
+
+            <div class="label">{t("agents.wizard.idea.templates")}</div>
+            <div class="templates">
+              {#each AGENT_TEMPLATES as template (template.id)}
+                <button class="template" disabled={drafting} onclick={() => useTemplate(template)}>
+                  <span class="template-icon">{template.icon}</span>
+                  <span class="template-text">
+                    <span class="card-title">{t(template.name)}</span>
+                    <span class="card-text">{t(template.description)}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
             <div class="label">{t("agents.wizard.idea.icon")}</div>
             <div class="icons">
               {#each AGENT_ICONS as icon (icon)}
@@ -251,6 +354,12 @@
               {/each}
             </div>
           {:else if step === "logic"}
+            {#if draftNote}
+              <div class="ai-note">
+                <span class="ai-note-title">✨ {t("agents.wizard.idea.drafted")}</span>
+                {draftNote}
+              </div>
+            {/if}
             <h2>{t("agents.wizard.logic.title")}</h2>
             <p class="explain">{t("agents.wizard.logic.explain")}</p>
             <label class="label" for="agent-name">{t("agents.wizard.logic.name")}</label>
@@ -349,10 +458,19 @@
             <div class="label">{t("agents.wizard.tools.integrations")}</div>
             <p class="hint">{t("agents.wizard.tools.integrationsHint")}</p>
             {#each spec.tools.mcp as server (server.name)}
-              <div class="capability on">🔌 {server.name}</div>
-            {:else}
-              <p class="soon">{t("agents.wizard.tools.integrationsSoon")}</p>
+              <div class="integration">
+                <span>🔌 {server.name}</span>
+                <button class="link" onclick={() => removeIntegration(server.name)}>{t("agents.integrations.remove")}</button>
+              </div>
             {/each}
+            {#if picking}
+              <IntegrationPicker agentId={spec.id} {suggestions} onadd={addIntegration} oncancel={() => (picking = false)} />
+            {:else}
+              <button class="button" onclick={() => (picking = true)}>+ {t("agents.integrations.addOne")}</button>
+              {#if suggestions.length > 0}
+                <p class="hint note">✨ {t("agents.integrations.aiSuggests", { list: suggestions.map((s) => s.query).join(", ") })}</p>
+              {/if}
+            {/if}
           {:else if step === "triggers"}
             {@const schedule = spec.triggers.schedule}
             <h2>{t("agents.wizard.triggers.title")}</h2>
@@ -873,13 +991,78 @@
     font-weight: 600;
   }
 
-  .soon {
-    margin: 0;
-    padding: 8px 10px;
-    border: 1px dashed var(--tabbar-border, #3a3a3a);
+  .templates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .template {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .template:hover:not(:disabled) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.05));
+  }
+
+  .template-icon {
+    font-size: 18px;
+  }
+
+  .template-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ai-note {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--pane-active-border, #3a6df0);
     border-radius: 6px;
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.12));
+    line-height: 1.5;
+  }
+
+  .ai-note-title {
+    font-weight: 600;
+  }
+
+  .integration {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 6px;
+  }
+
+  .link {
+    border: none;
+    background: transparent;
+    color: var(--error-fg, #f48771);
+    font: inherit;
     font-size: 11.5px;
-    opacity: 0.6;
+    cursor: pointer;
+  }
+
+  .button:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .button {

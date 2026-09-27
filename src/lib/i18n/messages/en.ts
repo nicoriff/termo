@@ -246,6 +246,55 @@ export const en: Messages = {
       emptyLog: "This run left no log.",
       working: "Working…",
     },
+    integrations: {
+      searchPlaceholder: "Search for a service: GitHub, Slack, Postgres, Notion…",
+      suggested: "Suggested:",
+      searching: "Searching…",
+      noResults: "No integrations by that name.",
+      noParams: "Nothing to set up.",
+      secretsNote: "Values marked 🔒 are kept in the system keychain, not in the agent's configuration.",
+      add: "Add",
+      addOne: "Add integration",
+      remove: "Remove",
+      aiSuggests: "The AI suggests searching for: {list}",
+    },
+    templates: {
+      reviewer: {
+        name: "Change reviewer",
+        description: "Reviews what you changed and haven't committed yet, and flags likely problems.",
+        task: "Review the uncommitted changes in this repository and point out likely bugs, risks or things to improve.",
+        instructions:
+          "Steps:\n1. Look at the changes with git diff and git status.\n2. Read the modified files to understand the context.\n3. Note likely bugs, unhandled edge cases and confusing code.\n\nRules:\n- Don't modify any file.\n- Don't ask questions: if something's unclear, say so in the summary.\n- Order the findings from most to least important.\n\nDone when: you've delivered the list of findings (or said all is well).",
+      },
+      dailySummary: {
+        name: "Daily repo summary",
+        description: "Every weekday morning, summarizes the previous day's commits.",
+        task: "Summarize the commits from the last 24 hours in this repository.",
+        instructions:
+          "Steps:\n1. List the last 24 hours of commits with git log.\n2. Group them by topic or area of the code.\n3. Point out anything that looks risky or unfinished.\n\nRules:\n- Don't modify any file.\n- Answer in under 15 lines.\n\nDone when: you've delivered the summary (or said there were no commits).",
+      },
+      tidyFolder: {
+        name: "Tidy a folder",
+        description: "Every hour, sorts a folder's loose files into subfolders by type.",
+        task: "Sort the loose files in this folder into subfolders by type (Images, Documents, Archives, Other).",
+        instructions:
+          "Steps:\n1. List the files sitting loose in the folder (not those already in subfolders).\n2. Pick each one's subfolder by its extension.\n3. Move them, creating any missing subfolders.\n\nRules:\n- Never delete files.\n- If a file with the same name already exists at the destination, leave the original where it is.\n- Don't touch files still downloading (.crdownload, .part, .tmp).\n\nDone when: you've moved everything that belonged elsewhere; say how many files you moved.",
+      },
+      docsKeeper: {
+        name: "Keep the docs current",
+        description: "Checks that the README matches the project as it is now, and updates it.",
+        task: "Check that this project's README matches the code and fix whatever has gone out of date.",
+        instructions:
+          "Steps:\n1. Read the README.\n2. Check the code, scripts and configuration it mentions.\n3. Fix what doesn't match (commands, names, setup steps).\n\nRules:\n- Only edit documentation files (.md).\n- Keep the existing tone and format.\n- Don't make up features.\n\nDone when: the README matches the project; summarize what you changed.",
+      },
+      researcher: {
+        name: "Research a topic",
+        description: "Searches the web and writes a summary with sources.",
+        task: "Research the most important news of the last week about the topic I give you and summarize it with sources: (write the topic here).",
+        instructions:
+          "Steps:\n1. Search the web for reliable, recent sources.\n2. Read the most relevant ones.\n3. Put together a summary of the key points.\n\nRules:\n- Cite the source (with its link) for each point.\n- If something isn't confirmed, say so.\n- Answer in under 20 lines.\n\nDone when: you've delivered the summary with sources.",
+      },
+    },
     wizard: {
       titleNew: "New agent",
       titleEdit: "Edit agent",
@@ -281,6 +330,12 @@ export const en: Messages = {
         placeholder:
           "E.g.: Every morning, go through yesterday's commits in this repo and write me a short summary of what changed and anything odd.",
         icon: "Icon",
+        buildWithAi: "Build it with AI",
+        thinking: "Thinking about your agent… this can take a minute.",
+        aiHint: "Claude builds every step from your description; then you review them.",
+        aiNeedsClaude: "Building it with AI needs Claude Code installed.",
+        templates: "Or start from a template",
+        drafted: "Here's how I built it",
       },
       logic: {
         title: "The agent's logic",
@@ -318,7 +373,7 @@ export const en: Messages = {
       },
       autonomy: {
         readTitle: "Only look",
-        readText: "Reads and searches files. Changes nothing. Ideal for summaries and reviews.",
+        readText: "Reads and searches files and looks things up in git (log, diff, status). Changes nothing. Ideal for summaries and reviews.",
         editTitle: "Edit files",
         editText: "Can also create and modify files in its folder.",
         runTitle: "Run commands",
@@ -328,7 +383,7 @@ export const en: Messages = {
         title: "Tools",
         explain:
           "Tools are what the agent can use to do its job. The basic ones come from the permission level you picked; add any others here.",
-        read: "Read and search files",
+        read: "Read and search files, and look things up in git",
         edit: "Create and modify files",
         run: "Run commands",
         fromAutonomy: "Changed from \"How much it can do on its own\", in the Engine step.",
@@ -336,7 +391,6 @@ export const en: Messages = {
         webHint: "For agents that need current information: documentation, news, prices.",
         integrations: "Integrations",
         integrationsHint: "Connect the agent to other services (GitHub, Slack, databases…) through MCP.",
-        integrationsSoon: "Very soon you'll be able to add integrations from the catalog.",
       },
       triggers: {
         title: "When does it run?",

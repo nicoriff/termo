@@ -33,6 +33,9 @@ ureq = { version = "2", features = ["tls"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
+# Agents' secrets (API tokens for their integrations) live in the system
+# keychain: Credential Manager, Keychain, the kernel keyring.
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

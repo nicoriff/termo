@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { RunRecord } from "$lib/core/agents-client";
-import { agentState, ago, formatDuration, newAgentSpec, specProblems, stepProblems, withoutEchoes } from "./agent-spec";
+import type { AgentDraft } from "$lib/core/agents-client";
+import {
+  agentState,
+  ago,
+  applyDraft,
+  formatDuration,
+  newAgentSpec,
+  specProblems,
+  secretsOf,
+  stepProblems,
+  withoutEchoes,
+} from "./agent-spec";
 
 function run(status: RunRecord["status"], activity = ""): RunRecord {
   return { id: "r", agentId: "a", trigger: "manual", status, startedAt: 0, endedAt: null, summary: "", activity, costUsd: null };
@@ -51,6 +62,47 @@ describe("agentState", () => {
     const paused = { ...spec, enabled: false };
     expect(agentState(paused, run("success")).tone).toBe("paused");
     expect(agentState(paused, run("running")).tone).toBe("running");
+  });
+});
+
+describe("applyDraft", () => {
+  const draft: AgentDraft = {
+    name: " Resumen diario ",
+    icon: "📊",
+    task: "Resumí los commits",
+    instructions: "Pasos: …",
+    autonomy: "read",
+    web: true,
+    schedule: { kind: "daily", minutes: 0, at: "09:00", weekdays: [5, 1, 1, 9] },
+    integrations: [],
+    explanation: "",
+  };
+
+  it("fills the drafted steps and keeps the user's own choices", () => {
+    const spec = newAgentSpec("a");
+    spec.engine = "codex";
+    spec.workDir = "C:\\repo";
+    applyDraft(spec, draft);
+    expect(spec.name).toBe("Resumen diario");
+    expect(spec.tools.web).toBe(true);
+    expect(spec.triggers.schedule).toEqual({ kind: "daily", at: "09:00", weekdays: [1, 5] });
+    expect(spec.engine).toBe("codex");
+    expect(spec.workDir).toBe("C:\\repo");
+  });
+
+  it("drops what doesn't fit instead of trusting it", () => {
+    const spec = newAgentSpec("a");
+    applyDraft(spec, { ...draft, autonomy: "root" as never, schedule: { kind: "daily", minutes: 0, at: "9am", weekdays: [] } });
+    expect(spec.autonomy).toBe("read");
+    expect(spec.triggers.schedule).toBeNull();
+  });
+});
+
+describe("secretsOf", () => {
+  it("finds the secrets an integration stored, and only those", () => {
+    const secrets = ["SMITHERY_AI_FETCH_AUTHORIZATION", "GITHUB_TOKEN", "SMITHERY_AI_FETCHER_KEY"];
+    expect(secretsOf("smithery-ai-fetch", secrets)).toEqual(["SMITHERY_AI_FETCH_AUTHORIZATION"]);
+    expect(secretsOf("github", secrets)).toEqual(["GITHUB_TOKEN"]);
   });
 });
 

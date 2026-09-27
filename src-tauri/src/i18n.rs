@@ -69,6 +69,8 @@ pub enum Msg<'a> {
     AgentTimedOut(u32),
     /// exit code
     AgentExitedWith(&'a str),
+    AgentSecretFailed(&'a str),
+    AgentDraftFailed(&'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -188,6 +190,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (AgentExitedWith(code), Es) => format!("Terminó con el código {code}"),
         (AgentExitedWith(code), En) => format!("Exited with code {code}"),
+
+        (AgentSecretFailed(error), Es) => format!("No se pudo guardar el secreto en el llavero del sistema: {error}"),
+        (AgentSecretFailed(error), En) => format!("Couldn't store the secret in the system keychain: {error}"),
+
+        (AgentDraftFailed(error), Es) => format!("No se pudo armar el agente con IA: {error}"),
+        (AgentDraftFailed(error), En) => format!("Couldn't build the agent with AI: {error}"),
     }
 }
 
@@ -230,6 +238,8 @@ mod tests {
             Msg::AgentStopped,
             Msg::AgentTimedOut(15),
             Msg::AgentExitedWith("1"),
+            Msg::AgentSecretFailed("locked"),
+            Msg::AgentDraftFailed("timeout"),
         ]
     }
 

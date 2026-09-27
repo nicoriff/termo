@@ -162,10 +162,19 @@ pub fn is_valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// git commands that only look: "only look" agents (reviews, summaries)
+/// need them, and none of them changes the repository.
+const READ_ONLY_GIT: &[&str] = &["log", "diff", "status", "show", "blame", "branch", "rev-parse", "ls-files"];
+
 /// Claude Code's tools for each autonomy level. Each level includes the one
 /// before it.
 pub fn claude_allowed_tools(spec: &AgentSpec) -> Vec<String> {
+    let git: Vec<String> = READ_ONLY_GIT
+        .iter()
+        .flat_map(|command| [format!("Bash(git {command}:*)"), format!("PowerShell(git {command}:*)")])
+        .collect();
     let mut tools: Vec<&str> = vec!["Read", "Glob", "Grep", "TodoWrite"];
+    tools.extend(git.iter().map(String::as_str));
     if matches!(spec.autonomy, Autonomy::Edit | Autonomy::Run) {
         tools.extend(["Edit", "Write", "NotebookEdit"]);
     }
@@ -315,6 +324,7 @@ mod tests {
         let edit = claude_allowed_tools(&spec(Engine::Claude, Autonomy::Edit));
         let run = claude_allowed_tools(&spec(Engine::Claude, Autonomy::Run));
         assert!(read.contains(&"Read".into()) && !read.contains(&"Edit".into()));
+        assert!(read.contains(&"Bash(git log:*)".into()) && !read.contains(&"Bash".into()));
         assert!(edit.contains(&"Edit".into()) && !edit.contains(&"Bash".into()));
         assert!(run.contains(&"Bash".into()) && run.contains(&"Edit".into()));
     }

@@ -22,6 +22,7 @@ use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
 use super::events::{parse_line, EventKind, RunEvent};
+use super::secrets;
 use super::spec::{build_args, AgentSpec, Engine};
 use super::store::{self, now_millis, RunRecord, RunStatus, RunTrigger};
 
@@ -138,8 +139,17 @@ impl Runner {
             return Err(tr(Msg::AgentAlreadyRunning));
         }
 
+        // Claude Code fills its integrations' `${NAME}` placeholders from the
+        // environment; Codex doesn't, so its config gets the values instead.
+        let secret_values = secrets::load(&spec.id, &spec.secrets);
+        let mut resolved = spec.clone();
+        if spec.engine == Engine::Codex {
+            for server in &mut resolved.tools.mcp {
+                server.config = secrets::expand(&server.config, &secret_values);
+            }
+        }
         let mut cmd = Command::new(&bin);
-        cmd.args(build_args(spec))
+        cmd.args(build_args(&resolved))
             .current_dir(&dir)
             // Codex reads a prompt from stdin when it's open; a CLI that
             // decides to ask something gets EOF instead of hanging.
@@ -149,6 +159,9 @@ impl Runner {
             .env("NO_COLOR", "1");
         for key in INHERITED_NOISE {
             cmd.env_remove(key);
+        }
+        if spec.engine == Engine::Claude {
+            cmd.envs(&secret_values);
         }
         #[cfg(windows)]
         {

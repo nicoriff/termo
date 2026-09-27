@@ -245,6 +245,55 @@ export const es = {
       emptyLog: "Esta corrida no dejó registro.",
       working: "Trabajando…",
     },
+    integrations: {
+      searchPlaceholder: "Buscá un servicio: GitHub, Slack, Postgres, Notion…",
+      suggested: "Sugeridas:",
+      searching: "Buscando…",
+      noResults: "No encontré integraciones con ese nombre.",
+      noParams: "No necesita configuración.",
+      secretsNote: "Los datos marcados con 🔒 se guardan en el llavero del sistema, no en la configuración del agente.",
+      add: "Agregar",
+      addOne: "Agregar integración",
+      remove: "Quitar",
+      aiSuggests: "La IA sugiere buscar: {list}",
+    },
+    templates: {
+      reviewer: {
+        name: "Revisor de cambios",
+        description: "Revisa lo que cambiaste y todavía no commiteaste, y te avisa de posibles problemas.",
+        task: "Revisá los cambios sin commitear de este repositorio y señalá posibles errores, riesgos o cosas para mejorar.",
+        instructions:
+          "Pasos:\n1. Mirá los cambios con git diff y git status.\n2. Leé los archivos modificados para entender el contexto.\n3. Anotá errores probables, casos borde sin cubrir y código confuso.\n\nReglas:\n- No modifiques ningún archivo.\n- No hagas preguntas: si algo no está claro, decilo en el resumen.\n- Ordená los hallazgos de más a menos importante.\n\nTerminaste cuando: entregaste la lista de hallazgos (o dijiste que está todo bien).",
+      },
+      dailySummary: {
+        name: "Resumen diario del repo",
+        description: "Cada mañana hábil resume los commits del día anterior.",
+        task: "Resumí los commits de las últimas 24 horas en este repositorio.",
+        instructions:
+          "Pasos:\n1. Listá los commits de las últimas 24 horas con git log.\n2. Agrupalos por tema o por área del código.\n3. Destacá lo que parezca riesgoso o incompleto.\n\nReglas:\n- No modifiques ningún archivo.\n- Respondé en menos de 15 líneas.\n\nTerminaste cuando: entregaste el resumen (o dijiste que no hubo commits).",
+      },
+      tidyFolder: {
+        name: "Ordenar una carpeta",
+        description: "Cada hora ordena los archivos sueltos de una carpeta en subcarpetas por tipo.",
+        task: "Ordená los archivos sueltos de esta carpeta en subcarpetas por tipo (Imágenes, Documentos, Comprimidos, Otros).",
+        instructions:
+          "Pasos:\n1. Listá los archivos que están sueltos en la carpeta (no los que ya están en subcarpetas).\n2. Decidí la subcarpeta de cada uno por su extensión.\n3. Movelos, creando las subcarpetas que falten.\n\nReglas:\n- Nunca borres archivos.\n- Si ya existe un archivo con el mismo nombre en el destino, dejá el original donde está.\n- No toques archivos que se estén descargando (.crdownload, .part, .tmp).\n\nTerminaste cuando: moviste todo lo que correspondía; decí cuántos archivos moviste.",
+      },
+      docsKeeper: {
+        name: "Mantener la documentación",
+        description: "Revisa que el README refleje el estado actual del proyecto y lo actualiza.",
+        task: "Revisá que el README de este proyecto esté al día con el código y corregí lo que haya quedado desactualizado.",
+        instructions:
+          "Pasos:\n1. Leé el README.\n2. Revisá el código, los scripts y la configuración que menciona.\n3. Corregí lo que no coincida (comandos, nombres, pasos de instalación).\n\nReglas:\n- Solo editá archivos de documentación (.md).\n- Mantené el tono y el formato existentes.\n- No inventes funcionalidades.\n\nTerminaste cuando: el README coincide con el proyecto; resumí qué cambiaste.",
+      },
+      researcher: {
+        name: "Investigar un tema",
+        description: "Busca en internet y arma un resumen con fuentes.",
+        task: "Investigá las novedades más importantes de la última semana sobre el tema que te indico y resumilas con sus fuentes: (escribí acá el tema).",
+        instructions:
+          "Pasos:\n1. Buscá en internet fuentes confiables y recientes.\n2. Leé las más relevantes.\n3. Armá un resumen con los puntos clave.\n\nReglas:\n- Citá la fuente (con su link) de cada punto.\n- Si algo no está confirmado, aclaralo.\n- Respondé en menos de 20 líneas.\n\nTerminaste cuando: entregaste el resumen con fuentes.",
+      },
+    },
     wizard: {
       titleNew: "Nuevo agente",
       titleEdit: "Editar agente",
@@ -280,6 +329,12 @@ export const es = {
         placeholder:
           "Ej.: Todas las mañanas, revisá los commits del día anterior en este repo y escribime un resumen corto de qué cambió y si hay algo raro.",
         icon: "Ícono",
+        buildWithAi: "Armarlo con IA",
+        thinking: "Pensando en tu agente… puede tardar un minuto.",
+        aiHint: "Claude arma todos los pasos a partir de tu descripción; después los revisás.",
+        aiNeedsClaude: "Para armarlo con IA hace falta Claude Code instalado.",
+        templates: "O empezá desde una plantilla",
+        drafted: "Lo armé así",
       },
       logic: {
         title: "La lógica del agente",
@@ -318,7 +373,7 @@ export const es = {
       },
       autonomy: {
         readTitle: "Solo mirar",
-        readText: "Lee y busca archivos. No cambia nada. Ideal para resúmenes y revisiones.",
+        readText: "Lee y busca archivos y consulta git (log, diff, status). No cambia nada. Ideal para resúmenes y revisiones.",
         editTitle: "Editar archivos",
         editText: "Además puede crear y modificar archivos en su carpeta.",
         runTitle: "Correr comandos",
@@ -328,7 +383,7 @@ export const es = {
         title: "Herramientas",
         explain:
           "Las herramientas son lo que el agente puede usar para hacer su trabajo. Las básicas vienen del nivel de permisos que elegiste; acá sumás las que quieras.",
-        read: "Leer y buscar archivos",
+        read: "Leer y buscar archivos, y consultar git",
         edit: "Crear y modificar archivos",
         run: "Ejecutar comandos",
         fromAutonomy: "Se cambian desde \"Cuánto puede hacer solo\", en el paso Motor.",
@@ -336,7 +391,6 @@ export const es = {
         webHint: "Para agentes que necesitan información actual: documentación, noticias, precios.",
         integrations: "Integraciones",
         integrationsHint: "Conectan al agente con otros servicios (GitHub, Slack, bases de datos…) mediante MCP.",
-        integrationsSoon: "Muy pronto vas a poder sumar integraciones desde el catálogo.",
       },
       triggers: {
         title: "¿Cuándo corre?",

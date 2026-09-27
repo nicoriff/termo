@@ -324,7 +324,7 @@ fn is_safe_remote_url(url: &str) -> bool {
 
 /// Builds the `.mcp.json`-shaped server config `claude mcp add-json` takes,
 /// preferring a remote (nothing to install locally) over a stdio package.
-fn server_config(request: &McpInstallRequest) -> Result<Value, String> {
+pub(crate) fn server_config(request: &McpInstallRequest) -> Result<Value, String> {
     if let Some(remote) = request.remotes.first() {
         let transport = remote.get("type").and_then(Value::as_str).unwrap_or("http");
         let url = remote

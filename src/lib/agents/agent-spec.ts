@@ -1,4 +1,4 @@
-import type { AgentSpec, RunEvent, RunRecord } from "$lib/core/agents-client";
+import type { AgentDraft, AgentSpec, RunEvent, RunRecord } from "$lib/core/agents-client";
 import type { MessageKey } from "$lib/i18n/translate";
 
 /** The wizard's steps, in order. */
@@ -38,6 +38,28 @@ export function newAgentSpec(id: string): AgentSpec {
     createdAt: 0,
     updatedAt: 0,
   };
+}
+
+/** Fills every step the AI drafted, keeping what only the user can decide
+ * (the engine, the working folder, the description itself). An answer that
+ * doesn't fit — a malformed time, an unknown autonomy — is left out rather
+ * than trusted. */
+export function applyDraft(spec: AgentSpec, draft: AgentDraft): void {
+  if (draft.name.trim()) spec.name = draft.name.trim();
+  if (draft.icon.trim()) spec.icon = [...draft.icon.trim()].slice(0, 2).join("");
+  if (draft.task.trim()) spec.task = draft.task.trim();
+  if (draft.instructions.trim()) spec.instructions = draft.instructions.trim();
+  if (["read", "edit", "run"].includes(draft.autonomy)) spec.autonomy = draft.autonomy;
+  spec.tools.web = draft.web;
+  const schedule = draft.schedule;
+  if (schedule.kind === "interval" && schedule.minutes >= 1) {
+    spec.triggers.schedule = { kind: "interval", minutes: Math.round(schedule.minutes) };
+  } else if (schedule.kind === "daily" && /^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.at)) {
+    const weekdays = [...new Set(schedule.weekdays.filter((day) => day >= 0 && day <= 6))].sort();
+    spec.triggers.schedule = { kind: "daily", at: schedule.at, weekdays };
+  } else {
+    spec.triggers.schedule = null;
+  }
 }
 
 /** What still has to be filled in before leaving `step`; empty when it's
@@ -96,6 +118,13 @@ export function ago(thenMs: number, nowMs: number): { key: MessageKey; params?: 
   const hours = Math.round(minutes / 60);
   if (hours < 24) return { key: "agents.time.hours", params: { n: String(hours) } };
   return { key: "agents.time.days", params: { n: String(Math.round(hours / 24)) } };
+}
+
+/** The secrets an integration stored (see secrets.rs `env_name`: the
+ * server's name, upper-cased, then the parameter). */
+export function secretsOf(serverName: string, secrets: string[]): string[] {
+  const prefix = `${serverName.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_`;
+  return secrets.filter((name) => name.startsWith(prefix) || name.startsWith(`_${prefix}`));
 }
 
 /** Claude says its final answer as a message and then again as the run's

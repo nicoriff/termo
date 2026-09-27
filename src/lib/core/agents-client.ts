@@ -95,6 +95,44 @@ export function agentRunLog(agentId: string, runId: string): Promise<RunEvent[]>
   return invoke("agent_run_log", { agentId, runId });
 }
 
+/** Mirrors src-tauri/src/agents/draft.rs. */
+export interface AgentDraft {
+  name: string;
+  icon: string;
+  task: string;
+  instructions: string;
+  autonomy: AgentAutonomy;
+  web: boolean;
+  schedule: { kind: "none" | "interval" | "daily"; minutes: number; at: string; weekdays: number[] };
+  integrations: { query: string; why: string }[];
+  explanation: string;
+}
+
+/** "Build it with AI": a first draft of the whole agent. Takes a while
+ * (Claude answers through its CLI). */
+export function draftAgent(description: string, workDir: string): Promise<AgentDraft> {
+  return invoke("agent_draft", { description, workDir });
+}
+
+export interface AgentMcpRequest {
+  agentId: string;
+  serverName: string;
+  remotes: unknown[];
+  packages: unknown[];
+  params: Record<string, string>;
+  secretParams: string[];
+}
+
+/** An MCP server from the registry ready to add to the agent; its secret
+ * values are stored in the system keychain on the way. */
+export function agentMcpServer(request: AgentMcpRequest): Promise<{ server: McpServer; secrets: string[] }> {
+  return invoke("agent_mcp_server", { request });
+}
+
+export function forgetAgentSecrets(agentId: string, names: string[]): Promise<void> {
+  return names.length > 0 ? invoke("agent_forget_secrets", { agentId, names }) : Promise.resolve();
+}
+
 export function onAgentRun(handler: (run: RunRecord) => void): Promise<UnlistenFn> {
   return listen<RunRecord>("agent-run", (event) => handler(event.payload));
 }

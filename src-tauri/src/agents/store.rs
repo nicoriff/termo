@@ -116,6 +116,11 @@ pub fn save_in(root: &Path, mut spec: AgentSpec) -> anyhow::Result<Vec<AgentSpec
     Ok(list_in(root))
 }
 
+pub fn get_in(root: &Path, id: &str) -> Option<AgentSpec> {
+    let dir = agent_dir(root, id).ok()?;
+    serde_json::from_str(&fs::read_to_string(dir.join("agent.json")).ok()?).ok()
+}
+
 /// Takes the agent's history with it.
 pub fn delete_in(root: &Path, id: &str) -> anyhow::Result<Vec<AgentSpec>> {
     let dir = agent_dir(root, id)?;

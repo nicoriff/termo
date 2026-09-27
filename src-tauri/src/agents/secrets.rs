@@ -1,0 +1,100 @@
+//! Agents' secrets — the API tokens their integrations need — kept in the
+//! system keychain (Credential Manager on Windows, Keychain on macOS), never
+//! in the agent's JSON.
+//!
+//! An integration's config names each secret as `${NAME}`. Claude Code
+//! expands those from its environment, so a run hands the values over as
+//! environment variables; Codex doesn't expand them, so for Codex they're
+//! written into the config just before the run (see `expand`).
+
+use std::collections::HashMap;
+
+const SERVICE: &str = "termo-agents";
+
+fn entry(agent_id: &str, name: &str) -> keyring::Result<keyring::Entry> {
+    keyring::Entry::new(SERVICE, &format!("{agent_id}/{name}"))
+}
+
+pub fn set(agent_id: &str, name: &str, value: &str) -> Result<(), String> {
+    entry(agent_id, name)
+        .and_then(|entry| entry.set_password(value))
+        .map_err(|err| err.to_string())
+}
+
+/// The values of the agent's secrets that are stored; a missing one is left
+/// out (the integration then fails to authenticate, and says so).
+pub fn load(agent_id: &str, names: &[String]) -> HashMap<String, String> {
+    names
+        .iter()
+        .filter_map(|name| {
+            let value = entry(agent_id, name).and_then(|entry| entry.get_password()).ok()?;
+            Some((name.clone(), value))
+        })
+        .collect()
+}
+
+pub fn delete_all(agent_id: &str, names: &[String]) {
+    for name in names {
+        if let Ok(entry) = entry(agent_id, name) {
+            let _ = entry.delete_credential();
+        }
+    }
+}
+
+/// A secret's name as an environment variable: what a `${…}` placeholder
+/// refers to.
+pub fn env_name(server: &str, param: &str) -> String {
+    let raw = format!("{server}_{param}");
+    let mut name: String = raw
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' })
+        .collect();
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        name.insert(0, '_');
+    }
+    name
+}
+
+/// Replaces every `${NAME}` whose value is known, anywhere in a JSON value.
+pub fn expand(value: &serde_json::Value, secrets: &HashMap<String, String>) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(text) => {
+            let mut out = text.clone();
+            for (name, secret) in secrets {
+                out = out.replace(&format!("${{{name}}}"), secret);
+            }
+            serde_json::Value::String(out)
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(items.iter().map(|item| expand(item, secrets)).collect()),
+        serde_json::Value::Object(map) => {
+            serde_json::Value::Object(map.iter().map(|(key, item)| (key.clone(), expand(item, secrets))).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn env_names_are_valid_variables() {
+        assert_eq!(env_name("github", "Authorization"), "GITHUB_AUTHORIZATION");
+        assert_eq!(env_name("my-server", "api.key"), "MY_SERVER_API_KEY");
+        assert_eq!(env_name("1x", "k"), "_1X_K");
+    }
+
+    #[test]
+    fn placeholders_are_filled_everywhere_they_appear() {
+        let secrets = HashMap::from([("TOKEN".to_string(), "abc".to_string())]);
+        let config = serde_json::json!({
+            "headers": { "Authorization": "Bearer ${TOKEN}" },
+            "args": ["--key", "${TOKEN}"],
+            "env": { "OTHER": "${MISSING}" }
+        });
+        let expanded = expand(&config, &secrets);
+        assert_eq!(expanded["headers"]["Authorization"], "Bearer abc");
+        assert_eq!(expanded["args"][1], "abc");
+        assert_eq!(expanded["env"]["OTHER"], "${MISSING}");
+    }
+}
