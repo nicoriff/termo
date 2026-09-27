@@ -129,6 +129,11 @@ export function agentMcpServer(request: AgentMcpRequest): Promise<{ server: McpS
   return invoke("agent_mcp_server", { request });
 }
 
+/** When each scheduled agent runs next on its own, Unix ms by agent id. */
+export function agentsNextRuns(): Promise<Record<string, number>> {
+  return invoke("agents_next_runs");
+}
+
 export function forgetAgentSecrets(agentId: string, names: string[]): Promise<void> {
   return names.length > 0 ? invoke("agent_forget_secrets", { agentId, names }) : Promise.resolve();
 }

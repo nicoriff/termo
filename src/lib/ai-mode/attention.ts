@@ -28,7 +28,7 @@ interface AgentEventPayload {
 
 let permission: Promise<boolean> | null = null;
 
-function canNotify(): Promise<boolean> {
+export function canNotify(): Promise<boolean> {
   permission ??= (async () => (await isPermissionGranted()) || (await requestPermission()) === "granted")().catch(
     () => false,
   );

@@ -6,6 +6,7 @@ pub mod draft;
 pub mod events;
 pub mod integrations;
 pub mod runner;
+pub mod scheduler;
 pub mod secrets;
 pub mod spec;
 pub mod store;

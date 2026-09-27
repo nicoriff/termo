@@ -113,6 +113,10 @@ impl Runner {
         active.values().map(|run| run.record.lock().unwrap().clone()).collect()
     }
 
+    pub fn is_running(&self, agent_id: &str) -> bool {
+        self.active.lock().unwrap().contains_key(agent_id)
+    }
+
     pub fn stop(&self, agent_id: &str) {
         if let Some(run) = self.active.lock().unwrap().get(agent_id) {
             run.stop.store(true, Ordering::Relaxed);

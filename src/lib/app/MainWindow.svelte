@@ -17,6 +17,7 @@
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
+  import { startAgentRunAttention } from "$lib/agents/agent-attention";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
@@ -37,6 +38,7 @@
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
+    const stopAgentRunAttention = startAgentRunAttention();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
@@ -68,6 +70,7 @@
       clearTimeout(resizeDebounce);
       unlisten?.();
       stopAgentAttention();
+      stopAgentRunAttention();
     };
   });
 

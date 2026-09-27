@@ -11,7 +11,10 @@
   import type { AgentSpec } from "$lib/core/agents-client";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { agentsStore } from "./agents-store.svelte";
-  import { agentState, ago, type AgentTone } from "./agent-spec";
+  import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
+
+  const timeOf = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const weekdayOf = (ms: number) => new Date(ms).toLocaleDateString([], { weekday: "short" });
 
   let menuFor = $state<string | null>(null);
   let confirmDelete = $state<string | null>(null);
@@ -110,6 +113,8 @@
         {@const state = agentState(agent, last)}
         {@const running = last?.status === "running"}
         {@const age = last?.endedAt ? ago(last.endedAt, agentsStore.now) : null}
+        {@const next = agentsStore.nextRun[agent.id]}
+        {@const nextLabel = next && !running ? nextRunLabel(next, agentsStore.now, timeOf, weekdayOf) : null}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           class="agent-row"
@@ -132,6 +137,11 @@
                 {t(state.key, state.params)}{#if age && !running}{" · "}{t(age.key, age.params)}{/if}
               </span>
             </div>
+            {#if nextLabel}
+              <div class="agent-next">⏱ {t(nextLabel.key, nextLabel.params)}</div>
+            {:else if agent.triggers.watch && agent.enabled && !running}
+              <div class="agent-next">👁 {t("agents.next.watching")}</div>
+            {/if}
             {#if errors[agent.id]}
               <div class="agent-error">{errors[agent.id]}</div>
             {/if}
@@ -363,6 +373,14 @@
 
   .state-dot.pulsing {
     animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  .agent-next {
+    font-size: 10.5px;
+    opacity: 0.55;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .agent-error {

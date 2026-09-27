@@ -1,5 +1,6 @@
 import {
   agentRuns,
+  agentsNextRuns,
   deleteAgent,
   listAgents,
   onAgentRun,
@@ -20,6 +21,8 @@ class AgentsStore {
   agents = $state<AgentSpec[]>([]);
   /** Each agent's current run, or its latest one. */
   lastRun = $state<Record<string, RunRecord>>({});
+  /** When each scheduled agent runs next on its own. */
+  nextRun = $state<Record<string, number>>({});
   /** The left sidebar. */
   open = $state(false);
   /** Ticks every 30 s while the sidebar is open, for "hace 5 min" labels. */
@@ -32,6 +35,8 @@ class AgentsStore {
     this.started = true;
     await onAgentRun((run) => {
       this.lastRun = { ...this.lastRun, [run.agentId]: run };
+      // A run moves the next one.
+      if (run.status !== "running") void this.refreshNextRuns();
     });
     this.agents = await listAgents().catch(() => []);
     const latest: Record<string, RunRecord> = {};
@@ -46,6 +51,11 @@ class AgentsStore {
     const live = await runningAgents().catch(() => []);
     for (const run of live) latest[run.agentId] = run;
     this.lastRun = { ...latest, ...this.lastRun };
+    await this.refreshNextRuns();
+  }
+
+  async refreshNextRuns(): Promise<void> {
+    this.nextRun = await agentsNextRuns().catch(() => this.nextRun);
   }
 
   isRunning(agentId: string): boolean {
@@ -62,12 +72,16 @@ class AgentsStore {
     this.timer = null;
     if (open) {
       this.now = Date.now();
-      this.timer = setInterval(() => (this.now = Date.now()), 30_000);
+      this.timer = setInterval(() => {
+        this.now = Date.now();
+        void this.refreshNextRuns();
+      }, 30_000);
     }
   }
 
   async save(spec: AgentSpec): Promise<void> {
     this.agents = await saveAgent($state.snapshot(spec));
+    void this.refreshNextRuns();
   }
 
   async remove(id: string): Promise<void> {

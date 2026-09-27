@@ -3,6 +3,7 @@ use tauri::State;
 use crate::agents::draft::{self, Draft};
 use crate::agents::events::RunEvent;
 use crate::agents::integrations::{self, AgentMcpRequest, AgentMcpServer};
+use crate::agents::scheduler;
 use crate::agents::secrets;
 use crate::agents::spec::AgentSpec;
 use crate::agents::store::{self, RunRecord, RunTrigger};
@@ -54,6 +55,16 @@ pub fn agent_stop(state: State<'_, AppState>, agent_id: String) {
 #[tauri::command]
 pub fn agents_running(state: State<'_, AppState>) -> Vec<RunRecord> {
     state.agents.running()
+}
+
+/// When each scheduled agent runs next on its own (Unix milliseconds).
+#[tauri::command]
+pub fn agents_next_runs(app: tauri::AppHandle) -> Result<std::collections::HashMap<String, i64>, String> {
+    let root = root(&app)?;
+    Ok(store::list_in(&root)
+        .iter()
+        .filter_map(|spec| scheduler::agent_next_run(&root, spec).map(|at| (spec.id.clone(), at)))
+        .collect())
 }
 
 /// Newest first.

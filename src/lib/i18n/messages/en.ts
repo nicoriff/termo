@@ -216,6 +216,16 @@ export const en: Messages = {
       lastStopped: "Last run: stopped",
       lastFailed: "Last run: failed",
     },
+    next: {
+      today: "Next: today {time}",
+      tomorrow: "Next: tomorrow {time}",
+      later: "Next: {day} {time}",
+      watching: "Watching its folder",
+    },
+    notify: {
+      success: "{name} finished",
+      failed: "{name} failed",
+    },
     time: {
       justNow: "just now",
       minutes: "{n} min ago",

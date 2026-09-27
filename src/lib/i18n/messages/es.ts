@@ -215,6 +215,16 @@ export const es = {
       lastStopped: "Última corrida: detenida",
       lastFailed: "Última corrida: falló",
     },
+    next: {
+      today: "Próxima: hoy {time}",
+      tomorrow: "Próxima: mañana {time}",
+      later: "Próxima: {day} {time}",
+      watching: "Vigilando su carpeta",
+    },
+    notify: {
+      success: "{name} terminó",
+      failed: "{name} falló",
+    },
     time: {
       justNow: "recién",
       minutes: "hace {n} min",

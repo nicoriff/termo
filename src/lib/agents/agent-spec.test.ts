@@ -7,6 +7,7 @@ import {
   applyDraft,
   formatDuration,
   newAgentSpec,
+  nextRunLabel,
   specProblems,
   secretsOf,
   stepProblems,
@@ -114,6 +115,25 @@ describe("withoutEchoes", () => {
       { kind: "result" as const, text: "Hay 21.", at: 2 },
     ];
     expect(withoutEchoes(events).map((event) => event.kind)).toEqual(["text", "result"]);
+  });
+});
+
+describe("nextRunLabel", () => {
+  const time = () => "09:00";
+  const weekday = () => "jue";
+  const now = new Date(2026, 8, 28, 20, 0).getTime();
+
+  it("says today, tomorrow or the day", () => {
+    expect(nextRunLabel(new Date(2026, 8, 28, 21, 0).getTime(), now, time, weekday).key).toBe("agents.next.today");
+    expect(nextRunLabel(new Date(2026, 8, 29, 9, 0).getTime(), now, time, weekday).key).toBe("agents.next.tomorrow");
+    expect(nextRunLabel(new Date(2026, 9, 1, 9, 0).getTime(), now, time, weekday)).toEqual({
+      key: "agents.next.later",
+      params: { day: "jue", time: "09:00" },
+    });
+  });
+
+  it("a missed run reads as due now, not as a past day", () => {
+    expect(nextRunLabel(new Date(2026, 8, 27, 9, 0).getTime(), now, time, weekday).key).toBe("agents.next.today");
   });
 });
 

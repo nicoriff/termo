@@ -134,6 +134,23 @@ export function withoutEchoes(events: RunEvent[]): RunEvent[] {
   return events.filter((event) => event.kind !== "text" || !results.has(event.text.trim()));
 }
 
+/** "next at 09:00" / "tomorrow 09:00" / "Thu 09:00" for a scheduled run.
+ * `time` and `weekday` format a timestamp in the user's locale. */
+export function nextRunLabel(
+  atMs: number,
+  nowMs: number,
+  time: (ms: number) => string,
+  weekday: (ms: number) => string,
+): { key: MessageKey; params: Record<string, string> } {
+  const at = new Date(atMs);
+  const now = new Date(nowMs);
+  const dayStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.round((dayStart(at) - dayStart(now)) / 86_400_000);
+  if (days <= 0) return { key: "agents.next.today", params: { time: time(atMs) } };
+  if (days === 1) return { key: "agents.next.tomorrow", params: { time: time(atMs) } };
+  return { key: "agents.next.later", params: { day: weekday(atMs), time: time(atMs) } };
+}
+
 /** "1 min 05 s" for how long a run took. */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));

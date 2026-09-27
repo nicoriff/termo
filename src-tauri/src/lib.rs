@@ -56,6 +56,7 @@ pub fn run() {
             pty::agent_hooks::refresh_installed(app.handle());
             pty::status_line::start_watcher(app.handle().clone());
             pty::status_line::refresh_installed(app.handle());
+            agents::scheduler::start(app.handle().clone(), app.state::<AppState>().agents.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -103,6 +104,7 @@ pub fn run() {
             commands::agent_commands::agent_draft,
             commands::agent_commands::agent_mcp_server,
             commands::agent_commands::agent_forget_secrets,
+            commands::agent_commands::agents_next_runs,
             commands::marketplace_commands::marketplace_status,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,

@@ -36,6 +36,10 @@ tauri-plugin-clipboard-manager = "2"
 # Agents' secrets (API tokens for their integrations) live in the system
 # keychain: Credential Manager, Keychain, the kernel keyring.
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
+# Agents' schedules ("every day at 09:00", in local time) and folder
+# watching ("run when something changes here").
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+notify = "8"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
