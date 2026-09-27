@@ -60,7 +60,7 @@ export const en: Messages = {
     },
   },
   quit: {
-    title: "Quit Termini",
+    title: "Quit Termo",
     busyConsoles: "Consoles with something running: {count}",
     busyAgents: "Active AI sessions: {count}",
     warning: "Quitting closes them all and loses whatever they are doing.",
@@ -106,8 +106,8 @@ export const en: Messages = {
     uninstalling: "Uninstalling...",
     confirmInstall: "Install now",
     cancel: "Cancel",
-    willRun: "Termini will run:",
-    willConfigure: "Termini will configure:",
+    willRun: "Termo will run:",
+    willConfigure: "Termo will configure:",
     installWarning: "Installing downloads and runs third-party code on your machine.",
     paramsTitle: "Connection parameters",
     paramRequired: "required",
@@ -159,8 +159,8 @@ export const en: Messages = {
     cancel: "Cancel",
   },
   about: {
-    open: "About Termini",
-    title: "About Termini",
+    open: "About Termo",
+    title: "About Termo",
     description: "A terminal with tabs and split panes, built for working with AI agents like Claude Code and Codex.",
     version: "Version {version}",
     system: "System",
@@ -283,7 +283,7 @@ export const en: Messages = {
       startup: "Startup",
       defaultLayout: "Layout on launch",
       noLayout: "None",
-      defaultLayoutHint: "On launch, Termini opens this layout instead of a single console.",
+      defaultLayoutHint: "On launch, Termo opens this layout instead of a single console.",
     },
     appearance: {
       theme: "Theme",
@@ -316,7 +316,7 @@ export const en: Messages = {
     platform: {
       onlyEditableOn: "This section can only be edited on {os}.",
       menuComplete: "Completion menu (Tab, Tab)",
-      psreadlineHint: "Only affects new PowerShell/pwsh sessions opened from Termini.",
+      psreadlineHint: "Only affects new PowerShell/pwsh sessions opened from Termo.",
       zshHint:
         "Tab shows the options and a second Tab opens a menu you move through with the arrow keys. Only affects new zsh sessions; doesn't change your ~/.zshrc.",
       bashColors: "Colored prompt (user, folder and git branch)",
@@ -332,7 +332,7 @@ export const en: Messages = {
       notifyFinished: "Notify when it finishes",
       notifyError: "Notify errors",
       dockBadge: "Pending count on the app icon",
-      noticesHint: "Only notifies when Termini isn't focused or that tab isn't visible.",
+      noticesHint: "Only notifies when Termo isn't focused or that tab isn't visible.",
       sounds: "Sounds",
       soundAwaiting: "When it needs your input",
       soundFinished: "When it finishes",
@@ -356,20 +356,20 @@ export const en: Messages = {
       remove: "Remove",
       statusLine: "Plan limits in the status bar",
       statusLineHint:
-        "Chains Termini onto Claude Code's status line in ~/.claude/settings.json without replacing yours: both get the same data. Shows the active console's 5-hour and weekly window usage. Pro or Max subscriptions only, and only after the session's first response.",
+        "Chains Termo onto Claude Code's status line in ~/.claude/settings.json without replacing yours: both get the same data. Shows the active console's 5-hour and weekly window usage. Pro or Max subscriptions only, and only after the session's first response.",
       hooksHint:
-        "Adds hooks to {claudeFile} and {codexFile} that tell Termini each session's exact state (asking for permission, working, done), instead of inferring it from the screen. Outside Termini they do nothing. A copy of the file is saved before the first change.",
+        "Adds hooks to {claudeFile} and {codexFile} that tell Termo each session's exact state (asking for permission, working, done), instead of inferring it from the screen. Outside Termo they do nothing. A copy of the file is saved before the first change.",
     },
     ohMyPosh: {
       installation: "Installation",
       searching: "Looking for Oh My Posh...",
       installed: "Installed",
-      installedByTermini: "Installed by Termini",
+      installedByTermo: "Installed by Termo",
       notInstalled: "Not installed",
       install: "Install",
       downloading: "Downloading...",
       installHint:
-        "Downloads the official binary from cdn.ohmyposh.dev into Termini's folder. Doesn't change your PATH or your config files.",
+        "Downloads the official binary from cdn.ohmyposh.dev into Termo's folder. Doesn't change your PATH or your config files.",
       prompt: "Prompt",
       enable: "Use Oh My Posh in new sessions",
       theme: "Theme",

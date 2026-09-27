@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 // Plain ANSI palette indices rather than fixed RGB, so the prompt follows
-// whichever Termini theme is active.
+// whichever Termo theme is active.
 const PS1_BASE: &str = r"\[\e[32m\]\u@\h\[\e[0m\]:\[\e[34m\]\w";
 const PS1_GIT_BRANCH: &str = r#"\[\e[35m\]$(b=$(git symbolic-ref --short HEAD 2>/dev/null) && echo " ($b)")"#;
 const PS1_END: &str = r"\[\e[0m\]\$ ";

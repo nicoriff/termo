@@ -21,7 +21,7 @@
   const isMainWindow = getCurrentWindow().label === "main";
 
   let {
-    title = "Termini",
+    title = "Termo",
     showSettingsButton = true,
     showMaximizeButton = true,
   }: {

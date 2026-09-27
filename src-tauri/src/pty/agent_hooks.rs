@@ -3,11 +3,11 @@
 //!
 //! Installing adds one hook entry per lifecycle event to the tool's user
 //! hooks file (entries from every settings level merge, so the user's own
-//! hooks stay untouched). Each entry runs Termini's own executable as
-//! `termini --agent-hook <tool> <event>` (see `run_hook_cli`), so it behaves
+//! hooks stay untouched). Each entry runs Termo's own executable as
+//! `termo --agent-hook <tool> <event>` (see `run_hook_cli`), so it behaves
 //! the same on macOS, Linux and Windows without a shell script. It is a no-op
-//! outside Termini: consoles spawned by Termini carry TERMINI_SESSION_ID and
-//! TERMINI_EVENTS_DIR, the hook appends the event to that session's file, and
+//! outside Termo: consoles spawned by Termo carry TERMO_SESSION_ID and
+//! TERMO_EVENTS_DIR, the hook appends the event to that session's file, and
 //! a watcher thread turns new lines into `agent-event` app events (see
 //! agent_events.rs for the line format).
 
@@ -28,7 +28,7 @@ use super::agent_events::{parse_line, AgentUpdate};
 pub const HOOK_FLAG: &str = "--agent-hook";
 
 /// The POSIX sh script earlier builds installed as the hook. Entries still
-/// pointing at it count as Termini's, so they get migrated or removed.
+/// pointing at it count as Termo's, so they get migrated or removed.
 const LEGACY_SCRIPT_NAME: &str = "termini-agent-hook";
 
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,13 +178,13 @@ pub(super) fn write_root(file: &Path, root: &Map<String, Value>) -> anyhow::Resu
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    let tmp = file.with_extension("termini-tmp");
+    let tmp = file.with_extension("termo-tmp");
     fs::write(&tmp, serde_json::to_string_pretty(root)? + "\n")?;
     fs::rename(&tmp, file)?;
     Ok(())
 }
 
-/// Removes Termini's entries, and any event list that ends up empty.
+/// Removes Termo's entries, and any event list that ends up empty.
 fn strip_ours(hooks: &mut Map<String, Value>) {
     for entries in hooks.values_mut() {
         if let Some(entries) = entries.as_array_mut() {
@@ -246,8 +246,8 @@ pub fn install(tool: AgentTool) -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let file = tool.hooks_file()?;
     let mut root = read_root(&file)?;
-    // One-time safety copy of the user's file before Termini first edits it.
-    let backup = file.with_extension("json.termini-backup");
+    // One-time safety copy of the user's file before Termo first edits it.
+    let backup = file.with_extension("json.termo-backup");
     if file.exists() && !backup.exists() {
         fs::copy(&file, &backup)?;
     }
@@ -273,7 +273,7 @@ pub fn is_installed(tool: AgentTool) -> bool {
 
 /// Points already-installed hooks at this executable (it moves between dev
 /// and installed builds, or on update) and migrates entries left by the old
-/// shell-script hook. Files without Termini hooks are never touched, and a
+/// shell-script hook. Files without Termo hooks are never touched, and a
 /// file is only rewritten when something actually changes.
 pub fn refresh_installed(app: &tauri::AppHandle) {
     if let Ok(dir) = app.path().app_data_dir() {
@@ -301,13 +301,13 @@ pub fn refresh_installed(app: &tauri::AppHandle) {
     }
 }
 
-/// `termini --agent-hook <tool> <event>`, run by the agent for each lifecycle
+/// `termo --agent-hook <tool> <event>`, run by the agent for each lifecycle
 /// event with the event's JSON on stdin. Never fails: whatever happens it
 /// returns normally (exit code 0), so it can never block the agent.
 pub fn run_hook_cli(tool: &str, event: &str) {
     let mut input = String::new();
     let _ = std::io::stdin().read_to_string(&mut input);
-    let (Some(dir), Ok(session)) = (std::env::var_os("TERMINI_EVENTS_DIR"), std::env::var("TERMINI_SESSION_ID"))
+    let (Some(dir), Ok(session)) = (std::env::var_os("TERMO_EVENTS_DIR"), std::env::var("TERMO_SESSION_ID"))
     else {
         return;
     };
@@ -452,14 +452,14 @@ mod tests {
     use super::super::agent_events::AgentStatus;
     use super::*;
 
-    const EXE: &str = "/Applications/Termini.app/Contents/MacOS/termini";
+    const EXE: &str = "/Applications/Termo.app/Contents/MacOS/termo";
 
     fn exe() -> &'static Path {
         Path::new(EXE)
     }
 
     fn temp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("termini-hook-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("termo-hook-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -477,14 +477,14 @@ mod tests {
 
         assert!(has_ours(&root, AgentTool::Claude));
         let stop = root["hooks"]["Stop"].as_array().unwrap();
-        assert_eq!(stop.len(), 2, "user hook plus exactly one Termini hook");
+        assert_eq!(stop.len(), 2, "user hook plus exactly one Termo hook");
         assert_eq!(stop[0]["hooks"][0]["command"], "say done");
         assert_eq!(stop[1]["hooks"][0]["command"], hook_command(exe(), AgentTool::Claude, "Stop"));
         assert_eq!(root["theme"], "dark");
     }
 
     #[test]
-    fn uninstall_removes_only_termini_entries() {
+    fn uninstall_removes_only_termo_entries() {
         let mut root = Map::new();
         add_ours(&mut root, AgentTool::Codex, exe()).unwrap();
         assert!(has_ours(&root, AgentTool::Codex));
@@ -506,7 +506,7 @@ mod tests {
         let mut root: Map<String, Value> = serde_json::from_value(json!({
             "hooks": { "Stop": [{ "hooks": [{
                 "type": "command",
-                "command": "'/Users/me/Library/Application Support/com.termini.app/hooks/termini-agent-hook' claude Stop"
+                "command": "'/Users/me/Library/Application Support/com.ln.termo/hooks/termini-agent-hook' claude Stop"
             }] }] }
         }))
         .unwrap();
@@ -520,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn files_without_termini_hooks_are_not_ours() {
+    fn files_without_termo_hooks_are_not_ours() {
         let root: Map<String, Value> = serde_json::from_value(json!({
             "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] }
         }))
@@ -532,8 +532,8 @@ mod tests {
     #[test]
     fn command_quotes_a_windows_path_for_bash() {
         assert_eq!(
-            hook_command(Path::new(r"C:\Program Files\Termini\termini.exe"), AgentTool::Claude, "Stop"),
-            "\"C:/Program Files/Termini/termini.exe\" --agent-hook claude Stop"
+            hook_command(Path::new(r"C:\Program Files\Termo\termo.exe"), AgentTool::Claude, "Stop"),
+            "\"C:/Program Files/Termo/termo.exe\" --agent-hook claude Stop"
         );
     }
 
@@ -542,10 +542,10 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn only_codex_gets_the_powershell_call_operator() {
-        let exe = Path::new(r"C:\Program Files\Termini\termini.exe");
+        let exe = Path::new(r"C:\Program Files\Termo\termo.exe");
         assert_eq!(
             hook_command(exe, AgentTool::Codex, "Stop"),
-            "& \"C:/Program Files/Termini/termini.exe\" --agent-hook codex Stop"
+            "& \"C:/Program Files/Termo/termo.exe\" --agent-hook codex Stop"
         );
         assert!(!hook_command(exe, AgentTool::Claude, "Stop").starts_with('&'));
     }
@@ -554,8 +554,8 @@ mod tests {
     #[test]
     fn command_quotes_a_unix_path_for_sh() {
         assert_eq!(
-            hook_command(Path::new("/opt/Ter'mini/termini"), AgentTool::Codex, "Stop"),
-            r"'/opt/Ter'\''mini/termini' --agent-hook codex Stop"
+            hook_command(Path::new("/opt/Ter'mini/termo"), AgentTool::Codex, "Stop"),
+            r"'/opt/Ter'\''mini/termo' --agent-hook codex Stop"
         );
     }
 

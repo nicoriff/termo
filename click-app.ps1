@@ -1,11 +1,11 @@
-# Usage: powershell -File click-app.ps1 -X <clientX> -Y <clientY> [-ProcessName termini]
+# Usage: powershell -File click-app.ps1 -X <clientX> -Y <clientY> [-ProcessName termo]
 # Clicks at CLIENT-area coordinates (same coordinate space as screenshot-app.ps1's
 # PrintWindow capture), converting to screen coords via ClientToScreen before
 # synthesizing the click. DPI-aware to match screenshot-app.ps1.
 param(
   [Parameter(Mandatory=$true)][int]$X,
   [Parameter(Mandatory=$true)][int]$Y,
-  [string]$ProcessName = "termini"
+  [string]$ProcessName = "termo"
 )
 
 Add-Type @"

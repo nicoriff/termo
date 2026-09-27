@@ -59,7 +59,7 @@ export const es = {
     },
   },
   quit: {
-    title: "Salir de Termini",
+    title: "Salir de Termo",
     busyConsoles: "Consolas con algo corriendo: {count}",
     busyAgents: "Sesiones de IA activas: {count}",
     warning: "Si salís se cierran todas y se pierde lo que estén haciendo.",
@@ -105,8 +105,8 @@ export const es = {
     uninstalling: "Desinstalando...",
     confirmInstall: "Instalar ahora",
     cancel: "Cancelar",
-    willRun: "Termini va a ejecutar:",
-    willConfigure: "Termini va a configurar:",
+    willRun: "Termo va a ejecutar:",
+    willConfigure: "Termo va a configurar:",
     installWarning: "Instalar descarga y ejecuta código de terceros en tu máquina.",
     paramsTitle: "Parámetros de conexión",
     paramRequired: "obligatorio",
@@ -158,8 +158,8 @@ export const es = {
     cancel: "Cancelar",
   },
   about: {
-    open: "Acerca de Termini",
-    title: "Acerca de Termini",
+    open: "Acerca de Termo",
+    title: "Acerca de Termo",
     description:
       "Una terminal con pestañas y paneles divididos, pensada para trabajar con agentes de IA como Claude Code y Codex.",
     version: "Versión {version}",
@@ -283,7 +283,7 @@ export const es = {
       startup: "Inicio",
       defaultLayout: "Layout al abrir",
       noLayout: "Ninguno",
-      defaultLayoutHint: "Al iniciar, Termini abre este layout en lugar de una sola consola.",
+      defaultLayoutHint: "Al iniciar, Termo abre este layout en lugar de una sola consola.",
     },
     appearance: {
       theme: "Tema",
@@ -316,7 +316,7 @@ export const es = {
     platform: {
       onlyEditableOn: "Solo se puede editar esta sección en {os}.",
       menuComplete: "Menú de autocompletado (Tab, Tab)",
-      psreadlineHint: "Solo afecta sesiones nuevas de PowerShell/pwsh abiertas desde Termini.",
+      psreadlineHint: "Solo afecta sesiones nuevas de PowerShell/pwsh abiertas desde Termo.",
       zshHint:
         "Tab muestra las opciones y un segundo Tab abre un menú que se recorre con las flechas. Solo afecta sesiones nuevas de zsh; no modifica tu ~/.zshrc.",
       bashColors: "Prompt con colores (usuario, carpeta y rama de git)",
@@ -332,7 +332,7 @@ export const es = {
       notifyFinished: "Notificar cuando termina",
       notifyError: "Notificar errores",
       dockBadge: "Contador de pendientes en el ícono de la app",
-      noticesHint: "Solo notifica si Termini no tiene el foco o esa pestaña no está a la vista.",
+      noticesHint: "Solo notifica si Termo no tiene el foco o esa pestaña no está a la vista.",
       sounds: "Sonidos",
       soundAwaiting: "Cuando necesita tu respuesta",
       soundFinished: "Cuando termina",
@@ -356,20 +356,20 @@ export const es = {
       remove: "Quitar",
       statusLine: "Límites del plan en la barra de estado",
       statusLineHint:
-        "Encadena Termini a la status line de Claude Code en ~/.claude/settings.json, sin reemplazar la tuya: el mismo dato le llega a las dos. Muestra el uso de la ventana de 5 horas y la semanal de la consola activa. Solo con suscripción Pro o Max, y recién después de la primera respuesta de la sesión.",
+        "Encadena Termo a la status line de Claude Code en ~/.claude/settings.json, sin reemplazar la tuya: el mismo dato le llega a las dos. Muestra el uso de la ventana de 5 horas y la semanal de la consola activa. Solo con suscripción Pro o Max, y recién después de la primera respuesta de la sesión.",
       hooksHint:
-        "Agrega a {claudeFile} y {codexFile} hooks que le informan a Termini el estado exacto de cada sesión (pide permiso, trabaja, terminó), en lugar de deducirlo de la pantalla. Fuera de Termini no hacen nada. Antes del primer cambio se guarda una copia del archivo.",
+        "Agrega a {claudeFile} y {codexFile} hooks que le informan a Termo el estado exacto de cada sesión (pide permiso, trabaja, terminó), en lugar de deducirlo de la pantalla. Fuera de Termo no hacen nada. Antes del primer cambio se guarda una copia del archivo.",
     },
     ohMyPosh: {
       installation: "Instalación",
       searching: "Buscando Oh My Posh...",
       installed: "Instalado",
-      installedByTermini: "Instalado por Termini",
+      installedByTermo: "Instalado por Termo",
       notInstalled: "No está instalado",
       install: "Instalar",
       downloading: "Descargando...",
       installHint:
-        "Descarga el binario oficial desde cdn.ohmyposh.dev a la carpeta de Termini. No modifica tu PATH ni tus archivos de configuración.",
+        "Descarga el binario oficial desde cdn.ohmyposh.dev a la carpeta de Termo. No modifica tu PATH ni tus archivos de configuración.",
       prompt: "Prompt",
       enable: "Usar Oh My Posh en sesiones nuevas",
       theme: "Tema",

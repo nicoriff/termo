@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isDarkColor } from "./theme-loader";
 
 describe("isDarkColor", () => {
-  it("tells Termini's own presets apart", () => {
+  it("tells Termo's own presets apart", () => {
     expect(isDarkColor("#1e1e1e")).toBe(true); // Dark
     expect(isDarkColor("#ffffff")).toBe(false); // Light
     expect(isDarkColor("#282a36")).toBe(true); // Dracula

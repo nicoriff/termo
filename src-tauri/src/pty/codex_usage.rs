@@ -133,7 +133,7 @@ mod tests {
     use std::io::Write;
 
     fn rollout(lines: &[&str]) -> (std::path::PathBuf, Value) {
-        let path = std::env::temp_dir().join(format!("termini-rollout-{}.jsonl", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("termo-rollout-{}.jsonl", uuid::Uuid::new_v4()));
         let mut file = File::create(&path).unwrap();
         for line in lines {
             writeln!(file, "{line}").unwrap();
@@ -197,7 +197,7 @@ mod tests {
     /// well-formed its content otherwise is.
     #[test]
     fn refuses_a_transcript_path_outside_codex_home() {
-        let home = std::env::temp_dir().join(format!("termini-codexhome-{}", uuid::Uuid::new_v4()));
+        let home = std::env::temp_dir().join(format!("termo-codexhome-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&home).unwrap();
 
         // rollout() writes under the bare system temp dir, not under `home`.

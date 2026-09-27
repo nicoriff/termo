@@ -1,9 +1,9 @@
-# Usage: powershell -File type-app.ps1 -Text "hello" [-ProcessName termini]
+# Usage: powershell -File type-app.ps1 -Text "hello" [-ProcessName termo]
 # Sends keystrokes to the foreground app via SendKeys (assumes the target
 # input already has focus, e.g. an autofocused search box).
 param(
   [Parameter(Mandatory=$true)][string]$Text,
-  [string]$ProcessName = "termini"
+  [string]$ProcessName = "termo"
 )
 
 Add-Type -AssemblyName System.Windows.Forms

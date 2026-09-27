@@ -322,7 +322,7 @@
     function onMove(e: PointerEvent) {
       if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 4) {
         dragging = true;
-        document.body.classList.add("termini-dragging-tab");
+        document.body.classList.add("termo-dragging-tab");
         createGhost();
       }
       if (!dragging) return;
@@ -336,7 +336,7 @@
     function onUp(e: PointerEvent) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      document.body.classList.remove("termini-dragging-tab");
+      document.body.classList.remove("termo-dragging-tab");
       clearHighlight();
       ghost?.remove();
       ghost = null;
@@ -587,8 +587,8 @@
 <style>
   /* Every element, not just body: the console under the pointer sets its own
      text cursor (xterm's), which would otherwise win over the dragging hand. */
-  :global(body.termini-dragging-tab),
-  :global(body.termini-dragging-tab *) {
+  :global(body.termo-dragging-tab),
+  :global(body.termo-dragging-tab *) {
     cursor: grabbing !important;
   }
 
@@ -608,7 +608,7 @@
 
   /* Suppressed during a divider drag (SplitView's startDrag toggles this
      body class) — same reasoning as .session-slot's identical rule. */
-  :global(body.termini-dragging-divider) .tile-chrome {
+  :global(body.termo-dragging-divider) .tile-chrome {
     transition: none;
   }
 

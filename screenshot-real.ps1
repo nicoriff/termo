@@ -1,11 +1,11 @@
-# Usage: powershell -File screenshot-real.ps1 -OutPath ".\shot.png" [-ProcessName termini]
+# Usage: powershell -File screenshot-real.ps1 -OutPath ".\shot.png" [-ProcessName termo]
 # Captures the real composited desktop pixels behind the app window via
 # CopyFromScreen (DPI-aware) -- unlike screenshot-app.ps1's PrintWindow
 # approach, this correctly shows true OS-level window transparency/rounded
 # corners against whatever is actually behind the window.
 param(
   [string]$OutPath = "E:\Proyectos\Termini\.screenshot-real.png",
-  [string]$ProcessName = "termini"
+  [string]$ProcessName = "termo"
 )
 
 Add-Type @"

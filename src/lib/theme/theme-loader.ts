@@ -15,7 +15,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 
 /** Whether a theme's own background is dark, by perceived brightness (the
  * usual sRGB weighting: green reads brightest, blue dimmest). What it's for
- * is `color-scheme`, so the native controls Termini doesn't paint itself —
+ * is `color-scheme`, so the native controls Termo doesn't paint itself —
  * scrollbars above all — come out dark on a dark theme and light on a light
  * one, instead of the engine's assumption that every page is light. */
 export function isDarkColor(hex: string): boolean {
@@ -43,7 +43,7 @@ export function applyThemeToDocument(theme: Theme, opacity = 1): void {
   const bg = hexToRgba(theme.ui.background, opacity);
   const activeBg = hexToRgba(theme.ui.activeBackground, opacity);
 
-  // Anything the engine paints rather than Termini — a scrollbar, a native
+  // Anything the engine paints rather than Termo — a scrollbar, a native
   // control — follows this. Without it every window is assumed light, which
   // on the default dark theme is where Preferences' pale scrollbar came from.
   root.setProperty("color-scheme", isDarkColor(theme.ui.background) ? "dark" : "light");

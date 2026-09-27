@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** Whether Termini is chained onto Claude Code's `statusLine` (see
+/** Whether Termo is chained onto Claude Code's `statusLine` (see
  * src-tauri/src/pty/status_line.rs). */
 export function isStatusLineInstalled(): Promise<boolean> {
   return invoke("status_line_installed");

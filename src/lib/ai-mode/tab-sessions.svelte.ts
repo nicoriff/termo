@@ -17,7 +17,7 @@ export interface TabAgentSession {
  * Both channels report it (hooks for either agent, Claude's status line), and
  * it is what lets a saved layout reopen not just the consoles but the
  * conversations that were in them. A console with no agent — or one whose
- * agent Termini can't identify, i.e. without hooks installed — simply never
+ * agent Termo can't identify, i.e. without hooks installed — simply never
  * appears here.
  */
 class TabAgentSessions {

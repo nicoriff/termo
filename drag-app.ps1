@@ -1,4 +1,4 @@
-# Usage: powershell -File drag-app.ps1 -FromX <x> -FromY <y> -ToX <x> -ToY <y> [-ProcessName termini]
+# Usage: powershell -File drag-app.ps1 -FromX <x> -FromY <y> -ToX <x> -ToY <y> [-ProcessName termo]
 # Simulates a press-move-move-...-release drag gesture at CLIENT-area
 # coordinates (same space as screenshot-app.ps1's capture), so the app's own
 # pointerdown/pointermove/pointerup listeners see a real drag rather than a
@@ -9,7 +9,7 @@ param(
   [Parameter(Mandatory=$true)][int]$ToX,
   [Parameter(Mandatory=$true)][int]$ToY,
   [int]$Steps = 12,
-  [string]$ProcessName = "termini"
+  [string]$ProcessName = "termo"
 )
 
 Add-Type @"

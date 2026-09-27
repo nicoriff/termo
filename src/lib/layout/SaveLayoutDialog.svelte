@@ -11,7 +11,7 @@
   let inputEl: HTMLInputElement | undefined = $state();
 
   /** Only worth asking when there is something to save: Modo IA on, and at
-   * least one console whose conversation Termini can identify (which needs the
+   * least one console whose conversation Termo can identify (which needs the
    * agent hooks, or Claude's status line). */
   const canSaveSessions = $derived(appConfigStore.aiModeEnabled && tabAgentSessions.count > 0);
 

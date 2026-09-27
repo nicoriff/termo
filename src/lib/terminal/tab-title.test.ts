@@ -45,7 +45,7 @@ describe("cleanProgramTitle", () => {
 
 describe("applyProcessChange", () => {
   it("drops a title set long before the process changed", () => {
-    const withTitle = applyProgramTitle(EMPTY_TAB_TITLE, "zsh in termini", 1_000);
+    const withTitle = applyProgramTitle(EMPTY_TAB_TITLE, "zsh in termo", 1_000);
     const next = applyProcessChange(withTitle, "vim", 1_000 + TITLE_GRACE_MS + 1);
     expect(resolveTabTitle(next, "zsh")).toBe("[zsh] vim");
   });

@@ -3,7 +3,7 @@
 //! Always through `claude plugin install/uninstall`, never by editing its
 //! files — and never with `--accept-command` on the first try. A marketplace
 //! can declare a command that runs on this machine as part of installing;
-//! the CLI refuses to run it unattended and reports it instead, so Termini
+//! the CLI refuses to run it unattended and reports it instead, so Termo
 //! hands that back to the UI, shows the exact command and its checksum, and
 //! only retries with the approval once a person has said yes to that precise
 //! text. Auto-approving would turn this panel into a way for a catalog entry

@@ -23,7 +23,7 @@ pub struct PtySession {
     // Stops the foreground-process poller thread (see spawn()) once the
     // session is killed — otherwise it would keep polling a dead PTY forever.
     stop: Arc<AtomicBool>,
-    // Only when TERMINI_PTY_RECORD is set (see recorder.rs).
+    // Only when TERMO_PTY_RECORD is set (see recorder.rs).
     recorder: Option<Arc<Recorder>>,
     // The size the console should have, and whether it has been re-applied
     // since startup (see write()).
@@ -55,7 +55,7 @@ impl PtySession {
         if let Some(cwd) = cwd {
             cmd.cwd(cwd);
         }
-        // CommandBuilder otherwise inherits Termini's own process
+        // CommandBuilder otherwise inherits Termo's own process
         // environment, which — being a GUI app, not something launched from
         // a terminal — has no TERM/COLORTERM at all. Color-capability
         // detection in CLI tools (chalk/supports-color and similar) uses
@@ -72,12 +72,12 @@ impl PtySession {
         // Lets agent hooks running inside this console report back to its
         // tab (see pty/agent_hooks.rs).
         let id = Uuid::new_v4();
-        cmd.env("TERMINI_SESSION_ID", id.to_string());
+        cmd.env("TERMO_SESSION_ID", id.to_string());
 
-        // Also strip anything identifying the process that launched Termini
+        // Also strip anything identifying the process that launched Termo
         // itself (e.g. running `tauri dev` from inside an agent/CI shell
         // leaks CLAUDE_CODE_*/CI/NO_COLOR down into every session this app
-        // spawns). Whatever context Termini was started from shouldn't leak
+        // spawns). Whatever context Termo was started from shouldn't leak
         // into fresh interactive shells it opens — a nested `claude`, for
         // instance, would see CLAUDE_CODE_CHILD_SESSION and assume it's a
         // child of that unrelated session (auto-resuming its history) and
@@ -349,8 +349,8 @@ mod tests {
 
         let session = PtySession::spawn(
             "/bin/sh",
-            &["-c".into(), r#"printf '%s|%s' "$TERMINI_SESSION_ID" "$TERMINI_TEST_VAR""#.into()],
-            &[("TERMINI_TEST_VAR", "hello".to_string())],
+            &["-c".into(), r#"printf '%s|%s' "$TERMO_SESSION_ID" "$TERMO_TEST_VAR""#.into()],
+            &[("TERMO_TEST_VAR", "hello".to_string())],
             None,
             80,
             24,
@@ -374,7 +374,7 @@ mod tests {
         assert!(text.contains(&format!("{}|hello", session.id)), "console output: {text:?}");
     }
 
-    /// Termini started from a shell that exports EDITOR (an agent's, a CI
+    /// Termo started from a shell that exports EDITOR (an agent's, a CI
     /// one) must not pass it down: zsh reads it at startup and switches to
     /// vi mode, which breaks Option+Backspace and every other emacs binding.
     #[test]

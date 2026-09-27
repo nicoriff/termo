@@ -1,12 +1,12 @@
-//! Opt-in integration with Claude Code's status line, so Termini can show a
+//! Opt-in integration with Claude Code's status line, so Termo can show a
 //! console's plan usage (the 5h/7d rate-limit windows), context window and
 //! session cost on its own status bar.
 //!
 //! Claude Code allows a single `statusLine` per user and runs its `command` in
 //! a shell, so installing *chains* onto whatever the user already had instead
-//! of replacing it: the same JSON is piped to Termini (which only records it)
+//! of replacing it: the same JSON is piped to Termo (which only records it)
 //! and then to their original command, whose output is what Claude Code keeps
-//! displaying. The original command is stored in Termini's config, so
+//! displaying. The original command is stored in Termo's config, so
 //! uninstalling puts it back.
 //!
 //! `rate_limits` only exists for claude.ai Pro/Max sessions and only after the
@@ -104,15 +104,15 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
     })
 }
 
-/// `termini --statusline`, run by Claude Code on every status-line refresh with
+/// `termo --statusline`, run by Claude Code on every status-line refresh with
 /// the session JSON on stdin. Records the snapshot for this console and returns
 /// normally whatever happens: it must never disturb the user's own status line.
 pub fn run_status_line_cli() {
     let mut input = String::new();
     let _ = std::io::stdin().read_to_string(&mut input);
     let (Some(dir), Ok(session)) = (
-        std::env::var_os("TERMINI_EVENTS_DIR"),
-        std::env::var("TERMINI_SESSION_ID"),
+        std::env::var_os("TERMO_EVENTS_DIR"),
+        std::env::var("TERMO_SESSION_ID"),
     ) else {
         return;
     };
@@ -220,7 +220,7 @@ pub fn is_installed() -> bool {
         .is_some_and(|command| command.contains(STATUS_LINE_FLAG))
 }
 
-/// One shell line that feeds the same JSON to Termini and then to whatever the
+/// One shell line that feeds the same JSON to Termo and then to whatever the
 /// user's status line already was, so theirs keeps producing the output Claude
 /// Code displays.
 fn chained_command(exe: &Path, wrapped: Option<&str>) -> String {
@@ -240,15 +240,15 @@ pub fn install(app: &tauri::AppHandle) -> anyhow::Result<()> {
     let mut root = read_root(&file)?;
 
     // Re-installing (e.g. after the executable moved) must not wrap our own
-    // command a second time — the original one lives in Termini's config.
+    // command a second time — the original one lives in Termo's config.
     let mut config = crate::config::store::load(app);
     let wrapped = match current_command(&root) {
         Some(command) if command.contains(STATUS_LINE_FLAG) => config.status_line_wrapped.clone(),
         other => other,
     };
 
-    // One-time safety copy of the user's file before Termini first edits it.
-    let backup = file.with_extension("json.termini-backup");
+    // One-time safety copy of the user's file before Termo first edits it.
+    let backup = file.with_extension("json.termo-backup");
     if file.exists() && !backup.exists() {
         fs::copy(&file, &backup)?;
     }
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn chains_onto_the_users_own_command() {
-        let command = chained_command(Path::new("/opt/termini"), Some("bash ~/.claude/statusline.sh"));
+        let command = chained_command(Path::new("/opt/termo"), Some("bash ~/.claude/statusline.sh"));
         assert!(command.starts_with("input=$(cat);"));
         assert!(command.contains(STATUS_LINE_FLAG));
         assert!(command.ends_with("| bash ~/.claude/statusline.sh"));
@@ -346,14 +346,14 @@ mod tests {
 
     #[test]
     fn stands_alone_when_there_was_no_status_line() {
-        let command = chained_command(Path::new("/opt/termini"), None);
+        let command = chained_command(Path::new("/opt/termo"), None);
         assert!(command.contains(STATUS_LINE_FLAG));
         assert!(!command.contains("| bash"));
     }
 
     #[test]
     fn ignores_session_ids_that_could_escape_the_events_dir() {
-        let base = std::env::temp_dir().join(format!("termini-status-test-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("termo-status-test-{}", uuid::Uuid::new_v4()));
         let dir = base.join("events");
         fs::create_dir_all(&dir).unwrap();
         write_snapshot(&dir, "../escaped", &StatusSnapshot::default()).unwrap();

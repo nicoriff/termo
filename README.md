@@ -1,4 +1,4 @@
-# Termini
+# Termo
 
 Terminal de escritorio para Windows/macOS/Linux, construida con
 [Tauri 2](https://tauri.app/) + [SvelteKit 5](https://svelte.dev/) +
@@ -30,7 +30,7 @@ el frontend (Svelte) dibuja las terminales, el layout en splits y la UI.
   sesiones nuevas de `pwsh`/`powershell` abran con PSReadLine configurado
   así: `Tab` completa normal, `Tab, Tab` abre un menú navegable (estilo
   oh-my-zsh). No modifica tu `$PROFILE` real, solo aplica a sesiones
-  lanzadas desde Termini.
+  lanzadas desde Termo.
 - **Ventana sin bordes nativos**, con su propia titlebar y controles de
   resize.
 

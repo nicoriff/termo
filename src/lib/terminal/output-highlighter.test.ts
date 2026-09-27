@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { OutputHighlighter } from "./output-highlighter";
 
 /** The prompt of a bash sitting in a deep directory: bash sets the window
- * title (OSC 0) and Termini asks it to report its cwd (OSC 7, see
+ * title (OSC 0) and Termo asks it to report its cwd (OSC 7, see
  * src-tauri/src/pty/cwd_report.rs). Both carry a full path, so both are
  * longer than a single PTY read whenever the directory is deep enough. */
-const DEEP = "/c/Users/Nicolas/Documents/Proyectos/termini/src/lib/terminal";
+const DEEP = "/c/Users/Nicolas/Documents/Proyectos/termo/src/lib/terminal";
 const TITLE_OSC = `\x1b]0;MINGW64:${DEEP}\x07`;
 const CWD_OSC = `\x1b]7;file://${DEEP}\x07`;
 

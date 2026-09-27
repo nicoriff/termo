@@ -35,7 +35,7 @@
   /** What a bug report needs, in one paste. Kept in English on purpose: it's
    * meant for an issue tracker, not for the person reading the dialog. */
   async function copyInfo() {
-    await writeText(`Termini ${version ?? "?"}\nTauri ${tauriVersion ?? "?"}\n${system}\n${navigator.userAgent}`);
+    await writeText(`Termo ${version ?? "?"}\nTauri ${tauriVersion ?? "?"}\n${system}\n${navigator.userAgent}`);
     copied = true;
     setTimeout(() => (copied = false), 1500);
   }
@@ -66,7 +66,7 @@
     transition:fly={{ y: -16, duration: 140 }}
   >
     <img class="about-icon" src="/app-icon.png" alt="" />
-    <h2 class="about-name">Termini</h2>
+    <h2 class="about-name">Termo</h2>
     <p class="about-version">{version ? t("about.version", { version }) : " "}</p>
     <p class="about-description">{t("about.description")}</p>
 

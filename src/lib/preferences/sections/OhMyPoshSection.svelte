@@ -79,7 +79,7 @@
     <p class="setting-hint">{t("preferences.ohMyPosh.searching")}</p>
   {:else if status.path}
     <p class="status-line">
-      {t(status.managed ? "preferences.ohMyPosh.installedByTermini" : "preferences.ohMyPosh.installed")}
+      {t(status.managed ? "preferences.ohMyPosh.installedByTermo" : "preferences.ohMyPosh.installed")}
       <code>{status.path}</code>
     </p>
   {:else}

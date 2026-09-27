@@ -36,7 +36,7 @@
       // Suppresses the zoom transition (see .session-slot/.tile-chrome CSS)
       // for the duration of the drag — otherwise every pointermove tick
       // would ease toward its target instead of tracking the pointer.
-      document.body.classList.add("termini-dragging-divider");
+      document.body.classList.add("termo-dragging-divider");
 
       function onMove(e: PointerEvent) {
         const ratio =
@@ -48,7 +48,7 @@
       function onUp() {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        document.body.classList.remove("termini-dragging-divider");
+        document.body.classList.remove("termo-dragging-divider");
       }
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
@@ -146,7 +146,7 @@
   /* Suppressed during a divider drag (startDrag toggles this body class) —
      without it, every pointermove tick would ease toward its target instead
      of tracking the pointer, making the drag feel laggy. */
-  :global(body.termini-dragging-divider) .session-slot {
+  :global(body.termo-dragging-divider) .session-slot {
     transition: none;
   }
 

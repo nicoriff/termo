@@ -38,7 +38,7 @@ pub fn pty_spawn(
     let mut args = args;
     let mut env = bash_color_env(&path, config.bash_prompt_colors);
     if let Ok(dir) = agent_hooks::events_dir(&app) {
-        env.push(("TERMINI_EVENTS_DIR", dir.to_string_lossy().into_owned()));
+        env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
     }
     let mut zsh_lines: Vec<String> = Vec::new();
     if config.zsh_menu_complete {

@@ -17,6 +17,6 @@ function replaceOnce(path, pattern, replacement) {
 }
 
 replaceOnce("src-tauri/Cargo.toml", /^(\[package\][^[]*?\nversion = ")[^"]*(")/m, `$1${version}$2`);
-replaceOnce("src-tauri/Cargo.lock", /(\nname = "termini"\r?\nversion = ")[^"]*(")/, `$1${version}$2`);
+replaceOnce("src-tauri/Cargo.lock", /(\nname = "termo"\r?\nversion = ")[^"]*(")/, `$1${version}$2`);
 
 console.log(`version ${version} → Cargo.toml, Cargo.lock`);

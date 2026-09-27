@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn lists_only_visible_folders_sorted_by_name() {
-        let base = std::env::temp_dir().join(format!("termini-folders-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("termo-folders-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(base.join("beta")).unwrap();
         fs::create_dir_all(base.join("Alpha")).unwrap();
         fs::write(base.join("file.txt"), "not a folder").unwrap();
@@ -171,12 +171,12 @@ mod tests {
 
     #[test]
     fn a_missing_folder_is_an_error_not_an_empty_list() {
-        assert!(subfolders(Path::new("/definitely/not/here/termini")).is_err());
+        assert!(subfolders(Path::new("/definitely/not/here/termo")).is_err());
     }
 
     #[test]
     fn creates_a_folder_and_refuses_to_reuse_one() {
-        let base = std::env::temp_dir().join(format!("termini-new-folder-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("termo-new-folder-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&base).unwrap();
         let created = new_folder(&base, "  my-project  ");
         let again = new_folder(&base, "my-project");

@@ -38,7 +38,7 @@ describe("breadcrumbs", () => {
     expect(breadcrumbs("E:\\Proyectos\\Termini")).toEqual([
       { label: "E:", path: "E:\\" },
       { label: "Proyectos", path: "E:\\Proyectos" },
-      { label: "Termini", path: "E:\\Proyectos\\Termini" },
+      { label: "Termini", path:"E:\\Proyectos\\Termini" },
     ]);
   });
 

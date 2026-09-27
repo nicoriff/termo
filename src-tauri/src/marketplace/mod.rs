@@ -1,5 +1,5 @@
 //! Browsing and installing Claude Code / Codex extensions from inside
-//! Termini: plugins from Claude's marketplaces and servers from the MCP
+//! Termo: plugins from Claude's marketplaces and servers from the MCP
 //! registry, installed through each agent's own CLI (see agent_cli.rs).
 
 pub mod agent_cli;

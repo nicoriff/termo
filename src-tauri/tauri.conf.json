@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "termini",
+  "productName": "Termo",
   "version": "../package.json",
-  "identifier": "com.termini.app",
+  "identifier": "com.ln.termo",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "termini",
+        "title": "Termo",
         "width": 1000,
         "height": 640,
         "minWidth": 480,

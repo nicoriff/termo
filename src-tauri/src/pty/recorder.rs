@@ -2,7 +2,7 @@
 //! output exactly as ConPTY/the tty sent it, input as the frontend wrote it,
 //! and resizes — so a rendering glitch can be replayed outside the app and
 //! pinned on a specific byte sequence. Dev builds only, and off unless
-//! `TERMINI_PTY_RECORD` names a directory when Termini starts; each console then gets its own
+//! `TERMO_PTY_RECORD` names a directory when Termo starts; each console then gets its own
 //! `<session id>.jsonl` there, one event per line:
 //! `{"t":<ms since spawn>,"k":"o"|"i","d":"<base64>"}` or
 //! `{"t":…,"k":"r","cols":…,"rows":…}`.
@@ -29,7 +29,7 @@ impl Recorder {
         if !cfg!(debug_assertions) {
             return None;
         }
-        let dir = PathBuf::from(std::env::var_os("TERMINI_PTY_RECORD")?);
+        let dir = PathBuf::from(std::env::var_os("TERMO_PTY_RECORD")?);
         std::fs::create_dir_all(&dir).ok()?;
         let file = File::create(dir.join(format!("{id}.jsonl"))).ok()?;
         let recorder = Self { file: Mutex::new(file), started: Instant::now() };

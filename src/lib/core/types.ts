@@ -75,7 +75,7 @@ export interface AppConfig {
   ai_sound_codex_finished: string;
   ai_sound_volume: number;
   ai_dock_badge: boolean;
-  /** The user's own Claude Code statusLine command, saved when Termini chained
+  /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;
   /** Saved layout to open on launch, or null for a single console. */

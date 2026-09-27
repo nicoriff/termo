@@ -4,6 +4,7 @@ mod config;
 mod i18n;
 mod layouts;
 mod marketplace;
+mod migration;
 mod pty;
 mod state;
 
@@ -11,8 +12,8 @@ use state::AppState;
 use tauri::Manager;
 
 /// Handles the two ways agents invoke this executable instead of launching the
-/// app — `termini --agent-hook <tool> <event>` (pty/agent_hooks.rs) and
-/// `termini --statusline` (pty/status_line.rs) — returning true when it did.
+/// app — `termo --agent-hook <tool> <event>` (pty/agent_hooks.rs) and
+/// `termo --statusline` (pty/status_line.rs) — returning true when it did.
 pub fn run_cli_mode_from_args() -> bool {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
@@ -30,6 +31,8 @@ pub fn run_cli_mode_from_args() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything reads the config folders (see migration.rs).
+    migration::migrate_from_termini();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())

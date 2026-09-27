@@ -19,7 +19,7 @@
   const { item, canInstall, onback }: Props = $props();
 
   /** Installing is a two-step: the first click shows the exact command
-   * Termini is about to run, and only the second one runs it. Installing
+   * Termo is about to run, and only the second one runs it. Installing
    * means running someone else's code on this machine, so it never happens
    * on a single click. */
   let confirming = $state(false);

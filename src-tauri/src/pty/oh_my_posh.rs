@@ -30,7 +30,7 @@ const POWERSHELL_REDRAW_HANDLER: &str = "Set-PSReadLineKeyHandler -Chord 'Ctrl+A
 /// plausibly press themselves.
 pub const POWERSHELL_REDRAW_KEY: &[u8] = b"\x1b[24;7~";
 
-/// zsh's half of the same fix, and it needs nothing from Termini: SIGWINCH
+/// zsh's half of the same fix, and it needs nothing from Termo: SIGWINCH
 /// already reaches the shell on every resize, so the trap alone is enough.
 const ZSH_REDRAW_LINE: &str = "TRAPWINCH() { zle && { zle reset-prompt; zle -R } }";
 
@@ -46,7 +46,7 @@ fn root_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     Ok(app.path().app_data_dir()?.join("oh-my-posh"))
 }
 
-/// Where Termini's own copy of the binary lives. Kept out of the user's
+/// Where Termo's own copy of the binary lives. Kept out of the user's
 /// PATH dirs on purpose: installing never touches their shell setup.
 pub fn managed_binary(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     Ok(root_dir(app)?.join("bin").join(exe_name()))
@@ -83,7 +83,7 @@ pub fn download_url() -> Option<String> {
     Some(format!("https://cdn.ohmyposh.dev/releases/latest/posh-{os}-{arch}{ext}"))
 }
 
-/// The binary to use, and whether it's Termini's own managed copy. Prefers
+/// The binary to use, and whether it's Termo's own managed copy. Prefers
 /// the managed copy, then any existing install the user already has.
 pub fn find(app: &tauri::AppHandle) -> Option<(PathBuf, bool)> {
     if let Ok(managed) = managed_binary(app) {
@@ -146,7 +146,7 @@ pub fn apply(
     }
 
     if managed {
-        // So `oh-my-posh` itself is usable inside Termini sessions too.
+        // So `oh-my-posh` itself is usable inside Termo sessions too.
         if let Some(bin_dir) = binary.parent() {
             let mut paths = vec![bin_dir.to_path_buf()];
             if let Some(existing) = std::env::var_os("PATH") {

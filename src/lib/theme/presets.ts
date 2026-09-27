@@ -393,7 +393,7 @@ export const SOLARIZED_LIGHT_THEME: Theme = {
   font: monoFont,
 };
 
-// Termini's own two first, then the rest by name.
+// Termo's own two first, then the rest by name.
 export const BUNDLED_THEMES: Theme[] = [
   DARK_THEME,
   LIGHT_THEME,

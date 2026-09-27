@@ -1,6 +1,6 @@
 //! Running the agents' own CLIs on the user's behalf.
 //!
-//! Installing goes through `claude`/`codex` rather than through Termini
+//! Installing goes through `claude`/`codex` rather than through Termo
 //! writing their config files: the CLI is what clones the repo, resolves the
 //! scope, updates its own lockfiles and enforces the marketplace's
 //! command-approval model. Reimplementing that here would mean tracking an
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn a_missing_binary_is_reported_not_panicked() {
-        let missing = PathBuf::from("/nonexistent/termini-test-cli");
+        let missing = PathBuf::from("/nonexistent/termo-test-cli");
         let err = run(&missing, &["--version"]).unwrap_err();
         assert!(!err.trim().is_empty());
     }

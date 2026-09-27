@@ -16,7 +16,7 @@ class UiState {
   deleteLayoutTarget = $state<SavedLayout | null>(null);
   /** The "saved layouts" window, where they're picked and deleted. */
   layoutManagerOpen = $state(false);
-  /** The "About Termini" window, opened from the title bar menu. */
+  /** The "About Termo" window, opened from the title bar menu. */
   aboutOpen = $state(false);
   /** The "where should this run" dialog, opened from a tile's new-tab menu:
    * what to open (an agent or a shell), which tile gets the tab, and the

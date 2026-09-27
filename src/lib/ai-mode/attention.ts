@@ -17,7 +17,7 @@ import type { ToolId } from "./pattern-table";
 import { playSound, type SoundChoice } from "./sounds";
 
 interface AgentEventPayload {
-  /** PTY id, as set in the console's TERMINI_SESSION_ID. */
+  /** PTY id, as set in the console's TERMO_SESSION_ID. */
   sessionId: string;
   tool: ToolId;
   status: AiSessionStatus | null;

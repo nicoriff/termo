@@ -117,7 +117,7 @@ pub struct AppConfig {
     pub ai_sound_volume: u8,
     /// App icon badge with the number of sessions waiting on the user.
     pub ai_dock_badge: bool,
-    /// The user's own Claude Code `statusLine` command, saved when Termini
+    /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
     /// Name of the saved layout to open on launch (see layouts.rs), or None

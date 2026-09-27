@@ -23,9 +23,9 @@ pub const MENU_COMPLETE_LINES: &[&str] = &[
 /// consoles never report where they are.
 pub const CWD_REPORT_LINES: &[&str] = &[
     "autoload -Uz add-zsh-hook",
-    r#"_termini_report_cwd() { printf '\033]7;file://%s\007' "$PWD" }"#,
-    "add-zsh-hook precmd _termini_report_cwd",
-    "_termini_report_cwd",
+    r#"_termo_report_cwd() { printf '\033]7;file://%s\007' "$PWD" }"#,
+    "add-zsh-hook precmd _termo_report_cwd",
+    "_termo_report_cwd",
 ];
 
 pub fn is_zsh(shell_path: &str) -> bool {
@@ -39,11 +39,11 @@ pub fn apply(app: &tauri::AppHandle, lines: &[String], env: &mut Vec<(&'static s
     fs::create_dir_all(&dir)?;
     fs::write(
         dir.join(".zshenv"),
-        "[ -f \"${TERMINI_USER_ZDOTDIR:-$HOME}/.zshenv\" ] && . \"${TERMINI_USER_ZDOTDIR:-$HOME}/.zshenv\"\n",
+        "[ -f \"${TERMO_USER_ZDOTDIR:-$HOME}/.zshenv\" ] && . \"${TERMO_USER_ZDOTDIR:-$HOME}/.zshenv\"\n",
     )?;
     let mut zshrc = String::from(
-        "ZDOTDIR=\"${TERMINI_USER_ZDOTDIR:-$HOME}\"\n\
-         unset TERMINI_USER_ZDOTDIR\n\
+        "ZDOTDIR=\"${TERMO_USER_ZDOTDIR:-$HOME}\"\n\
+         unset TERMO_USER_ZDOTDIR\n\
          [ -f \"$ZDOTDIR/.zshrc\" ] && . \"$ZDOTDIR/.zshrc\"\n",
     );
     for line in lines {
@@ -53,7 +53,7 @@ pub fn apply(app: &tauri::AppHandle, lines: &[String], env: &mut Vec<(&'static s
     fs::write(dir.join(".zshrc"), zshrc)?;
 
     if let Some(user_zdotdir) = std::env::var_os("ZDOTDIR") {
-        env.push(("TERMINI_USER_ZDOTDIR", user_zdotdir.to_string_lossy().into_owned()));
+        env.push(("TERMO_USER_ZDOTDIR", user_zdotdir.to_string_lossy().into_owned()));
     }
     env.push(("ZDOTDIR", dir.to_string_lossy().into_owned()));
     Ok(())

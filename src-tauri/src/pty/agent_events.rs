@@ -1,7 +1,7 @@
 //! Translates Claude Code / Codex lifecycle hook events into Modo IA
-//! session statuses. Both tools run `termini --agent-hook` (see
+//! session statuses. Both tools run `termo --agent-hook` (see
 //! agent_hooks.rs) on each event, which appends one line per event to
-//! `<TERMINI_EVENTS_DIR>/<TERMINI_SESSION_ID>.jsonl`:
+//! `<TERMO_EVENTS_DIR>/<TERMO_SESSION_ID>.jsonl`:
 //!
 //! `<tool>\t<event>\t<detail>\t<agent session id>\t<cwd>`
 //!

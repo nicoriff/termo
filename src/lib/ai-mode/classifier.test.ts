@@ -11,7 +11,7 @@ describe("classify: claude code", () => {
       // to a start-of-line-anchored identity regex would go unnoticed.
       "     Claude Code v2.1.269",
       "     Sonnet 5 · Claude Pro",
-      "     ~/termini",
+      "     ~/termo",
       "",
       "> ",
       "auto mode on (shift+tab to cycle) · esc to interrupt · ← for agents",

@@ -3,7 +3,7 @@
 //! A process launched from Finder (or the Dock, or `open`) inherits launchd's
 //! environment, not a login shell's: its PATH is the bare system one, without
 //! the per-user and package-manager directories where anything installed by a
-//! shell one-liner actually lives. Both things Termini shells out to land
+//! shell one-liner actually lives. Both things Termo shells out to land
 //! there — oh-my-posh in Homebrew's prefix, Claude Code's `claude` in
 //! `~/.local/bin` — so PATH alone finds neither.
 
@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn finds_nothing_for_a_name_that_cannot_exist() {
-        assert!(find_binary("termini-no-such-binary-9f3a").is_none());
+        assert!(find_binary("termo-no-such-binary-9f3a").is_none());
     }
 
     /// npm's Windows installer leaves a `.cmd` shim on PATH, never a
@@ -92,9 +92,9 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn finds_a_cmd_shim_on_windows() {
-        let dir = std::env::temp_dir().join("termini-bin-search-test-cmd-shim");
+        let dir = std::env::temp_dir().join("termo-bin-search-test-cmd-shim");
         std::fs::create_dir_all(&dir).unwrap();
-        let shim = dir.join("termini-fake-cli.cmd");
+        let shim = dir.join("termo-fake-cli.cmd");
         std::fs::write(&shim, "@echo off\r\n").unwrap();
 
         let original_path = std::env::var_os("PATH").unwrap_or_default();
@@ -102,7 +102,7 @@ mod tests {
         paths.insert(0, dir.clone());
         std::env::set_var("PATH", std::env::join_paths(&paths).unwrap());
 
-        let found = find_binary("termini-fake-cli");
+        let found = find_binary("termo-fake-cli");
 
         std::env::set_var("PATH", &original_path);
         std::fs::remove_dir_all(&dir).ok();

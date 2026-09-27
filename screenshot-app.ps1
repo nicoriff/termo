@@ -1,9 +1,9 @@
-# Usage: powershell -File screenshot-app.ps1 -OutPath ".\shot.png" [-ProcessName termini]
+# Usage: powershell -File screenshot-app.ps1 -OutPath ".\shot.png" [-ProcessName termo]
 # Captures the app window's own content via PrintWindow (immune to
 # multi-monitor/DPI-scaling coordinate issues that broke CopyFromScreen here).
 param(
   [string]$OutPath = "E:\Proyectos\Termini\.screenshot.png",
-  [string]$ProcessName = "termini"
+  [string]$ProcessName = "termo"
 )
 
 Add-Type @"
