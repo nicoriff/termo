@@ -11,10 +11,22 @@ export interface SessionTab {
   /** Set on a tab that shows a file in the editor rather than a console
    * (see isFileTab); the shell fields are then unused. */
   filePath?: string;
+  /** Set on a tab that shows an agent's runs (see AgentRunView) rather than
+   * a console; the shell fields are then unused. */
+  agentRun?: { agentId: string; runId: string };
 }
 
 export function isFileTab(session: SessionTab): session is SessionTab & { filePath: string } {
   return session.filePath !== undefined;
+}
+
+/** Whether the tab is a console, as opposed to a file or an agent's runs. */
+export function isConsoleTab(session: SessionTab): boolean {
+  return session.filePath === undefined && session.agentRun === undefined;
+}
+
+export function makeAgentRunSession(title: string, agentId: string, runId: string): SessionTab {
+  return { id: crypto.randomUUID(), title, agentRun: { agentId, runId } };
 }
 
 /** A file's name, which titles its tab. */

@@ -1,3 +1,4 @@
+pub mod agent_commands;
 pub mod agent_hook_commands;
 pub mod agent_session_commands;
 pub mod config_commands;

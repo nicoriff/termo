@@ -11,6 +11,7 @@
     layouts: "commands.groups.layouts",
     appearance: "commands.groups.appearance",
     aiMode: "commands.groups.aiMode",
+    agents: "commands.groups.agents",
     extensions: "commands.groups.extensions",
   };
 

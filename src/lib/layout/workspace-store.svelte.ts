@@ -5,7 +5,9 @@ import {
   collectSessions,
   collectTiles,
   fileFolder,
+  isConsoleTab,
   isFileTab,
+  makeAgentRunSession,
   makeFileSession,
   computeLayout,
   countSessions,
@@ -80,16 +82,48 @@ class WorkspaceStore {
     const tile = collectTiles(this.root).find((t) => t.id === tileId);
     const active = tile?.sessions.find((s) => s.id === tile.activeSessionId);
     if (!tile || !active) return;
-    if (isFileTab(active)) {
-      // A file can't be "cloned": the tile's last console is what's copied,
-      // opened next to the file — or the default shell, if it has none.
-      const console = [...tile.sessions].reverse().find((s) => !isFileTab(s));
-      this.addTab(tile.id, console?.shellPath, console?.shellArgs, console?.title, fileFolder(active.filePath));
+    if (!isConsoleTab(active)) {
+      // A file or an agent's runs can't be "cloned": the tile's last console
+      // is what's copied, opened next to the file — or the default shell, if
+      // it has none.
+      const console = [...tile.sessions].reverse().find(isConsoleTab);
+      this.addTab(tile.id, console?.shellPath, console?.shellArgs, console?.title, sessionFolder(active));
       return;
     }
     // Where that console is now (as it reported via OSC 7), not just where it
     // was opened — a new tab should land in the directory you were working in.
     this.addTab(tile.id, active.shellPath, active.shellArgs, active.title, sessionFolder(active));
+  }
+
+  /** Shows one of an agent's runs in a tab. Each agent has at most one such
+   * tab: when it's already open anywhere it switches to `runId` and comes to
+   * the front; otherwise a new one opens in the focused tile. */
+  openAgentRun(agentId: string, runId: string, title: string): void {
+    if (!this.root) return;
+    const open = collectSessions(this.root).find((loc) => loc.session.agentRun?.agentId === agentId);
+    if (open) {
+      const updated = updateLeaf(this.root, open.tileId, (tile) => ({
+        ...tile,
+        sessions: tile.sessions.map((session) =>
+          session.id === open.session.id ? { ...session, title, agentRun: { agentId, runId } } : session,
+        ),
+        activeSessionId: open.session.id,
+      }));
+      if (updated) this.root = updated;
+      this.focusedTileId = open.tileId;
+      return;
+    }
+    const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
+    if (!tileId) return;
+    const session = makeAgentRunSession(title, agentId, runId);
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
   }
 
   /** Opens `filePath` in an editor tab in `tileId` — or, when it's already
@@ -336,6 +370,7 @@ class WorkspaceStore {
  * reported, else where it opened), or the folder of the file it shows. */
 export function sessionFolder(session: SessionTab): string | undefined {
   if (isFileTab(session)) return fileFolder(session.filePath);
+  if (session.agentRun) return undefined;
   return tabCwd.byTab[session.id] ?? session.cwd;
 }
 

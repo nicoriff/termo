@@ -23,6 +23,7 @@ export type ShortcutAction =
   | "newClaude"
   | "newCodex"
   | "toggleExplorer"
+  | "toggleAgents"
   | "cycleTab"
   | "zoomTile"
   | "commandPalette"
@@ -41,6 +42,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newClaude",
   "newCodex",
   "toggleExplorer",
+  "toggleAgents",
   "cycleTab",
   "zoomTile",
   "commandPalette",
@@ -62,6 +64,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newClaude: "shortcuts.labels.newClaude",
   newCodex: "shortcuts.labels.newCodex",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
+  toggleAgents: "shortcuts.labels.toggleAgents",
   cycleTab: "shortcuts.labels.cycleTab",
   zoomTile: "shortcuts.labels.zoomTile",
   commandPalette: "shortcuts.labels.commandPalette",
@@ -200,6 +203,7 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   newCodex: { mac: "meta+shift+x", other: "ctrl+shift+x" },
   // Not plain Ctrl+B: the shell uses it to move the cursor back.
   toggleExplorer: { mac: "meta+shift+b", other: "ctrl+shift+b" },
+  toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
   commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },

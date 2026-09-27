@@ -12,6 +12,7 @@
   import TileChrome from "./TileChrome.svelte";
   import Terminal from "$lib/terminal/Terminal.svelte";
   import FileEditor from "$lib/editor/FileEditor.svelte";
+  import AgentRunView from "$lib/agents/AgentRunView.svelte";
   import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
@@ -88,6 +89,8 @@
             active={workspaceStore.focusedTileId === loc.tileId &&
               tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
           />
+        {:else if loc.session.agentRun}
+          <AgentRunView agentId={loc.session.agentRun.agentId} runId={loc.session.agentRun.runId} />
         {:else}
           <Terminal
             sessionId={loc.session.id}

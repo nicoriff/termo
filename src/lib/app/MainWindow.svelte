@@ -14,6 +14,9 @@
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+  import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
+  import AgentWizard from "$lib/agents/AgentWizard.svelte";
+  import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
@@ -36,6 +39,7 @@
     const stopAgentAttention = startAgentAttention();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
+    void agentsStore.init();
 
     (async () => {
       await appConfigStore.init();
@@ -119,6 +123,12 @@
       explorerStore.toggle(workspaceStore.focusedTileId);
       return;
     }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleAgents"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      agentsStore.toggle();
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, tool] of [
         ["newClaude", "claude"],
@@ -184,6 +194,9 @@
     <AiModePanel />
   {/if}
   <main class="content">
+    {#if agentsStore.open}
+      <AgentsSidebar />
+    {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
     {/if}
@@ -207,6 +220,9 @@
     {/if}
     {#if uiState.closeFileTarget}
       <CloseFileDialog />
+    {/if}
+    {#if uiState.agentWizard}
+      <AgentWizard />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

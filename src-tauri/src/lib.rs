@@ -1,4 +1,5 @@
 mod agent_sessions;
+mod agents;
 mod commands;
 mod config;
 mod i18n;
@@ -91,6 +92,14 @@ pub fn run() {
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,
+            commands::agent_commands::agents_list,
+            commands::agent_commands::agents_save,
+            commands::agent_commands::agents_delete,
+            commands::agent_commands::agent_run,
+            commands::agent_commands::agent_stop,
+            commands::agent_commands::agents_running,
+            commands::agent_commands::agent_runs,
+            commands::agent_commands::agent_run_log,
             commands::marketplace_commands::marketplace_status,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,

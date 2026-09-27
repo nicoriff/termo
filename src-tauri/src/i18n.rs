@@ -59,6 +59,16 @@ pub enum Msg<'a> {
     FileNotText(&'a str),
     /// (file name, OS error)
     FileWriteFailed(&'a str, &'a str),
+    AgentTaskMissing,
+    AgentAlreadyRunning,
+    AgentWorkDirMissing(&'a str),
+    AgentRunFailed(&'a str),
+    AgentSaveFailed(&'a str),
+    AgentStopped,
+    /// minutes
+    AgentTimedOut(u32),
+    /// exit code
+    AgentExitedWith(&'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -154,6 +164,30 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (FileWriteFailed(name, error), Es) => format!("No se pudo guardar \"{name}\": {error}"),
         (FileWriteFailed(name, error), En) => format!("Couldn't save \"{name}\": {error}"),
+
+        (AgentTaskMissing, Es) => "El agente no tiene una tarea para hacer".into(),
+        (AgentTaskMissing, En) => "The agent has no task to do".into(),
+
+        (AgentAlreadyRunning, Es) => "El agente ya está corriendo".into(),
+        (AgentAlreadyRunning, En) => "The agent is already running".into(),
+
+        (AgentWorkDirMissing(dir), Es) => format!("No existe la carpeta de trabajo \"{dir}\""),
+        (AgentWorkDirMissing(dir), En) => format!("The working folder \"{dir}\" doesn't exist"),
+
+        (AgentRunFailed(error), Es) => format!("No se pudo iniciar el agente: {error}"),
+        (AgentRunFailed(error), En) => format!("Couldn't start the agent: {error}"),
+
+        (AgentSaveFailed(error), Es) => format!("No se pudo guardar el agente: {error}"),
+        (AgentSaveFailed(error), En) => format!("Couldn't save the agent: {error}"),
+
+        (AgentStopped, Es) => "Detenido a mano".into(),
+        (AgentStopped, En) => "Stopped by hand".into(),
+
+        (AgentTimedOut(minutes), Es) => format!("Se cortó a los {minutes} min (el límite de tiempo)"),
+        (AgentTimedOut(minutes), En) => format!("Cut off after {minutes} min (the time limit)"),
+
+        (AgentExitedWith(code), Es) => format!("Terminó con el código {code}"),
+        (AgentExitedWith(code), En) => format!("Exited with code {code}"),
     }
 }
 
@@ -188,6 +222,14 @@ mod tests {
             Msg::FileTooLarge("big.log", 5),
             Msg::FileNotText("image.png"),
             Msg::FileWriteFailed("a.txt", "access denied"),
+            Msg::AgentTaskMissing,
+            Msg::AgentAlreadyRunning,
+            Msg::AgentWorkDirMissing("C:\\x"),
+            Msg::AgentRunFailed("not found"),
+            Msg::AgentSaveFailed("disk full"),
+            Msg::AgentStopped,
+            Msg::AgentTimedOut(15),
+            Msg::AgentExitedWith("1"),
         ]
     }
 

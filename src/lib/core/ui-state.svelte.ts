@@ -1,5 +1,6 @@
 import type { SavedLayout } from "./layouts-client";
 import type { LaunchTarget } from "$lib/agent-launch/launch-target";
+import type { AgentSpec } from "./agents-client";
 
 class UiState {
   maximized = $state(false);
@@ -25,6 +26,9 @@ class UiState {
   /** A file tab with unsaved changes the user asked to close: waiting on
    * save / don't save / cancel. */
   closeFileTarget = $state<{ tileId: string; sessionId: string; name: string } | null>(null);
+  /** The guided agent builder: the agent being edited (null for a blank
+   * new one) and whether saving creates it. */
+  agentWizard = $state<{ spec: AgentSpec | null; isNew: boolean } | null>(null);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -51,6 +55,7 @@ class UiState {
       this.aboutOpen ||
       this.agentLaunch !== null ||
       this.closeFileTarget !== null ||
+      this.agentWizard !== null ||
       this.marketplaceOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
@@ -132,6 +137,15 @@ class UiState {
 
   cancelCloseFile(): void {
     this.closeFileTarget = null;
+  }
+
+  openAgentWizard(spec: AgentSpec | null, isNew: boolean): void {
+    this.agentWizard = { spec, isNew };
+  }
+
+  closeAgentWizard(): void {
+    this.agentWizard = null;
+    this.refocusTerminals();
   }
 
   closeAgentLaunch(): void {

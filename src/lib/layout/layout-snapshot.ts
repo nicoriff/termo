@@ -10,7 +10,7 @@
  * state, tab titles). Restoring mints fresh ones instead.
  */
 
-import { makeFileSession, makeSession, makeTile, type SplitDirection, type SplitNode } from "./split-tree";
+import { makeAgentRunSession, makeFileSession, makeSession, makeTile, type SplitDirection, type SplitNode } from "./split-tree";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 
 export interface LayoutSession {
@@ -20,6 +20,8 @@ export interface LayoutSession {
   cwd?: string;
   /** A file tab: reopened in the editor rather than as a console. */
   filePath?: string;
+  /** An agent's runs tab. */
+  agentRun?: { agentId: string; runId: string };
   /** The agent conversation this console had open, when the layout was saved
    * with sessions. Restoring reopens it with the agent's own resume command. */
   agentTool?: ToolId;
@@ -63,6 +65,10 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
       const stored: LayoutSession = { title: session.title };
       if (session.filePath !== undefined) {
         stored.filePath = session.filePath;
+        return stored;
+      }
+      if (session.agentRun !== undefined) {
+        stored.agentRun = { ...session.agentRun };
         return stored;
       }
       if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
@@ -114,6 +120,8 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string):
     const stored = node.sessions.length > 0 ? node.sessions : [{ title: "Shell" } as LayoutSession];
     const sessions = stored.map((session) => {
       if (session.filePath) return withId(makeFileSession(session.filePath), newId);
+      if (session.agentRun)
+        return withId(makeAgentRunSession(session.title, session.agentRun.agentId, session.agentRun.runId), newId);
       const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
       if (session.agentTool && session.agentSessionId) {
         resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });

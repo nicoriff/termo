@@ -24,6 +24,8 @@ export interface ShortcutsConfig {
   new_codex_other: string | null;
   toggle_explorer_mac: string | null;
   toggle_explorer_other: string | null;
+  toggle_agents_mac: string | null;
+  toggle_agents_other: string | null;
   cycle_tab_mac: string | null;
   cycle_tab_other: string | null;
   zoom_tile_mac: string | null;

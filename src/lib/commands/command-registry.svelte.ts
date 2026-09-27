@@ -14,6 +14,7 @@ import { themeStore } from "../theme/theme-store.svelte";
 import { requestAgentLaunch } from "../agent-launch/request-launch";
 import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
 import { newTabOptions } from "../layout/new-tab-options.svelte";
+import { agentsStore } from "../agents/agents-store.svelte";
 import type { Command } from "./commands";
 
 /** themeStore's setters never persist on their own — the Preferences sections
@@ -52,7 +53,38 @@ export function buildCommands(): Command[] {
       label: t("commands.openMarketplace"),
       run: () => uiState.openMarketplace(),
     },
+    {
+      id: "agents.toggle",
+      group: "agents",
+      label: agentsStore.open ? t("commands.hideAgents") : t("commands.showAgents"),
+      run: () => agentsStore.toggle(),
+    },
+    {
+      id: "agents.new",
+      group: "agents",
+      label: t("commands.createAgent"),
+      run: () => uiState.openAgentWizard(null, true),
+    },
   ];
+
+  for (const agent of agentsStore.agents) {
+    commands.push({
+      id: `agents.run.${agent.id}`,
+      group: "agents",
+      label: t("commands.runAgent", { name: agent.name }),
+      run: () =>
+        void agentsStore
+          .run(agent)
+          .then((run) => workspaceStore.openAgentRun(agent.id, run.id, agent.name))
+          .catch(() => {}),
+    });
+    commands.push({
+      id: `agents.edit.${agent.id}`,
+      group: "agents",
+      label: t("commands.editAgent", { name: agent.name }),
+      run: () => uiState.openAgentWizard(agent, false),
+    });
+  }
 
   const root = workspaceStore.root;
   for (const loc of root ? collectSessions(root) : []) {

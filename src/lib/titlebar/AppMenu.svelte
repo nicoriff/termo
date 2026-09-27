@@ -16,6 +16,7 @@
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import { layoutHasSessions } from "$lib/layout/layout-snapshot";
   import type { SavedLayout } from "$lib/core/layouts-client";
+  import { agentsStore } from "$lib/agents/agents-store.svelte";
 
   let { anchor, onclose }: { anchor?: HTMLElement; onclose: () => void } = $props();
 
@@ -112,6 +113,11 @@
   function browseExtensions() {
     onclose();
     uiState.openMarketplace();
+  }
+
+  function showAgents() {
+    onclose();
+    agentsStore.setOpen(true);
   }
 
   /** Asks first: restoring closes every console that's open. */
@@ -229,6 +235,16 @@
     </svg>
     <span class="app-menu-text">{t("marketplace.open")}</span>
     <span class="app-menu-hint">{hint("marketplace")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showAgents}>
+    <!-- A robot's head: the agents the user built. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1.5" y="3.5" width="9" height="7" rx="1.8" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M6 3.5V1.5M4.3 7h.01M7.7 7h.01" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+    </svg>
+    <span class="app-menu-text">{t("agents.title")}</span>
+    <span class="app-menu-hint">{hint("toggleAgents")}</span>
   </button>
 
   <div class="app-menu-divider"></div>

@@ -428,6 +428,11 @@
           <svg class="tile-tab-file" viewBox="0 0 12 14" aria-hidden="true">
             <path d="M1.5 1.5h6l3 3v8h-9z M7.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.agentRun}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="2" y="4" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1" />
+            <path d="M7 4V2 M5 8h.01 M9 8h.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
         {/if}
         <span
           class="tile-tab-title"
