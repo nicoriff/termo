@@ -189,6 +189,7 @@ export const en: Messages = {
     title: "Agents",
     new: "New agent",
     close: "Close agents panel",
+    resize: "Drag to change the width (double-click: original size)",
     empty: {
       title: "You don't have any agents yet",
       text: "An agent does a task on its own: reviewing changes, tidying files, writing a summary. We'll guide you step by step through your first one.",

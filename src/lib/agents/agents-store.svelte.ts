@@ -13,6 +13,25 @@ import {
   type RunTrigger,
 } from "$lib/core/agents-client";
 
+/** The sidebar's width: a default, and how far it can be dragged. */
+export const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 560 };
+const WIDTH_KEY = "termo.agents.sidebarWidth";
+
+export function clampSidebarWidth(width: number): number {
+  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+}
+
+/** Only a convenience: a browser storage that's missing or throws just means
+ * the default width. */
+function loadWidth(): number {
+  try {
+    const saved = Number(localStorage.getItem(WIDTH_KEY));
+    return saved ? clampSidebarWidth(saved) : SIDEBAR_WIDTH.initial;
+  } catch {
+    return SIDEBAR_WIDTH.initial;
+  }
+}
+
 /** The user's agents and what each is doing, kept by the backend
  * (src-tauri/src/agents). Runs report through the `agent-run` event, so the
  * state here follows runs started from anywhere — the sidebar, the wizard's
@@ -25,6 +44,8 @@ class AgentsStore {
   nextRun = $state<Record<string, number>>({});
   /** The left sidebar. */
   open = $state(false);
+  /** Its width in px, as the user last dragged it. */
+  width = $state(loadWidth());
   /** Ticks every 30 s while the sidebar is open, for "hace 5 min" labels. */
   now = $state(Date.now());
   private started = false;
@@ -60,6 +81,16 @@ class AgentsStore {
 
   isRunning(agentId: string): boolean {
     return this.lastRun[agentId]?.status === "running";
+  }
+
+  setWidth(width: number, persist = false): void {
+    this.width = clampSidebarWidth(width);
+    if (!persist) return;
+    try {
+      localStorage.setItem(WIDTH_KEY, String(this.width));
+    } catch {
+      // Not remembered next time; nothing else depends on it.
+    }
   }
 
   toggle(): void {

@@ -188,6 +188,7 @@ export const es = {
     title: "Agentes",
     new: "Nuevo agente",
     close: "Cerrar panel de agentes",
+    resize: "Arrastrá para cambiar el ancho (doble clic: tamaño original)",
     empty: {
       title: "Todavía no tenés agentes",
       text: "Un agente hace una tarea por su cuenta: revisar cambios, ordenar archivos, armar un resumen. Te guiamos paso a paso para crear el primero.",

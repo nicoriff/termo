@@ -11,7 +11,7 @@
   import type { AgentSpec } from "$lib/core/agents-client";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { agentsStore } from "./agents-store.svelte";
+  import { SIDEBAR_WIDTH, agentsStore } from "./agents-store.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
 
   const timeOf = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -72,6 +72,39 @@
     await agentsStore.remove(agent.id);
   }
 
+  let resizing = $state(false);
+
+  /** Dragging the right edge: the width follows the pointer, and is
+   * remembered once it's let go. */
+  function startResize(event: PointerEvent) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = agentsStore.width;
+    resizing = true;
+    const move = (e: PointerEvent) => agentsStore.setWidth(startWidth + e.clientX - startX);
+    const end = () => {
+      resizing = false;
+      agentsStore.setWidth(agentsStore.width, true);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  }
+
+  function onResizeKey(event: KeyboardEvent) {
+    const step = event.shiftKey ? 40 : 10;
+    if (event.key === "ArrowLeft") agentsStore.setWidth(agentsStore.width - step, true);
+    else if (event.key === "ArrowRight") agentsStore.setWidth(agentsStore.width + step, true);
+    else return;
+    event.preventDefault();
+  }
+
   function toggleMenu(event: MouseEvent, id: string) {
     event.stopPropagation();
     confirmDelete = null;
@@ -83,7 +116,28 @@
 
 <svelte:window onpointerdown={() => (menuFor = null)} />
 
-<aside class="agents" transition:slide={{ axis: "x", duration: 180, easing: cubicOut }} aria-label={t("agents.title")}>
+<aside
+  class="agents"
+  class:resizing
+  style="--agents-width:{agentsStore.width}px"
+  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
+  aria-label={t("agents.title")}
+>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div
+    class="resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label={t("agents.resize")}
+    aria-valuemin={SIDEBAR_WIDTH.min}
+    aria-valuemax={SIDEBAR_WIDTH.max}
+    aria-valuenow={agentsStore.width}
+    title={t("agents.resize")}
+    tabindex="0"
+    onpointerdown={startResize}
+    ondblclick={() => agentsStore.setWidth(SIDEBAR_WIDTH.initial, true)}
+    onkeydown={onResizeKey}
+  ></div>
   <div class="agents-inner">
     <header class="agents-header">
       <span class="agents-title">{t("agents.title")}</span>
@@ -240,8 +294,9 @@
      than being covered. The width animates; the content inside keeps its
      own fixed width so nothing reflows while it slides. */
   .agents {
+    position: relative;
     flex-shrink: 0;
-    width: 264px;
+    width: var(--agents-width, 264px);
     overflow: hidden;
     border-right: 1px solid var(--tabbar-border, #2a2a2a);
     background: var(--tabbar-bg, #1e1e1e);
@@ -250,10 +305,40 @@
   }
 
   .agents-inner {
-    width: 264px;
+    width: var(--agents-width, 264px);
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+
+  /* A thin strip over the right border, wider than it looks so it's easy to
+     grab. */
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    width: 6px;
+    cursor: ew-resize;
+    outline: none;
+  }
+
+  .resize-handle:hover,
+  .resize-handle:focus-visible,
+  .agents.resizing .resize-handle {
+    background: var(--divider-hover-bg, #3a6df0);
+    opacity: 0.6;
+  }
+
+  /* While dragging, the pointer shouldn't select text or flicker back to an
+     arrow over the consoles. */
+  .agents.resizing {
+    user-select: none;
+  }
+
+  :global(body:has(.agents.resizing)) {
+    cursor: ew-resize;
   }
 
   .agents-header {
