@@ -30,7 +30,7 @@ export interface AgentSpec {
   triggers: { schedule: AgentSchedule | null; watch: { path: string } | null };
   secrets: string[];
   enabled: boolean;
-  deploy: { github: { repoPath: string; workflowFile: string; deployedAt: number } | null };
+  deploy: { github: { repo: string; repoPath: string; workflowFile: string; deployedAt: number } | null };
   createdAt: number;
   updatedAt: number;
 }
@@ -132,6 +132,25 @@ export function agentMcpServer(request: AgentMcpRequest): Promise<{ server: McpS
 /** When each scheduled agent runs next on its own, Unix ms by agent id. */
 export function agentsNextRuns(): Promise<Record<string, number>> {
   return invoke("agents_next_runs");
+}
+
+/** Mirrors src-tauri/src/agents/github.rs. */
+export interface GithubPreview {
+  workflowFile: string;
+  yaml: string;
+  repo: string | null;
+  secrets: string[];
+  approximated: boolean;
+  dropsWatch: boolean;
+}
+
+export function githubPreview(spec: AgentSpec): Promise<GithubPreview> {
+  return invoke("agent_github_preview", { spec });
+}
+
+/** Writes the workflow into the agent's repository; resolves to its path. */
+export function githubWrite(spec: AgentSpec): Promise<string> {
+  return invoke("agent_github_write", { spec });
 }
 
 export function forgetAgentSecrets(agentId: string, names: string[]): Promise<void> {

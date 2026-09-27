@@ -105,6 +105,8 @@ pub fn run() {
             commands::agent_commands::agent_mcp_server,
             commands::agent_commands::agent_forget_secrets,
             commands::agent_commands::agents_next_runs,
+            commands::agent_commands::agent_github_preview,
+            commands::agent_commands::agent_github_write,
             commands::marketplace_commands::marketplace_status,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,

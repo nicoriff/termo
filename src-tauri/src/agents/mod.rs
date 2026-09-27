@@ -4,6 +4,7 @@
 
 pub mod draft;
 pub mod events;
+pub mod github;
 pub mod integrations;
 pub mod runner;
 pub mod scheduler;

@@ -10,6 +10,7 @@
   import { isMac } from "$lib/core/platform";
   import type { AgentSpec } from "$lib/core/agents-client";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { agentsStore } from "./agents-store.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
 
@@ -130,6 +131,16 @@
             <div class="agent-name-line">
               <span class="agent-name">{agent.name}</span>
               <ConsoleIcon kind={agent.engine} size={11} />
+              {#if agent.deploy.github}
+                <button
+                  class="deploy-badge"
+                  title={t("agents.github.openActions")}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    if (agent.deploy.github?.repo) void openUrl(`https://github.com/${agent.deploy.github.repo}/actions`);
+                  }}>GitHub</button
+                >
+              {/if}
             </div>
             <div class="agent-state" style="color:{toneColor(state.tone)}">
               <span class="state-dot" class:pulsing={running} style="background:{toneColor(state.tone)}"></span>
@@ -373,6 +384,23 @@
 
   .state-dot.pulsing {
     animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  .deploy-badge {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 9.5px;
+    opacity: 0.75;
+    cursor: pointer;
+  }
+
+  .deploy-badge:hover {
+    opacity: 1;
   }
 
   .agent-next {

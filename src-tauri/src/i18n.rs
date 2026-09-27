@@ -71,6 +71,9 @@ pub enum Msg<'a> {
     AgentExitedWith(&'a str),
     AgentSecretFailed(&'a str),
     AgentDraftFailed(&'a str),
+    AgentGithubNeedsRepo,
+    AgentGithubClaudeOnly,
+    AgentGithubWriteFailed(&'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -196,6 +199,15 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (AgentDraftFailed(error), Es) => format!("No se pudo armar el agente con IA: {error}"),
         (AgentDraftFailed(error), En) => format!("Couldn't build the agent with AI: {error}"),
+
+        (AgentGithubNeedsRepo, Es) => "Para llevarlo a GitHub, la carpeta de trabajo del agente tiene que ser un repositorio de git".into(),
+        (AgentGithubNeedsRepo, En) => "To take it to GitHub, the agent's working folder has to be a git repository".into(),
+
+        (AgentGithubClaudeOnly, Es) => "Por ahora solo los agentes con Claude Code pueden correr en GitHub Actions".into(),
+        (AgentGithubClaudeOnly, En) => "For now only Claude Code agents can run on GitHub Actions".into(),
+
+        (AgentGithubWriteFailed(error), Es) => format!("No se pudo escribir el workflow: {error}"),
+        (AgentGithubWriteFailed(error), En) => format!("Couldn't write the workflow: {error}"),
     }
 }
 
@@ -240,6 +252,9 @@ mod tests {
             Msg::AgentExitedWith("1"),
             Msg::AgentSecretFailed("locked"),
             Msg::AgentDraftFailed("timeout"),
+            Msg::AgentGithubNeedsRepo,
+            Msg::AgentGithubClaudeOnly,
+            Msg::AgentGithubWriteFailed("access denied"),
         ]
     }
 

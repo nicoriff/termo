@@ -2,6 +2,7 @@ use tauri::State;
 
 use crate::agents::draft::{self, Draft};
 use crate::agents::events::RunEvent;
+use crate::agents::github::{self, GithubPreview};
 use crate::agents::integrations::{self, AgentMcpRequest, AgentMcpServer};
 use crate::agents::scheduler;
 use crate::agents::secrets;
@@ -94,6 +95,18 @@ pub fn agent_mcp_server(request: AgentMcpRequest) -> Result<AgentMcpServer, Stri
 #[tauri::command]
 pub fn agent_forget_secrets(agent_id: String, names: Vec<String>) {
     secrets::delete_all(&agent_id, &names);
+}
+
+/// What deploying to GitHub Actions would write, without writing it.
+#[tauri::command]
+pub fn agent_github_preview(spec: AgentSpec) -> Result<GithubPreview, String> {
+    github::preview(&spec)
+}
+
+/// Writes the agent's workflow into its repository; returns the file's path.
+#[tauri::command]
+pub fn agent_github_write(spec: AgentSpec) -> Result<String, String> {
+    github::write(&spec)
 }
 
 #[tauri::command]

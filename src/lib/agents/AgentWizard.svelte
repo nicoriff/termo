@@ -16,6 +16,7 @@
     type RunEvent,
   } from "$lib/core/agents-client";
   import IntegrationPicker from "./IntegrationPicker.svelte";
+  import GithubDeployPanel from "./GithubDeployPanel.svelte";
   import { AGENT_TEMPLATES, applyTemplate, type AgentTemplate } from "./agent-templates";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -100,6 +101,8 @@
   let draftNote = $state("");
   let suggestions = $state<AgentDraft["integrations"]>([]);
   let picking = $state(false);
+  /** The GitHub Actions panel of the last step. */
+  let showGithub = $state(Boolean(target.spec?.deploy.github));
   /** Every secret stored while the wizard is open, kept or not. */
   const addedSecrets: string[] = [];
 
@@ -559,17 +562,27 @@
                 <span class="card-title">💻 {t("agents.wizard.deploy.local")}</span>
                 <span class="card-text">{t("agents.wizard.deploy.localText")}</span>
               </div>
-              <div class="card static disabled">
+              <button
+                class="card"
+                class:selected={showGithub}
+                disabled={spec.engine !== "claude"}
+                onclick={() => (showGithub = !showGithub)}
+              >
                 <span class="card-title">GitHub Actions</span>
-                <span class="card-text">{t("agents.wizard.deploy.githubText")}</span>
-                <span class="badge">{t("agents.wizard.deploy.soon")}</span>
-              </div>
+                <span class="card-text">
+                  {spec.engine === "claude" ? t("agents.wizard.deploy.githubText") : t("agents.wizard.deploy.githubClaudeOnly")}
+                </span>
+                {#if spec.deploy.github}<span class="badge">✓ {t("agents.wizard.deploy.githubDone")}</span>{/if}
+              </button>
               <div class="card static disabled">
                 <span class="card-title">Vercel</span>
                 <span class="card-text">{t("agents.wizard.deploy.vercelText")}</span>
                 <span class="badge">{t("agents.wizard.deploy.soon")}</span>
               </div>
             </div>
+            {#if showGithub && spec.engine === "claude"}
+              <GithubDeployPanel {spec} />
+            {/if}
             <label class="toggle">
               <input type="checkbox" bind:checked={spec.enabled} />
               <span>

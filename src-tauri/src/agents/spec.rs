@@ -90,6 +90,8 @@ pub struct Triggers {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct GithubDeploy {
+    /// `owner/repo` on GitHub, when known.
+    pub repo: String,
     pub repo_path: String,
     pub workflow_file: String,
     pub deployed_at: i64,
