@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import {
     closeWindow,
+    getDecorationLayout,
     isWindowFullscreen,
     isWindowMaximized,
     minimizeWindow,
@@ -10,11 +11,12 @@
     toggleMaximizeWindow,
   } from "$lib/core/window-client";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { isMac } from "$lib/core/platform";
+  import { isLinux, isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { requestQuit } from "$lib/app/quit";
   import AppMenu from "./AppMenu.svelte";
+  import { DEFAULT_DECORATION_LAYOUT, parseDecorationLayout, type WindowButton } from "./decoration-layout";
 
   // This bar is also the Preferences window's, where closing just hides it —
   // only the main window's X ends the app, so only it asks first.
@@ -35,6 +37,13 @@
   let unlisten: (() => void) | null = null;
   let menuOpen = $state(false);
   let menuButtonEl = $state<HTMLButtonElement | undefined>(undefined);
+  let layout = $state(DEFAULT_DECORATION_LAYOUT);
+  const startButtons = $derived(layout.start.filter(shown));
+  const endButtons = $derived(layout.end.filter(shown));
+
+  function shown(button: WindowButton): boolean {
+    return button !== "maximize" || showMaximizeButton;
+  }
 
   async function refreshMaximized() {
     maximized = await isWindowMaximized();
@@ -51,6 +60,11 @@
 
   onMount(() => {
     void refreshMaximized();
+    if (isLinux) {
+      getDecorationLayout()
+        .then((value) => (layout = parseDecorationLayout(value)))
+        .catch(() => {});
+    }
     // Best-effort sync for external changes (e.g. Aero-snap to top of screen).
     // The toggle button/double-click above refresh state directly since this
     // event doesn't reliably fire for every maximize/restore transition.
@@ -73,9 +87,23 @@
   class="titlebar"
   class:mac={isMac}
   class:mac-fullscreen={isMac && fullscreen}
+  class:linux={isLinux}
   data-tauri-drag-region
   ondblclick={handleDoubleClick}
 >
+  <!-- Linux, like GNOME: window buttons where the desktop's setting puts
+       them, the menu on the other side, the title centered. -->
+  {#if isLinux}
+    <div class="titlebar-controls">
+      {#each startButtons as button (button)}
+        {@render windowButton(button)}
+      {/each}
+      {#if layout.menuSide === "start"}
+        {@render menuButton()}
+      {/if}
+    </div>
+  {/if}
+
   <div class="titlebar-brand" data-tauri-drag-region>
     <img class="titlebar-icon" src="/app-icon.png" alt="" />
     <span class="titlebar-title">{title}</span>
@@ -84,71 +112,85 @@
   <div class="titlebar-spacer" data-tauri-drag-region></div>
 
   <div class="titlebar-controls">
-    {#if showSettingsButton}
-      <button
-        class="titlebar-button"
-        aria-label={t("titlebar.menu")}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        bind:this={menuButtonEl}
-        onclick={() => (menuOpen = !menuOpen)}
-      >
-        <!-- A menu, not a settings button: the sliders glyph now belongs to
-             the "System preferences" item inside it. -->
-        <svg viewBox="0 0 14 14" width="13" height="13">
-          <line x1="2" y1="3.5" x2="12" y2="3.5" stroke="currentColor" stroke-width="1" />
-          <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="1" />
-          <line x1="2" y1="10.5" x2="12" y2="10.5" stroke="currentColor" stroke-width="1" />
-        </svg>
-      </button>
-      {#if menuOpen}
-        <AppMenu anchor={menuButtonEl} onclose={() => (menuOpen = false)} />
+    {#if isLinux}
+      {#if layout.menuSide === "end"}
+        {@render menuButton()}
       {/if}
-    {/if}
-    {#if !isMac}
-      <button
-        class="titlebar-button"
-        aria-label={t("titlebar.minimize")}
-        onclick={() => void minimizeWindow()}
-      >
-        <svg viewBox="0 0 10 10" width="10" height="10">
-          <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
-        </svg>
-      </button>
-      {#if showMaximizeButton}
-        <button
-          class="titlebar-button"
-          aria-label={t(maximized ? "titlebar.restore" : "titlebar.maximize")}
-          onclick={() => void toggleMaximize()}
-        >
-          {#if maximized}
-            <svg viewBox="0 0 10 10" width="10" height="10">
-              <path
-                d="M2 0h8v8h-2M0 2h8v8H0z"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1"
-              />
-            </svg>
-          {:else}
-            <svg viewBox="0 0 10 10" width="10" height="10">
-              <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
-            </svg>
-          {/if}
-        </button>
+      {#each endButtons as button (button)}
+        {@render windowButton(button)}
+      {/each}
+    {:else}
+      {@render menuButton()}
+      {#if !isMac}
+        {@render windowButton("minimize")}
+        {#if showMaximizeButton}
+          {@render windowButton("maximize")}
+        {/if}
+        {@render windowButton("close")}
       {/if}
-      <button
-        class="titlebar-button titlebar-close"
-        aria-label={t("titlebar.close")}
-        onclick={() => void (isMainWindow ? requestQuit() : closeWindow())}
-      >
-        <svg viewBox="0 0 10 10" width="10" height="10">
-          <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
-        </svg>
-      </button>
     {/if}
   </div>
 </div>
+
+{#snippet menuButton()}
+  {#if showSettingsButton}
+    <button
+      class="titlebar-button titlebar-menu"
+      aria-label={t("titlebar.menu")}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      bind:this={menuButtonEl}
+      onclick={() => (menuOpen = !menuOpen)}
+    >
+      <!-- A menu, not a settings button: the sliders glyph now belongs to
+           the "System preferences" item inside it. -->
+      <svg viewBox="0 0 14 14" width="13" height="13">
+        <line x1="2" y1="3.5" x2="12" y2="3.5" stroke="currentColor" stroke-width="1" />
+        <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="1" />
+        <line x1="2" y1="10.5" x2="12" y2="10.5" stroke="currentColor" stroke-width="1" />
+      </svg>
+    </button>
+    {#if menuOpen}
+      <AppMenu anchor={menuButtonEl} onclose={() => (menuOpen = false)} />
+    {/if}
+  {/if}
+{/snippet}
+
+{#snippet windowButton(button: WindowButton)}
+  {#if button === "minimize"}
+    <button class="titlebar-button" aria-label={t("titlebar.minimize")} onclick={() => void minimizeWindow()}>
+      <svg viewBox="0 0 10 10" width="10" height="10">
+        <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
+      </svg>
+    </button>
+  {:else if button === "maximize"}
+    <button
+      class="titlebar-button"
+      aria-label={t(maximized ? "titlebar.restore" : "titlebar.maximize")}
+      onclick={() => void toggleMaximize()}
+    >
+      {#if maximized}
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <path d="M2 0h8v8h-2M0 2h8v8H0z" fill="none" stroke="currentColor" stroke-width="1" />
+        </svg>
+      {:else}
+        <svg viewBox="0 0 10 10" width="10" height="10">
+          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+        </svg>
+      {/if}
+    </button>
+  {:else}
+    <button
+      class="titlebar-button titlebar-close"
+      aria-label={t("titlebar.close")}
+      onclick={() => void (isMainWindow ? requestQuit() : closeWindow())}
+    >
+      <svg viewBox="0 0 10 10" width="10" height="10">
+        <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />
+      </svg>
+    </button>
+  {/if}
+{/snippet}
 
 <style>
   .titlebar {
@@ -254,5 +296,71 @@
     width: 28px;
     height: 24px;
     border-radius: 6px;
+  }
+  /* Linux: GNOME's header bar — centered bold title, no icon, round
+     neutral window buttons (no red close), a flat rounded menu button. */
+  .titlebar.linux {
+    position: relative;
+  }
+
+  .titlebar.linux .titlebar-brand {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-50%);
+    padding: 0;
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  .titlebar.linux .titlebar-icon {
+    display: none;
+  }
+
+  .titlebar.linux .titlebar-title {
+    font-family: system-ui, "Cantarell", "Ubuntu", sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: normal;
+  }
+
+  .titlebar.linux .titlebar-controls {
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+  }
+
+  .titlebar.linux .titlebar-controls:empty {
+    display: none;
+  }
+
+  .titlebar.linux .titlebar-button {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  .titlebar.linux .titlebar-button svg {
+    width: 8px;
+    height: 8px;
+  }
+
+  .titlebar.linux .titlebar-button:hover,
+  .titlebar.linux .titlebar-close:hover {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    color: inherit;
+  }
+
+  .titlebar.linux .titlebar-menu {
+    width: 32px;
+    border-radius: 6px;
+    background: transparent;
+  }
+
+  .titlebar.linux .titlebar-menu svg {
+    width: 13px;
+    height: 13px;
   }
 </style>

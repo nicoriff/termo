@@ -25,6 +25,26 @@ pub fn is_maximized(window: tauri::Window) -> Result<bool, String> {
     window.is_maximized().map_err(|err| err.to_string())
 }
 
+/// The user's titlebar button layout, as GTK's `gtk-decoration-layout`
+/// ("appmenu:minimize,maximize,close": left of the colon goes on the left).
+/// GNOME and KDE both keep it in sync with their own setting. `None` off
+/// Linux, or if GTK has no value.
+///
+/// Sync on purpose: Tauri runs sync commands on the main thread, the only
+/// one GTK may be touched from.
+#[tauri::command]
+pub fn decoration_layout() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::ObjectExt;
+        gtk::Settings::default()?.property::<Option<String>>("gtk-decoration-layout")
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 /// Ends the app outright. Closing the main window gets there too (lib.rs exits
 /// on its Destroyed event, which is what keeps the preloaded, hidden
 /// Preferences window from outliving it), but "Quit" shouldn't depend on that

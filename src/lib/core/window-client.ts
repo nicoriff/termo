@@ -30,6 +30,12 @@ export function preferencesReady(): Promise<void> {
   return invoke("preferences_ready");
 }
 
+/** GTK's titlebar button layout, e.g. "appmenu:minimize,maximize,close";
+ * null off Linux. See decoration_layout in window_commands.rs. */
+export function getDecorationLayout(): Promise<string | null> {
+  return invoke("decoration_layout");
+}
+
 export function isWindowMaximized(): Promise<boolean> {
   return invoke("is_maximized");
 }

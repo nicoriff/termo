@@ -4304,6 +4304,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "dirs",
+ "gtk",
  "keyring",
  "libc",
  "notify",

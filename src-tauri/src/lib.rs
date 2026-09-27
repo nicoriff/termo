@@ -83,6 +83,7 @@ pub fn run() {
             commands::window_commands::preferences_ready,
             commands::window_commands::set_ui_language,
             commands::window_commands::set_background_blur,
+            commands::window_commands::decoration_layout,
             commands::agent_hook_commands::agent_hooks_status,
             commands::agent_hook_commands::install_agent_hooks,
             commands::agent_hook_commands::uninstall_agent_hooks,

@@ -55,6 +55,11 @@ windows-sys = { version = "0.59", features = [
 # crate to the dependency graph.
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Already in the graph through tauri/wry (same version), for reading the
+# user's titlebar button layout (window_commands::decoration_layout).
+gtk = "0.18"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 window-vibrancy = "0.6"
 
