@@ -52,6 +52,13 @@ pub enum Msg<'a> {
     FolderExists(&'a str),
     /// (folder name, OS error)
     FolderCreateFailed(&'a str, &'a str),
+    /// (file name, OS error)
+    FileReadFailed(&'a str, &'a str),
+    /// (file name, limit in MB)
+    FileTooLarge(&'a str, u64),
+    FileNotText(&'a str),
+    /// (file name, OS error)
+    FileWriteFailed(&'a str, &'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -135,6 +142,18 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (FolderCreateFailed(name, error), Es) => format!("No se pudo crear \"{name}\": {error}"),
         (FolderCreateFailed(name, error), En) => format!("Couldn't create \"{name}\": {error}"),
+
+        (FileReadFailed(name, error), Es) => format!("No se pudo abrir \"{name}\": {error}"),
+        (FileReadFailed(name, error), En) => format!("Couldn't open \"{name}\": {error}"),
+
+        (FileTooLarge(name, limit), Es) => format!("\"{name}\" pesa más de {limit} MB: es demasiado grande para abrirlo acá"),
+        (FileTooLarge(name, limit), En) => format!("\"{name}\" is over {limit} MB: too large to open here"),
+
+        (FileNotText(name), Es) => format!("\"{name}\" no es un archivo de texto"),
+        (FileNotText(name), En) => format!("\"{name}\" isn't a text file"),
+
+        (FileWriteFailed(name, error), Es) => format!("No se pudo guardar \"{name}\": {error}"),
+        (FileWriteFailed(name, error), En) => format!("Couldn't save \"{name}\": {error}"),
     }
 }
 
@@ -165,6 +184,10 @@ mod tests {
             Msg::FolderNameInvalid("a/b"),
             Msg::FolderExists("project"),
             Msg::FolderCreateFailed("project", "access denied"),
+            Msg::FileReadFailed("a.txt", "access denied"),
+            Msg::FileTooLarge("big.log", 5),
+            Msg::FileNotText("image.png"),
+            Msg::FileWriteFailed("a.txt", "access denied"),
         ]
     }
 

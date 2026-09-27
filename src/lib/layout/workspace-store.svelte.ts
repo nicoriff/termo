@@ -2,7 +2,11 @@ import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import type { ShellLaunch } from "../core/default-shell";
 import { tabCwd } from "../terminal/tab-cwd.svelte";
 import {
+  collectSessions,
   collectTiles,
+  fileFolder,
+  isFileTab,
+  makeFileSession,
   computeLayout,
   countSessions,
   makeSession,
@@ -76,9 +80,36 @@ class WorkspaceStore {
     const tile = collectTiles(this.root).find((t) => t.id === tileId);
     const active = tile?.sessions.find((s) => s.id === tile.activeSessionId);
     if (!tile || !active) return;
+    if (isFileTab(active)) {
+      // A file can't be "cloned": the tile's last console is what's copied,
+      // opened next to the file — or the default shell, if it has none.
+      const console = [...tile.sessions].reverse().find((s) => !isFileTab(s));
+      this.addTab(tile.id, console?.shellPath, console?.shellArgs, console?.title, fileFolder(active.filePath));
+      return;
+    }
     // Where that console is now (as it reported via OSC 7), not just where it
     // was opened — a new tab should land in the directory you were working in.
-    this.addTab(tile.id, active.shellPath, active.shellArgs, active.title, tabCwd.byTab[active.id] ?? active.cwd);
+    this.addTab(tile.id, active.shellPath, active.shellArgs, active.title, sessionFolder(active));
+  }
+
+  /** Opens `filePath` in an editor tab in `tileId` — or, when it's already
+   * open anywhere, brings that tab forward instead of opening it twice. */
+  openFile(tileId: string, filePath: string): void {
+    if (!this.root) return;
+    const open = collectSessions(this.root).find((loc) => loc.session.filePath === filePath);
+    if (open) {
+      this.setActiveSession(open.tileId, open.session.id);
+      return;
+    }
+    const session = makeFileSession(filePath);
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
   }
 
   closeTab(tileId: string, sessionId: string): void {
@@ -299,6 +330,13 @@ class WorkspaceStore {
     if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
     return { base: afterRemoval ?? this.root, moved };
   }
+}
+
+/** The folder a tab is "in": where its console is now (as the shell last
+ * reported, else where it opened), or the folder of the file it shows. */
+export function sessionFolder(session: SessionTab): string | undefined {
+  if (isFileTab(session)) return fileFolder(session.filePath);
+  return tabCwd.byTab[session.id] ?? session.cwd;
 }
 
 export const workspaceStore = new WorkspaceStore();

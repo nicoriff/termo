@@ -11,6 +11,7 @@
   import { workspaceStore } from "./workspace-store.svelte";
   import TileChrome from "./TileChrome.svelte";
   import Terminal from "$lib/terminal/Terminal.svelte";
+  import FileEditor from "$lib/editor/FileEditor.svelte";
   import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
@@ -80,14 +81,23 @@
           resolved.insets.top + resolved.insets.bottom}px)"
         onpointerdown={() => workspaceStore.focusTile(loc.tileId)}
       >
-        <Terminal
-          sessionId={loc.session.id}
-          shellPath={loc.session.shellPath}
-          shellArgs={loc.session.shellArgs}
-          cwd={loc.session.cwd}
-          active={workspaceStore.focusedTileId === loc.tileId &&
-            tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
-        />
+        {#if loc.session.filePath}
+          <FileEditor
+            sessionId={loc.session.id}
+            filePath={loc.session.filePath}
+            active={workspaceStore.focusedTileId === loc.tileId &&
+              tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+          />
+        {:else}
+          <Terminal
+            sessionId={loc.session.id}
+            shellPath={loc.session.shellPath}
+            shellArgs={loc.session.shellArgs}
+            cwd={loc.session.cwd}
+            active={workspaceStore.focusedTileId === loc.tileId &&
+              tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+          />
+        {/if}
       </div>
     {/if}
   {/each}

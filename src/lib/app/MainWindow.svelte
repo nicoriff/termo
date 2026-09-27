@@ -12,6 +12,8 @@
   import QuitDialog from "./QuitDialog.svelte";
   import AboutDialog from "./AboutDialog.svelte";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
+  import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
+  import { explorerStore } from "$lib/explorer/explorer-store.svelte";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
@@ -107,6 +109,16 @@
       uiState.openMarketplace();
       return;
     }
+    if (
+      !workspaceStore.overviewOpen &&
+      workspaceStore.focusedTileId &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleExplorer"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      explorerStore.toggle(workspaceStore.focusedTileId);
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, tool] of [
         ["newClaude", "claude"],
@@ -192,6 +204,9 @@
     {/if}
     {#if uiState.agentLaunch}
       <AgentLaunchDialog />
+    {/if}
+    {#if uiState.closeFileTarget}
+      <CloseFileDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

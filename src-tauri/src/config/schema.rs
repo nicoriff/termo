@@ -31,6 +31,8 @@ pub struct ShortcutsConfig {
     pub new_claude_other: Option<String>,
     pub new_codex_mac: Option<String>,
     pub new_codex_other: Option<String>,
+    pub toggle_explorer_mac: Option<String>,
+    pub toggle_explorer_other: Option<String>,
     pub cycle_tab_mac: Option<String>,
     pub cycle_tab_other: Option<String>,
     pub zoom_tile_mac: Option<String>,

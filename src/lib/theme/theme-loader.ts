@@ -57,6 +57,9 @@ export function applyThemeToDocument(theme: Theme, opacity = 1): void {
   root.setProperty("--tabbar-border", theme.ui.border);
   root.setProperty("--tabbar-fg", theme.ui.foreground);
   root.setProperty("--tabbar-active-bg", activeBg);
+  // For panels floating over a console: with the translucent one the text
+  // underneath shows through and competes with the panel's own.
+  root.setProperty("--tabbar-active-bg-solid", theme.ui.activeBackground);
   root.setProperty("--tabbar-active-fg", theme.ui.activeForeground);
 
   root.setProperty("--pane-active-border", theme.ui.accent);

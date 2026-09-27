@@ -1,7 +1,6 @@
 import { uiState } from "$lib/core/ui-state.svelte";
 import { collectTiles } from "$lib/layout/split-tree";
-import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
+import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 import type { LaunchTarget } from "./launch-target";
 
@@ -17,7 +16,7 @@ export function requestLaunch(target: LaunchTarget, tileId = workspaceStore.focu
   const tile = collectTiles(root).find((candidate) => candidate.id === tileId);
   if (!tile) return;
   const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
-  const here = active ? (tabCwd.byTab[active.id] ?? active.cwd ?? null) : null;
+  const here = active ? (sessionFolder(active) ?? null) : null;
   uiState.openAgentLaunch(target, tile.id, here);
 }
 

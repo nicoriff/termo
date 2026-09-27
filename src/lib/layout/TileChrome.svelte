@@ -1,17 +1,21 @@
 <script lang="ts">
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import type { AiSessionStatus } from "$lib/ai-mode/classifier";
-  import { workspaceStore } from "./workspace-store.svelte";
+  import { sessionFolder, workspaceStore } from "./workspace-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isMac } from "$lib/core/platform";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { resolveShellArgs } from "$lib/core/shell-args";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
-  import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
+
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
-  import { dropZoneAt, type DropZone, type PaneInsets, type PaneRect, type TileNode } from "./split-tree";
+  import { dropZoneAt, fileName, type DropZone, type PaneInsets, type PaneRect, type TileNode } from "./split-tree";
+  import { fileTabs } from "$lib/editor/file-tabs.svelte";
+  import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+  import ExplorerPanel from "$lib/explorer/ExplorerPanel.svelte";
+  import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
@@ -131,8 +135,7 @@
     // Opens where this tile's active console is now, like the new-tab
     // shortcut does (see workspaceStore.newTabLikeFocused).
     const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
-    const cwd = active ? (tabCwd.byTab[active.id] ?? active.cwd) : undefined;
-    workspaceStore.addTab(tile.id, shell.path, args, shell.display_name, cwd);
+    workspaceStore.addTab(tile.id, shell.path, args, shell.display_name, active ? sessionFolder(active) : undefined);
     closeShellPicker();
   }
 
@@ -371,6 +374,12 @@
 
   function closeTab(event: Event, sessionId: string) {
     event.stopPropagation();
+    // A file with unsaved changes asks first (see CloseFileDialog).
+    const session = tile.sessions.find((candidate) => candidate.id === sessionId);
+    if (session?.filePath && fileTabs.isDirty(sessionId)) {
+      uiState.requestCloseFile({ tileId: tile.id, sessionId, name: fileName(session.filePath) });
+      return;
+    }
     workspaceStore.closeTab(tile.id, sessionId);
   }
 
@@ -415,9 +424,20 @@
         {#if aiStatus?.tool && aiStatus.status}
           <span class="tile-tab-ai-dot" style="background:{aiDotColor(aiStatus.status)}"></span>
         {/if}
-        <span class="tile-tab-title" title={tabTitleStore.titleFor(session.id, session.title)}>
+        {#if session.filePath}
+          <svg class="tile-tab-file" viewBox="0 0 12 14" aria-hidden="true">
+            <path d="M1.5 1.5h6l3 3v8h-9z M7.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+        {/if}
+        <span
+          class="tile-tab-title"
+          title={session.filePath ?? tabTitleStore.titleFor(session.id, session.title)}
+        >
           {tabTitleStore.titleFor(session.id, session.title)}
         </span>
+        {#if fileTabs.dirty[session.id]}
+          <span class="tile-tab-dirty" title={t("editor.unsaved")}>●</span>
+        {/if}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span
           class="tile-tab-close"
@@ -551,7 +571,23 @@
     </div>
   {/if}
 
+  {#if explorerStore.open[tile.id]}
+    <ExplorerPanel {tile} />
+  {/if}
+
   <div class="tile-toolbar">
+    <button
+      class:on={explorerStore.open[tile.id]}
+      title={`${t("explorer.toggle")} (${formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleExplorer"), isMac)})`}
+      aria-label={t("explorer.toggle")}
+      aria-pressed={!!explorerStore.open[tile.id]}
+      onclick={() => explorerStore.toggle(tile.id)}
+    >
+      <svg viewBox="0 0 12 12" width="11" height="11">
+        <path d="M1 2.5v8h10v-6.5h-4.5l-1-1.5z" fill="none" stroke="currentColor" />
+        <path d="M3 6.5h6M3 8.5h4" stroke="currentColor" />
+      </svg>
+    </button>
     <button title={t("tabs.splitVertical")} onclick={() => void split("row")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
@@ -743,6 +779,20 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
+  }
+
+  .tile-tab-file {
+    width: 11px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  /* Unsaved changes in a file tab. */
+  .tile-tab-dirty {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--pane-active-border, #3a6df0);
   }
 
   .tile-tab-ai-dot {
@@ -1022,6 +1072,12 @@
 
   .tile-toolbar button:hover {
     background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+  /* The explorer button while its panel is open. */
+  .tile-toolbar button.on {
+    background: var(--pane-active-border, #3a6df0);
     color: #fff;
   }
 </style>

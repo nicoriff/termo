@@ -22,6 +22,9 @@ class UiState {
    * what to open (an agent or a shell), which tile gets the tab, and the
    * folder that tile's console is in (null when it hasn't reported one). */
   agentLaunch = $state<{ target: LaunchTarget; tileId: string; here: string | null } | null>(null);
+  /** A file tab with unsaved changes the user asked to close: waiting on
+   * save / don't save / cancel. */
+  closeFileTarget = $state<{ tileId: string; sessionId: string; name: string } | null>(null);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -47,6 +50,7 @@ class UiState {
       this.layoutManagerOpen ||
       this.aboutOpen ||
       this.agentLaunch !== null ||
+      this.closeFileTarget !== null ||
       this.marketplaceOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
@@ -120,6 +124,14 @@ class UiState {
 
   openAgentLaunch(target: LaunchTarget, tileId: string, here: string | null): void {
     this.agentLaunch = { target, tileId, here };
+  }
+
+  requestCloseFile(target: { tileId: string; sessionId: string; name: string }): void {
+    this.closeFileTarget = target;
+  }
+
+  cancelCloseFile(): void {
+    this.closeFileTarget = null;
   }
 
   closeAgentLaunch(): void {

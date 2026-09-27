@@ -8,6 +8,28 @@ export interface SessionTab {
   /** Directory the console starts in. Only set when something asked for it
    * (restoring an agent session); otherwise the shell's own default wins. */
   cwd?: string;
+  /** Set on a tab that shows a file in the editor rather than a console
+   * (see isFileTab); the shell fields are then unused. */
+  filePath?: string;
+}
+
+export function isFileTab(session: SessionTab): session is SessionTab & { filePath: string } {
+  return session.filePath !== undefined;
+}
+
+/** A file's name, which titles its tab. */
+export function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/** The folder a file is in. */
+export function fileFolder(path: string): string {
+  const cut = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  return cut > 0 ? path.slice(0, cut) : path;
+}
+
+export function makeFileSession(filePath: string): SessionTab {
+  return { id: crypto.randomUUID(), title: fileName(filePath), filePath };
 }
 
 export interface TileNode {
