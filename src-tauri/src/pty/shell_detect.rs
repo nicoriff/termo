@@ -140,11 +140,16 @@ pub fn list_shells() -> Vec<ShellInfo> {
     use std::path::Path;
 
     let mut shells = Vec::new();
+    // Keyed by name, not path: with a merged /usr (Ubuntu, Fedora…)
+    // /etc/shells lists both /bin/bash and /usr/bin/bash, and the id
+    // (the name) must be unique for the frontend's keyed lists.
     let mut seen = HashSet::new();
 
     if let Ok(current) = std::env::var("SHELL") {
-        if Path::new(&current).exists() && seen.insert(current.clone()) {
-            shells.push(shell_info_for_path(&current, true));
+        if Path::new(&current).exists() {
+            let info = shell_info_for_path(&current, true);
+            seen.insert(info.id.clone());
+            shells.push(info);
         }
     }
 
@@ -154,8 +159,12 @@ pub fn list_shells() -> Vec<ShellInfo> {
             if path.is_empty() || path.starts_with('#') {
                 continue;
             }
-            if Path::new(path).exists() && seen.insert(path.to_string()) {
-                shells.push(shell_info_for_path(path, false));
+            if !Path::new(path).exists() {
+                continue;
+            }
+            let info = shell_info_for_path(path, false);
+            if seen.insert(info.id.clone()) {
+                shells.push(info);
             }
         }
     }
