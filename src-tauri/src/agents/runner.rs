@@ -23,7 +23,7 @@ use crate::marketplace::model::AgentTarget;
 
 use super::events::{parse_line, EventKind, RunEvent};
 use super::secrets;
-use super::spec::{build_args, AgentSpec, Engine};
+use super::spec::{build_invocation, AgentSpec, Engine};
 use super::store::{self, now_millis, RunRecord, RunStatus, RunTrigger};
 
 /// Lines of stderr kept to explain a failure.
@@ -130,6 +130,7 @@ impl Runner {
         app: &tauri::AppHandle,
         spec: &AgentSpec,
         trigger: RunTrigger,
+        context: Option<&str>,
     ) -> Result<RunRecord, String> {
         if spec.task.trim().is_empty() {
             return Err(tr(Msg::AgentTaskMissing));
@@ -143,30 +144,36 @@ impl Runner {
             return Err(tr(Msg::AgentAlreadyRunning));
         }
 
-        // Claude Code fills its integrations' `${NAME}` placeholders from the
-        // environment; Codex doesn't, so its config gets the values instead.
-        let secret_values = secrets::load(&spec.id, &spec.secrets);
-        let mut resolved = spec.clone();
-        if spec.engine == Engine::Codex {
-            for server in &mut resolved.tools.mcp {
-                server.config = secrets::expand(&server.config, &secret_values);
-            }
+        let run_id = uuid::Uuid::new_v4().to_string();
+        // The agent's logic, for `--append-system-prompt-file`: a file rather
+        // than an argument (see spec::Invocation). Removed when the run ends.
+        let system_prompt = (spec.engine == Engine::Claude && !spec.instructions.trim().is_empty())
+            .then(|| root.join(&spec.id).join("runs").join(format!("{run_id}.system.md")));
+        if let Some(path) = &system_prompt {
+            let written = std::fs::create_dir_all(path.parent().expect("has a folder"))
+                .and_then(|_| std::fs::write(path, spec.instructions.trim()));
+            written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
         }
+        let secret_values = secrets::load(&spec.id, &spec.secrets);
+        let invocation = build_invocation(
+            spec,
+            context,
+            system_prompt.as_deref().and_then(|path| path.to_str()),
+            &secret_values,
+        );
         let mut cmd = Command::new(&bin);
-        cmd.args(build_args(&resolved))
+        cmd.args(&invocation.args)
             .current_dir(&dir)
-            // Codex reads a prompt from stdin when it's open; a CLI that
-            // decides to ask something gets EOF instead of hanging.
-            .stdin(Stdio::null())
+            // The prompt goes in through stdin, which is then closed: a CLI
+            // that decides to ask something gets EOF instead of hanging.
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("NO_COLOR", "1");
         for key in INHERITED_NOISE {
             cmd.env_remove(key);
         }
-        if spec.engine == Engine::Claude {
-            cmd.envs(&secret_values);
-        }
+        cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -178,10 +185,24 @@ impl Runner {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
-        let mut child = cmd.spawn().map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
+        let mut child = cmd.spawn().map_err(|err| {
+            if let Some(path) = &system_prompt {
+                let _ = std::fs::remove_file(path);
+            }
+            tr(Msg::AgentRunFailed(&err.to_string()))
+        })?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let prompt = invocation.stdin;
+            // Its own thread: a CLI that writes before it has read all of its
+            // input can't deadlock against this write.
+            std::thread::spawn(move || {
+                use std::io::Write;
+                let _ = stdin.write_all(prompt.as_bytes());
+            });
+        }
 
         let record = RunRecord {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: run_id,
             agent_id: spec.id.clone(),
             trigger,
             status: RunStatus::Running,
@@ -329,6 +350,9 @@ impl Runner {
             let finished = record.clone();
             drop(record);
 
+            if let Some(path) = &system_prompt {
+                let _ = std::fs::remove_file(path);
+            }
             let _ = store::save_run_in(&log.root, &finished);
             store::prune_runs_in(&log.root, &finished.agent_id);
             log.step(RunEvent {

@@ -5,6 +5,7 @@
 pub mod agent_cli;
 pub mod catalog;
 pub mod claude_plugins;
+pub mod downloads;
 pub mod install;
 pub mod mcp_registry;
 pub mod model;

@@ -74,6 +74,14 @@ pub enum Msg<'a> {
     AgentGithubNeedsRepo,
     AgentGithubClaudeOnly,
     AgentGithubWriteFailed(&'a str),
+    AgentConnectorIncomplete,
+    AgentConnectorBadName(&'a str),
+    AgentImportNotAgent,
+    AgentGitNotRepo(&'a str),
+    AgentHookFailed(&'a str),
+    AgentImportTooNew,
+    /// (file, OS error)
+    AgentFileFailed(&'a str, &'a str),
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -208,6 +216,27 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (AgentGithubWriteFailed(error), Es) => format!("No se pudo escribir el workflow: {error}"),
         (AgentGithubWriteFailed(error), En) => format!("Couldn't write the workflow: {error}"),
+
+        (AgentConnectorIncomplete, Es) => "Falta el comando que inicia el conector".into(),
+        (AgentConnectorIncomplete, En) => "The command that starts the connector is missing".into(),
+
+        (AgentConnectorBadName(name), Es) => format!("\"{name}\" no sirve como nombre: usá letras, números y _ (o - en un header)"),
+        (AgentGitNotRepo(dir), Es) => format!("\"{dir}\" no es un repositorio de git"),
+        (AgentGitNotRepo(dir), En) => format!("\"{dir}\" isn't a git repository"),
+
+        (AgentHookFailed(error), Es) => format!("No se pudo instalar el hook de git: {error}"),
+        (AgentHookFailed(error), En) => format!("Couldn't install the git hook: {error}"),
+
+        (AgentImportNotAgent, Es) => "El archivo no es un agente exportado desde Termo".into(),
+        (AgentImportNotAgent, En) => "The file isn't an agent exported from Termo".into(),
+
+        (AgentImportTooNew, Es) => "El agente se exportó desde una versión más nueva de Termo: actualizá la app para importarlo".into(),
+        (AgentImportTooNew, En) => "The agent was exported from a newer Termo: update the app to import it".into(),
+
+        (AgentFileFailed(file, error), Es) => format!("No se pudo usar el archivo \"{file}\": {error}"),
+        (AgentFileFailed(file, error), En) => format!("Couldn't use the file \"{file}\": {error}"),
+
+        (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
     }
 }
 
@@ -255,6 +284,13 @@ mod tests {
             Msg::AgentGithubNeedsRepo,
             Msg::AgentGithubClaudeOnly,
             Msg::AgentGithubWriteFailed("access denied"),
+            Msg::AgentConnectorIncomplete,
+            Msg::AgentConnectorBadName("MY VAR"),
+            Msg::AgentImportNotAgent,
+            Msg::AgentGitNotRepo("C:\\x"),
+            Msg::AgentHookFailed("access denied"),
+            Msg::AgentImportTooNew,
+            Msg::AgentFileFailed("a.json", "access denied"),
         ]
     }
 

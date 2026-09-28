@@ -38,6 +38,8 @@
     test: "agents.run.trigger.test",
     schedule: "agents.run.trigger.schedule",
     watch: "agents.run.trigger.watch",
+    git: "agents.run.trigger.git",
+    webhook: "agents.run.trigger.webhook",
   };
 
   function statusColor(status: RunRecord["status"]): string {

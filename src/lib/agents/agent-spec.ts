@@ -31,7 +31,7 @@ export function newAgentSpec(id: string): AgentSpec {
     autonomy: "read",
     tools: { web: false, mcp: [] },
     limits: { timeoutMin: 15 },
-    triggers: { schedule: null, watch: null },
+    triggers: { schedule: null, watch: null, git: null, webhook: null },
     secrets: [],
     enabled: true,
     deploy: { github: null },
@@ -80,6 +80,7 @@ export function stepProblems(step: WizardStep, spec: AgentSpec): MessageKey[] {
     if (schedule?.kind === "daily" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.at))
       problems.push("agents.wizard.problems.time");
     if (spec.triggers.watch && !spec.triggers.watch.path.trim()) problems.push("agents.wizard.problems.watch");
+    if (spec.triggers.git && !spec.triggers.git.repoPath.trim()) problems.push("agents.wizard.problems.gitRepo");
   }
   return problems;
 }

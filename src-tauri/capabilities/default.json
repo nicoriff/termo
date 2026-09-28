@@ -20,6 +20,8 @@
     "core:window:allow-set-badge-count",
     "notification:default",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

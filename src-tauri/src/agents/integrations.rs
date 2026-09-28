@@ -91,9 +91,154 @@ pub fn build(request: AgentMcpRequest) -> Result<AgentMcpServer, String> {
     })
 }
 
+/// One environment variable (a local command) or header (a remote server)
+/// of a connector the user wrote themselves.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomValue {
+    pub name: String,
+    pub value: String,
+    #[serde(default)]
+    pub secret: bool,
+}
+
+/// A connector of the user's own: not from the registry, so no registry
+/// checks — it's their command or their URL — but held to the same shape.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomMcpRequest {
+    pub agent_id: String,
+    pub name: String,
+    /// "stdio" (a local command) | "http" | "sse"
+    pub kind: String,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub values: Vec<CustomValue>,
+}
+
+fn is_env_name(name: &str) -> bool {
+    !name.is_empty() && !name.starts_with(|c: char| c.is_ascii_digit()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn is_header_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// The connector's config, with its secrets moved to the keychain.
+pub fn build_custom(request: CustomMcpRequest) -> Result<AgentMcpServer, String> {
+    if !is_valid_id(&request.agent_id) {
+        return Err(tr(Msg::AgentSaveFailed("invalid agent id")));
+    }
+    let name = short_name(request.name.trim());
+    let remote = request.kind == "http" || request.kind == "sse";
+    let mut config = serde_json::Map::new();
+    if remote {
+        let url = request.url.trim();
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            return Err(tr(Msg::UnsafeMcpRemoteUrl(url)));
+        }
+        config.insert("type".into(), Value::String(request.kind.clone()));
+        config.insert("url".into(), Value::String(url.into()));
+    } else {
+        let command = request.command.trim();
+        if command.is_empty() {
+            return Err(tr(Msg::AgentConnectorIncomplete));
+        }
+        config.insert("type".into(), Value::String("stdio".into()));
+        config.insert("command".into(), Value::String(command.into()));
+        let args: Vec<Value> = request
+            .args
+            .iter()
+            .map(|arg| arg.trim())
+            .filter(|arg| !arg.is_empty())
+            .map(|arg| Value::String(arg.into()))
+            .collect();
+        config.insert("args".into(), Value::Array(args));
+    }
+
+    let mut values = serde_json::Map::new();
+    let mut stored = Vec::new();
+    for entry in &request.values {
+        let key = entry.name.trim();
+        if key.is_empty() {
+            continue;
+        }
+        let valid = if remote { is_header_name(key) } else { is_env_name(key) };
+        if !valid {
+            return Err(tr(Msg::AgentConnectorBadName(key)));
+        }
+        let value = if entry.secret && !entry.value.is_empty() {
+            let env = secrets::env_name(&name, key);
+            secrets::set(&request.agent_id, &env, &entry.value).map_err(|err| tr(Msg::AgentSecretFailed(&err)))?;
+            stored.push(env.clone());
+            format!("${{{env}}}")
+        } else {
+            entry.value.clone()
+        };
+        values.insert(key.into(), Value::String(value));
+    }
+    if !values.is_empty() {
+        config.insert(if remote { "headers" } else { "env" }.into(), Value::Object(values));
+    }
+
+    Ok(AgentMcpServer {
+        server: McpServer { name, config: Value::Object(config) },
+        secrets: stored,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn custom(kind: &str) -> CustomMcpRequest {
+        CustomMcpRequest {
+            agent_id: "a1".into(),
+            name: "Mi API".into(),
+            kind: kind.into(),
+            command: "npx".into(),
+            args: vec!["-y".into(), " mi-server ".into(), "".into()],
+            url: "https://api.example.com/mcp".into(),
+            values: vec![CustomValue { name: "REGION".into(), value: "eu".into(), secret: false }],
+        }
+    }
+
+    #[test]
+    fn a_local_command_keeps_its_arguments_and_variables() {
+        let result = build_custom(custom("stdio")).unwrap();
+        assert_eq!(result.server.name, "mi-api");
+        assert_eq!(result.server.config["command"], "npx");
+        assert_eq!(result.server.config["args"], serde_json::json!(["-y", "mi-server"]));
+        assert_eq!(result.server.config["env"]["REGION"], "eu");
+        assert!(result.server.config.get("url").is_none());
+    }
+
+    #[test]
+    fn a_remote_server_gets_headers_and_only_a_web_url() {
+        let mut request = custom("http");
+        request.values = vec![CustomValue { name: "X-Region".into(), value: "eu".into(), secret: false }];
+        let result = build_custom(request).unwrap();
+        assert_eq!(result.server.config["url"], "https://api.example.com/mcp");
+        assert_eq!(result.server.config["headers"]["X-Region"], "eu");
+        let mut bad = custom("http");
+        bad.url = "file:///etc/passwd".into();
+        assert!(build_custom(bad).is_err());
+    }
+
+    #[test]
+    fn names_that_cant_be_variables_or_headers_are_refused() {
+        let mut request = custom("stdio");
+        request.values = vec![CustomValue { name: "MY VAR".into(), value: "x".into(), secret: false }];
+        assert!(build_custom(request).is_err());
+        let mut empty = custom("stdio");
+        empty.command = " ".into();
+        assert!(build_custom(empty).is_err());
+    }
 
     #[test]
     fn short_names_fit_tool_names() {

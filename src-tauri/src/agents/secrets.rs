@@ -2,10 +2,10 @@
 //! system keychain (Credential Manager on Windows, Keychain on macOS), never
 //! in the agent's JSON.
 //!
-//! An integration's config names each secret as `${NAME}`. Claude Code
-//! expands those from its environment, so a run hands the values over as
-//! environment variables; Codex doesn't expand them, so for Codex they're
-//! written into the config just before the run (see `expand`).
+//! An integration's config names each secret as `${NAME}`, and a run hands
+//! the values over through the environment, never on a command line: Claude
+//! Code expands the placeholders itself, and for Codex the variables and
+//! headers are forwarded by name (see spec::build_invocation).
 
 use std::collections::HashMap;
 
@@ -55,24 +55,6 @@ pub fn env_name(server: &str, param: &str) -> String {
     name
 }
 
-/// Replaces every `${NAME}` whose value is known, anywhere in a JSON value.
-pub fn expand(value: &serde_json::Value, secrets: &HashMap<String, String>) -> serde_json::Value {
-    match value {
-        serde_json::Value::String(text) => {
-            let mut out = text.clone();
-            for (name, secret) in secrets {
-                out = out.replace(&format!("${{{name}}}"), secret);
-            }
-            serde_json::Value::String(out)
-        }
-        serde_json::Value::Array(items) => serde_json::Value::Array(items.iter().map(|item| expand(item, secrets)).collect()),
-        serde_json::Value::Object(map) => {
-            serde_json::Value::Object(map.iter().map(|(key, item)| (key.clone(), expand(item, secrets))).collect())
-        }
-        other => other.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,19 +64,5 @@ mod tests {
         assert_eq!(env_name("github", "Authorization"), "GITHUB_AUTHORIZATION");
         assert_eq!(env_name("my-server", "api.key"), "MY_SERVER_API_KEY");
         assert_eq!(env_name("1x", "k"), "_1X_K");
-    }
-
-    #[test]
-    fn placeholders_are_filled_everywhere_they_appear() {
-        let secrets = HashMap::from([("TOKEN".to_string(), "abc".to_string())]);
-        let config = serde_json::json!({
-            "headers": { "Authorization": "Bearer ${TOKEN}" },
-            "args": ["--key", "${TOKEN}"],
-            "env": { "OTHER": "${MISSING}" }
-        });
-        let expanded = expand(&config, &secrets);
-        assert_eq!(expanded["headers"]["Authorization"], "Bearer abc");
-        assert_eq!(expanded["args"][1], "abc");
-        assert_eq!(expanded["env"]["OTHER"], "${MISSING}");
     }
 }

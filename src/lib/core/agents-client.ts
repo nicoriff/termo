@@ -27,7 +27,14 @@ export interface AgentSpec {
   autonomy: AgentAutonomy;
   tools: { web: boolean; mcp: McpServer[] };
   limits: { timeoutMin: number };
-  triggers: { schedule: AgentSchedule | null; watch: { path: string } | null };
+  triggers: {
+    schedule: AgentSchedule | null;
+    watch: { path: string } | null;
+    /** Runs on a git event in `repoPath`, through a hook Termo installs. */
+    git: { repoPath: string; event: "commit" | "push" } | null;
+    /** Runs when its local URL is called with this token. */
+    webhook: { token: string } | null;
+  };
   secrets: string[];
   enabled: boolean;
   deploy: { github: { repo: string; repoPath: string; workflowFile: string; deployedAt: number } | null };
@@ -36,7 +43,7 @@ export interface AgentSpec {
 }
 
 export type RunStatus = "running" | "success" | "error" | "stopped" | "timedOut";
-export type RunTrigger = "manual" | "test" | "schedule" | "watch";
+export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook";
 
 export interface RunRecord {
   id: string;
@@ -155,6 +162,60 @@ export function githubWrite(spec: AgentSpec): Promise<string> {
 
 export function forgetAgentSecrets(agentId: string, names: string[]): Promise<void> {
   return names.length > 0 ? invoke("agent_forget_secrets", { agentId, names }) : Promise.resolve();
+}
+
+export interface CustomMcpRequest {
+  agentId: string;
+  name: string;
+  kind: "stdio" | "http" | "sse";
+  command: string;
+  args: string[];
+  url: string;
+  values: { name: string; value: string; secret: boolean }[];
+}
+
+/** A connector of the user's own, ready to add; its secrets go to the
+ * system keychain on the way. */
+export function agentCustomMcp(request: CustomMcpRequest): Promise<{ server: McpServer; secrets: string[] }> {
+  return invoke("agent_custom_mcp", { request });
+}
+
+/** Last month's downloads of an MCP server's package, or null when its
+ * registry doesn't say. */
+export function mcpDownloads(registryType: string, identifier: string): Promise<number | null> {
+  return invoke("mcp_downloads", { registryType, identifier });
+}
+
+/** What an import brought in, and what it couldn't. */
+export interface ImportReport {
+  imported: string[];
+  movedToOwnFolder: string[];
+  needsSecrets: string[];
+  /** Every imported agent arrives paused; these deserve a close look first. */
+  review: { agent: string; runsCommands: boolean; commands: string[]; urls: string[] }[];
+}
+
+export function exportAgents(ids: string[], path: string): Promise<void> {
+  return invoke("agents_export", { ids, path });
+}
+
+/** Saves the files' agents as new ones; resolves to the full list and a report. */
+export function importAgents(paths: string[]): Promise<[AgentSpec[], ImportReport]> {
+  return invoke("agents_import", { paths });
+}
+
+/** Which of these secrets have no value on this machine. */
+export function missingSecrets(agentId: string, names: string[]): Promise<string[]> {
+  return names.length > 0 ? invoke("agent_missing_secrets", { agentId, names }) : Promise.resolve([]);
+}
+
+export function setAgentSecret(agentId: string, name: string, value: string): Promise<void> {
+  return invoke("agent_set_secret", { agentId, name, value });
+}
+
+/** The local webhook's port, and whether Termo could take it. */
+export function agentsWebhook(): Promise<{ port: number; listening: boolean }> {
+  return invoke("agents_webhook");
 }
 
 export function onAgentRun(handler: (run: RunRecord) => void): Promise<UnlistenFn> {

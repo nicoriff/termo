@@ -11,6 +11,7 @@
   import type { AgentSpec } from "$lib/core/agents-client";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { open, save } from "@tauri-apps/plugin-dialog";
   import { SIDEBAR_WIDTH, agentsStore } from "./agents-store.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
 
@@ -60,6 +61,57 @@
       { ...structuredClone($state.snapshot(agent)), id: crypto.randomUUID(), name: `${agent.name} (2)`, deploy: { github: null }, createdAt: 0 },
       true,
     );
+  }
+
+  /** The outcome of the last import or export, until it's dismissed. */
+  let notice = $state<{ error: boolean; lines: string[] } | null>(null);
+
+  async function importAgents() {
+    const picked = await open({
+      multiple: true,
+      title: t("agents.portable.importTitle"),
+      filters: [{ name: t("agents.portable.fileKind"), extensions: ["json"] }],
+    }).catch(() => null);
+    const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    if (paths.length === 0) return;
+    try {
+      const report = await agentsStore.importFrom(paths);
+      const lines = [
+        t("agents.portable.imported", { names: report.imported.join(", ") }),
+        t("agents.portable.paused"),
+      ];
+      for (const item of report.review) {
+        if (item.runsCommands) lines.push(t("agents.portable.reviewRuns", { agent: item.agent }));
+        for (const command of item.commands) lines.push(t("agents.portable.reviewCommand", { agent: item.agent, command }));
+        for (const url of item.urls) lines.push(t("agents.portable.reviewUrl", { agent: item.agent, url }));
+      }
+      if (report.movedToOwnFolder.length > 0)
+        lines.push(t("agents.portable.ownFolder", { names: report.movedToOwnFolder.join(", ") }));
+      if (report.needsSecrets.length > 0)
+        lines.push(t("agents.portable.needsSecrets", { names: report.needsSecrets.join(", ") }));
+      notice = { error: false, lines };
+    } catch (reason) {
+      notice = { error: true, lines: [String(reason)] };
+    }
+  }
+
+  async function exportAgent(agent: AgentSpec) {
+    menuFor = null;
+    const slug = agent.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "agente";
+    const path = await save({
+      title: t("agents.portable.exportTitle"),
+      defaultPath: `${slug}.termo-agent.json`,
+      filters: [{ name: t("agents.portable.fileKind"), extensions: ["json"] }],
+    }).catch(() => null);
+    if (!path) return;
+    try {
+      await agentsStore.exportTo([agent.id], path);
+      const lines = [t("agents.portable.exported", { path })];
+      if (agent.secrets.length > 0) lines.push(t("agents.portable.secretsStay"));
+      notice = { error: false, lines };
+    } catch (reason) {
+      notice = { error: true, lines: [String(reason)] };
+    }
   }
 
   async function remove(agent: AgentSpec) {
@@ -146,6 +198,16 @@
       {/if}
       <button
         class="icon-button"
+        title={t("agents.portable.import")}
+        aria-label={t("agents.portable.import")}
+        onclick={() => void importAgents()}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M6 1.5v6M3.5 5L6 7.5 8.5 5M1.5 8.5v2h9v-2" fill="none" stroke="currentColor" stroke-width="1.2" />
+        </svg>
+      </button>
+      <button
+        class="icon-button"
         title={t("agents.new")}
         aria-label={t("agents.new")}
         onclick={() => uiState.openAgentWizard(null, true)}
@@ -161,6 +223,17 @@
         <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
       </button>
     </header>
+
+    {#if notice}
+      <div class="notice" class:error={notice.error}>
+        <div class="notice-text">
+          {#each notice.lines as line (line)}<p>{line}</p>{/each}
+        </div>
+        <button class="icon-button" aria-label={t("agents.portable.dismiss")} onclick={() => (notice = null)}>
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
+        </button>
+      </div>
+    {/if}
 
     <div class="agents-list">
       {#each agentsStore.agents as agent (agent.id)}
@@ -206,6 +279,14 @@
               <div class="agent-next">⏱ {t(nextLabel.key, nextLabel.params)}</div>
             {:else if agent.triggers.watch && agent.enabled && !running}
               <div class="agent-next">👁 {t("agents.next.watching")}</div>
+            {/if}
+            {#if agent.triggers.git && agent.enabled && !running}
+              <div class="agent-next">
+                🔗 {t(agent.triggers.git.event === "push" ? "agents.next.onPush" : "agents.next.onCommit")}
+              </div>
+            {/if}
+            {#if agent.triggers.webhook && agent.enabled && !running}
+              <div class="agent-next">🌐 {t("agents.next.webhook")}</div>
             {/if}
             {#if errors[agent.id]}
               <div class="agent-error">{errors[agent.id]}</div>
@@ -267,6 +348,7 @@
                 </button>
               {/if}
               <button role="menuitem" onclick={() => duplicate(agent)}>{t("agents.actions.duplicate")}</button>
+              <button role="menuitem" onclick={() => void exportAgent(agent)}>{t("agents.actions.export")}</button>
               <button role="menuitem" onclick={() => ((menuFor = null), void agentsStore.setEnabled(agent.id, !agent.enabled))}>
                 {agent.enabled ? t("agents.actions.pause") : t("agents.actions.resume")}
               </button>
@@ -283,6 +365,7 @@
           <p class="empty-title">{t("agents.empty.title")}</p>
           <p class="empty-text">{t("agents.empty.text")}</p>
           <button class="empty-button" onclick={() => uiState.openAgentWizard(null, true)}>{t("agents.empty.create")}</button>
+          <button class="empty-link" onclick={() => void importAgents()}>{t("agents.portable.orImport")}</button>
         </div>
       {/each}
     </div>
@@ -555,6 +638,42 @@
     height: 1px;
     margin: 4px 2px;
     background: var(--tabbar-border, #2a2a2a);
+  }
+
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 8px 8px 0;
+    padding: 8px 6px 8px 10px;
+    border-left: 3px solid var(--pane-active-border, #3a6df0);
+    border-radius: 6px;
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.06));
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .notice.error {
+    border-left-color: var(--error-fg, #f48771);
+  }
+
+  .notice-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .notice-text p {
+    margin: 0 0 3px;
+  }
+
+  .empty-link {
+    margin-top: 10px;
+    border: none;
+    background: transparent;
+    color: var(--pane-active-border, #3a6df0);
+    font: inherit;
+    cursor: pointer;
   }
 
   .agents-empty {

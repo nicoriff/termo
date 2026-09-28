@@ -22,6 +22,10 @@ pub fn run_cli_mode_from_args() -> bool {
             pty::agent_hooks::run_hook_cli(tool, event);
             true
         }
+        [flag, agent, event, ..] if flag == agents::git_hooks::RUN_FLAG => {
+            agents::run_agent_cli(agent, event);
+            true
+        }
         [flag, ..] if flag == pty::status_line::STATUS_LINE_FLAG => {
             pty::status_line::run_status_line_cli();
             true
@@ -38,6 +42,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .on_page_load(commands::window_commands::on_page_load)
         .setup(|app| {
@@ -57,6 +62,7 @@ pub fn run() {
             pty::status_line::start_watcher(app.handle().clone());
             pty::status_line::refresh_installed(app.handle());
             agents::scheduler::start(app.handle().clone(), app.state::<AppState>().agents.clone());
+            agents::webhook::start(app.handle().clone(), app.state::<AppState>().agents.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -108,6 +114,13 @@ pub fn run() {
             commands::agent_commands::agents_next_runs,
             commands::agent_commands::agent_github_preview,
             commands::agent_commands::agent_github_write,
+            commands::agent_commands::agent_custom_mcp,
+            commands::agent_commands::mcp_downloads,
+            commands::agent_commands::agents_export,
+            commands::agent_commands::agents_import,
+            commands::agent_commands::agent_missing_secrets,
+            commands::agent_commands::agent_set_secret,
+            commands::agent_commands::agents_webhook,
             commands::marketplace_commands::marketplace_status,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,

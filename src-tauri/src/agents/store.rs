@@ -51,6 +51,8 @@ pub enum RunTrigger {
     Test,
     Schedule,
     Watch,
+    Git,
+    Webhook,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

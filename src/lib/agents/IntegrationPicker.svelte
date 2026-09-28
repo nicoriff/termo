@@ -1,7 +1,9 @@
 <script lang="ts">
   import { t } from "$lib/i18n/i18n.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { searchMcpRegistry, type CatalogItem, type McpDetail } from "$lib/core/marketplace-client";
-  import { agentMcpServer, type McpServer } from "$lib/core/agents-client";
+  import { agentMcpServer, mcpDownloads, type McpServer } from "$lib/core/agents-client";
+  import { formatCount, installSource, publisherOf } from "./integration-info";
   import { initialParamValues, paramsFor, paramsSatisfied, type ParamSpec } from "$lib/marketplace/mcp-params";
 
   let {
@@ -30,6 +32,43 @@
   let seq = 0;
 
   const detail = $derived(chosen?.detail as McpDetail | undefined);
+
+  /** Last month's downloads by item id: a number, null when the package's
+   * registry doesn't say, missing while it's being asked. */
+  let downloads = $state<Record<string, number | null>>({});
+
+  // Asked for what's on screen only, and once per item.
+  $effect(() => {
+    for (const item of results) {
+      if (item.id in downloads) continue;
+      const source = installSource(item.detail as McpDetail);
+      if (source?.kind !== "package") continue;
+      void mcpDownloads(source.registryType, source.identifier)
+        .catch(() => null)
+        .then((count) => (downloads = { ...downloads, [item.id]: count }));
+    }
+  });
+
+  /** "por someone · 12 mil descargas/mes", as far as it's known. */
+  function metaOf(item: CatalogItem): string {
+    const parts: string[] = [];
+    const publisher = publisherOf(item);
+    if (publisher) parts.push(t("agents.integrations.by", { author: publisher }));
+    const source = installSource(item.detail as McpDetail);
+    if (source?.kind === "remote") parts.push(t("agents.integrations.remote"));
+    else if (source?.kind === "package") {
+      if (!(item.id in downloads)) parts.push(t("agents.integrations.downloadsLoading"));
+      else {
+        const count = downloads[item.id];
+        parts.push(
+          count == null
+            ? t("agents.integrations.noDownloads")
+            : t("agents.integrations.downloads", { count: formatCount(count) }),
+        );
+      }
+    }
+    return parts.join(" · ");
+  }
 
   function search(text: string) {
     query = text;
@@ -107,6 +146,7 @@
         {#each results as item (item.id)}
           <button class="result" onclick={() => choose(item)}>
             <span class="result-name">{item.displayName}</span>
+            <span class="result-meta">{metaOf(item)}</span>
             <span class="result-text">{item.description}</span>
           </button>
         {:else}
@@ -117,7 +157,11 @@
   {:else}
     <div class="chosen">
       <span class="result-name">{chosen.displayName}</span>
+      <span class="result-meta">{metaOf(chosen)}</span>
       <span class="result-text">{chosen.description}</span>
+      {#if chosen.homepage}
+        <button class="link" onclick={() => void openUrl(chosen!.homepage!)}>{t("agents.integrations.source")} ↗</button>
+      {/if}
     </div>
     {#each specs as spec (spec.name)}
       <label class="param">
@@ -230,6 +274,23 @@
   .result-name,
   .param-name {
     font-weight: 600;
+  }
+
+  .result-meta {
+    font-size: 11px;
+    opacity: 0.55;
+  }
+
+  .link {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--pane-active-border, #3a6df0);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
   }
 
   .result-text {

@@ -12,6 +12,7 @@ use notify::{EventKind, RecursiveMode, Watcher};
 
 use super::runner::Runner;
 use super::spec::{AgentSpec, Schedule};
+use super::queue;
 use super::store::{self, RunTrigger};
 
 /// How often the schedules are checked.
@@ -103,12 +104,21 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
 
             reconcile_watchers(&agents, &mut watchers, &changed);
 
+            // Git hooks' requests; a busy agent's wait for its run to end.
+            let queue_dir = root.parent().map(|data| data.join("agent-triggers")).unwrap_or_default();
+            for (id, contexts) in queue::take(&queue_dir, |id| runner.is_running(id)) {
+                let Some(spec) = agents.iter().find(|spec| spec.id == id) else { continue };
+                if spec.enabled && spec.triggers.git.is_some() {
+                    let _ = runner.start(&app, spec, RunTrigger::Git, Some(&contexts.join("\n")));
+                }
+            }
+
             for spec in &agents {
                 if !spec.enabled || runner.is_running(&spec.id) {
                     continue;
                 }
                 if agent_next_run(&root, spec).is_some_and(|due| due <= now) {
-                    let _ = runner.start(&app, spec, RunTrigger::Schedule);
+                    let _ = runner.start(&app, spec, RunTrigger::Schedule, None);
                     continue;
                 }
                 let settled = {
@@ -125,7 +135,7 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
                         .and_then(|run| run.ended_at)
                         .is_some_and(|ended| now - ended < QUIET_AFTER_RUN_MS);
                     if !ended_recently {
-                        let _ = runner.start(&app, spec, RunTrigger::Watch);
+                        let _ = runner.start(&app, spec, RunTrigger::Watch, None);
                     }
                 }
             }

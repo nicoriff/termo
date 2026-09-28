@@ -2,6 +2,9 @@ import {
   agentRuns,
   agentsNextRuns,
   deleteAgent,
+  exportAgents,
+  importAgents,
+  type ImportReport,
   listAgents,
   onAgentRun,
   runAgent,
@@ -113,6 +116,17 @@ class AgentsStore {
   async save(spec: AgentSpec): Promise<void> {
     this.agents = await saveAgent($state.snapshot(spec));
     void this.refreshNextRuns();
+  }
+
+  async importFrom(paths: string[]): Promise<ImportReport> {
+    const [agents, report] = await importAgents(paths);
+    this.agents = agents;
+    void this.refreshNextRuns();
+    return report;
+  }
+
+  exportTo(ids: string[], path: string): Promise<void> {
+    return exportAgents(ids, path);
   }
 
   async remove(id: string): Promise<void> {

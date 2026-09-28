@@ -23,7 +23,21 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' asset: http://asset.localhost https: data:",
+        "font-src": "'self' asset: http://asset.localhost data:",
+        "connect-src": "ipc: http://ipc.localhost",
+        "media-src": "'none'",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "worker-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      },
+      "devCsp": "default-src 'self' http://localhost:1420 ws://localhost:1420 ipc: http://ipc.localhost asset: http://asset.localhost; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:1420; style-src 'self' 'unsafe-inline' http://localhost:1420; img-src 'self' asset: http://asset.localhost https: data: http://localhost:1420; font-src 'self' asset: http://asset.localhost data: http://localhost:1420; connect-src ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420",
       "assetProtocol": {
         "enable": true,
         "scope": ["$APPCONFIG/fonts/*"]

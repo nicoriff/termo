@@ -7,7 +7,10 @@
   import {
     deleteAgent,
     draftAgent,
+    agentsWebhook,
     forgetAgentSecrets,
+    missingSecrets,
+    setAgentSecret,
     onAgentRunEvent,
     type AgentAutonomy,
     type AgentDraft,
@@ -15,7 +18,9 @@
     type McpServer,
     type RunEvent,
   } from "$lib/core/agents-client";
+  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import IntegrationPicker from "./IntegrationPicker.svelte";
+  import CustomConnectorForm from "./CustomConnectorForm.svelte";
   import GithubDeployPanel from "./GithubDeployPanel.svelte";
   import { AGENT_TEMPLATES, applyTemplate, type AgentTemplate } from "./agent-templates";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
@@ -100,7 +105,55 @@
   /** The AI's word on its choices, shown until the user moves on. */
   let draftNote = $state("");
   let suggestions = $state<AgentDraft["integrations"]>([]);
-  let picking = $state(false);
+  /** The agent's secrets with no value on this machine (an imported agent),
+   * and what's being typed for each. */
+  let missing = $state<string[]>([]);
+  let secretDrafts = $state<Record<string, string>>({});
+  void missingSecrets(spec.id, $state.snapshot(spec.secrets)).then((names) => (missing = names)).catch(() => {});
+
+  async function storeSecret(name: string) {
+    const value = secretDrafts[name];
+    if (!value) return;
+    try {
+      await setAgentSecret(spec.id, name, value);
+      missing = missing.filter((other) => other !== name);
+      delete secretDrafts[name];
+    } catch (reason) {
+      saveError = String(reason);
+    }
+  }
+
+  /** The local webhook (step "triggers"): its address and a ready-made call. */
+  let webhookInfo = $state<{ port: number; listening: boolean } | null>(null);
+  void agentsWebhook()
+    .then((info) => (webhookInfo = info))
+    .catch(() => {});
+  let copiedCurl = $state(false);
+  const curlExample = $derived(
+    spec.triggers.webhook
+      ? `curl -X POST -H "Authorization: Bearer ${spec.triggers.webhook.token}" -d "…" http://127.0.0.1:${webhookInfo?.port ?? 47821}/agents/${spec.id}/run`
+      : "",
+  );
+
+  /** A webhook token: long and random, like a password. */
+  function newToken(): string {
+    return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+  }
+
+  async function copyCurl() {
+    await writeText(curlExample).catch(() => {});
+    copiedCurl = true;
+    setTimeout(() => (copiedCurl = false), 1500);
+  }
+
+  /** Text from outside (a commit, a webhook call, a web page) reaching an
+   * agent that can run commands: the combination worth a warning. */
+  const outsideRisk = $derived(
+    spec.autonomy === "run" && Boolean(spec.triggers.git || spec.triggers.webhook || spec.tools.web),
+  );
+
+  /** Which way of adding an integration is open, if any. */
+  let picking = $state<"registry" | "custom" | null>(null);
   /** The GitHub Actions panel of the last step. */
   let showGithub = $state(Boolean(target.spec?.deploy.github));
   /** Every secret stored while the wizard is open, kept or not. */
@@ -135,7 +188,7 @@
     spec.tools.mcp = [...spec.tools.mcp.filter((existing) => existing.name !== server.name), server];
     spec.secrets = [...new Set([...spec.secrets, ...secrets])];
     addedSecrets.push(...secrets);
-    picking = false;
+    picking = null;
   }
 
   function removeIntegration(name: string) {
@@ -424,6 +477,10 @@
               {/each}
             </div>
 
+            {#if outsideRisk}
+              <p class="warning">⚠ {t("agents.wizard.untrustedWarning")}</p>
+            {/if}
+
             <details class="advanced">
               <summary>{t("agents.wizard.advanced")}</summary>
               <div class="row">
@@ -465,11 +522,29 @@
                 <span>🔌 {server.name}</span>
                 <button class="link" onclick={() => removeIntegration(server.name)}>{t("agents.integrations.remove")}</button>
               </div>
+              {#each secretsOf(server.name, missing) as name (name)}
+                <!-- An imported agent, or a keychain that lost the value: the
+                     integration can't authenticate until it's entered here. -->
+                <div class="missing-secret">
+                  <span class="hint">🔒 {t("agents.integrations.missingSecret", { name })}</span>
+                  <div class="row">
+                    <input class="field" type="password" bind:value={secretDrafts[name]} />
+                    <button class="button" disabled={!secretDrafts[name]} onclick={() => void storeSecret(name)}>
+                      {t("agents.integrations.saveSecret")}
+                    </button>
+                  </div>
+                </div>
+              {/each}
             {/each}
-            {#if picking}
-              <IntegrationPicker agentId={spec.id} {suggestions} onadd={addIntegration} oncancel={() => (picking = false)} />
+            {#if picking === "registry"}
+              <IntegrationPicker agentId={spec.id} {suggestions} onadd={addIntegration} oncancel={() => (picking = null)} />
+            {:else if picking === "custom"}
+              <CustomConnectorForm agentId={spec.id} onadd={addIntegration} oncancel={() => (picking = null)} />
             {:else}
-              <button class="button" onclick={() => (picking = true)}>+ {t("agents.integrations.addOne")}</button>
+              <div class="row">
+                <button class="button" onclick={() => (picking = "registry")}>+ {t("agents.integrations.addOne")}</button>
+                <button class="button" onclick={() => (picking = "custom")}>+ {t("agents.custom.addOwn")}</button>
+              </div>
               {#if suggestions.length > 0}
                 <p class="hint note">✨ {t("agents.integrations.aiSuggests", { list: suggestions.map((s) => s.query).join(", ") })}</p>
               {/if}
@@ -524,6 +599,64 @@
             </label>
             {#if spec.triggers.watch}
               <input class="field" placeholder={t("agents.wizard.triggers.watchPlaceholder")} bind:value={spec.triggers.watch.path} />
+            {/if}
+
+            <label class="toggle">
+              <input
+                type="checkbox"
+                checked={spec.triggers.git !== null}
+                onchange={(e) =>
+                  (spec.triggers.git = e.currentTarget.checked
+                    ? { repoPath: spec.workDir || hereFolder || "", event: "commit" }
+                    : null)}
+              />
+              <span>
+                <span class="toggle-title">{t("agents.wizard.triggers.git")}</span>
+                <span class="hint">{t("agents.wizard.triggers.gitHint")}</span>
+              </span>
+            </label>
+            {#if spec.triggers.git}
+              <div class="row">
+                <input class="field" placeholder={t("agents.wizard.triggers.gitPlaceholder")} bind:value={spec.triggers.git.repoPath} />
+                <select class="field narrow wide" bind:value={spec.triggers.git.event} aria-label={t("agents.wizard.triggers.gitEvent")}>
+                  <option value="commit">{t("agents.wizard.triggers.gitCommit")}</option>
+                  <option value="push">{t("agents.wizard.triggers.gitPush")}</option>
+                </select>
+              </div>
+            {/if}
+
+            <label class="toggle">
+              <input
+                type="checkbox"
+                checked={spec.triggers.webhook !== null}
+                onchange={(e) => (spec.triggers.webhook = e.currentTarget.checked ? { token: newToken() } : null)}
+              />
+              <span>
+                <span class="toggle-title">{t("agents.wizard.triggers.webhook")}</span>
+                <span class="hint">{t("agents.wizard.triggers.webhookHint")}</span>
+              </span>
+            </label>
+            {#if spec.triggers.webhook}
+              <div class="webhook">
+                {#if webhookInfo && !webhookInfo.listening}
+                  <p class="error">{t("agents.wizard.triggers.webhookDown", { port: String(webhookInfo.port) })}</p>
+                {/if}
+                <div class="command">
+                  <code>{curlExample}</code>
+                  <button class="button small" onclick={() => void copyCurl()}>
+                    {copiedCurl ? t("agents.github.copied") : t("agents.github.copy")}
+                  </button>
+                </div>
+                <p class="hint">
+                  {t("agents.wizard.triggers.webhookBody")}
+                  <button class="link" onclick={() => spec.triggers.webhook && (spec.triggers.webhook.token = newToken())}>
+                    {t("agents.wizard.triggers.webhookNewToken")}
+                  </button>
+                </p>
+              </div>
+            {/if}
+            {#if outsideRisk}
+              <p class="warning">⚠ {t("agents.wizard.untrustedWarning")}</p>
             {/if}
             <p class="hint note">{t("agents.wizard.triggers.onlyOpen")}</p>
           {:else if step === "test"}
@@ -1052,6 +1185,57 @@
 
   .ai-note-title {
     font-weight: 600;
+  }
+
+  .field.wide {
+    width: 170px;
+  }
+
+  .webhook {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .command {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .command code {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: var(--terminal-bg, rgba(0, 0, 0, 0.3));
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .button.small {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    font-size: 11.5px;
+  }
+
+  .warning {
+    margin: 12px 0 0;
+    padding: 8px 10px;
+    border-left: 3px solid var(--warning-fg, #d7ba7d);
+    border-radius: 5px;
+    background: rgba(215, 186, 125, 0.1);
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+
+  .missing-secret {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: -2px 0 8px 12px;
   }
 
   .integration {

@@ -159,9 +159,10 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
     let bin = agent_cli::require(AgentTarget::Claude, None)?;
     std::fs::create_dir_all(scratch).map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))?;
     let mut cmd = Command::new(bin);
+    // The prompt (the user's description, several lines) goes through stdin:
+    // see spec::Invocation for why no free text rides on the command line.
     cmd.args([
         "-p",
-        &prompt(description, work_dir, i18n::current()),
         "--output-format",
         "json",
         "--json-schema",
@@ -175,9 +176,10 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
     ])
     // An empty folder, so there's nothing around for it to go looking at.
     .current_dir(scratch)
-    .stdin(Stdio::null())
+    .stdin(Stdio::piped())
     .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
+    // Never read: piped, a chatty stderr would fill up and stall the CLI.
+    .stderr(Stdio::null())
     .env("NO_COLOR", "1");
     #[cfg(windows)]
     {
@@ -186,6 +188,13 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     let mut child = cmd.spawn().map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let text = prompt(description, work_dir, i18n::current());
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let _ = stdin.write_all(text.as_bytes());
+        });
+    }
     let mut stdout = child.stdout.take().expect("piped");
     let reader = std::thread::spawn(move || {
         let mut text = String::new();

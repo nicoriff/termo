@@ -33,6 +33,8 @@ ureq = { version = "2", features = ["tls"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
+# Native open/save dialogs (importing and exporting agents).
+tauri-plugin-dialog = "2"
 # Agents' secrets (API tokens for their integrations) live in the system
 # keychain: Credential Manager, Keychain, the kernel keyring.
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
@@ -40,6 +42,8 @@ keyring = { version = "3", features = ["windows-native", "apple-native", "linux-
 # watching ("run when something changes here").
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 notify = "8"
+# The agents' local webhook (127.0.0.1 only).
+tiny_http = "0.12"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
