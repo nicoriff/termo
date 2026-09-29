@@ -3,6 +3,7 @@ mod agents;
 mod commands;
 mod config;
 mod i18n;
+mod keep_awake;
 mod layouts;
 mod marketplace;
 mod migration;
@@ -123,6 +124,8 @@ pub fn run() {
             commands::agent_commands::agents_webhook,
             commands::agent_commands::agent_conversation,
             commands::agent_commands::agent_models,
+            commands::keep_awake_commands::keep_awake_state,
+            commands::keep_awake_commands::keep_awake_set,
             commands::agent_commands::agents_board,
             commands::agent_commands::agents_board_remove,
             commands::project_commands::projects_list,

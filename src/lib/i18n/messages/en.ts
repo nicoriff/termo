@@ -3,6 +3,20 @@ import type { Messages } from "../translate";
 /** English catalog. Typed against the Spanish one, so a missing or extra key fails `npm run check`. */
 export const en: Messages = {
   titlebar: {
+    keepAwake: {
+      label: "Keep the computer awake",
+      hint: "Click: turn on or off · Right-click: options",
+      off: "Off: the computer can sleep as usual",
+      onForever: "On until you turn it off",
+      onFor: "On · {time} left",
+      duration: "For",
+      forever: "Until I turn it off",
+      minutes: "{n} minutes",
+      hours: "{n} hours",
+      display: "Keep the screen on too",
+      turnOff: "Turn off",
+      note: "Stops it from sleeping or hibernating on its own while Termo is open. Closing the lid or choosing Sleep by hand still works.",
+    },
     menu: "Menu",
     systemPreferences: "System preferences",
     quit: "Quit",
@@ -958,6 +972,9 @@ export const en: Messages = {
       defaultLayout: "Layout on launch",
       noLayout: "None",
       defaultLayoutHint: "On launch, Termo opens this layout instead of a single console.",
+      titleBar: "Title bar",
+      keepAwakeButton: "Button to keep the computer awake",
+      keepAwakeButtonHint: "The cup in the title bar. Hiding it also turns the mode off if it was on.",
     },
     appearance: {
       theme: "Theme",

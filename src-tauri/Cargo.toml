@@ -51,6 +51,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
+    # Keeping the computer awake (keep_awake.rs).
+    "Win32_System_Power",
 ] }
 
 [target.'cfg(unix)'.dependencies]

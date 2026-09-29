@@ -14,8 +14,10 @@
   import { isLinux, isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
   import { requestQuit } from "$lib/app/quit";
   import AppMenu from "./AppMenu.svelte";
+  import KeepAwakeButton from "./KeepAwakeButton.svelte";
   import { DEFAULT_DECORATION_LAYOUT, parseDecorationLayout, type WindowButton } from "./decoration-layout";
 
   // This bar is also the Preferences window's, where closing just hides it —
@@ -99,6 +101,7 @@
         {@render windowButton(button)}
       {/each}
       {#if layout.menuSide === "start"}
+        {@render keepAwake()}
         {@render menuButton()}
       {/if}
     </div>
@@ -114,12 +117,14 @@
   <div class="titlebar-controls">
     {#if isLinux}
       {#if layout.menuSide === "end"}
+        {@render keepAwake()}
         {@render menuButton()}
       {/if}
       {#each endButtons as button (button)}
         {@render windowButton(button)}
       {/each}
     {:else}
+      {@render keepAwake()}
       {@render menuButton()}
       {#if !isMac}
         {@render windowButton("minimize")}
@@ -131,6 +136,14 @@
     {/if}
   </div>
 </div>
+
+<!-- Keeping the computer awake belongs to the app, not to a window: only
+     the main window's bar offers it. -->
+{#snippet keepAwake()}
+  {#if isMainWindow && showSettingsButton && appConfigStore.keepAwakeButton}
+    <KeepAwakeButton />
+  {/if}
+{/snippet}
 
 {#snippet menuButton()}
   {#if showSettingsButton}

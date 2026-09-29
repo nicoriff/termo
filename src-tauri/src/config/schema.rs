@@ -123,6 +123,8 @@ pub struct AppConfig {
     pub ai_dock_badge: bool,
     /// The Agents button in the window's vertical bar.
     pub agents_in_activity_bar: bool,
+    /// The keep-awake button in the title bar (see keep_awake.rs).
+    pub keep_awake_button: bool,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -164,6 +166,7 @@ impl Default for AppConfig {
             ai_sound_volume: 70,
             ai_dock_badge: true,
             agents_in_activity_bar: true,
+            keep_awake_button: true,
             status_line_wrapped: None,
             default_layout: None,
             window: WindowConfig::default(),

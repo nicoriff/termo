@@ -4,6 +4,7 @@ pub mod agent_session_commands;
 pub mod config_commands;
 pub mod explorer_commands;
 pub mod folder_commands;
+pub mod keep_awake_commands;
 pub mod font_commands;
 pub mod layout_commands;
 pub mod marketplace_commands;

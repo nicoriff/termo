@@ -95,6 +95,8 @@ class AppConfigStore {
   aiDockBadge = $state(true);
   /** The Agents button in the window's vertical bar. */
   agentsInActivityBar = $state(true);
+  /** The keep-awake button in the title bar. */
+  keepAwakeButton = $state(true);
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
@@ -168,6 +170,7 @@ class AppConfigStore {
     this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
     this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
+    this.keepAwakeButton = config.keep_awake_button ?? true;
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.shortcuts = config.shortcuts;
@@ -274,6 +277,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setKeepAwakeButton(visible: boolean): void {
+    this.keepAwakeButton = visible;
+    void this.persist();
+  }
+
   /** Null means launching into a single console, as before. */
   setDefaultLayout(name: string | null): void {
     this.defaultLayout = name;
@@ -348,6 +356,7 @@ class AppConfigStore {
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,
+      keep_awake_button: this.keepAwakeButton,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       font_size_override: themeStore.fontSizeOverride,

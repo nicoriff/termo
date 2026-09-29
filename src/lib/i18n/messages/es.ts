@@ -1,6 +1,20 @@
 /** Spanish catalog. Source of truth for the key structure: `en.ts` must match it exactly. */
 export const es = {
   titlebar: {
+    keepAwake: {
+      label: "Mantener la computadora despierta",
+      hint: "Clic: activar o desactivar · Clic derecho: opciones",
+      off: "Desactivado: la computadora puede suspenderse como siempre",
+      onForever: "Activado hasta que lo desactives",
+      onFor: "Activado · quedan {time}",
+      duration: "Durante",
+      forever: "Hasta que lo desactive",
+      minutes: "{n} minutos",
+      hours: "{n} horas",
+      display: "Mantener también la pantalla encendida",
+      turnOff: "Desactivar",
+      note: "Impide que se suspenda o hiberne sola mientras Termo está abierto. Cerrar la tapa o suspenderla a mano sigue funcionando.",
+    },
     menu: "Menú",
     systemPreferences: "Preferencias del sistema",
     quit: "Salir",
@@ -959,6 +973,9 @@ export const es = {
       defaultLayout: "Layout al abrir",
       noLayout: "Ninguno",
       defaultLayoutHint: "Al iniciar, Termo abre este layout en lugar de una sola consola.",
+      titleBar: "Barra de título",
+      keepAwakeButton: "Botón para mantener la computadora despierta",
+      keepAwakeButtonHint: "La taza de la barra de título. Ocultarla también desactiva el modo si estaba activo.",
     },
     appearance: {
       theme: "Tema",

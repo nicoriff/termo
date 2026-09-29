@@ -90,6 +90,10 @@ pub enum Msg<'a> {
     ProjectImproveFailed(&'a str),
     ProjectImportNotProject,
     ProjectVersionMissing,
+    /// the system's error
+    KeepAwakeFailed(&'a str),
+    /// Why the computer is kept awake, as the system lists it (Linux).
+    KeepAwakeReason,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -265,6 +269,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (ProjectVersionMissing, Es) => "Esa versión del proyecto ya no está".into(),
         (ProjectVersionMissing, En) => "That version of the project is gone".into(),
 
+        (KeepAwakeFailed(error), Es) => format!("No se pudo mantener la computadora despierta: {error}"),
+        (KeepAwakeFailed(error), En) => format!("Couldn't keep the computer awake: {error}"),
+
+        (KeepAwakeReason, Es) => "Termo mantiene la computadora despierta".into(),
+        (KeepAwakeReason, En) => "Termo is keeping the computer awake".into(),
+
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
     }
 }
@@ -327,6 +337,8 @@ mod tests {
             Msg::ProjectImproveFailed("timeout"),
             Msg::ProjectImportNotProject,
             Msg::ProjectVersionMissing,
+            Msg::KeepAwakeFailed("access denied"),
+            Msg::KeepAwakeReason,
         ]
     }
 

@@ -4,6 +4,14 @@
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import { t, type LanguagePreference } from "$lib/i18n/i18n.svelte";
   import SettingDropdown from "../SettingDropdown.svelte";
+  import { setKeepAwake } from "$lib/titlebar/keep-awake";
+
+  /** Hiding the button would leave a session on with nowhere to turn it
+   * off, so hiding it also ends one. */
+  function setKeepAwakeButton(visible: boolean) {
+    appConfigStore.setKeepAwakeButton(visible);
+    if (!visible) void setKeepAwake(false, false, null).catch(() => {});
+  }
 
   // "Español"/"English" stay in their own language so they're recognizable
   // whichever UI language is active.
@@ -54,6 +62,19 @@
   <p class="setting-hint">{t("preferences.general.defaultLayoutHint")}</p>
 </section>
 
+<section>
+  <h3>{t("preferences.general.titleBar")}</h3>
+  <label class="row toggle-row">
+    <span>{t("preferences.general.keepAwakeButton")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.keepAwakeButton}
+      onchange={(e) => setKeepAwakeButton(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.general.keepAwakeButtonHint")}</p>
+</section>
+
 <style>
   section {
     margin-bottom: 20px;
@@ -73,6 +94,16 @@
     justify-content: space-between;
     gap: 10px;
     font-size: 12px;
+  }
+
+  .toggle-row {
+    cursor: pointer;
+  }
+
+  .toggle-row input {
+    accent-color: var(--pane-active-border, #3a6df0);
+    flex-shrink: 0;
+    cursor: pointer;
   }
 
   .setting-hint {
