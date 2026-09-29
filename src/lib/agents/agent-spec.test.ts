@@ -5,18 +5,63 @@ import {
   agentState,
   ago,
   applyDraft,
+  conversationTree,
   formatDuration,
   newAgentSpec,
   nextRunLabel,
   specProblems,
   secretsOf,
   stepProblems,
+  strongerContacts,
   withoutEchoes,
 } from "./agent-spec";
 
 function run(status: RunRecord["status"], activity = ""): RunRecord {
-  return { id: "r", agentId: "a", trigger: "manual", status, startedAt: 0, endedAt: null, summary: "", activity, costUsd: null };
+  return {
+    id: "r",
+    agentId: "a",
+    trigger: "manual",
+    status,
+    startedAt: 0,
+    endedAt: null,
+    summary: "",
+    activity,
+    costUsd: null,
+    link: null,
+    rehearsal: false,
+  };
 }
+
+describe("working with other agents", () => {
+  it("asks which agent to follow", () => {
+    const spec = newAgentSpec("a");
+    spec.triggers.after = { agentId: "", on: "success" };
+    expect(stepProblems("triggers", spec)).toEqual(["agents.wizard.problems.afterAgent"]);
+    spec.triggers.after.agentId = "b";
+    expect(stepProblems("triggers", spec)).toEqual([]);
+  });
+
+  it("finds the contacts allowed to do more than the agent", () => {
+    const spec = newAgentSpec("a");
+    const tester = { ...newAgentSpec("t"), autonomy: "run" as const };
+    const reader = newAgentSpec("r");
+    spec.collaboration.contacts = ["t", "r"];
+    expect(strongerContacts(spec, [tester, reader, newAgentSpec("x")]).map((agent) => agent.id)).toEqual(["t"]);
+    spec.autonomy = "run";
+    expect(strongerContacts(spec, [tester, reader])).toEqual([]);
+  });
+
+  it("lays out a conversation with each run under the one that set it off", () => {
+    const at = (id: string, startedAt: number, parent?: string): RunRecord => ({
+      ...run("success"),
+      id,
+      startedAt,
+      link: parent ? { conversationId: "a1", parentRunId: parent, parentAgentId: "", path: [], rehearsal: false } : null,
+    });
+    const tree = conversationTree([at("c1", 3, "b1"), at("a1", 1), at("d1", 4, "a1"), at("b1", 2, "a1")]);
+    expect(tree.map(({ run, depth }) => `${run.id}:${depth}`)).toEqual(["a1:0", "b1:1", "c1:2", "d1:1"]);
+  });
+});
 
 describe("stepProblems", () => {
   it("asks for a name and a task before leaving the logic step", () => {

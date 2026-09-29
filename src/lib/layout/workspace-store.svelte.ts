@@ -8,6 +8,7 @@ import {
   isConsoleTab,
   isFileTab,
   makeAgentRunSession,
+  makeProjectSession,
   makeFileSession,
   computeLayout,
   countSessions,
@@ -116,6 +117,34 @@ class WorkspaceStore {
     const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
     if (!tileId) return;
     const session = makeAgentRunSession(title, agentId, runId);
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
+  }
+
+  /** Shows a project in a tab: the one it already has, brought forward, or
+   * a new one in the focused tile. */
+  openProject(projectId: string, title: string): void {
+    if (!this.root) return;
+    const open = collectSessions(this.root).find((loc) => loc.session.projectView?.projectId === projectId);
+    if (open) {
+      const updated = updateLeaf(this.root, open.tileId, (tile) => ({
+        ...tile,
+        sessions: tile.sessions.map((session) => (session.id === open.session.id ? { ...session, title } : session)),
+        activeSessionId: open.session.id,
+      }));
+      if (updated) this.root = updated;
+      this.focusedTileId = open.tileId;
+      return;
+    }
+    const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
+    if (!tileId) return;
+    const session = makeProjectSession(title, projectId);
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],
@@ -370,7 +399,7 @@ class WorkspaceStore {
  * reported, else where it opened), or the folder of the file it shows. */
 export function sessionFolder(session: SessionTab): string | undefined {
   if (isFileTab(session)) return fileFolder(session.filePath);
-  if (session.agentRun) return undefined;
+  if (session.agentRun || session.projectView) return undefined;
   return tabCwd.byTab[session.id] ?? session.cwd;
 }
 

@@ -23,8 +23,9 @@ use crate::marketplace::model::AgentTarget;
 
 use super::events::{parse_line, EventKind, RunEvent};
 use super::secrets;
-use super::spec::{build_invocation, AgentSpec, Engine};
-use super::store::{self, now_millis, RunRecord, RunStatus, RunTrigger};
+use super::spec::{build_invocation, with_team_server, AgentSpec, Engine, TEAM_TOKEN_VAR};
+use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
+use super::{projects, team, webhook};
 
 /// Lines of stderr kept to explain a failure.
 const STDERR_TAIL: usize = 12;
@@ -117,6 +118,15 @@ impl Runner {
         self.active.lock().unwrap().contains_key(agent_id)
     }
 
+    /// Whether this particular run of the agent is still going.
+    pub fn is_running_run(&self, agent_id: &str, run_id: &str) -> bool {
+        self.active
+            .lock()
+            .unwrap()
+            .get(agent_id)
+            .is_some_and(|run| run.record.lock().unwrap().id == run_id)
+    }
+
     pub fn stop(&self, agent_id: &str) {
         if let Some(run) = self.active.lock().unwrap().get(agent_id) {
             run.stop.store(true, Ordering::Relaxed);
@@ -132,16 +142,45 @@ impl Runner {
         trigger: RunTrigger,
         context: Option<&str>,
     ) -> Result<RunRecord, String> {
+        self.start_linked(app, spec, trigger, context, None, false)
+    }
+
+    /// The same, for a run another agent's run set off (see team.rs), or a
+    /// rehearsal (see projects::rehearsal_spec) — which a linked run is too
+    /// when the run that set it off was one.
+    pub fn start_linked(
+        self: &Arc<Self>,
+        app: &tauri::AppHandle,
+        spec: &AgentSpec,
+        trigger: RunTrigger,
+        context: Option<&str>,
+        link: Option<RunLink>,
+        rehearsal: bool,
+    ) -> Result<RunRecord, String> {
         if spec.task.trim().is_empty() {
             return Err(tr(Msg::AgentTaskMissing));
         }
         let root = store::root(app).map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
+        if trigger != RunTrigger::Test {
+            projects::check_daily_limit(&root, spec)?;
+        }
+        let rehearsal = rehearsal || link.as_ref().is_some_and(|link| link.rehearsal);
+        let rehearsed;
+        let spec = if rehearsal {
+            rehearsed = projects::rehearsal_spec(spec);
+            &rehearsed
+        } else {
+            spec
+        };
         let dir = work_dir(&root, spec)?;
         let bin = agent_cli::require(target(spec.engine), None)?;
 
         let mut active = self.active.lock().unwrap();
         if active.contains_key(&spec.id) {
             return Err(tr(Msg::AgentAlreadyRunning));
+        }
+        if let Some(link) = &link {
+            team::admit(&link.conversation_id)?;
         }
 
         let run_id = uuid::Uuid::new_v4().to_string();
@@ -154,9 +193,18 @@ impl Runner {
                 .and_then(|_| std::fs::write(path, spec.instructions.trim()));
             written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
         }
-        let secret_values = secrets::load(&spec.id, &spec.secrets);
+        let mut secret_values = secrets::load(&spec.id, &spec.secrets);
+        // Working with other agents: Termo's MCP server, reached with a token
+        // only this run holds. Without the port there's no server to reach,
+        // and the run simply goes without those tools.
+        let team_token = (spec.collaboration.is_on() && webhook::listening())
+            .then(|| team::open_session(spec, &run_id, link.as_ref(), rehearsal));
+        let team_spec = team_token.as_ref().map(|_| with_team_server(spec, &webhook::mcp_url()));
+        if let Some(token) = &team_token {
+            secret_values.insert(TEAM_TOKEN_VAR.to_string(), token.clone());
+        }
         let invocation = build_invocation(
-            spec,
+            team_spec.as_ref().unwrap_or(spec),
             context,
             system_prompt.as_deref().and_then(|path| path.to_str()),
             &secret_values,
@@ -174,6 +222,12 @@ impl Runner {
             cmd.env_remove(key);
         }
         cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
+        if team_token.is_some() && spec.engine == Engine::Claude {
+            // Asking another agent takes as long as that agent's run; Claude
+            // Code would give up on the call well before.
+            let timeout_ms = u64::from(spec.limits.timeout_min.max(1)) * 60_000;
+            cmd.env("MCP_TOOL_TIMEOUT", timeout_ms.to_string());
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -188,6 +242,9 @@ impl Runner {
         let mut child = cmd.spawn().map_err(|err| {
             if let Some(path) = &system_prompt {
                 let _ = std::fs::remove_file(path);
+            }
+            if let Some(token) = &team_token {
+                team::close_session(token);
             }
             tr(Msg::AgentRunFailed(&err.to_string()))
         })?;
@@ -211,6 +268,8 @@ impl Runner {
             summary: String::new(),
             activity: String::new(),
             cost_usd: None,
+            link,
+            rehearsal,
         };
         let _ = store::save_run_in(&root, &record);
         let shared = Arc::new(Mutex::new(record.clone()));
@@ -298,6 +357,7 @@ impl Runner {
         let timeout_min = spec.limits.timeout_min.max(1);
         let runner = Arc::clone(self);
         let agent_id = spec.id.clone();
+        let agent_name = spec.name.clone();
         std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(u64::from(timeout_min) * 60);
             let (exit, forced) = loop {
@@ -353,6 +413,11 @@ impl Runner {
             if let Some(path) = &system_prompt {
                 let _ = std::fs::remove_file(path);
             }
+            // Its tools stop working with it: a call still waiting on another
+            // agent gives up (and stops that agent's run).
+            if let Some(token) = &team_token {
+                team::close_session(token);
+            }
             let _ = store::save_run_in(&log.root, &finished);
             store::prune_runs_in(&log.root, &finished.agent_id);
             log.step(RunEvent {
@@ -363,6 +428,8 @@ impl Runner {
             });
             runner.active.lock().unwrap().remove(&agent_id);
             let _ = log.app.emit("agent-run", &finished);
+            // The agents that come after this one.
+            team::on_finished(&log.root, &finished, &agent_name);
         });
 
         Ok(record)

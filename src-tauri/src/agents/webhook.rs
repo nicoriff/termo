@@ -4,6 +4,9 @@
 //! loopback address alone — and only callers holding the token, sent in a
 //! header (never in the URL, where it would end up in shell history and
 //! logs), can use it.
+//!
+//! The same port serves the agents' own MCP server at `/mcp` (see
+//! mcp_server.rs).
 
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -12,6 +15,7 @@ use std::sync::Arc;
 use serde_json::json;
 use tiny_http::{Header, Method, Response, Server};
 
+use super::mcp_server;
 use super::runner::Runner;
 use super::spec::is_valid_id;
 use super::store::{self, RunTrigger};
@@ -26,10 +30,19 @@ static LISTENING: AtomicBool = AtomicBool::new(false);
 /// calls are turned away instead of piling up threads.
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 const MAX_IN_FLIGHT: usize = 8;
+/// The same for agents' MCP calls, counted apart: asking another agent
+/// holds a call open for minutes, and that mustn't turn webhooks away.
+static MCP_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+const MAX_MCP_IN_FLIGHT: usize = 16;
 
 /// Whether the webhook could take its port (another program may hold it).
 pub fn listening() -> bool {
     LISTENING.load(Ordering::Relaxed)
+}
+
+/// Where agent runs reach Termo's MCP server.
+pub fn mcp_url() -> String {
+    format!("http://127.0.0.1:{PORT}{}", mcp_server::PATH)
 }
 
 /// The agent a request is for (`/agents/<id>/run`). A query string is
@@ -71,15 +84,21 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
         LISTENING.store(true, Ordering::Relaxed);
         let Ok(root) = store::root(&app) else { return };
         for request in server.incoming_requests() {
-            if IN_FLIGHT.fetch_add(1, Ordering::SeqCst) >= MAX_IN_FLIGHT {
-                IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+            let mcp = mcp_server::is_mcp(request.url());
+            let (counter, max) = if mcp { (&MCP_IN_FLIGHT, MAX_MCP_IN_FLIGHT) } else { (&IN_FLIGHT, MAX_IN_FLIGHT) };
+            if counter.fetch_add(1, Ordering::SeqCst) >= max {
+                counter.fetch_sub(1, Ordering::SeqCst);
                 reply(request, 503, json!({ "error": "busy" }));
                 continue;
             }
             let (app, runner, root) = (app.clone(), runner.clone(), root.clone());
             std::thread::spawn(move || {
-                handle(request, &app, &runner, &root);
-                IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+                if mcp {
+                    mcp_server::handle(request, &app, &runner, &root);
+                } else {
+                    handle(request, &app, &runner, &root);
+                }
+                counter.fetch_sub(1, Ordering::SeqCst);
             });
         }
     });

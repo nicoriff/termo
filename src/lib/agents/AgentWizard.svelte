@@ -12,12 +12,15 @@
     missingSecrets,
     setAgentSecret,
     onAgentRunEvent,
+    agentModels,
     type AgentAutonomy,
     type AgentDraft,
     type AgentEngine,
     type McpServer,
+    type ModelOption,
     type RunEvent,
   } from "$lib/core/agents-client";
+  import FolderField from "./FolderField.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import IntegrationPicker from "./IntegrationPicker.svelte";
   import CustomConnectorForm from "./CustomConnectorForm.svelte";
@@ -38,6 +41,7 @@
     newAgentSpec,
     specProblems,
     stepProblems,
+    strongerContacts,
     withoutEchoes,
     type WizardStep,
   } from "./agent-spec";
@@ -99,6 +103,50 @@
 
   const installed = (engine: AgentEngine) => newTabOptions.agentClis?.[engine] !== false;
 
+  /** The models each engine's CLI offers (loaded once; missing until then). */
+  let models = $state<Partial<Record<AgentEngine, ModelOption[]>>>({});
+  for (const engine of ["claude", "codex"] as const) {
+    void agentModels(engine)
+      .then((list) => (models = { ...models, [engine]: list }))
+      .catch(() => (models = { ...models, [engine]: [] }));
+  }
+  const engineModels = $derived(models[spec.engine] ?? []);
+
+  function modelLabel(model: ModelOption): string {
+    return model.note ? `${model.name} · ${model.note}` : model.name;
+  }
+
+  /** A model belongs to its engine: switching engines drops one the other
+   * doesn't have. */
+  function chooseEngine(engine: AgentEngine) {
+    spec.engine = engine;
+    const list = models[engine];
+    if (spec.model && list && !list.some((model) => model.id === spec.model)) spec.model = "";
+  }
+
+  /** The other agents: contacts to choose (step "tools") and ones to
+   * follow (step "triggers"). In a team, only its own members; outside,
+   * nobody who's in a team. */
+  const teams = $derived(new Set(agentsStore.projects.filter((project) => project.isolated).map((project) => project.id)));
+  const inTeam = $derived(teams.has(spec.projectId));
+  const others = $derived(
+    agentsStore.agents.filter(
+      (other) =>
+        other.id !== spec.id &&
+        (inTeam || teams.has(other.projectId) ? other.projectId === spec.projectId : true),
+    ),
+  );
+  const stronger = $derived(strongerContacts(spec, others));
+  const AUTONOMY_TITLE = Object.fromEntries(AUTONOMY.map((level) => [level.id, level.title])) as Record<
+    AgentAutonomy,
+    MessageKey
+  >;
+
+  function toggleContact(id: string, on: boolean) {
+    const contacts = spec.collaboration.contacts.filter((contact) => contact !== id);
+    spec.collaboration.contacts = on ? [...contacts, id] : contacts;
+  }
+
   // "Build it with AI" (step "idea").
   let drafting = $state(false);
   let draftError = $state("");
@@ -149,7 +197,8 @@
   /** Text from outside (a commit, a webhook call, a web page) reaching an
    * agent that can run commands: the combination worth a warning. */
   const outsideRisk = $derived(
-    spec.autonomy === "run" && Boolean(spec.triggers.git || spec.triggers.webhook || spec.tools.web),
+    spec.autonomy === "run" &&
+      Boolean(spec.triggers.git || spec.triggers.webhook || spec.triggers.after || spec.tools.web),
   );
 
   /** Which way of adding an integration is open, if any. */
@@ -442,7 +491,7 @@
                   class="card"
                   class:selected={spec.engine === engine.id}
                   disabled={!installed(engine.id)}
-                  onclick={() => (spec.engine = engine.id)}
+                  onclick={() => chooseEngine(engine.id)}
                 >
                   <span class="card-title"><ConsoleIcon kind={engine.id} size={14} /> {engine.label}</span>
                   <span class="card-text">
@@ -454,7 +503,7 @@
 
             <div class="label">{t("agents.wizard.engine.workDir")}</div>
             <p class="hint">{t("agents.wizard.engine.workDirHint")}</p>
-            <input class="field" placeholder={t("agents.wizard.engine.workDirOwn")} bind:value={spec.workDir} />
+            <FolderField placeholder={t("agents.wizard.engine.workDirOwn")} bind:value={spec.workDir} />
             <div class="chips">
               <button class="chip" class:selected={!spec.workDir.trim()} onclick={() => (spec.workDir = "")}>
                 {t("agents.wizard.engine.useOwn")}
@@ -465,6 +514,16 @@
                 </button>
               {/if}
             </div>
+
+            {#if agentsStore.projects.length > 0}
+              <label class="label" for="agent-project">{t("agents.wizard.engine.project")}</label>
+              <select id="agent-project" class="field" bind:value={spec.projectId}>
+                <option value="">{t("agents.projects.loose")}</option>
+                {#each agentsStore.projects as project (project.id)}
+                  <option value={project.id}>{project.icon} {project.name}</option>
+                {/each}
+              </select>
+            {/if}
 
             <div class="label">{t("agents.wizard.engine.autonomy")}</div>
             <p class="hint">{t("agents.wizard.engine.autonomyHint")}</p>
@@ -485,8 +544,26 @@
               <summary>{t("agents.wizard.advanced")}</summary>
               <div class="row">
                 <label class="label inline" for="agent-model">{t("agents.wizard.engine.model")}</label>
-                <input id="agent-model" class="field" placeholder={t("agents.wizard.engine.modelPlaceholder")} bind:value={spec.model} />
+                <select id="agent-model" class="field" bind:value={spec.model}>
+                  <option value="">{t("agents.wizard.engine.modelDefault")}</option>
+                  {#if spec.model && !engineModels.some((model) => model.id === spec.model)}
+                    <option value={spec.model}>{t("agents.wizard.engine.modelUnlisted", { model: spec.model })}</option>
+                  {/if}
+                  {#each engineModels.filter((model) => model.main) as model (model.id)}
+                    <option value={model.id} title={model.description}>{modelLabel(model)}</option>
+                  {/each}
+                  {#if engineModels.some((model) => !model.main)}
+                    <optgroup label={t("agents.wizard.engine.modelOthers")}>
+                      {#each engineModels.filter((model) => !model.main) as model (model.id)}
+                        <option value={model.id} title={model.description}>{modelLabel(model)}</option>
+                      {/each}
+                    </optgroup>
+                  {/if}
+                </select>
               </div>
+              {#if models[spec.engine] && engineModels.length === 0}
+                <p class="hint">{t("agents.wizard.engine.modelsMissing", { engine: spec.engine === "claude" ? "Claude Code" : "Codex" })}</p>
+              {/if}
               <div class="row">
                 <label class="label inline" for="agent-timeout">{t("agents.wizard.engine.timeout")}</label>
                 <input id="agent-timeout" class="field narrow" type="number" min="1" bind:value={spec.limits.timeoutMin} />
@@ -549,6 +626,45 @@
                 <p class="hint note">✨ {t("agents.integrations.aiSuggests", { list: suggestions.map((s) => s.query).join(", ") })}</p>
               {/if}
             {/if}
+
+            <div class="label">{t("agents.wizard.tools.team")}</div>
+            <p class="hint">{t("agents.wizard.tools.teamHint")}</p>
+            {#if inTeam}
+              <p class="hint">{t("agents.wizard.tools.teamOnly")}</p>
+            {/if}
+            {#each others as other (other.id)}
+              <label class="integration contact">
+                <input
+                  type="checkbox"
+                  checked={spec.collaboration.contacts.includes(other.id)}
+                  onchange={(e) => toggleContact(other.id, e.currentTarget.checked)}
+                />
+                <span class="contact-name">{other.icon || "🤖"} {other.name}</span>
+                <span class="hint contact-level">
+                  {t(AUTONOMY_TITLE[other.autonomy])}{#if !other.enabled}{" · "}{t("agents.wizard.tools.paused")}{/if}
+                </span>
+              </label>
+            {:else}
+              <p class="hint">{t("agents.wizard.tools.noOthers")}</p>
+            {/each}
+            {#if stronger.length > 0}
+              <label class="toggle">
+                <input type="checkbox" bind:checked={spec.collaboration.allowEscalation} />
+                <span>
+                  <span class="toggle-title">{t("agents.wizard.tools.escalation")}</span>
+                  <span class="hint">
+                    {t("agents.wizard.tools.escalationHint", { names: stronger.map((agent) => agent.name).join(", ") })}
+                  </span>
+                </span>
+              </label>
+            {/if}
+            <label class="toggle">
+              <input type="checkbox" bind:checked={spec.collaboration.board} />
+              <span>
+                <span class="toggle-title">{t("agents.wizard.tools.board")}</span>
+                <span class="hint">{t("agents.wizard.tools.boardHint")}</span>
+              </span>
+            </label>
           {:else if step === "triggers"}
             {@const schedule = spec.triggers.schedule}
             <h2>{t("agents.wizard.triggers.title")}</h2>
@@ -598,7 +714,7 @@
               </span>
             </label>
             {#if spec.triggers.watch}
-              <input class="field" placeholder={t("agents.wizard.triggers.watchPlaceholder")} bind:value={spec.triggers.watch.path} />
+              <FolderField placeholder={t("agents.wizard.triggers.watchPlaceholder")} bind:value={spec.triggers.watch.path} />
             {/if}
 
             <label class="toggle">
@@ -617,7 +733,7 @@
             </label>
             {#if spec.triggers.git}
               <div class="row">
-                <input class="field" placeholder={t("agents.wizard.triggers.gitPlaceholder")} bind:value={spec.triggers.git.repoPath} />
+                <FolderField placeholder={t("agents.wizard.triggers.gitPlaceholder")} bind:value={spec.triggers.git.repoPath} />
                 <select class="field narrow wide" bind:value={spec.triggers.git.event} aria-label={t("agents.wizard.triggers.gitEvent")}>
                   <option value="commit">{t("agents.wizard.triggers.gitCommit")}</option>
                   <option value="push">{t("agents.wizard.triggers.gitPush")}</option>
@@ -653,6 +769,38 @@
                     {t("agents.wizard.triggers.webhookNewToken")}
                   </button>
                 </p>
+              </div>
+            {/if}
+            <label class="toggle">
+              <input
+                type="checkbox"
+                checked={spec.triggers.after !== null}
+                disabled={others.length === 0 && !spec.triggers.after}
+                onchange={(e) =>
+                  (spec.triggers.after = e.currentTarget.checked
+                    ? { agentId: others.length === 1 ? others[0].id : "", on: "success" }
+                    : null)}
+              />
+              <span>
+                <span class="toggle-title">{t("agents.wizard.triggers.after")}</span>
+                <span class="hint">
+                  {others.length === 0 ? t("agents.wizard.triggers.afterNone") : t("agents.wizard.triggers.afterHint")}
+                </span>
+              </span>
+            </label>
+            {#if spec.triggers.after}
+              <div class="row">
+                <select class="field" bind:value={spec.triggers.after.agentId} aria-label={t("agents.wizard.triggers.afterAgent")}>
+                  <option value="" disabled>{t("agents.wizard.triggers.afterPick")}</option>
+                  {#each others as other (other.id)}
+                    <option value={other.id}>{other.icon || "🤖"} {other.name}</option>
+                  {/each}
+                </select>
+                <select class="field narrow wide" bind:value={spec.triggers.after.on} aria-label={t("agents.wizard.triggers.afterOn")}>
+                  <option value="success">{t("agents.wizard.triggers.afterSuccess")}</option>
+                  <option value="failure">{t("agents.wizard.triggers.afterFailure")}</option>
+                  <option value="any">{t("agents.wizard.triggers.afterAny")}</option>
+                </select>
               </div>
             {/if}
             {#if outsideRisk}
@@ -1246,6 +1394,25 @@
     margin-bottom: 6px;
     border: 1px solid var(--tabbar-border, #3a3a3a);
     border-radius: 6px;
+  }
+
+  .contact {
+    justify-content: flex-start;
+    gap: 9px;
+    cursor: pointer;
+  }
+
+  .contact-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .contact-level {
+    margin: 0;
+    white-space: nowrap;
   }
 
   .link {

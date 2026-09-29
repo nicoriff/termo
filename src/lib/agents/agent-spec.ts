@@ -1,4 +1,4 @@
-import type { AgentDraft, AgentSpec, RunEvent, RunRecord } from "$lib/core/agents-client";
+import type { AgentAutonomy, AgentDraft, AgentSpec, RunEvent, RunRecord, RunTrigger } from "$lib/core/agents-client";
 import type { MessageKey } from "$lib/i18n/translate";
 
 /** The wizard's steps, in order. */
@@ -17,6 +17,25 @@ export const STEP_LABEL_KEYS: Record<WizardStep, MessageKey> = {
 
 export const AGENT_ICONS = ["🤖", "🔍", "📝", "🧹", "📊", "🛠️", "📬", "🧪", "📚", "⚡"];
 
+/** What set a run off, in words. */
+export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {
+  manual: "agents.run.trigger.manual",
+  test: "agents.run.trigger.test",
+  schedule: "agents.run.trigger.schedule",
+  watch: "agents.run.trigger.watch",
+  git: "agents.run.trigger.git",
+  webhook: "agents.run.trigger.webhook",
+  chain: "agents.run.trigger.chain",
+  agent: "agents.run.trigger.agent",
+  message: "agents.run.trigger.message",
+};
+
+export const AUTONOMY_TITLE_KEYS: Record<AgentAutonomy, MessageKey> = {
+  read: "agents.wizard.autonomy.readTitle",
+  edit: "agents.wizard.autonomy.editTitle",
+  run: "agents.wizard.autonomy.runTitle",
+};
+
 export function newAgentSpec(id: string): AgentSpec {
   return {
     id,
@@ -31,10 +50,12 @@ export function newAgentSpec(id: string): AgentSpec {
     autonomy: "read",
     tools: { web: false, mcp: [] },
     limits: { timeoutMin: 15 },
-    triggers: { schedule: null, watch: null, git: null, webhook: null },
+    triggers: { schedule: null, watch: null, git: null, webhook: null, after: null },
+    collaboration: { contacts: [], board: false, allowEscalation: false },
     secrets: [],
     enabled: true,
     deploy: { github: null },
+    projectId: "",
     createdAt: 0,
     updatedAt: 0,
   };
@@ -81,8 +102,40 @@ export function stepProblems(step: WizardStep, spec: AgentSpec): MessageKey[] {
       problems.push("agents.wizard.problems.time");
     if (spec.triggers.watch && !spec.triggers.watch.path.trim()) problems.push("agents.wizard.problems.watch");
     if (spec.triggers.git && !spec.triggers.git.repoPath.trim()) problems.push("agents.wizard.problems.gitRepo");
+    if (spec.triggers.after && !spec.triggers.after.agentId) problems.push("agents.wizard.problems.afterAgent");
   }
   return problems;
+}
+
+const AUTONOMY_RANK: Record<AgentAutonomy, number> = { read: 0, edit: 1, run: 2 };
+
+/** The contacts allowed to do more than the agent itself: asking them is
+ * refused unless `allowEscalation` is on (see team.rs `check_call`). */
+export function strongerContacts(spec: AgentSpec, agents: AgentSpec[]): AgentSpec[] {
+  return agents.filter(
+    (other) =>
+      spec.collaboration.contacts.includes(other.id) && AUTONOMY_RANK[other.autonomy] > AUTONOMY_RANK[spec.autonomy],
+  );
+}
+
+/** The runs of a conversation in reading order — each run right after the
+ * one that set it off — with how deep each sits. */
+export function conversationTree(runs: RunRecord[]): { run: RunRecord; depth: number }[] {
+  const ids = new Set(runs.map((run) => run.id));
+  const children = new Map<string, RunRecord[]>();
+  const roots: RunRecord[] = [];
+  for (const run of [...runs].sort((a, b) => a.startedAt - b.startedAt)) {
+    const parent = run.link?.parentRunId;
+    if (parent && ids.has(parent)) children.set(parent, [...(children.get(parent) ?? []), run]);
+    else roots.push(run);
+  }
+  const out: { run: RunRecord; depth: number }[] = [];
+  const visit = (run: RunRecord, depth: number) => {
+    out.push({ run, depth });
+    for (const child of children.get(run.id) ?? []) visit(child, depth + 1);
+  };
+  for (const root of roots) visit(root, 0);
+  return out;
 }
 
 /** Every problem across the whole spec, for the final save. */

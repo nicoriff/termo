@@ -34,16 +34,41 @@ export interface AgentSpec {
     git: { repoPath: string; event: "commit" | "push" } | null;
     /** Runs when its local URL is called with this token. */
     webhook: { token: string } | null;
+    /** Runs when another agent finishes, with its result as context. */
+    after: { agentId: string; on: AfterOutcome } | null;
+  };
+  /** Working with other agents (see src-tauri/src/agents/team.rs). */
+  collaboration: {
+    /** The agents it may ask or message, by id. */
+    contacts: string[];
+    /** Reading and writing the board the agents share. */
+    board: boolean;
+    /** Whether it may ask agents allowed to do more than itself. */
+    allowEscalation: boolean;
   };
   secrets: string[];
   enabled: boolean;
   deploy: { github: { repo: string; repoPath: string; workflowFile: string; deployedAt: number } | null };
+  /** The project it belongs to; empty: none. */
+  projectId: string;
   createdAt: number;
   updatedAt: number;
 }
 
+export type AfterOutcome = "success" | "failure" | "any";
+
 export type RunStatus = "running" | "success" | "error" | "stopped" | "timedOut";
-export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook";
+export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook" | "chain" | "agent" | "message";
+
+/** Where a run sits in a conversation between agents. */
+export interface RunLink {
+  conversationId: string;
+  parentRunId: string;
+  parentAgentId: string;
+  /** The agents from the conversation's first down to the parent. */
+  path: string[];
+  rehearsal: boolean;
+}
 
 export interface RunRecord {
   id: string;
@@ -56,6 +81,179 @@ export interface RunRecord {
   summary: string;
   activity: string;
   costUsd: number | null;
+  /** Set when another agent's run started this one. */
+  link: RunLink | null;
+  /** A rehearsal: it could only look. */
+  rehearsal: boolean;
+}
+
+/** The conversation a run belongs to: its parent's, or its own. */
+export function conversationOf(run: RunRecord): string {
+  return run.link?.conversationId ?? run.id;
+}
+
+/** A model an agent can run on, as its CLI offers it. */
+export interface ModelOption {
+  /** What goes to --model / -m. */
+  id: string;
+  name: string;
+  description: string;
+  /** One the CLI puts first; the rest are older or niche. */
+  main: boolean;
+  /** A remark the CLI shows next to it. */
+  note: string;
+}
+
+/** The models the engine's CLI offers this account; empty until it has run once. */
+export function agentModels(engine: AgentEngine): Promise<ModelOption[]> {
+  return invoke("agent_models", { engine });
+}
+
+/** Every run of a conversation between agents, oldest first. */
+export function agentConversation(conversationId: string): Promise<RunRecord[]> {
+  return invoke("agent_conversation", { conversationId });
+}
+
+/** A note on the board the agents share. */
+export interface BoardEntry {
+  value: string;
+  /** The agent that wrote it. */
+  by: string;
+  /** Unix milliseconds. */
+  at: number;
+}
+
+/** A team project's own board, or (null) the one agents outside a team share. */
+export function agentsBoard(projectId: string | null = null): Promise<Record<string, BoardEntry>> {
+  return invoke("agents_board", { projectId });
+}
+
+export function removeBoardEntry(key: string, projectId: string | null = null): Promise<Record<string, BoardEntry>> {
+  return invoke("agents_board_remove", { projectId, key });
+}
+
+/** Mirrors src-tauri/src/agents/projects.rs. */
+export interface Project {
+  id: string;
+  name: string;
+  icon: string;
+  goal: string;
+  /** New agents in the project start with this folder. */
+  workDir: string;
+  /** A team: its agents only talk among themselves and share its own board. */
+  isolated: boolean;
+  /** The agent "Run project" starts. */
+  entryAgentId: string;
+  limits: { maxRunsPerDay: number };
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProjectStats {
+  runsToday: number;
+  costToday: number;
+  costWeek: number;
+  maxRunsPerDay: number;
+}
+
+export interface ProjectVersion {
+  /** Unix ms; also the version's name. */
+  at: number;
+  agents: string[];
+}
+
+/** Mirrors src-tauri/src/agents/project_ai.rs. */
+export interface GeneratedProject {
+  project: Project;
+  agents: AgentSpec[];
+  integrations: { agentId: string; query: string; why: string }[];
+  explanation: string;
+}
+
+export type SuggestionField = "task" | "instructions" | "autonomy" | "timeoutMin";
+
+export interface Suggestion {
+  agentId: string;
+  field: SuggestionField;
+  value: string;
+  reason: string;
+}
+
+export interface Improvement {
+  summary: string;
+  suggestions: Suggestion[];
+}
+
+export function listProjects(): Promise<Project[]> {
+  return invoke("projects_list");
+}
+
+/** Returns the full list after saving. */
+export function saveProject(project: Project): Promise<Project[]> {
+  return invoke("project_save", { project });
+}
+
+/** Deletes the project, and its agents when asked (else they're left loose). */
+export function deleteProject(id: string, deleteAgents: boolean): Promise<[Project[], AgentSpec[]]> {
+  return invoke("project_delete", { id, deleteAgents });
+}
+
+/** Moves an agent into a project, or out of any with an empty id. */
+export function moveAgent(agentId: string, projectId: string): Promise<AgentSpec[]> {
+  return invoke("agent_move", { agentId, projectId });
+}
+
+export function setProjectEnabled(id: string, enabled: boolean): Promise<AgentSpec[]> {
+  return invoke("project_set_enabled", { id, enabled });
+}
+
+/** Starts the project's entry agent; a rehearsal only looks, all the way down. */
+export function runProject(id: string, rehearsal: boolean): Promise<RunRecord> {
+  return invoke("project_run", { id, rehearsal });
+}
+
+export function stopProject(id: string): Promise<void> {
+  return invoke("project_stop", { id });
+}
+
+export function projectStats(id: string): Promise<ProjectStats> {
+  return invoke("project_stats", { id });
+}
+
+/** The latest runs of the project's agents, newest first. */
+export function projectRuns(id: string, limit: number): Promise<RunRecord[]> {
+  return invoke("project_runs", { id, limit });
+}
+
+export function exportProject(id: string, path: string): Promise<void> {
+  return invoke("project_export", { id, path });
+}
+
+export function importProject(path: string): Promise<[Project[], AgentSpec[], ImportReport]> {
+  return invoke("project_import", { path });
+}
+
+/** A team drafted with AI, not saved yet. Takes a while. */
+export function draftProject(description: string, workDir: string): Promise<GeneratedProject> {
+  return invoke("project_draft", { description, workDir });
+}
+
+/** Saves a reviewed project with its agents. */
+export function createProject(project: Project, agents: AgentSpec[]): Promise<[Project[], AgentSpec[]]> {
+  return invoke("project_create", { project, agents });
+}
+
+/** Changes suggested from how the project's runs went. Takes a while. */
+export function improveProject(id: string): Promise<Improvement> {
+  return invoke("project_improve", { id });
+}
+
+export function projectVersions(id: string): Promise<ProjectVersion[]> {
+  return invoke("project_versions", { id });
+}
+
+export function restoreProject(id: string, at: number): Promise<[Project[], AgentSpec[]]> {
+  return invoke("project_restore", { id, at });
 }
 
 export type RunEventKind = "started" | "tool" | "text" | "result" | "stderr" | "ended";

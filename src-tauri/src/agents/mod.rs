@@ -7,13 +7,18 @@ pub mod events;
 pub mod git_hooks;
 pub mod github;
 pub mod integrations;
+pub mod mcp_server;
+pub mod models;
 pub mod portable;
+pub mod project_ai;
+pub mod projects;
 pub mod queue;
 pub mod runner;
 pub mod scheduler;
 pub mod secrets;
 pub mod spec;
 pub mod store;
+pub mod team;
 pub mod webhook;
 
 /// `termo --run-agent <id> <event>`, called by the git hook Termo installs
@@ -25,6 +30,8 @@ pub fn run_agent_cli(agent_id: &str, event: &str) {
     let request = queue::Request {
         agent_id: agent_id.to_string(),
         context: git_hooks::describe_head(&here, event),
+        trigger: None,
+        link: None,
     };
     let _ = queue::push(&dir, &request);
 }

@@ -56,7 +56,8 @@ fn clip(text: &str, max: usize) -> String {
 /// One line saying what a Claude tool call was about: the command, the file,
 /// the pattern, the URL.
 fn describe_input(input: &serde_json::Value) -> String {
-    for key in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"] {
+    // "agent" and "key": Termo's own tools for working with other agents.
+    for key in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt", "agent", "key"] {
         if let Some(value) = input.get(key).and_then(|value| value.as_str()) {
             return clip(value, MAX_DETAIL);
         }

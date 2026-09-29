@@ -53,6 +53,27 @@ pub enum RunTrigger {
     Watch,
     Git,
     Webhook,
+    /// Another agent it follows finished (`triggers.after`).
+    Chain,
+    /// Another agent asked it something and waits for the answer.
+    Agent,
+    /// Another agent left it a message.
+    Message,
+}
+
+/// Where a run sits in a conversation between agents: the run that set it
+/// off and the agents above it. A run with no link starts its own
+/// conversation, named after its own id.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RunLink {
+    pub conversation_id: String,
+    pub parent_run_id: String,
+    pub parent_agent_id: String,
+    /// The agents from the conversation's first down to the parent.
+    pub path: Vec<String>,
+    /// Part of a rehearsal (see projects::rehearsal_spec).
+    pub rehearsal: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -72,6 +93,19 @@ pub struct RunRecord {
     #[serde(default)]
     pub activity: String,
     pub cost_usd: Option<f64>,
+    /// Set when another agent's run started this one.
+    #[serde(default)]
+    pub link: Option<RunLink>,
+    /// A rehearsal: it could only look.
+    #[serde(default)]
+    pub rehearsal: bool,
+}
+
+impl RunRecord {
+    /// The conversation it belongs to: its parent's, or its own.
+    pub fn conversation_id(&self) -> &str {
+        self.link.as_ref().map_or(&self.id, |link| &link.conversation_id)
+    }
 }
 
 pub fn root(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
@@ -160,6 +194,26 @@ pub fn list_runs_in(root: &Path, agent_id: &str) -> Vec<RunRecord> {
     runs
 }
 
+pub fn get_run_in(root: &Path, agent_id: &str, run_id: &str) -> Option<RunRecord> {
+    if !is_valid_id(run_id) {
+        return None;
+    }
+    let dir = runs_dir(root, agent_id).ok()?;
+    serde_json::from_str(&fs::read_to_string(dir.join(format!("{run_id}.json"))).ok()?).ok()
+}
+
+/// Every run of a conversation between agents, across all of them, oldest
+/// first.
+pub fn conversation_in(root: &Path, conversation_id: &str) -> Vec<RunRecord> {
+    let mut runs: Vec<RunRecord> = list_in(root)
+        .iter()
+        .flat_map(|spec| list_runs_in(root, &spec.id))
+        .filter(|run| run.conversation_id() == conversation_id)
+        .collect();
+    runs.sort_by_key(|run| run.started_at);
+    runs
+}
+
 /// Drops the history past the newest `KEEP_RUNS`.
 pub fn prune_runs_in(root: &Path, agent_id: &str) {
     let Ok(dir) = runs_dir(root, agent_id) else {
@@ -226,6 +280,8 @@ mod tests {
             summary: String::new(),
             activity: String::new(),
             cost_usd: None,
+            link: None,
+            rehearsal: false,
         }
     }
 
@@ -278,6 +334,28 @@ mod tests {
         let runs = list_runs_in(&root, "a");
         assert_eq!(runs.len(), KEEP_RUNS);
         assert_eq!(runs[0].started_at, KEEP_RUNS as i64 + 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_conversation_gathers_runs_across_agents() {
+        let root = temp_root("conversation");
+        save_in(&root, agent("a", "A")).unwrap();
+        save_in(&root, agent("b", "B")).unwrap();
+        save_run_in(&root, &run("a", "r1", 1)).unwrap();
+        let mut child = run("b", "r2", 2);
+        child.link = Some(RunLink {
+            conversation_id: "r1".into(),
+            parent_run_id: "r1".into(),
+            parent_agent_id: "a".into(),
+            path: vec!["a".into()],
+            rehearsal: false,
+        });
+        save_run_in(&root, &child).unwrap();
+        save_run_in(&root, &run("b", "other", 3)).unwrap();
+        let ids: Vec<String> = conversation_in(&root, "r1").into_iter().map(|run| run.id).collect();
+        assert_eq!(ids, ["r1", "r2"]);
+        assert_eq!(get_run_in(&root, "b", "r2").unwrap().link.unwrap().parent_agent_id, "a");
         let _ = fs::remove_dir_all(root);
     }
 

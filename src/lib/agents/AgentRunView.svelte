@@ -1,11 +1,19 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { agentRunLog, agentRuns, onAgentRunEvent, type RunEvent, type RunRecord } from "$lib/core/agents-client";
+  import {
+    agentConversation,
+    agentRunLog,
+    agentRuns,
+    conversationOf,
+    onAgentRunEvent,
+    type RunEvent,
+    type RunRecord,
+  } from "$lib/core/agents-client";
   import { t } from "$lib/i18n/i18n.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { agentsStore } from "./agents-store.svelte";
-  import { ago, formatDuration, withoutEchoes } from "./agent-spec";
+  import { TRIGGER_KEYS, ago, conversationTree, formatDuration, withoutEchoes } from "./agent-spec";
   import { renderMarkdownLite } from "./markdown-lite";
   import type { MessageKey } from "$lib/i18n/translate";
 
@@ -33,14 +41,39 @@
     timedOut: "agents.run.status.timedOut",
   };
 
-  const TRIGGER_KEYS: Record<RunRecord["trigger"], MessageKey> = {
-    manual: "agents.run.trigger.manual",
-    test: "agents.run.trigger.test",
-    schedule: "agents.run.trigger.schedule",
-    watch: "agents.run.trigger.watch",
-    git: "agents.run.trigger.git",
-    webhook: "agents.run.trigger.webhook",
-  };
+  const agentNamed = (id: string) => agentsStore.agents.find((candidate) => candidate.id === id);
+
+  /** The other runs of the conversation between agents this run is part of. */
+  let conversation = $state<RunRecord[]>([]);
+  const conversationId = $derived(run ? conversationOf(run) : null);
+  // Reloaded as any agent's run starts or ends: the conversation's runs
+  // belong to several agents.
+  const liveSignature = $derived(
+    Object.values(agentsStore.lastRun)
+      .map((candidate) => `${candidate.id}:${candidate.status}`)
+      .join(),
+  );
+  $effect(() => {
+    const id = conversationId;
+    void liveSignature;
+    if (!id) {
+      conversation = [];
+      return;
+    }
+    let cancelled = false;
+    void agentConversation(id)
+      .then((runs) => {
+        if (!cancelled) conversation = runs;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  function showRun(other: RunRecord) {
+    workspaceStore.openAgentRun(other.agentId, other.id, agentNamed(other.agentId)?.name ?? "");
+  }
 
   function statusColor(status: RunRecord["status"]): string {
     const c = themeStore.current.colors;
@@ -134,6 +167,25 @@
     {:else}
       <p class="muted">{t("agents.run.noRuns")}</p>
     {/each}
+    {#if conversation.length > 1}
+      <div class="history-title conversation-title">{t("agents.run.conversation")}</div>
+      {#each conversationTree(conversation) as { run: item, depth } (item.id)}
+        {@const other = agentNamed(item.agentId)}
+        <button
+          class="history-row"
+          class:selected={item.id === runId}
+          style="padding-left:{10 + depth * 12}px"
+          title={t("agents.run.openRun")}
+          onclick={() => showRun(item)}
+        >
+          <span class="dot" style="background:{statusColor(item.status)}"></span>
+          <span class="history-text">
+            <span>{other?.icon ?? "🤖"} {other?.name ?? t("agents.run.deleted")}</span>
+            <span class="history-sub">{t(TRIGGER_KEYS[item.trigger])}</span>
+          </span>
+        </button>
+      {/each}
+    {/if}
   </aside>
 
   <section class="run-main">
@@ -146,7 +198,20 @@
             <span class="dot" style="background:{statusColor(run.status)}"></span>
             {t(STATUS_KEYS[run.status])} · {time(run.startedAt)} · {formatDuration(elapsed)}
             {#if run.costUsd != null}· US$ {run.costUsd.toFixed(2)}{/if}
+            {#if run.rehearsal}<span class="rehearsal-badge">{t("agents.run.rehearsal")}</span>{/if}
           </span>
+          {#if run.link}
+            {@const link = run.link}
+            <button
+              class="requested-by"
+              onclick={() =>
+                workspaceStore.openAgentRun(link.parentAgentId, link.parentRunId, agentNamed(link.parentAgentId)?.name ?? "")}
+            >
+              ↳ {t("agents.run.requestedBy", {
+                agent: agentNamed(link.parentAgentId)?.name ?? t("agents.run.deleted"),
+              })}
+            </button>
+          {/if}
         {/if}
       </div>
       {#if run?.status === "running"}
@@ -219,6 +284,32 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     opacity: 0.55;
+  }
+
+  .conversation-title {
+    margin-top: 14px;
+  }
+
+  .rehearsal-badge {
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 10px;
+  }
+
+  .requested-by {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--pane-active-border, #3a6df0);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .requested-by:hover {
+    text-decoration: underline;
   }
 
   .history-row {

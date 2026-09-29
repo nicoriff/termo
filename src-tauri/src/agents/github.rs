@@ -242,8 +242,12 @@ pub fn preview(spec: &AgentSpec) -> Result<GithubPreview, String> {
         secrets,
         approximated,
         // Nothing on GitHub can watch a folder here, see this repo's local
-        // hooks or reach the local webhook.
-        drops_watch: spec.triggers.watch.is_some() || spec.triggers.git.is_some() || spec.triggers.webhook.is_some(),
+        // hooks, reach the local webhook or the agents on this computer.
+        drops_watch: spec.triggers.watch.is_some()
+            || spec.triggers.git.is_some()
+            || spec.triggers.webhook.is_some()
+            || spec.triggers.after.is_some()
+            || spec.collaboration.is_on(),
     })
 }
 

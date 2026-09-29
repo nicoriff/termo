@@ -428,6 +428,10 @@
           <svg class="tile-tab-file" viewBox="0 0 12 14" aria-hidden="true">
             <path d="M1.5 1.5h6l3 3v8h-9z M7.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.projectView}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M1.5 3.5h4l1.5 1.5h5.5v7h-11z" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
         {:else if !session.agentRun}
           <span class="tile-tab-kind"><ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} /></span>
         {:else if session.agentRun}
@@ -439,7 +443,7 @@
         <span
           class="tile-tab-title"
           title={session.filePath ??
-            (session.agentRun
+            (session.agentRun || session.projectView
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >

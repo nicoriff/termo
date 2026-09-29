@@ -17,6 +17,7 @@
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
+  import ProjectDialog from "$lib/agents/ProjectDialog.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { startAgentRunAttention } from "$lib/agents/agent-attention";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
@@ -231,6 +232,9 @@
     {/if}
     {#if uiState.agentWizard}
       <AgentWizard />
+    {/if}
+    {#if uiState.projectDialog}
+      <ProjectDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

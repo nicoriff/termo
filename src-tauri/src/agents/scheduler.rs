@@ -104,12 +104,19 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
 
             reconcile_watchers(&agents, &mut watchers, &changed);
 
-            // Git hooks' requests; a busy agent's wait for its run to end.
-            let queue_dir = root.parent().map(|data| data.join("agent-triggers")).unwrap_or_default();
-            for (id, contexts) in queue::take(&queue_dir, |id| runner.is_running(id)) {
+            // Git hooks' requests, and other agents' (a finished run's
+            // followers, messages); a busy agent's wait for its run to end.
+            for (id, requests) in queue::take(&queue::dir_for(&root), |id| runner.is_running(id)) {
                 let Some(spec) = agents.iter().find(|spec| spec.id == id) else { continue };
-                if spec.enabled && spec.triggers.git.is_some() {
-                    let _ = runner.start(&app, spec, RunTrigger::Git, Some(&contexts.join("\n")));
+                let (trigger, context, link) = queue::merge(&requests);
+                let still_wanted = match trigger {
+                    RunTrigger::Git => spec.triggers.git.is_some(),
+                    RunTrigger::Chain => spec.triggers.after.is_some(),
+                    RunTrigger::Message => true,
+                    _ => false,
+                };
+                if spec.enabled && still_wanted {
+                    let _ = runner.start_linked(&app, spec, trigger, Some(&context), link, false);
                 }
             }
 

@@ -13,6 +13,7 @@
   import Terminal from "$lib/terminal/Terminal.svelte";
   import FileEditor from "$lib/editor/FileEditor.svelte";
   import AgentRunView from "$lib/agents/AgentRunView.svelte";
+  import ProjectView from "$lib/agents/ProjectView.svelte";
   import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
@@ -91,6 +92,8 @@
           />
         {:else if loc.session.agentRun}
           <AgentRunView agentId={loc.session.agentRun.agentId} runId={loc.session.agentRun.runId} />
+        {:else if loc.session.projectView}
+          <ProjectView projectId={loc.session.projectView.projectId} />
         {:else}
           <Terminal
             sessionId={loc.session.id}

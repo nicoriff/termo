@@ -82,6 +82,14 @@ pub enum Msg<'a> {
     AgentImportTooNew,
     /// (file, OS error)
     AgentFileFailed(&'a str, &'a str),
+    /// runs a day
+    ProjectDailyLimit(u32),
+    ProjectNotFound,
+    ProjectNoEntry,
+    ProjectDraftFailed(&'a str),
+    ProjectImproveFailed(&'a str),
+    ProjectImportNotProject,
+    ProjectVersionMissing,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -236,6 +244,27 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (AgentFileFailed(file, error), Es) => format!("No se pudo usar el archivo \"{file}\": {error}"),
         (AgentFileFailed(file, error), En) => format!("Couldn't use the file \"{file}\": {error}"),
 
+        (ProjectDailyLimit(runs), Es) => format!("El proyecto ya hizo sus {runs} corridas de hoy"),
+        (ProjectDailyLimit(runs), En) => format!("The project already made its {runs} runs for today"),
+
+        (ProjectNotFound, Es) => "El proyecto ya no existe".into(),
+        (ProjectNotFound, En) => "The project no longer exists".into(),
+
+        (ProjectNoEntry, Es) => "Elegí el agente de entrada del proyecto en su configuración".into(),
+        (ProjectNoEntry, En) => "Choose the project's entry agent in its settings".into(),
+
+        (ProjectDraftFailed(error), Es) => format!("No se pudo armar el proyecto con IA: {error}"),
+        (ProjectDraftFailed(error), En) => format!("Couldn't build the project with AI: {error}"),
+
+        (ProjectImproveFailed(error), Es) => format!("No se pudieron pensar mejoras: {error}"),
+        (ProjectImproveFailed(error), En) => format!("Couldn't come up with improvements: {error}"),
+
+        (ProjectImportNotProject, Es) => "El archivo no es un proyecto exportado desde Termo".into(),
+        (ProjectImportNotProject, En) => "The file isn't a project exported from Termo".into(),
+
+        (ProjectVersionMissing, Es) => "Esa versión del proyecto ya no está".into(),
+        (ProjectVersionMissing, En) => "That version of the project is gone".into(),
+
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
     }
 }
@@ -291,6 +320,13 @@ mod tests {
             Msg::AgentHookFailed("access denied"),
             Msg::AgentImportTooNew,
             Msg::AgentFileFailed("a.json", "access denied"),
+            Msg::ProjectDailyLimit(20),
+            Msg::ProjectNotFound,
+            Msg::ProjectNoEntry,
+            Msg::ProjectDraftFailed("timeout"),
+            Msg::ProjectImproveFailed("timeout"),
+            Msg::ProjectImportNotProject,
+            Msg::ProjectVersionMissing,
         ]
     }
 

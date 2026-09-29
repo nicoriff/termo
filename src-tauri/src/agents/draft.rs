@@ -135,7 +135,13 @@ The user's description:
 }
 
 /// Reads Claude's `--output-format json` answer.
+#[cfg(test)]
 pub fn parse_answer(stdout: &str) -> Result<Draft, String> {
+    serde_json::from_value(parse_structured(stdout)?).map_err(|err| err.to_string())
+}
+
+/// The structured part of Claude's `--output-format json` answer.
+pub fn parse_structured(stdout: &str) -> Result<serde_json::Value, String> {
     let value: serde_json::Value = serde_json::from_str(stdout.trim()).map_err(|err| err.to_string())?;
     if value.get("is_error").and_then(|flag| flag.as_bool()) == Some(true) {
         let detail = value.get("result").and_then(|text| text.as_str()).unwrap_or("error");
@@ -152,12 +158,20 @@ pub fn parse_answer(stdout: &str) -> Result<Draft, String> {
                 .and_then(|text| serde_json::from_str(text).ok())
         })
         .ok_or_else(|| "no structured output".to_string())?;
-    serde_json::from_value(structured).map_err(|err| err.to_string())
+    Ok(structured)
 }
 
 pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft, String> {
+    let answer = ask_claude(scratch, prompt(description, work_dir, i18n::current()), &schema(), TIMEOUT)
+        .map_err(|err| tr(Msg::AgentDraftFailed(&err)))?;
+    serde_json::from_value(answer).map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))
+}
+
+/// One structured answer from Claude Code: `text` as the prompt, the answer
+/// shaped by `schema`. Errors come untranslated, for the caller to word.
+pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
     let bin = agent_cli::require(AgentTarget::Claude, None)?;
-    std::fs::create_dir_all(scratch).map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))?;
+    std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
     let mut cmd = Command::new(bin);
     // The prompt (the user's description, several lines) goes through stdin:
     // see spec::Invocation for why no free text rides on the command line.
@@ -166,7 +180,7 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
         "--output-format",
         "json",
         "--json-schema",
-        &schema().to_string(),
+        &schema.to_string(),
         // A single answer: no tools to wait on and no servers to start.
         "--permission-mode",
         "dontAsk",
@@ -187,9 +201,8 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = cmd.spawn().map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))?;
+    let mut child = cmd.spawn().map_err(|err| err.to_string())?;
     if let Some(mut stdin) = child.stdin.take() {
-        let text = prompt(description, work_dir, i18n::current());
         std::thread::spawn(move || {
             use std::io::Write;
             let _ = stdin.write_all(text.as_bytes());
@@ -201,7 +214,7 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
         let _ = stdout.read_to_string(&mut text);
         text
     });
-    let deadline = Instant::now() + TIMEOUT;
+    let deadline = Instant::now() + timeout;
     loop {
         if child.try_wait().ok().flatten().is_some() {
             break;
@@ -209,12 +222,11 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(tr(Msg::AgentDraftFailed("timeout")));
+            return Err("timeout".into());
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    let text = reader.join().unwrap_or_default();
-    parse_answer(&text).map_err(|err| tr(Msg::AgentDraftFailed(&err)))
+    parse_structured(&reader.join().unwrap_or_default())
 }
 
 #[cfg(test)]

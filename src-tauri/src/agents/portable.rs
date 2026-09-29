@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::{tr, Msg};
 
+use super::projects::Project;
 use super::secrets;
 use super::spec::{AgentSpec, Deploy};
 
@@ -79,10 +80,22 @@ pub struct ImportReport {
     pub review: Vec<Review>,
 }
 
-/// The file's text for these agents: their definitions without anything
-/// that only makes sense on this machine (ids, dates, deploy records).
-pub fn export(specs: &[AgentSpec], now: i64) -> String {
-    let agents = specs
+/// How an agent refers to another in a file: `#<position in the file>`, as
+/// ids don't travel. References to agents left out of the file are dropped.
+fn to_file_ref(id: &str, specs: &[AgentSpec]) -> Option<String> {
+    specs.iter().position(|spec| spec.id == id).map(|index| format!("#{index}"))
+}
+
+/// The other way, once the file's agents have their new ids.
+fn from_file_ref(reference: &str, ids: &[String]) -> Option<String> {
+    let index: usize = reference.strip_prefix('#')?.parse().ok()?;
+    ids.get(index).cloned()
+}
+
+/// The agents as they go in a file: their definitions without anything that
+/// only makes sense on this machine (ids, dates, deploy records, projects).
+fn to_file(specs: &[AgentSpec]) -> Vec<AgentSpec> {
+    specs
         .iter()
         .map(|spec| {
             let mut spec = spec.clone();
@@ -90,6 +103,16 @@ pub fn export(specs: &[AgentSpec], now: i64) -> String {
             if let Some(hook) = spec.triggers.webhook.as_mut() {
                 hook.token = String::new();
             }
+            spec.collaboration.contacts = spec
+                .collaboration
+                .contacts
+                .iter()
+                .filter_map(|id| to_file_ref(id, specs))
+                .collect();
+            spec.triggers.after = spec.triggers.after.take().and_then(|mut after| {
+                after.agent_id = to_file_ref(&after.agent_id, specs)?;
+                Some(after)
+            });
             spec
         })
         .map(|spec| AgentSpec {
@@ -97,16 +120,34 @@ pub fn export(specs: &[AgentSpec], now: i64) -> String {
             created_at: 0,
             updated_at: 0,
             deploy: Deploy::default(),
+            project_id: String::new(),
             ..spec.clone()
         })
-        .collect();
+        .collect()
+}
+
+/// The file's text for these agents.
+pub fn export(specs: &[AgentSpec], now: i64) -> String {
     let file = AgentFile {
         format: FORMAT.into(),
         version: VERSION,
         exported_at: now,
-        agents,
+        agents: to_file(specs),
     };
     serde_json::to_string_pretty(&file).unwrap_or_default()
+}
+
+/// A name not among `taken` (lower-cased), which it joins.
+fn free_name(wanted: &str, fallback: &str, taken: &mut Vec<String>) -> String {
+    let base = if wanted.trim().is_empty() { fallback.to_string() } else { wanted.trim().to_string() };
+    let mut name = base.clone();
+    let mut n = 2;
+    while taken.contains(&name.to_lowercase()) {
+        name = format!("{base} ({n})");
+        n += 1;
+    }
+    taken.push(name.to_lowercase());
+    name
 }
 
 /// Reads a file into new agents, ready to save: fresh ids, names that don't
@@ -119,6 +160,11 @@ pub fn import(text: &str, existing: &[String], new_id: impl Fn() -> String) -> R
     if file.version > VERSION {
         return Err(tr(Msg::AgentImportTooNew));
     }
+    Ok(from_file(file.agents, existing, new_id))
+}
+
+/// A file's agents made into new ones here.
+fn from_file(file_agents: Vec<AgentSpec>, existing: &[String], new_id: impl Fn() -> String) -> (Vec<AgentSpec>, ImportReport) {
     let mut taken: Vec<String> = existing.iter().map(|name| name.to_lowercase()).collect();
     let mut report = ImportReport {
         imported: Vec::new(),
@@ -127,20 +173,13 @@ pub fn import(text: &str, existing: &[String], new_id: impl Fn() -> String) -> R
         review: Vec::new(),
     };
     let mut agents = Vec::new();
-    for mut spec in file.agents {
+    for mut spec in file_agents {
         spec.id = new_id();
         spec.created_at = 0;
         spec.updated_at = 0;
         spec.deploy = Deploy::default();
-        let base = if spec.name.trim().is_empty() { "Agente".to_string() } else { spec.name.trim().to_string() };
-        let mut name = base.clone();
-        let mut n = 2;
-        while taken.contains(&name.to_lowercase()) {
-            name = format!("{base} ({n})");
-            n += 1;
-        }
-        taken.push(name.to_lowercase());
-        spec.name = name;
+        spec.project_id = String::new();
+        spec.name = free_name(&spec.name, "Agente", &mut taken);
         if !spec.work_dir.trim().is_empty() && !Path::new(spec.work_dir.trim()).is_dir() {
             spec.work_dir = String::new();
             report.moved_to_own_folder.push(spec.name.clone());
@@ -167,7 +206,86 @@ pub fn import(text: &str, existing: &[String], new_id: impl Fn() -> String) -> R
         report.imported.push(spec.name.clone());
         agents.push(spec);
     }
-    Ok((agents, report))
+    // References between the file's agents, now that they have ids.
+    let ids: Vec<String> = agents.iter().map(|spec| spec.id.clone()).collect();
+    for spec in &mut agents {
+        spec.collaboration.contacts = spec
+            .collaboration
+            .contacts
+            .iter()
+            .filter_map(|reference| from_file_ref(reference, &ids))
+            .collect();
+        spec.triggers.after = spec.triggers.after.take().and_then(|mut after| {
+            after.agent_id = from_file_ref(&after.agent_id, &ids)?;
+            Some(after)
+        });
+    }
+    (agents, report)
+}
+
+const PROJECT_FORMAT: &str = "termo-project";
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ProjectFile {
+    format: String,
+    version: u32,
+    /// Unix seconds.
+    exported_at: i64,
+    project: Project,
+    agents: Vec<AgentSpec>,
+}
+
+/// A whole project as a file: itself and its agents, with the references
+/// between them (its entry agent, contacts, chains) kept.
+pub fn export_project(project: &Project, specs: &[AgentSpec], now: i64) -> String {
+    let project = Project {
+        id: String::new(),
+        entry_agent_id: to_file_ref(&project.entry_agent_id, specs).unwrap_or_default(),
+        created_at: 0,
+        updated_at: 0,
+        ..project.clone()
+    };
+    let file = ProjectFile {
+        format: PROJECT_FORMAT.into(),
+        version: VERSION,
+        exported_at: now,
+        project,
+        agents: to_file(specs),
+    };
+    serde_json::to_string_pretty(&file).unwrap_or_default()
+}
+
+/// Reads a project file into a new project with new agents, ready to save.
+pub fn import_project(
+    text: &str,
+    existing_agents: &[String],
+    existing_projects: &[String],
+    new_id: impl Fn() -> String,
+) -> Result<(Project, Vec<AgentSpec>, ImportReport), String> {
+    let file: ProjectFile = serde_json::from_str(text).map_err(|_| tr(Msg::ProjectImportNotProject))?;
+    if file.format != PROJECT_FORMAT {
+        return Err(tr(Msg::ProjectImportNotProject));
+    }
+    if file.version > VERSION {
+        return Err(tr(Msg::AgentImportTooNew));
+    }
+    let (mut agents, report) = from_file(file.agents, existing_agents, &new_id);
+    let ids: Vec<String> = agents.iter().map(|spec| spec.id.clone()).collect();
+    let mut taken: Vec<String> = existing_projects.iter().map(|name| name.to_lowercase()).collect();
+    let mut project = file.project;
+    project.id = new_id();
+    project.name = free_name(&project.name, "Proyecto", &mut taken);
+    project.created_at = 0;
+    project.updated_at = 0;
+    project.entry_agent_id = from_file_ref(&project.entry_agent_id, &ids).unwrap_or_default();
+    if !project.work_dir.trim().is_empty() && !Path::new(project.work_dir.trim()).is_dir() {
+        project.work_dir = String::new();
+    }
+    for spec in &mut agents {
+        spec.project_id = project.id.clone();
+    }
+    Ok((project, agents, report))
 }
 
 /// Which of the agent's secrets have no value in this machine's keychain.
@@ -254,6 +372,53 @@ mod tests {
         assert_eq!(report.review[0].urls, ["https://y.example/mcp"]);
         let (_, plain) = import(&export(&[agent("Solo mira")], 0), &[], counter()).unwrap();
         assert!(plain.review.is_empty());
+    }
+
+    #[test]
+    fn references_between_agents_travel_only_within_the_file() {
+        use crate::agents::spec::{AfterAgent, AfterOutcome};
+        let mut first = agent("Revisor");
+        first.id = "r".into();
+        first.collaboration.contacts = vec!["t".into(), "elsewhere".into()];
+        let mut second = agent("Tester");
+        second.id = "t".into();
+        second.triggers.after = Some(AfterAgent { agent_id: "r".into(), on: AfterOutcome::Success });
+        let mut lonely = agent("Solo");
+        lonely.triggers.after = Some(AfterAgent { agent_id: "elsewhere".into(), on: AfterOutcome::Any });
+        let text = export(&[first, second, lonely], 0);
+        assert!(!text.contains("elsewhere"));
+        let (agents, _) = import(&text, &[], counter()).unwrap();
+        assert_eq!(agents[0].collaboration.contacts, ["new-2"]);
+        assert_eq!(agents[1].triggers.after.as_ref().unwrap().agent_id, "new-1");
+        assert!(agents[2].triggers.after.is_none());
+    }
+
+    #[test]
+    fn a_project_travels_with_its_agents_and_entry() {
+        let mut first = agent("Revisor");
+        first.id = "r".into();
+        first.project_id = "p".into();
+        let mut second = agent("Tester");
+        second.id = "t".into();
+        second.project_id = "p".into();
+        let project = Project {
+            id: "p".into(),
+            name: "Pipeline".into(),
+            isolated: true,
+            entry_agent_id: "t".into(),
+            work_dir: "Z:\\no\\existe".into(),
+            ..Project::default()
+        };
+        let text = export_project(&project, &[first, second], 0);
+        assert!(!text.contains("\"p\""));
+        let (imported, agents, report) = import_project(&text, &[], &["pipeline".into()], counter()).unwrap();
+        assert_eq!(imported.id, "new-3");
+        assert_eq!(imported.name, "Pipeline (2)");
+        assert!(imported.isolated && imported.work_dir.is_empty());
+        assert_eq!(imported.entry_agent_id, "new-2");
+        assert!(agents.iter().all(|spec| spec.project_id == "new-3" && !spec.enabled));
+        assert_eq!(report.imported, ["Revisor", "Tester"]);
+        assert!(import_project(&export(&[agent("x")], 0), &[], &[], counter()).is_err());
     }
 
     #[test]
