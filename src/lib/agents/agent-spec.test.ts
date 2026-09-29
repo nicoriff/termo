@@ -9,6 +9,7 @@ import {
   formatDuration,
   newAgentSpec,
   nextRunLabel,
+  outsideRisk,
   specProblems,
   secretsOf,
   stepProblems,
@@ -193,5 +194,19 @@ describe("time formatting", () => {
   it("formats durations", () => {
     expect(formatDuration(4_200)).toBe("4 s");
     expect(formatDuration(65_000)).toBe("1 min 05 s");
+  });
+
+  it("warns when text from outside meets a way to act on it", () => {
+    const spec = newAgentSpec("a");
+    // Nothing from outside: nothing to warn about, whatever it can do.
+    expect(outsideRisk({ ...spec, autonomy: "run" })).toBeNull();
+    const hooked = { ...spec, triggers: { ...spec.triggers, webhook: { token: "t" } } };
+    // Only looking, with no way out: its answer stays here.
+    expect(outsideRisk(hooked)).toBeNull();
+    expect(outsideRisk({ ...hooked, autonomy: "run" })).toBe("run");
+    const connector = { name: "x", config: { url: "https://x.example" } };
+    expect(outsideRisk({ ...hooked, tools: { web: false, mcp: [connector] } })).toBe("leak");
+    // The web is both a way in and a way out.
+    expect(outsideRisk({ ...spec, tools: { web: true, mcp: [] } })).toBe("leak");
   });
 });

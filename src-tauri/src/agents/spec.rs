@@ -9,6 +9,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{tr, Msg};
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum Engine {
@@ -249,9 +251,149 @@ pub fn is_valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// A connector's name. It becomes `mcp__<name>` in Claude Code's
+/// comma-separated `--allowedTools` and a key in Codex's `-c` overrides, so a
+/// comma, a dot or an `=` in it would reach past the connector (`x,Bash`
+/// would allow Bash): held to what tool names allow.
+pub fn is_valid_server_name(name: &str) -> bool {
+    is_valid_id(name)
+}
+
+/// A name that works as an environment variable.
+pub fn is_env_name(name: &str) -> bool {
+    !name.is_empty() && !name.starts_with(|c: char| c.is_ascii_digit()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+pub fn is_header_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Variables that change how a program starts or where it sends its
+/// traffic, rather than what an integration gets. An agent's secrets go into
+/// the CLI's own environment (and Codex's forwarded ones too), so these are
+/// never taken from an agent's definition, where an imported file could put
+/// `NODE_OPTIONS` or `PATH`.
+pub fn is_reserved_env(name: &str) -> bool {
+    const EXACT: &[&str] = &[
+        "PATH", "PATHEXT", "COMSPEC", "SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+        "TEMP", "TMP", "TMPDIR", "SHELL", "BASH_ENV", "ENV", "ZDOTDIR", "NODE_OPTIONS", "NODE_PATH",
+        "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED", "ELECTRON_RUN_AS_NODE", "PERL5OPT", "PERL5LIB",
+        "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "HTTP_PROXY",
+        "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "ANTHROPIC_BASE_URL",
+        "OPENAI_BASE_URL", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "MCP_TOOL_TIMEOUT", TEAM_TOKEN_VAR,
+    ];
+    const PREFIXES: &[&str] = &["LD_", "DYLD_", "PYTHON", "NPM_CONFIG_", "GIT_", "CLAUDE_CODE_", "TERMO_MCP_"];
+    let upper = name.to_ascii_uppercase();
+    EXACT.contains(&upper.as_str()) || PREFIXES.iter().any(|prefix| upper.starts_with(prefix))
+}
+
+/// A model as the CLIs name it (`opus`, `claude-opus-5-5[1m]`,
+/// `gpt-5-codex`). It goes on the command line after `--model`, so nothing
+/// that could read as an option of its own. Empty: the CLI's default.
+pub fn is_valid_model(model: &str) -> bool {
+    let model = model.trim();
+    model.is_empty()
+        || (model.len() <= 100
+            && model.starts_with(|c: char| c.is_ascii_alphanumeric())
+            && model
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '/' | '[' | ']' | '@')))
+}
+
+/// Whether a config value takes one of the agent's secrets (`${NAME}`).
+fn refers_to_secret(value: &serde_json::Value) -> bool {
+    value.as_str().is_some_and(|text| text.contains("${"))
+}
+
+/// What an agent's definition can't hold, wherever it comes from — the
+/// wizard, a file someone shared, a restored version: checked before it's
+/// saved or imported. Runs skip whatever still slips by (see the invocations).
+pub fn check(spec: &AgentSpec) -> Result<(), String> {
+    for server in &spec.tools.mcp {
+        if !is_valid_server_name(&server.name) {
+            return Err(tr(Msg::AgentBadConnectorName(&server.name)));
+        }
+        if let Some(vars) = server.config.get("env").and_then(|value| value.as_object()) {
+            for (key, value) in vars {
+                if !is_env_name(key) || (refers_to_secret(value) && is_reserved_env(key)) {
+                    return Err(tr(Msg::AgentBadVariable(key)));
+                }
+            }
+        }
+        if let Some(headers) = server.config.get("headers").and_then(|value| value.as_object()) {
+            if let Some(header) = headers.keys().find(|header| !is_header_name(header)) {
+                return Err(tr(Msg::AgentConnectorBadName(header)));
+            }
+        }
+    }
+    if let Some(name) = spec.secrets.iter().find(|name| !is_env_name(name) || is_reserved_env(name)) {
+        return Err(tr(Msg::AgentBadVariable(name)));
+    }
+    if !is_valid_model(&spec.model) {
+        return Err(tr(Msg::AgentBadModel(spec.model.trim())));
+    }
+    Ok(())
+}
+
 /// git commands that only look: "only look" agents (reviews, summaries)
-/// need them, and none of them changes the repository.
-const READ_ONLY_GIT: &[&str] = &["log", "diff", "status", "show", "blame", "branch", "rev-parse", "ls-files"];
+/// need them, and none of them changes the repository — as long as they
+/// don't carry one of `GIT_DENIED_OPTIONS`.
+const READ_ONLY_GIT: &[&str] = &["log", "diff", "status", "show", "blame", "rev-parse", "ls-files"];
+
+/// `git branch` only in the forms that list: the rest create, move or delete
+/// branches (`-D`, `-f`, `-m`). `--list` can't be combined with those, so
+/// anything after it only filters.
+const READ_ONLY_GIT_BRANCH: &[&str] = &[
+    "git branch",
+    "git branch --show-current",
+    "git branch -a",
+    "git branch -r",
+    "git branch -v",
+    "git branch -vv",
+    "git branch --list *",
+];
+
+/// Options of those commands that reach past looking: writing a file
+/// (`--output`), reading one outside the repository (`--no-index`,
+/// `--contents`), or running a program the repository's config names
+/// (`--ext-diff`, `--textconv`). Denied wherever in the command they appear.
+const GIT_DENIED_OPTIONS: &[&str] = &["--output", "--no-index", "--contents", "--ext-diff", "--textconv"];
+
+/// Git config for every run, through the environment, above any config
+/// file: a folder that came from elsewhere can name a program in
+/// `core.fsmonitor`, which even `git status` would start. Both ways git has:
+/// `GIT_CONFIG_PARAMETERS` (what `-c` uses, in every version with an
+/// fsmonitor) and `GIT_CONFIG_COUNT` (2.31 on).
+pub const GIT_SAFETY_ENV: &[(&str, &str)] = &[
+    ("GIT_CONFIG_PARAMETERS", "'core.fsmonitor=false'"),
+    ("GIT_CONFIG_COUNT", "1"),
+    ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
+    ("GIT_CONFIG_VALUE_0", "false"),
+];
+
+/// What `--allowedTools` can't say, passed as `--settings`: rules with spaces
+/// in them, rules that deny, and keeping every read — the file tools, `cat`,
+/// `git` — inside the working folder, so text from outside (a webhook, a
+/// commit) can't have the agent read `~/.ssh` and send it on.
+pub fn claude_settings_json(spec: &AgentSpec) -> String {
+    let mut allow = Vec::new();
+    let mut deny = Vec::new();
+    // An agent that runs commands has the whole shell anyway.
+    if spec.autonomy != Autonomy::Run {
+        for tool in ["Bash", "PowerShell"] {
+            allow.extend(READ_ONLY_GIT_BRANCH.iter().map(|command| format!("{tool}({command})")));
+            deny.extend(GIT_DENIED_OPTIONS.iter().map(|option| format!("{tool}(git *{option}*)")));
+        }
+    }
+    serde_json::json!({
+        "permissions": {
+            "allow": allow,
+            "deny": deny,
+            "blockReadsOutsideWorkingDirectories": true,
+        }
+    })
+    .to_string()
+}
 
 /// Claude Code's tools for each autonomy level. Each level includes the one
 /// before it.
@@ -273,7 +415,7 @@ pub fn claude_allowed_tools(spec: &AgentSpec) -> Vec<String> {
     }
     let mut tools: Vec<String> = tools.into_iter().map(String::from).collect();
     // Every tool of each of the agent's own MCP servers.
-    tools.extend(spec.tools.mcp.iter().map(|server| format!("mcp__{}", server.name)));
+    tools.extend(usable_servers(spec).map(|server| format!("mcp__{}", server.name)));
     tools
 }
 
@@ -305,15 +447,15 @@ pub fn with_team_server(spec: &AgentSpec, url: &str) -> AgentSpec {
     spec
 }
 
+/// The agent's MCP servers a run can be given: one whose name got past
+/// `check` some other way (an agent saved before it) is left out.
+fn usable_servers(spec: &AgentSpec) -> impl Iterator<Item = &McpServer> {
+    spec.tools.mcp.iter().filter(|server| is_valid_server_name(&server.name))
+}
+
 /// `--mcp-config`'s JSON: `{"mcpServers": {name: config}}`.
 pub fn mcp_config_json(spec: &AgentSpec) -> Option<String> {
-    if spec.tools.mcp.is_empty() {
-        return None;
-    }
-    let servers: serde_json::Map<String, serde_json::Value> = spec
-        .tools
-        .mcp
-        .iter()
+    let servers: serde_json::Map<String, serde_json::Value> = usable_servers(spec)
         .map(|server| {
             let mut config = server.config.clone();
             if let Some(object) = config.as_object_mut() {
@@ -322,6 +464,9 @@ pub fn mcp_config_json(spec: &AgentSpec) -> Option<String> {
             (server.name.clone(), config)
         })
         .collect();
+    if servers.is_empty() {
+        return None;
+    }
     Some(serde_json::json!({ "mcpServers": servers }).to_string())
 }
 
@@ -391,6 +536,8 @@ fn claude_invocation(
         "dontAsk".into(),
         "--allowedTools".into(),
         claude_allowed_tools(spec).join(","),
+        "--settings".into(),
+        claude_settings_json(spec),
     ];
     if let Some(file) = system_prompt_file.filter(|_| !spec.instructions.trim().is_empty()) {
         args.push("--append-system-prompt-file".into());
@@ -403,12 +550,17 @@ fn claude_invocation(
         // nobody chose for it.
         args.push("--strict-mcp-config".into());
     }
-    if !spec.model.trim().is_empty() {
+    if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
         args.push("--model".into());
         args.push(spec.model.trim().into());
     }
-    // Claude Code fills `${NAME}` in the MCP config from its environment.
-    let mut env: Vec<(String, String)> = secrets.iter().map(|(name, value)| (name.clone(), value.clone())).collect();
+    // Claude Code fills `${NAME}` in the MCP config from its environment —
+    // its own, so nothing that changes how it starts.
+    let mut env: Vec<(String, String)> = secrets
+        .iter()
+        .filter(|(name, _)| *name == TEAM_TOKEN_VAR || (is_env_name(name) && !is_reserved_env(name)))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
     env.sort();
     Invocation {
         args,
@@ -461,7 +613,7 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
         args.push("-c".into());
         args.push(format!("mcp_servers.{server}.{key}={value}"));
     };
-    for server in &spec.tools.mcp {
+    for server in usable_servers(spec) {
         let Some(config) = server.config.as_object() else { continue };
         let name = server.name.as_str();
         for key in ["command", "url"] {
@@ -479,9 +631,15 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
         // environment, whitelisted for the server by name.
         if let Some(vars) = config.get("env").and_then(|value| value.as_object()) {
             let mut forwarded = Vec::new();
-            for (key, value) in vars {
+            // The key goes into a `-c` path, and a secret one into Codex's own
+            // environment: only plain names, and none that change how Codex
+            // starts.
+            for (key, value) in vars.iter().filter(|(key, _)| is_env_name(key)) {
                 let text = value.as_str().unwrap_or_default();
                 if has_secret(text) {
+                    if is_reserved_env(key) {
+                        continue;
+                    }
                     env.push((key.clone(), expand(text)));
                     forwarded.push(serde_json::Value::String(key.clone()));
                 } else {
@@ -495,7 +653,7 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
         // Headers: plain ones as `http_headers`; secret ones read from the
         // environment through `env_http_headers`.
         if let Some(headers) = config.get("headers").and_then(|value| value.as_object()) {
-            for (header, value) in headers {
+            for (header, value) in headers.iter().filter(|(header, _)| is_header_name(header)) {
                 let text = value.as_str().unwrap_or_default();
                 if has_secret(text) {
                     let var = format!("TERMO_MCP_{}_{}", env_safe(name), env_safe(header));
@@ -507,7 +665,7 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
             }
         }
     }
-    if !spec.model.trim().is_empty() {
+    if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
         args.push("-m".into());
         args.push(spec.model.trim().into());
     }
@@ -652,6 +810,159 @@ mod tests {
         assert!(!args.contains("k1") && !args.contains("t2"));
         assert!(run.env.contains(&("API_KEY".to_string(), "k1".to_string())));
         assert!(run.env.contains(&("TERMO_MCP_REMOTE_AUTHORIZATION".to_string(), "Bearer t2".to_string())));
+    }
+
+    /// What `check` refuses, for an agent saved before it existed: a run
+    /// leaves it out rather than let it reach past its place.
+    #[test]
+    fn a_run_leaves_out_what_would_reach_past_its_place() {
+        let bad_server = McpServer { name: "x,Bash".into(), config: serde_json::json!({ "command": "npx" }) };
+        let injected = McpServer {
+            name: "x.command=\"calc\"#".into(),
+            config: serde_json::json!({ "url": "https://x.example/mcp" }),
+        };
+        let env_server = McpServer {
+            name: "docs".into(),
+            config: serde_json::json!({
+                "command": "npx",
+                "env": { "NODE_OPTIONS": "--require=evil.js ${K}", "A.B": "1", "API_KEY": "${K}" }
+            }),
+        };
+        let secrets = HashMap::from([
+            ("K".to_string(), "v".to_string()),
+            ("PATH".to_string(), "C:\\evil".to_string()),
+            (TEAM_TOKEN_VAR.to_string(), "t".to_string()),
+        ]);
+
+        let mut claude = spec(Engine::Claude, Autonomy::Read);
+        claude.tools.mcp = vec![bad_server.clone(), injected.clone()];
+        claude.model = "--dangerously-skip-permissions".into();
+        let run = build_invocation(&claude, None, None, &secrets);
+        let tools = value_after(&run.args, "--allowedTools").unwrap();
+        assert!(!tools.split(',').any(|tool| tool == "Bash" || tool.starts_with("mcp__")));
+        assert!(value_after(&run.args, "--mcp-config").is_none());
+        assert!(value_after(&run.args, "--model").is_none());
+        let names: Vec<&str> = run.env.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["K", TEAM_TOKEN_VAR]);
+
+        let mut codex = spec(Engine::Codex, Autonomy::Read);
+        codex.tools.mcp = vec![bad_server, injected, env_server];
+        codex.model = "-c".into();
+        let run = build_invocation(&codex, None, None, &secrets);
+        let args = run.args.join(" ");
+        assert!(!args.contains("calc") && !args.contains("mcp_servers.x"));
+        assert!(!args.contains("A.B") && !args.contains("NODE_OPTIONS"));
+        assert!(args.contains("mcp_servers.docs.env_vars=[\"API_KEY\"]"));
+        assert!(value_after(&run.args, "-m").is_none());
+        let names: Vec<&str> = run.env.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["API_KEY"]);
+    }
+
+    #[test]
+    fn check_refuses_what_a_run_would_leave_out() {
+        let mut agent = spec(Engine::Claude, Autonomy::Read);
+        assert!(check(&agent).is_ok());
+        agent.tools.mcp.push(McpServer { name: "x,Bash".into(), config: serde_json::json!({}) });
+        assert!(check(&agent).is_err());
+        agent.tools.mcp[0].name = "github".into();
+        agent.tools.mcp[0].config = serde_json::json!({ "url": "https://x", "headers": { "X Bad": "1" } });
+        assert!(check(&agent).is_err());
+        // A plain value only reaches the connector; a secret one reaches the CLI too.
+        agent.tools.mcp[0].config = serde_json::json!({ "command": "uvx", "env": { "PYTHONPATH": "." } });
+        assert!(check(&agent).is_ok());
+        agent.tools.mcp[0].config = serde_json::json!({ "command": "uvx", "env": { "PYTHONPATH": "${P}" } });
+        assert!(check(&agent).is_err());
+        agent.tools.mcp.clear();
+        agent.secrets = vec!["GITHUB_TOKEN".into()];
+        assert!(check(&agent).is_ok());
+        agent.secrets = vec!["LD_PRELOAD".into()];
+        assert!(check(&agent).is_err());
+        agent.secrets.clear();
+        for model in ["opus", "claude-opus-5-5[1m]", "gpt-5-codex", " sonnet "] {
+            agent.model = model.into();
+            assert!(check(&agent).is_ok(), "{model}");
+        }
+        for model in ["-c", "--model=x", "a b", "x;y"] {
+            agent.model = model.into();
+            assert!(check(&agent).is_err(), "{model}");
+        }
+    }
+
+    fn settings_of(run: &Invocation) -> serde_json::Value {
+        serde_json::from_str(value_after(&run.args, "--settings").unwrap()).unwrap()
+    }
+
+    fn rules(settings: &serde_json::Value, kind: &str) -> Vec<String> {
+        settings["permissions"][kind]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rule| rule.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// An "only look" agent's git: listing branches but not deleting or
+    /// moving them, and none of the options that write a file, read one
+    /// outside the repository or start a program.
+    #[test]
+    fn looking_with_git_never_changes_or_reaches_past_the_repository() {
+        let run = build_invocation(&spec(Engine::Claude, Autonomy::Read), None, None, &no_secrets());
+        let allowed = value_after(&run.args, "--allowedTools").unwrap();
+        assert!(!allowed.contains("git branch"));
+        let settings = settings_of(&run);
+        let allow = rules(&settings, "allow");
+        assert!(allow.contains(&"Bash(git branch --show-current)".to_string()));
+        assert!(allow.contains(&"PowerShell(git branch --list *)".to_string()));
+        assert!(!allow.iter().any(|rule| rule.contains("-D") || rule.contains("-f") || rule.contains(":*")));
+        let deny = rules(&settings, "deny");
+        for option in ["--output", "--no-index", "--contents", "--ext-diff", "--textconv"] {
+            assert!(deny.contains(&format!("Bash(git *{option}*)")), "{option}");
+            assert!(deny.contains(&format!("PowerShell(git *{option}*)")), "{option}");
+        }
+        // The same for an agent that edits: `--output` would write outside its folder.
+        let edit = settings_of(&build_invocation(&spec(Engine::Claude, Autonomy::Edit), None, None, &no_secrets()));
+        assert_eq!(rules(&edit, "deny"), deny);
+    }
+
+    #[test]
+    fn every_claude_run_reads_only_inside_its_folder() {
+        for autonomy in [Autonomy::Read, Autonomy::Edit, Autonomy::Run] {
+            let settings = settings_of(&build_invocation(&spec(Engine::Claude, autonomy), None, None, &no_secrets()));
+            assert_eq!(settings["permissions"]["blockReadsOutsideWorkingDirectories"], true);
+        }
+        // Running commands already means the whole shell: nothing to narrow.
+        let run = settings_of(&build_invocation(&spec(Engine::Claude, Autonomy::Run), None, None, &no_secrets()));
+        assert!(rules(&run, "deny").is_empty() && rules(&run, "allow").is_empty());
+    }
+
+    #[test]
+    fn runs_never_start_a_folders_fsmonitor() {
+        let env: HashMap<&str, &str> = GIT_SAFETY_ENV.iter().copied().collect();
+        assert_eq!(env["GIT_CONFIG_COUNT"], "1");
+        assert_eq!((env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]), ("core.fsmonitor", "false"));
+        assert_eq!(env["GIT_CONFIG_PARAMETERS"], "'core.fsmonitor=false'");
+    }
+
+    /// The same, against the git that's here: the override reaches it.
+    #[test]
+    fn the_git_here_takes_the_override() {
+        let Some(git) = crate::pty::bin_search::find_binary("git") else { return };
+        let output = std::process::Command::new(git)
+            .args(["config", "--get", "core.fsmonitor"])
+            .envs(GIT_SAFETY_ENV.iter().copied())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "false");
+    }
+
+    #[test]
+    fn reserved_variables_are_matched_whatever_their_case() {
+        for name in ["PATH", "path", "NODE_OPTIONS", "DYLD_INSERT_LIBRARIES", "GIT_SSH_COMMAND", TEAM_TOKEN_VAR] {
+            assert!(is_reserved_env(name), "{name}");
+        }
+        for name in ["GITHUB_TOKEN", "API_KEY", "REGION", "OPENAI_API_KEY"] {
+            assert!(!is_reserved_env(name), "{name}");
+        }
     }
 
     #[test]

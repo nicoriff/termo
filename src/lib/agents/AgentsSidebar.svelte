@@ -8,7 +8,14 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
-  import { agentsBoard, removeBoardEntry, type AgentSpec, type BoardEntry, type Project } from "$lib/core/agents-client";
+  import {
+    agentsBoard,
+    removeBoardEntry,
+    type AgentSpec,
+    type BoardEntry,
+    type ImportReport,
+    type Project,
+  } from "$lib/core/agents-client";
   import { groupByProject, projectTone } from "./project-spec";
   import { newAgentSpec } from "./agent-spec";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
@@ -238,6 +245,23 @@
   /** The outcome of the last import or export, until it's dismissed. */
   let notice = $state<{ error: boolean; lines: string[] } | null>(null);
 
+  /** What to look at before turning imported agents on — the same for a
+   * project's agents as for loose ones. */
+  function reportLines(report: ImportReport): string[] {
+    const lines = [t("agents.portable.paused")];
+    for (const item of report.review) {
+      if (item.runsCommands) lines.push(t("agents.portable.reviewRuns", { agent: item.agent }));
+      if (item.escalates) lines.push(t("agents.portable.reviewEscalates", { agent: item.agent }));
+      for (const command of item.commands) lines.push(t("agents.portable.reviewCommand", { agent: item.agent, command }));
+      for (const url of item.urls) lines.push(t("agents.portable.reviewUrl", { agent: item.agent, url }));
+    }
+    if (report.movedToOwnFolder.length > 0)
+      lines.push(t("agents.portable.ownFolder", { names: report.movedToOwnFolder.join(", ") }));
+    if (report.needsSecrets.length > 0)
+      lines.push(t("agents.portable.needsSecrets", { names: report.needsSecrets.join(", ") }));
+    return lines;
+  }
+
   async function importAgents() {
     const picked = await open({
       multiple: true,
@@ -254,31 +278,15 @@
         const report = await agentsStore.importProject(path);
         notice = {
           error: false,
-          lines: [
-            t("agents.projects.imported", { names: report.imported.join(", ") }),
-            t("agents.portable.paused"),
-            ...(report.needsSecrets.length > 0
-              ? [t("agents.portable.needsSecrets", { names: report.needsSecrets.join(", ") })]
-              : []),
-          ],
+          lines: [t("agents.projects.imported", { names: report.imported.join(", ") }), ...reportLines(report)],
         };
       }
       if (paths.length === 0) return;
       const report = await agentsStore.importFrom(paths);
-      const lines = [
-        t("agents.portable.imported", { names: report.imported.join(", ") }),
-        t("agents.portable.paused"),
-      ];
-      for (const item of report.review) {
-        if (item.runsCommands) lines.push(t("agents.portable.reviewRuns", { agent: item.agent }));
-        for (const command of item.commands) lines.push(t("agents.portable.reviewCommand", { agent: item.agent, command }));
-        for (const url of item.urls) lines.push(t("agents.portable.reviewUrl", { agent: item.agent, url }));
-      }
-      if (report.movedToOwnFolder.length > 0)
-        lines.push(t("agents.portable.ownFolder", { names: report.movedToOwnFolder.join(", ") }));
-      if (report.needsSecrets.length > 0)
-        lines.push(t("agents.portable.needsSecrets", { names: report.needsSecrets.join(", ") }));
-      notice = { error: false, lines };
+      notice = {
+        error: false,
+        lines: [t("agents.portable.imported", { names: report.imported.join(", ") }), ...reportLines(report)],
+      };
     } catch (reason) {
       notice = { error: true, lines: [String(reason)] };
     }

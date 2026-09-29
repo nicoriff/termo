@@ -118,6 +118,19 @@ export function strongerContacts(spec: AgentSpec, agents: AgentSpec[]): AgentSpe
   );
 }
 
+/** Text from outside — a commit, a webhook call, another agent's result, a
+ * web page — can carry instructions of its own. Worth a warning when the
+ * agent can act on them: `"run"` when it can run commands; `"leak"` when it
+ * can send what it reads somewhere else (the web, a connector). Its reads
+ * stay in its own folder (see spec.rs), so that's what could leak. */
+export function outsideRisk(spec: AgentSpec): "run" | "leak" | null {
+  const outside = Boolean(spec.triggers.git || spec.triggers.webhook || spec.triggers.after || spec.tools.web);
+  if (!outside) return null;
+  if (spec.autonomy === "run") return "run";
+  if (spec.tools.web || spec.tools.mcp.length > 0) return "leak";
+  return null;
+}
+
 /** The runs of a conversation in reading order — each run right after the
  * one that set it off — with how deep each sits. */
 export function conversationTree(runs: RunRecord[]): { run: RunRecord; depth: number }[] {

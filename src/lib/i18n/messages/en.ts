@@ -592,6 +592,7 @@ export const en: Messages = {
       orImport: "or import one from a file",
       paused: "They arrive paused: review them and turn them on with ⋯ → Resume.",
       reviewRuns: "{agent} can run any command in the terminal.",
+      reviewEscalates: "{agent} can hand work to agents allowed to do more than it.",
       reviewCommand: "{agent} starts this program: {command}",
       reviewUrl: "{agent} connects to {url}",
     },
@@ -665,6 +666,8 @@ export const en: Messages = {
       keysHint: "Ctrl+Enter: next · Esc: cancel",
       untrustedWarning:
         "This agent reads text from outside (a commit, a webhook, a web page or another agent) and can also run commands. That text could try to give it orders: if it doesn't need to run commands, pick \"Edit files\" or \"Only look\".",
+      leakWarning:
+        "This agent reads text from outside (a commit, a webhook, a web page or another agent) and can also send data out (the web or its connectors). That text could ask it to send files from its folder: give it only the integrations it needs.",
       back: "Back",
       next: "Next",
       create: "Create agent",

@@ -390,7 +390,7 @@ export interface ImportReport {
   movedToOwnFolder: string[];
   needsSecrets: string[];
   /** Every imported agent arrives paused; these deserve a close look first. */
-  review: { agent: string; runsCommands: boolean; commands: string[]; urls: string[] }[];
+  review: { agent: string; runsCommands: boolean; escalates: boolean; commands: string[]; urls: string[] }[];
 }
 
 export function exportAgents(ids: string[], path: string): Promise<void> {

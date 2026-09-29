@@ -93,18 +93,54 @@ pub async fn git_status(root: String) -> HashMap<String, GitMark> {
         .unwrap_or_default()
 }
 
-fn changed_files(root: &Path) -> HashMap<String, GitMark> {
+/// `git status` for the marks, run on whatever folder is open — one that came
+/// in a zip or on a USB stick too, whose `.git/config` nobody here wrote.
+/// Such a config can name programs git starts on its own: `core.fsmonitor`
+/// (turned off here, above any config file) and a filter driver's `clean` or
+/// `process`, which status runs to compare files. Submodules have configs of
+/// their own, so they're left out.
+const STATUS_ARGS: &[&str] = &[
+    "-c",
+    "core.fsmonitor=false",
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--ignore-submodules=all",
+];
+
+fn git_command(root: &Path) -> Command {
     // A GUI app's PATH often lacks where git lives (see pty/bin_search.rs).
     let git = crate::pty::bin_search::find_binary("git").unwrap_or_else(|| PathBuf::from("git"));
     let mut command = Command::new(git);
-    command.arg("-C").arg(root).args(["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+    command.arg("-C").arg(root);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         // No console window flashing up on every refresh.
         command.creation_flags(0x0800_0000);
     }
-    let Ok(output) = command.output() else {
+    command
+}
+
+/// Whether the repository's own config (`git config --local --list`, its
+/// includes followed) defines a filter driver: a program `git status` could
+/// start. Reading the config never runs one.
+fn defines_filters(local_config: &str) -> bool {
+    local_config
+        .lines()
+        .filter_map(|line| line.split_once('=').map_or(Some(line), |(key, _)| Some(key)))
+        .any(|key| key.trim().to_ascii_lowercase().starts_with("filter."))
+}
+
+fn changed_files(root: &Path) -> HashMap<String, GitMark> {
+    // A repository whose own config brings filters goes without marks rather
+    // than have the explorer start its programs just by being opened.
+    let config = git_command(root).args(["config", "--local", "--includes", "--list"]).output();
+    if config.is_ok_and(|output| defines_filters(&String::from_utf8_lossy(&output.stdout))) {
+        return HashMap::new();
+    }
+    let Ok(output) = git_command(root).args(STATUS_ARGS).output() else {
         return HashMap::new();
     };
     if !output.status.success() {
@@ -196,6 +232,54 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("termo-explorer-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn filter_drivers_in_the_repositorys_config_are_spotted() {
+        assert!(defines_filters("core.bare=false\nfilter.crypt.clean=git-crypt clean\n"));
+        assert!(defines_filters("Filter.X.Process=x"));
+        assert!(!defines_filters("core.bare=false\nremote.origin.url=https://x/filter.git\n"));
+        assert!(!defines_filters(""));
+    }
+
+    #[test]
+    fn status_turns_fsmonitor_off_and_leaves_submodules_out() {
+        let args = STATUS_ARGS.join(" ");
+        assert!(args.starts_with("-c core.fsmonitor=false status"));
+        assert!(args.contains("--ignore-submodules=all"));
+    }
+
+    /// A git in the folder's config: a folder that came from elsewhere, whose
+    /// `.git/config` names programs. Opening it in the explorer must not
+    /// start them. Skipped where git isn't around.
+    #[test]
+    fn opening_a_repository_never_starts_the_programs_its_config_names() {
+        let Some(git) = crate::pty::bin_search::find_binary("git") else { return };
+        let base = scratch();
+        let git_in = |args: &[&str]| Command::new(&git).arg("-C").arg(&base).args(args).output().unwrap();
+        if !git_in(&["init", "-q"]).status.success() {
+            return;
+        }
+        fs::write(base.join("a.txt"), "a").unwrap();
+        let marker = base.join("ran.txt");
+        let command = format!("echo ran > '{}'", marker.to_string_lossy().replace('\\', "/"));
+
+        git_in(&["config", "core.fsmonitor", &command]);
+        // Only if this git does start it: otherwise there's nothing to prove.
+        git_in(&["status"]);
+        if marker.exists() {
+            fs::remove_file(&marker).unwrap();
+            let marks = changed_files(&base);
+            assert!(!marker.exists(), "the explorer started core.fsmonitor");
+            assert!(marks.keys().any(|path| path.ends_with("a.txt")));
+        }
+
+        git_in(&["config", "--unset", "core.fsmonitor"]);
+        git_in(&["config", "filter.x.clean", &command]);
+        fs::write(base.join(".gitattributes"), "* filter=x\n").unwrap();
+        assert!(changed_files(&base).is_empty());
+        assert!(!marker.exists(), "the explorer started a filter");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

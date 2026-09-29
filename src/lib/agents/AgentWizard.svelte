@@ -39,6 +39,7 @@
     secretsOf,
     WIZARD_STEPS,
     newAgentSpec,
+    outsideRisk,
     specProblems,
     stepProblems,
     strongerContacts,
@@ -194,12 +195,9 @@
     setTimeout(() => (copiedCurl = false), 1500);
   }
 
-  /** Text from outside (a commit, a webhook call, a web page) reaching an
-   * agent that can run commands: the combination worth a warning. */
-  const outsideRisk = $derived(
-    spec.autonomy === "run" &&
-      Boolean(spec.triggers.git || spec.triggers.webhook || spec.triggers.after || spec.tools.web),
-  );
+  /** Text from outside reaching an agent that can act on it (see
+   * agent-spec.ts `outsideRisk`). */
+  const risk = $derived(outsideRisk(spec));
 
   /** Which way of adding an integration is open, if any. */
   let picking = $state<"registry" | "custom" | null>(null);
@@ -536,8 +534,10 @@
               {/each}
             </div>
 
-            {#if outsideRisk}
-              <p class="warning">⚠ {t("agents.wizard.untrustedWarning")}</p>
+            {#if risk}
+              <p class="warning">
+                ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
+              </p>
             {/if}
 
             <details class="advanced">
@@ -803,8 +803,10 @@
                 </select>
               </div>
             {/if}
-            {#if outsideRisk}
-              <p class="warning">⚠ {t("agents.wizard.untrustedWarning")}</p>
+            {#if risk}
+              <p class="warning">
+                ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
+              </p>
             {/if}
             <p class="hint note">{t("agents.wizard.triggers.onlyOpen")}</p>
           {:else if step === "test"}

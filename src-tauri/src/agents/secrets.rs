@@ -42,7 +42,9 @@ pub fn delete_all(agent_id: &str, names: &[String]) {
 }
 
 /// A secret's name as an environment variable: what a `${…}` placeholder
-/// refers to.
+/// refers to. It goes into the CLI's own environment, so never one of the
+/// variables that change how a program starts (a server called `git` would
+/// otherwise make `GIT_…`).
 pub fn env_name(server: &str, param: &str) -> String {
     let raw = format!("{server}_{param}");
     let mut name: String = raw
@@ -51,6 +53,9 @@ pub fn env_name(server: &str, param: &str) -> String {
         .collect();
     if name.starts_with(|c: char| c.is_ascii_digit()) {
         name.insert(0, '_');
+    }
+    if super::spec::is_reserved_env(&name) {
+        name.insert_str(0, "SECRET_");
     }
     name
 }
@@ -64,5 +69,12 @@ mod tests {
         assert_eq!(env_name("github", "Authorization"), "GITHUB_AUTHORIZATION");
         assert_eq!(env_name("my-server", "api.key"), "MY_SERVER_API_KEY");
         assert_eq!(env_name("1x", "k"), "_1X_K");
+    }
+
+    #[test]
+    fn env_names_never_change_how_a_program_starts() {
+        assert_eq!(env_name("git", "token"), "SECRET_GIT_TOKEN");
+        assert_eq!(env_name("node", "options"), "SECRET_NODE_OPTIONS");
+        assert!(!super::super::spec::is_reserved_env(&env_name("python-tools", "key")));
     }
 }

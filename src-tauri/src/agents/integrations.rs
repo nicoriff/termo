@@ -14,7 +14,7 @@ use crate::marketplace::install::{server_config, McpInstallRequest};
 use crate::marketplace::model::AgentTarget;
 
 use super::secrets;
-use super::spec::{is_valid_id, McpServer};
+use super::spec::{is_env_name, is_header_name, is_reserved_env, is_valid_id, McpServer};
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -121,14 +121,6 @@ pub struct CustomMcpRequest {
     pub values: Vec<CustomValue>,
 }
 
-fn is_env_name(name: &str) -> bool {
-    !name.is_empty() && !name.starts_with(|c: char| c.is_ascii_digit()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-fn is_header_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-}
-
 /// The connector's config, with its secrets moved to the keychain.
 pub fn build_custom(request: CustomMcpRequest) -> Result<AgentMcpServer, String> {
     if !is_valid_id(&request.agent_id) {
@@ -171,6 +163,11 @@ pub fn build_custom(request: CustomMcpRequest) -> Result<AgentMcpServer, String>
         let valid = if remote { is_header_name(key) } else { is_env_name(key) };
         if !valid {
             return Err(tr(Msg::AgentConnectorBadName(key)));
+        }
+        // Codex hands a secret variable to the connector through its own
+        // environment (see spec::check).
+        if !remote && entry.secret && is_reserved_env(key) {
+            return Err(tr(Msg::AgentBadVariable(key)));
         }
         let value = if entry.secret && !entry.value.is_empty() {
             let env = secrets::env_name(&name, key);
@@ -235,6 +232,10 @@ mod tests {
         let mut request = custom("stdio");
         request.values = vec![CustomValue { name: "MY VAR".into(), value: "x".into(), secret: false }];
         assert!(build_custom(request).is_err());
+        // A secret variable reaches Codex's own environment.
+        let mut reserved = custom("stdio");
+        reserved.values = vec![CustomValue { name: "NODE_OPTIONS".into(), value: "x".into(), secret: true }];
+        assert!(build_custom(reserved).is_err());
         let mut empty = custom("stdio");
         empty.command = " ".into();
         assert!(build_custom(empty).is_err());

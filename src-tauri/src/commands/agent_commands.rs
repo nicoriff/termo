@@ -24,10 +24,12 @@ pub(crate) fn root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String>
     store::root(app).map_err(|err| tr(Msg::AgentSaveFailed(&err.to_string())))
 }
 
-/// Saves an agent the way every save has to go: its git hook first (if it
+/// Saves an agent the way every save has to go: checked (see spec::check),
+/// its git hook first (if it
 /// can't go in, nothing is saved half-done), then the definition, then a
 /// version of the project it left and the one it's in.
 pub(crate) fn save_agent(root: &Path, spec: AgentSpec) -> Result<Vec<AgentSpec>, String> {
+    crate::agents::spec::check(&spec)?;
     let before = store::get_in(root, &spec.id);
     git_hooks::sync(before.as_ref(), Some(&spec))?;
     let project_id = spec.project_id.clone();

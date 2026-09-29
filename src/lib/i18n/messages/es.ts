@@ -591,6 +591,7 @@ export const es = {
       orImport: "o importá uno desde un archivo",
       paused: "Llegan pausados: revisalos y activalos con ⋯ → Reanudar.",
       reviewRuns: "{agent} puede correr cualquier comando en la terminal.",
+      reviewEscalates: "{agent} puede pedirle trabajo a agentes con más permisos que él.",
       reviewCommand: "{agent} inicia este programa: {command}",
       reviewUrl: "{agent} se conecta a {url}",
     },
@@ -664,6 +665,8 @@ export const es = {
       keysHint: "Ctrl+Enter: siguiente · Esc: cancelar",
       untrustedWarning:
         "Este agente lee texto que viene de afuera (un commit, un webhook, una página web u otro agente) y además puede correr comandos. Ese texto podría intentar darle órdenes: si no hace falta correr comandos, elegí \"Editar archivos\" o \"Solo mirar\".",
+      leakWarning:
+        "Este agente lee texto que viene de afuera (un commit, un webhook, una página web u otro agente) y además puede mandar datos afuera (la web o sus conectores). Ese texto podría pedirle que envíe archivos de su carpeta: dale solo las integraciones que necesita.",
       back: "Atrás",
       next: "Siguiente",
       create: "Crear agente",

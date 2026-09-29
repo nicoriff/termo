@@ -82,6 +82,14 @@ pub enum Msg<'a> {
     AgentImportTooNew,
     /// (file, OS error)
     AgentFileFailed(&'a str, &'a str),
+    /// the connector's name
+    AgentBadConnectorName(&'a str),
+    /// the variable's name
+    AgentBadVariable(&'a str),
+    /// the model
+    AgentBadModel(&'a str),
+    /// (agent, why)
+    AgentImportRejected(&'a str, &'a str),
     /// runs a day
     ProjectDailyLimit(u32),
     ProjectNotFound,
@@ -247,6 +255,22 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (AgentFileFailed(file, error), Es) => format!("No se pudo usar el archivo \"{file}\": {error}"),
         (AgentFileFailed(file, error), En) => format!("Couldn't use the file \"{file}\": {error}"),
+        (AgentBadConnectorName(name), Es) => {
+            format!("\"{name}\" no sirve como nombre de conector: usá letras, números, - y _")
+        }
+        (AgentBadConnectorName(name), En) => format!("\"{name}\" can't be a connector's name: use letters, digits, - and _"),
+        (AgentBadVariable(name), Es) => format!(
+            "\"{name}\" no puede ser una variable de un conector ni de un secreto: no es un nombre válido o cambia cómo arranca un programa"
+        ),
+        (AgentBadVariable(name), En) => format!(
+            "\"{name}\" can't be a connector's or a secret's variable: it isn't a valid name, or it changes how a program starts"
+        ),
+        (AgentBadModel(model), Es) => format!("\"{model}\" no es un nombre de modelo"),
+        (AgentBadModel(model), En) => format!("\"{model}\" isn't a model's name"),
+        (AgentImportRejected(agent, why), Es) => format!("No se importó nada: el agente \"{agent}\" trae algo no permitido. {why}"),
+        (AgentImportRejected(agent, why), En) => {
+            format!("Nothing was imported: the agent \"{agent}\" holds something not allowed. {why}")
+        }
 
         (ProjectDailyLimit(runs), Es) => format!("El proyecto ya hizo sus {runs} corridas de hoy"),
         (ProjectDailyLimit(runs), En) => format!("The project already made its {runs} runs for today"),
@@ -330,6 +354,10 @@ mod tests {
             Msg::AgentHookFailed("access denied"),
             Msg::AgentImportTooNew,
             Msg::AgentFileFailed("a.json", "access denied"),
+            Msg::AgentBadConnectorName("x,Bash"),
+            Msg::AgentBadVariable("NODE_OPTIONS"),
+            Msg::AgentBadModel("--x"),
+            Msg::AgentImportRejected("Revisor", "bad name"),
             Msg::ProjectDailyLimit(20),
             Msg::ProjectNotFound,
             Msg::ProjectNoEntry,

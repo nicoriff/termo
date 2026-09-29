@@ -23,7 +23,7 @@ use crate::marketplace::model::AgentTarget;
 
 use super::events::{parse_line, EventKind, RunEvent};
 use super::secrets;
-use super::spec::{build_invocation, with_team_server, AgentSpec, Engine, TEAM_TOKEN_VAR};
+use super::spec::{build_invocation, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
 use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
 use super::{projects, team, webhook};
 
@@ -222,6 +222,7 @@ impl Runner {
             cmd.env_remove(key);
         }
         cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
+        cmd.envs(GIT_SAFETY_ENV.iter().copied());
         if team_token.is_some() && spec.engine == Engine::Claude {
             // Asking another agent takes as long as that agent's run; Claude
             // Code would give up on the call well before.
