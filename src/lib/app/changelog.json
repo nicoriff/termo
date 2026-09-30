@@ -1,0 +1,18 @@
+[
+  {
+    "version": "0.8.0",
+    "date": "2026-09-29",
+    "es": [
+      "**Buscar actualizaciones**: desde Acerca de o el menú, Termo descarga la versión nueva, la instala y se reinicia, y te muestra qué trae.",
+      "**Agentes más seguros**: los que solo miran ya no pueden borrar ramas ni escribir archivos con git, ninguno lee fuera de su carpeta y los archivos importados se revisan antes de entrar.",
+      "El explorador ya no ejecuta programas que traiga la configuración de un repositorio al abrirlo.",
+      "El asistente avisa cuando un agente lee texto de afuera y además puede mandar datos afuera."
+    ],
+    "en": [
+      "**Check for updates**: from About or the menu, Termo downloads the new version, installs it and restarts, and shows you what it brings.",
+      "**Safer agents**: the ones that only look can no longer delete branches or write files through git, none reads outside its folder, and imported files are checked before they come in.",
+      "The explorer no longer starts programs a repository's config names when you open it.",
+      "The wizard warns when an agent reads text from outside and can also send data out."
+    ]
+  }
+]

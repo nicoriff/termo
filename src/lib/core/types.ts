@@ -84,6 +84,8 @@ export interface AppConfig {
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;
+  /** The version that last ran (see WhatsNewDialog). */
+  last_seen_version: string | null;
   /** Saved layout to open on launch, or null for a single console. */
   default_layout: string | null;
   window: WindowConfig;

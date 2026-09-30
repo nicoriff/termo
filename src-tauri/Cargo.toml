@@ -44,6 +44,10 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 notify = "8"
 # The agents' local webhook (127.0.0.1 only).
 tiny_http = "0.12"
+# Updates from "Check for updates": signed builds from the GitHub releases
+# (see plugins.updater in tauri.conf.json), and the restart after one.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

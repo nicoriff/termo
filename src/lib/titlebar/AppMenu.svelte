@@ -131,6 +131,11 @@
     uiState.openAbout();
   }
 
+  function checkUpdates() {
+    onclose();
+    uiState.openUpdates();
+  }
+
   function quit() {
     onclose();
     // Asks first if anything is still running (see app/quit.ts).
@@ -257,6 +262,15 @@
       <circle cx="6" cy="3.3" r="0.7" fill="currentColor" />
     </svg>
     <span class="app-menu-text">{t("about.open")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={checkUpdates}>
+    <!-- An arrow down into a tray: a new version coming in. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M6 1.5v6M3.5 5l2.5 2.5L8.5 5" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M1.5 8v2.5h9V8" fill="none" stroke="currentColor" stroke-width="1" />
+    </svg>
+    <span class="app-menu-text">{t("updates.check")}</span>
   </button>
 
   <button class="app-menu-item danger" role="menuitem" onmouseenter={closeSubmenus} onclick={quit}>

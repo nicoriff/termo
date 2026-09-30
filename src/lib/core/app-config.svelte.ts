@@ -102,6 +102,9 @@ class AppConfigStore {
   /** Set by the backend when it chains onto the user's Claude Code status
    * line; kept here only so persisting doesn't drop it. */
   private statusLineWrapped: string | null = null;
+  /** The version that last ran, to show what an update brought (see
+   * WhatsNewDialog). Null until the first launch that knows about it. */
+  lastSeenVersion: string | null = null;
   shortcuts = $state<ShortcutsConfig>(EMPTY_SHORTCUTS);
   loaded = $state(false);
 
@@ -173,6 +176,7 @@ class AppConfigStore {
     this.keepAwakeButton = config.keep_awake_button ?? true;
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
+    this.lastSeenVersion = config.last_seen_version ?? null;
     this.shortcuts = config.shortcuts;
     this.installedFontPath = config.installed_font_path;
     // Kept current even in Preferences (which never resizes to it) so its
@@ -282,6 +286,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setLastSeenVersion(version: string): void {
+    this.lastSeenVersion = version;
+    void this.persist();
+  }
+
   /** Null means launching into a single console, as before. */
   setDefaultLayout(name: string | null): void {
     this.defaultLayout = name;
@@ -359,6 +368,7 @@ class AppConfigStore {
       keep_awake_button: this.keepAwakeButton,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
+      last_seen_version: this.lastSeenVersion,
       font_size_override: themeStore.fontSizeOverride,
       font_family_override: themeStore.fontFamilyOverride,
       installed_font_path: this.installedFontPath,

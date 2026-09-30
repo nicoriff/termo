@@ -128,6 +128,9 @@ pub struct AppConfig {
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
+    /// The version that last ran, so the first launch after an update can
+    /// show what it brought (src/lib/app/WhatsNewDialog.svelte).
+    pub last_seen_version: Option<String>,
     /// Name of the saved layout to open on launch (see layouts.rs), or None
     /// to start with a single console. A name that no longer exists is
     /// ignored rather than treated as an error.
@@ -168,6 +171,7 @@ impl Default for AppConfig {
             agents_in_activity_bar: true,
             keep_awake_button: true,
             status_line_wrapped: None,
+            last_seen_version: None,
             default_layout: None,
             window: WindowConfig::default(),
             shortcuts: ShortcutsConfig::default(),

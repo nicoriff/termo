@@ -78,6 +78,7 @@
     <p class="about-copyright">© {YEAR} Nicolas Luque</p>
 
     <div class="dialog-actions">
+      <button class="dialog-button" onclick={() => uiState.openUpdates()}>{t("updates.check")}</button>
       <button class="dialog-button" onclick={() => void copyInfo()}>
         {copied ? t("about.copied") : t("about.copy")}
       </button>

@@ -1,6 +1,7 @@
 import type { SavedLayout } from "./layouts-client";
 import type { LaunchTarget } from "$lib/agent-launch/launch-target";
 import type { AgentSpec, Project } from "./agents-client";
+import type { ChangelogEntry } from "$lib/app/release-notes";
 
 class UiState {
   maximized = $state(false);
@@ -19,6 +20,11 @@ class UiState {
   layoutManagerOpen = $state(false);
   /** The "About Termo" window, opened from the title bar menu. */
   aboutOpen = $state(false);
+  /** "Check for updates" (see app/updater.svelte.ts). */
+  updatesOpen = $state(false);
+  /** What the last update brought, shown once on the first launch after it:
+   * the changelog entries since the version that ran before. */
+  whatsNew = $state<ChangelogEntry[] | null>(null);
   /** The "where should this run" dialog, opened from a tile's new-tab menu:
    * what to open (an agent or a shell), which tile gets the tab, and the
    * folder that tile's console is in (null when it hasn't reported one). */
@@ -55,6 +61,8 @@ class UiState {
       this.saveLayoutPromptOpen ||
       this.layoutManagerOpen ||
       this.aboutOpen ||
+      this.updatesOpen ||
+      this.whatsNew !== null ||
       this.agentLaunch !== null ||
       this.closeFileTarget !== null ||
       this.agentWizard !== null ||
@@ -128,6 +136,24 @@ class UiState {
 
   closeAbout(): void {
     this.aboutOpen = false;
+  }
+
+  /** Opens "Check for updates" in place of whatever dialog asked for it. */
+  openUpdates(): void {
+    this.aboutOpen = false;
+    this.updatesOpen = true;
+  }
+
+  closeUpdates(): void {
+    this.updatesOpen = false;
+  }
+
+  showWhatsNew(entries: ChangelogEntry[]): void {
+    this.whatsNew = entries;
+  }
+
+  closeWhatsNew(): void {
+    this.whatsNew = null;
   }
 
   openAgentLaunch(target: LaunchTarget, tileId: string, here: string | null): void {

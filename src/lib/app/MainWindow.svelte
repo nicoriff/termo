@@ -11,6 +11,9 @@
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
   import AboutDialog from "./AboutDialog.svelte";
+  import UpdateDialog from "./UpdateDialog.svelte";
+  import WhatsNewDialog from "./WhatsNewDialog.svelte";
+  import { showWhatsNewOnce } from "./whats-new";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
@@ -66,6 +69,9 @@
         clearTimeout(resizeDebounce);
         resizeDebounce = setTimeout(() => void appConfigStore.recordWindowSize(), 400);
       });
+
+      // After the consoles are up, so the dialog lands on a ready window.
+      void showWhatsNewOnce();
     })();
 
     return () => {
@@ -223,6 +229,12 @@
     {/if}
     {#if uiState.aboutOpen}
       <AboutDialog />
+    {/if}
+    {#if uiState.updatesOpen}
+      <UpdateDialog />
+    {/if}
+    {#if uiState.whatsNew}
+      <WhatsNewDialog />
     {/if}
     {#if uiState.agentLaunch}
       <AgentLaunchDialog />
