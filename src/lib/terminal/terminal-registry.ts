@@ -4,7 +4,9 @@
 export interface TerminalHandle {
   hasSelection(): boolean;
   selection(): string;
-  write(text: string): void;
+  /** Pastes `text` as a paste, not as typing: bracketed when the program
+   * asked for it, so a multi-line paste doesn't run line by line. */
+  paste(text: string): void;
   selectAll(): void;
   clear(): void;
   focus(): void;

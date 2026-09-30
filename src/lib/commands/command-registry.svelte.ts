@@ -47,27 +47,33 @@ export function buildCommands(): Command[] {
       label: t("commands.openTilePicker"),
       run: () => workspaceStore.openOverview(),
     },
-    {
-      id: "extensions.browse",
-      group: "extensions",
-      label: t("commands.openMarketplace"),
-      run: () => uiState.openMarketplace(),
-    },
-    {
-      id: "agents.toggle",
-      group: "agents",
-      label: agentsStore.open ? t("commands.hideAgents") : t("commands.showAgents"),
-      run: () => agentsStore.toggle(),
-    },
-    {
-      id: "agents.new",
-      group: "agents",
-      label: t("commands.createAgent"),
-      run: () => uiState.openAgentWizard(null, true),
-    },
   ];
 
-  for (const agent of agentsStore.agents) {
+  // Extensions and agents are Modo IA's: only listed with it on.
+  if (appConfigStore.aiModeEnabled) {
+    commands.push(
+      {
+        id: "extensions.browse",
+        group: "extensions",
+        label: t("commands.openMarketplace"),
+        run: () => uiState.openMarketplace(),
+      },
+      {
+        id: "agents.toggle",
+        group: "agents",
+        label: agentsStore.open ? t("commands.hideAgents") : t("commands.showAgents"),
+        run: () => agentsStore.toggle(),
+      },
+      {
+        id: "agents.new",
+        group: "agents",
+        label: t("commands.createAgent"),
+        run: () => uiState.openAgentWizard(null, true),
+      },
+    );
+  }
+
+  for (const agent of appConfigStore.aiModeEnabled ? agentsStore.agents : []) {
     commands.push({
       id: `agents.run.${agent.id}`,
       group: "agents",
@@ -105,7 +111,7 @@ export function buildCommands(): Command[] {
 
   // Left out when the CLI isn't installed: typing its command would only
   // print an error.
-  for (const tool of ["claude", "codex"] as const) {
+  for (const tool of appConfigStore.aiModeEnabled ? (["claude", "codex"] as const) : []) {
     if (newTabOptions.agentClis?.[tool] === false) continue;
     commands.push({
       id: `tabs.newAgent.${tool}`,

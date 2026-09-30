@@ -529,8 +529,11 @@
         {#if shells.length === 0}
           <p class="shell-picker-empty">{t("tabs.loadingShells")}</p>
         {/if}
+        <!-- Claude Code and Codex are Modo IA's: only listed with it on. -->
+        {#if appConfigStore.aiModeEnabled}
         <div class="shell-picker-divider"></div>
-        {#each AGENTS as tool (tool)}
+        {/if}
+        {#each appConfigStore.aiModeEnabled ? AGENTS : [] as tool (tool)}
           {@const installed = agentClis?.[tool] ?? true}
           <button
             class="shell-picker-item"

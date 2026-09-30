@@ -99,6 +99,15 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
         let mut watchers: HashMap<String, Watched> = HashMap::new();
         loop {
             std::thread::sleep(TICK);
+            // Modo IA off: nothing runs. What git hooks and other agents
+            // leave meanwhile is dropped, not all set off when it's back
+            // on, and folders stop being watched (see ai_mode.rs).
+            if !crate::ai_mode::enabled() {
+                let _ = queue::take(&queue::dir_for(&root), |_| false);
+                watchers.clear();
+                changed.lock().unwrap().clear();
+                continue;
+            }
             let agents = store::list_in(&root);
             let now = store::now_millis();
 

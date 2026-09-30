@@ -1046,8 +1046,9 @@ export const en: Messages = {
     },
     aiMode: {
       title: "AI Mode",
-      detect: "Detect Claude Code / Codex status in tabs",
-      detectHint: "Shows a panel with counts, a status dot on each tab and the current mode in the status bar.",
+      detect: "Turn on Modo IA",
+      detectHint:
+        "Turns on everything AI: tracking Claude Code and Codex in tabs (panel, statuses, notices and sounds), the agents and their local server, extensions, and opening Claude or Codex from the “+”. Off, Termo is just a terminal.",
       notices: "Notifications",
       notifyAwaiting: "Notify when it needs your input",
       notifyFinished: "Notify when it finishes",

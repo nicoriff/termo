@@ -2,6 +2,7 @@ import type { SavedLayout } from "./layouts-client";
 import type { LaunchTarget } from "$lib/agent-launch/launch-target";
 import type { AgentSpec, Project } from "./agents-client";
 import type { ChangelogEntry } from "$lib/app/release-notes";
+import { appConfigStore } from "./app-config.svelte";
 
 class UiState {
   maximized = $state(false);
@@ -157,6 +158,8 @@ class UiState {
   }
 
   openAgentLaunch(target: LaunchTarget, tileId: string, here: string | null): void {
+    // Shells open whatever the switch; Claude Code and Codex are Modo IA's.
+    if (target.kind === "agent" && !appConfigStore.aiModeEnabled) return;
     this.agentLaunch = { target, tileId, here };
   }
 
@@ -168,7 +171,10 @@ class UiState {
     this.closeFileTarget = null;
   }
 
+  // The agents, extensions and agent launchers are Modo IA's: with it off
+  // they don't open, whatever asked (a menu, the palette, a shortcut).
   openAgentWizard(spec: AgentSpec | null, isNew: boolean): void {
+    if (!appConfigStore.aiModeEnabled) return;
     this.agentWizard = { spec, isNew };
   }
 
@@ -178,6 +184,7 @@ class UiState {
   }
 
   openProjectDialog(project: Project | null): void {
+    if (!appConfigStore.aiModeEnabled) return;
     this.projectDialog = { project };
   }
 
@@ -191,7 +198,16 @@ class UiState {
   }
 
   openMarketplace(): void {
+    if (!appConfigStore.aiModeEnabled) return;
     this.marketplaceOpen = true;
+  }
+
+  /** Modo IA turned off: whatever of it is open closes. */
+  closeAiSurfaces(): void {
+    this.agentWizard = null;
+    this.projectDialog = null;
+    if (this.agentLaunch?.target.kind === "agent") this.agentLaunch = null;
+    this.marketplaceOpen = false;
   }
 
   closeMarketplace(): void {

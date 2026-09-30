@@ -1047,8 +1047,9 @@ export const es = {
     },
     aiMode: {
       title: "Modo IA",
-      detect: "Detectar estado de Claude Code / Codex en las pestañas",
-      detectHint: "Muestra un panel con conteos, un punto de estado por pestaña y el modo actual en la barra de estado.",
+      detect: "Activar Modo IA",
+      detectHint:
+        "Prende todo lo relacionado con IA: el seguimiento de Claude Code y Codex en las pestañas (panel, estados, avisos y sonidos), los agentes y su servidor local, las extensiones y abrir Claude o Codex desde el “+”. Apagado, Termo es solo una terminal.",
       notices: "Avisos",
       notifyAwaiting: "Notificar cuando necesita tu respuesta",
       notifyFinished: "Notificar cuando termina",

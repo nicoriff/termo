@@ -27,6 +27,7 @@ import {
   type RunRecord,
   type RunTrigger,
 } from "$lib/core/agents-client";
+import { appConfigStore } from "$lib/core/app-config.svelte";
 
 /** The sidebar's width: a default, and how far it can be dragged. */
 export const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 560 };
@@ -127,6 +128,8 @@ class AgentsStore {
   }
 
   setOpen(open: boolean): void {
+    // Modo IA's, like every agent feature: it doesn't open with it off.
+    if (open && !appConfigStore.aiModeEnabled) return;
     this.open = open;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;

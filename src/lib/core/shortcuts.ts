@@ -175,6 +175,21 @@ export function isPlainCtrlC(event: KeyLike): boolean {
   return eventMatchesKeybinding(event, "ctrl+c");
 }
 
+/**
+ * Whether a key press pastes into the console: the Paste shortcut, or — on
+ * Windows, as in Windows Terminal — a plain Ctrl+V. Programs there (Claude
+ * Code among them) don't paste text on Ctrl+V themselves.
+ */
+export function isPasteChord(event: KeyLike, pasteBinding: string, windows: boolean): boolean {
+  return eventMatchesKeybinding(event, pasteBinding) || (windows && isPlainCtrlV(event));
+}
+
+/** Ctrl+V and nothing else held: the chord that, with no text to paste,
+ * still goes on to the program (which may paste an image itself). */
+export function isPlainCtrlV(event: KeyLike): boolean {
+  return eventMatchesKeybinding(event, "ctrl+v");
+}
+
 /** Keys that produce a visible character on their own — recording one of
  * these with no modifier held is almost always the user just typing, not
  * trying to set a shortcut, so `normalizeEventToBinding` rejects it. */

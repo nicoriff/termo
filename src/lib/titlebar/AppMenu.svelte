@@ -227,6 +227,8 @@
     <span class="app-menu-text">{t("layouts.manage")}</span>
   </button>
 
+  <!-- Extensions and Agents are Modo IA's: only with it on. -->
+  {#if appConfigStore.aiModeEnabled}
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={browseExtensions}>
     <!-- A puzzle piece: the usual mark for an extension. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -251,6 +253,7 @@
     <span class="app-menu-text">{t("agents.title")}</span>
     <span class="app-menu-hint">{hint("toggleAgents")}</span>
   </button>
+  {/if}
 
   <div class="app-menu-divider"></div>
 

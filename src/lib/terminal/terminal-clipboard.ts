@@ -25,12 +25,15 @@ export async function copySelection(): Promise<boolean> {
   return true;
 }
 
-export async function pasteClipboard(): Promise<void> {
+/** Returns false when the clipboard held no text (an image, say), which is
+ * what lets a plain Ctrl+V still reach the program on Windows. */
+export async function pasteClipboard(): Promise<boolean> {
   const terminal = focusedTerminal();
-  if (!terminal) return;
-  const text = await readText();
-  if (text) terminal.write(text);
+  if (!terminal) return false;
+  const text = await readText().catch(() => "");
+  if (text) terminal.paste(text);
   terminal.focus();
+  return Boolean(text);
 }
 
 export function selectAll(): void {

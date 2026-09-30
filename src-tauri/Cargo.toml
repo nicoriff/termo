@@ -48,6 +48,9 @@ tiny_http = "0.12"
 # (see plugins.updater in tauri.conf.json), and the restart after one.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# One Termo at a time (release builds): opening it again brings the running
+# one forward. Two would each run the agents over the same data.
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

@@ -102,6 +102,8 @@ pub enum Msg<'a> {
     KeepAwakeFailed(&'a str),
     /// Why the computer is kept awake, as the system lists it (Linux).
     KeepAwakeReason,
+    /// An agent run asked for while Modo IA is off (see ai_mode.rs).
+    AiModeOff,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -299,6 +301,9 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KeepAwakeReason, Es) => "Termo mantiene la computadora despierta".into(),
         (KeepAwakeReason, En) => "Termo is keeping the computer awake".into(),
 
+        (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
+        (AiModeOff, En) => "Modo IA is off: turn it on in Preferences to use agents".into(),
+
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
     }
 }
@@ -367,6 +372,7 @@ mod tests {
             Msg::ProjectVersionMissing,
             Msg::KeepAwakeFailed("access denied"),
             Msg::KeepAwakeReason,
+            Msg::AiModeOff,
         ]
     }
 

@@ -157,6 +157,10 @@ impl Runner {
         link: Option<RunLink>,
         rehearsal: bool,
     ) -> Result<RunRecord, String> {
+        // Every way a run starts comes through here: none while Modo IA is off.
+        if !crate::ai_mode::enabled() {
+            return Err(tr(Msg::AiModeOff));
+        }
         if spec.task.trim().is_empty() {
             return Err(tr(Msg::AgentTaskMissing));
         }

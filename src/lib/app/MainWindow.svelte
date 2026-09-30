@@ -88,6 +88,14 @@
     void setBackgroundBlur(appConfigStore.backgroundBlur).catch(() => {});
   });
 
+  // Modo IA is the switch for every AI feature: turned off (here or from
+  // Preferences), whatever of it is open closes.
+  $effect(() => {
+    if (!appConfigStore.loaded || appConfigStore.aiModeEnabled) return;
+    agentsStore.setOpen(false);
+    uiState.closeAiSurfaces();
+  });
+
   // App icon badge: Modo IA sessions waiting on the user.
   $effect(() => {
     const pending =
@@ -206,7 +214,7 @@
   {/if}
   <main class="content">
     <!-- Only while it has something to show: Agents is its one button. -->
-    {#if appConfigStore.agentsInActivityBar}
+    {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
       <ActivityBar />
     {/if}
     {#if agentsStore.open}

@@ -1,4 +1,5 @@
 mod agent_sessions;
+mod ai_mode;
 mod agents;
 mod commands;
 mod config;
@@ -39,7 +40,21 @@ pub fn run_cli_mode_from_args() -> bool {
 pub fn run() {
     // Before anything reads the config folders (see migration.rs).
     migration::migrate_from_termini();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // One Termo at a time: opening it again brings the running one forward
+    // instead. Two would each run the agents over the same data — both
+    // taking from one queue, each blind to the other's runs. First, as the
+    // plugin asks. Left out of debug builds, so a dev build can run beside
+    // the installed one.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -61,11 +76,11 @@ pub fn run() {
                 });
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
-            pty::agent_hooks::refresh_installed(app.handle());
             pty::status_line::start_watcher(app.handle().clone());
-            pty::status_line::refresh_installed(app.handle());
-            agents::scheduler::start(app.handle().clone(), app.state::<AppState>().agents.clone());
-            agents::webhook::start(app.handle().clone(), app.state::<AppState>().agents.clone());
+            // The agents, their local server and refreshing the hooks: only
+            // with Modo IA on (see ai_mode.rs).
+            let ai_mode_on = config::store::load(app.handle()).ai_mode_enabled;
+            ai_mode::init(app.handle(), &app.state::<AppState>().agents, ai_mode_on);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

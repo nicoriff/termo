@@ -170,6 +170,10 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
 /// One structured answer from Claude Code: `text` as the prompt, the answer
 /// shaped by `schema`. Errors come untranslated, for the caller to word.
 pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
+    // Drafting with AI is an AI feature too (see ai_mode.rs).
+    if !crate::ai_mode::enabled() {
+        return Err(crate::i18n::tr(crate::i18n::Msg::AiModeOff));
+    }
     let bin = agent_cli::require(AgentTarget::Claude, None)?;
     std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
     let mut cmd = Command::new(bin);

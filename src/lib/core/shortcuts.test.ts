@@ -5,7 +5,9 @@ import {
   formatKeybindingLabel,
   getDefaultKeybinding,
   isCopyChord,
+  isPasteChord,
   isPlainCtrlC,
+  isPlainCtrlV,
   normalizeEventToBinding,
   normalizeEventToZoomBinding,
   parseKeybinding,
@@ -17,6 +19,28 @@ import {
 function key(overrides: Partial<KeyLike> & { key: string }): KeyLike {
   return { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, ...overrides };
 }
+
+describe("isPasteChord", () => {
+  const ctrlV = key({ key: "v", ctrlKey: true });
+  const ctrlShiftV = key({ key: "V", ctrlKey: true, shiftKey: true });
+
+  it("takes plain Ctrl+V as paste on Windows, as Windows Terminal does", () => {
+    expect(isPasteChord(ctrlV, "ctrl+shift+v", true)).toBe(true);
+    expect(isPlainCtrlV(ctrlV)).toBe(true);
+  });
+
+  it("keeps the Paste shortcut working everywhere", () => {
+    expect(isPasteChord(ctrlShiftV, "ctrl+shift+v", true)).toBe(true);
+    expect(isPasteChord(ctrlShiftV, "ctrl+shift+v", false)).toBe(true);
+    expect(isPlainCtrlV(ctrlShiftV)).toBe(false);
+  });
+
+  it("leaves Ctrl+V to the program on Linux, and other chords alone", () => {
+    expect(isPasteChord(ctrlV, "ctrl+shift+v", false)).toBe(false);
+    expect(isPasteChord(key({ key: "v", ctrlKey: true, altKey: true }), "ctrl+shift+v", true)).toBe(false);
+    expect(isPasteChord(key({ key: "c", ctrlKey: true }), "ctrl+shift+v", true)).toBe(false);
+  });
+});
 
 describe("isCopyChord", () => {
   const ctrlC = key({ key: "c", ctrlKey: true });

@@ -9,7 +9,7 @@ import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
 import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
-import { eventMatchesKeybinding, isCopyChord, isPlainCtrlC } from "../core/shortcuts";
+import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
@@ -202,9 +202,16 @@ export class TerminalInstance {
         return false;
       }
 
-      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("paste"))) {
+      // On Windows plain Ctrl+V pastes too, as in Windows Terminal (see
+      // isPasteChord): Claude Code there doesn't paste text on it. When the
+      // clipboard holds no text (an image), the key still reaches the
+      // program, which may take the image itself.
+      if (isPasteChord(event, appConfigStore.getEffectiveShortcut("paste"), isWindows)) {
         event.preventDefault();
-        void pasteClipboard();
+        const plainCtrlV = isPlainCtrlV(event);
+        void pasteClipboard().then((pasted) => {
+          if (!pasted && plainCtrlV && this.sessionId) void writePty(this.sessionId, "\x16");
+        });
         return false;
       }
 
@@ -326,9 +333,9 @@ export class TerminalInstance {
     registerTerminal(this.tabId, {
       hasSelection: () => this.term.hasSelection(),
       selection: () => this.term.getSelection(),
-      write: (text) => {
-        if (this.sessionId) void writePty(this.sessionId, text);
-      },
+      // xterm wraps it in the bracketed-paste markers when the program turned
+      // them on (Claude Code, PSReadLine do) and hands it to onData — the PTY.
+      paste: (text) => this.term.paste(text),
       selectAll: () => this.term.selectAll(),
       clear: () => this.term.clear(),
       focus: () => this.focus(),

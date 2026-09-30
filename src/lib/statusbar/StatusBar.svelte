@@ -100,7 +100,8 @@
       {activeTool ? TOOL_DISPLAY_NAMES[activeTool] : tabTitleStore.typeFor(activeConsole)}
     </span>
   {/if}
-  {#if activeTool || planWindows.length > 0}
+  <!-- Plan usage and cost are Modo IA's: only with it on. -->
+  {#if appConfigStore.aiModeEnabled && (activeTool || planWindows.length > 0)}
     <span class="status-item status-plan" title={t("statusBar.planHint")}>
       {t("statusBar.plan")}
       {#each planWindows as usage (usage.label)}
@@ -118,7 +119,7 @@
       {/each}
     </span>
   {/if}
-  {#if costUsd !== null}
+  {#if appConfigStore.aiModeEnabled && costUsd !== null}
     <span class="status-item status-cost" title={t("statusBar.costHint")}>
       {t("statusBar.cost", { value: formatUsd(costUsd) })}
     </span>

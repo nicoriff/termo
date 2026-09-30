@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.8.2",
+    "date": "2026-09-30",
+    "es": [
+      "En Windows, **Ctrl+V pega** en la consola, también dentro de Claude Code, como en Windows Terminal. Lo que pegás con varias líneas llega entero, sin ejecutarse línea por línea. Ctrl+Shift+V también pega.",
+      "**Modo IA es el interruptor general**: apagado, además del seguimiento de sesiones se apagan los agentes (no corre ninguno y no queda un puerto local abierto), las extensiones y los accesos a Claude y Codex.",
+      "**Un solo Termo a la vez**: abrirlo de nuevo trae al frente el que ya está abierto. Con dos abiertos, un agente que sigue a otro podía correr en el otro Termo sin que se viera, y un agente programado podía correr dos veces."
+    ],
+    "en": [
+      "On Windows, **Ctrl+V pastes** into the console, inside Claude Code too, as in Windows Terminal. A multi-line paste arrives whole instead of running line by line. Ctrl+Shift+V pastes too.",
+      "**Modo IA is the master switch**: off, besides session tracking it turns off the agents (none runs and no local port stays open), extensions and the Claude and Codex shortcuts.",
+      "**One Termo at a time**: opening it again brings the one already open forward. With two open, an agent that follows another could run in the other Termo unseen, and a scheduled agent could run twice."
+    ]
+  },
+  {
     "version": "0.8.1",
     "date": "2026-09-30",
     "es": [

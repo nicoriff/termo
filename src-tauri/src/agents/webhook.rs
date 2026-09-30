@@ -10,7 +10,8 @@
 
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::json;
 use tiny_http::{Header, Method, Response, Server};
@@ -78,11 +79,34 @@ fn reply(request: tiny_http::Request, status: u16, body: serde_json::Value) {
     let _ = request.respond(Response::from_string(body.to_string()).with_status_code(status).with_header(content_type));
 }
 
+/// The server while it's up, so `stop` can close it.
+static SERVER: Mutex<Option<Arc<Server>>> = Mutex::new(None);
+
+/// Listens until `stop` (Modo IA turned off; see ai_mode.rs).
 pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
     std::thread::spawn(move || {
-        let Ok(server) = Server::http(("127.0.0.1", PORT)) else { return };
-        LISTENING.store(true, Ordering::Relaxed);
         let Ok(root) = store::root(&app) else { return };
+        // Turned back on right after being turned off, the old socket may
+        // take a moment to be let go.
+        let Some(server) = (0..10).find_map(|attempt| {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Server::http(("127.0.0.1", PORT)).ok()
+        }) else {
+            return;
+        };
+        let server = Arc::new(server);
+        {
+            let mut slot = SERVER.lock().unwrap();
+            // Turned off again while it was waiting for the port.
+            if !crate::ai_mode::enabled() {
+                return;
+            }
+            *slot = Some(server.clone());
+        }
+        LISTENING.store(true, Ordering::Relaxed);
+        // Ends when `stop` unblocks the server.
         for request in server.incoming_requests() {
             let mcp = mcp_server::is_mcp(request.url());
             let (counter, max) = if mcp { (&MCP_IN_FLIGHT, MAX_MCP_IN_FLIGHT) } else { (&IN_FLIGHT, MAX_IN_FLIGHT) };
@@ -102,6 +126,15 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
             });
         }
     });
+}
+
+/// Closes the port: the accept loop above ends, and the socket goes with the
+/// last reference to the server. Calls already being handled finish.
+pub fn stop() {
+    if let Some(server) = SERVER.lock().unwrap().take() {
+        LISTENING.store(false, Ordering::Relaxed);
+        server.unblock();
+    }
 }
 
 fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &Arc<Runner>, root: &std::path::Path) {
