@@ -2,6 +2,7 @@
   import { fade, fly } from "svelte/transition";
   import { getTauriVersion, getVersion } from "@tauri-apps/api/app";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { isMac, isWindows } from "$lib/core/platform";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -75,7 +76,10 @@
       <dd>{system}</dd>
     </dl>
 
-    <p class="about-copyright">© {YEAR} Nicolas Luque</p>
+    <p class="about-copyright">
+      © {YEAR}
+      <button class="about-link" onclick={() => void openUrl("https://github.com/nicoriff")}>@nicoriff</button>
+    </p>
 
     <div class="dialog-actions">
       <button class="dialog-button" onclick={() => uiState.openUpdates()}>{t("updates.check")}</button>
@@ -176,6 +180,24 @@
     margin: 14px 0 0;
     font-size: 11px;
     opacity: 0.5;
+  }
+
+  /* The GitHub handle, opening the profile in the browser. */
+  .about-link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .about-link:hover,
+  .about-link:focus-visible {
+    color: var(--pane-active-border, #3a6df0);
+    outline: none;
   }
 
   .dialog-actions {
