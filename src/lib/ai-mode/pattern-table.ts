@@ -4,7 +4,10 @@
  * below): add/adjust regexes, don't touch classifier.ts.
  */
 
-export type ToolId = "claude" | "codex";
+export type ToolId = "claude" | "codex" | "gemini";
+
+/** Every agent CLI Termo knows, in the order they're listed everywhere. */
+export const TOOL_IDS: readonly ToolId[] = ["claude", "codex", "gemini"];
 
 export interface ToolPatternSet {
   tool: ToolId;
@@ -57,5 +60,22 @@ export const TOOL_PATTERNS: ToolPatternSet[] = [
     running: [/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/],
     awaiting: [/\(y\/n\)/i, /\[y\/N\]/, /\bAllow\b/, /\bApprove\b/, /proceed\?/i],
     error: [/\bError\b/, /\bTraceback\b/, /\bfailed\b/i],
+  },
+  {
+    tool: "gemini",
+    // From Gemini CLI's documented interface, not yet checked against real
+    // screen captures; its hooks (see agent_hooks.rs) are the precise source
+    // and this only fills in without them.
+    confidence: "low",
+    // Gemini CLI runs under node, so the foreground process is rarely named
+    // after it; kept for installs that wrap it in a `gemini` binary.
+    processPathHints: ["gemini"],
+    // The input box's placeholder, and the footer's model name.
+    identity: [/Type your message or @path\/to\/file/, /\bgemini-\d/i],
+    // Its spinner line ends in "(esc to cancel, 12s)" while a turn runs.
+    running: [/\(esc to cancel/],
+    // A tool call waiting for approval.
+    awaiting: [/Allow execution/i, /Apply this change\?/i, /Waiting for user confirmation/i],
+    error: [/\[API Error/],
   },
 ];

@@ -21,7 +21,7 @@ use crate::i18n::{tr, Msg};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
-use super::events::{parse_line, EventKind, RunEvent};
+use super::events::{EventKind, Outcome, Parser, RunEvent};
 use super::secrets;
 use super::spec::{build_invocation, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
 use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
@@ -65,6 +65,7 @@ fn target(engine: Engine) -> AgentTarget {
     match engine {
         Engine::Claude => AgentTarget::Claude,
         Engine::Codex => AgentTarget::Codex,
+        Engine::Gemini => AgentTarget::Gemini,
     }
 }
 
@@ -213,6 +214,17 @@ impl Runner {
             system_prompt.as_deref().and_then(|path| path.to_str()),
             &secret_values,
         );
+        // Gemini CLI's settings for this run (see spec::Invocation): a file it
+        // reads as system settings, removed when the run ends.
+        let run_settings = invocation
+            .settings
+            .as_ref()
+            .map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.gemini-settings.json")));
+        if let (Some(path), Some(text)) = (&run_settings, &invocation.settings) {
+            let written = std::fs::create_dir_all(path.parent().expect("has a folder"))
+                .and_then(|_| std::fs::write(path, text));
+            written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
+        }
         let mut cmd = Command::new(&bin);
         cmd.args(&invocation.args)
             .current_dir(&dir)
@@ -227,6 +239,9 @@ impl Runner {
         }
         cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
         cmd.envs(GIT_SAFETY_ENV.iter().copied());
+        if let Some(path) = &run_settings {
+            cmd.env("GEMINI_CLI_SYSTEM_SETTINGS_PATH", path);
+        }
         if team_token.is_some() && spec.engine == Engine::Claude {
             // Asking another agent takes as long as that agent's run; Claude
             // Code would give up on the call well before.
@@ -245,7 +260,7 @@ impl Runner {
             cmd.process_group(0);
         }
         let mut child = cmd.spawn().map_err(|err| {
-            if let Some(path) = &system_prompt {
+            for path in system_prompt.iter().chain(&run_settings) {
                 let _ = std::fs::remove_file(path);
             }
             if let Some(token) = &team_token {
@@ -307,8 +322,8 @@ impl Runner {
         let stdout = child.stdout.take().map(|out| {
             let (log, shared, failed, last_text, engine) = (log.clone(), shared.clone(), failed.clone(), last_text.clone(), spec.engine);
             std::thread::spawn(move || {
-                for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    let (events, outcome) = parse_line(engine, &line, now_millis());
+                let mut parser = Parser::new(engine);
+                let handle = |events: Vec<RunEvent>, outcome: Outcome| {
                     if outcome.failed {
                         failed.store(true, Ordering::Relaxed);
                     }
@@ -332,7 +347,13 @@ impl Runner {
                         drop(record);
                         log.step(event);
                     }
+                };
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    let (events, outcome) = parser.line(&line, now_millis());
+                    handle(events, outcome);
                 }
+                // What a CLI said before its output ended without a result.
+                handle(parser.finish(now_millis()), Outcome::default());
             })
         });
         let stderr_tail = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -415,7 +436,7 @@ impl Runner {
             let finished = record.clone();
             drop(record);
 
-            if let Some(path) = &system_prompt {
+            for path in system_prompt.iter().chain(&run_settings) {
                 let _ = std::fs::remove_file(path);
             }
             // Its tools stop working with it: a call still waiting on another

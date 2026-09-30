@@ -5,9 +5,9 @@
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { SOUND_IDS, playSound, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
-  import type { ToolId } from "$lib/ai-mode/pattern-table";
+  import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
 
-  const TOOLS: ToolId[] = ["claude", "codex"];
+  const TOOLS = TOOL_IDS;
   const EVENTS: { event: SoundEvent; label: "preferences.aiMode.soundAwaiting" | "preferences.aiMode.soundFinished" }[] =
     [
       { event: "awaiting", label: "preferences.aiMode.soundAwaiting" },

@@ -106,6 +106,7 @@ export const es = {
     targets: {
       claude: "Claude Code",
       codex: "Codex",
+      gemini: "Gemini CLI",
     },
     filterInstalled: "Instalados",
     filterSkills: "Con skills",
@@ -725,6 +726,7 @@ export const es = {
           "El motor es el programa que hace el trabajo: Claude Code o Codex, los que ya usás en la consola, con tu misma cuenta. Acá también decidís dónde trabaja y hasta dónde puede actuar solo.",
         claudeHint: "El agente de Anthropic. Recomendado para la mayoría de las tareas.",
         codexHint: "El agente de OpenAI. Corre sus comandos dentro de un sandbox.",
+        geminiHint: "El agente de Google. Para mirar usa su modo plan, que solo lee.",
         notInstalled: "No está instalado en esta computadora.",
         workDir: "Carpeta de trabajo",
         workDirHint: "Dónde trabaja el agente: un proyecto tuyo, o una carpeta propia y aislada.",
@@ -904,6 +906,7 @@ export const es = {
       newTab: "Nueva pestaña",
       newClaude: "Nueva pestaña de Claude Code",
       newCodex: "Nueva pestaña de Codex",
+      newGemini: "Nueva pestaña de Gemini CLI",
       toggleExplorer: "Explorador de archivos",
       toggleAgents: "Panel de agentes",
       cycleTab: "Ciclar pestañas",
@@ -1089,7 +1092,7 @@ export const es = {
       statusLineHint:
         "Encadena Termo a la status line de Claude Code en ~/.claude/settings.json, sin reemplazar la tuya: el mismo dato le llega a las dos. Muestra el uso de la ventana de 5 horas y la semanal de la consola activa. Solo con suscripción Pro o Max, y recién después de la primera respuesta de la sesión.",
       hooksHint:
-        "Agrega a {claudeFile} y {codexFile} hooks que le informan a Termo el estado exacto de cada sesión (pide permiso, trabaja, terminó), en lugar de deducirlo de la pantalla. Fuera de Termo no hacen nada. Antes del primer cambio se guarda una copia del archivo.",
+        "Agrega a {files} hooks que le informan a Termo el estado exacto de cada sesión (pide permiso, trabaja, terminó), en lugar de deducirlo de la pantalla. Fuera de Termo no hacen nada. Antes del primer cambio se guarda una copia del archivo.",
     },
     ohMyPosh: {
       installation: "Instalación",

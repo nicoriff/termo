@@ -84,6 +84,22 @@ describe("classify: process-path identity signal", () => {
   });
 });
 
+describe("classify: gemini (from its documented interface)", () => {
+  it("recognizes Gemini CLI by its input box, not as Claude or Codex", () => {
+    const state: ClassifyState = { detectedTool: null };
+    const lines = [">   Type your message or @path/to/file", "~/proj   no sandbox   gemini-2.5-pro (99% context left)"];
+    expect(classify(lines, state, null).tool).toBe("gemini");
+  });
+
+  it("reads a running turn, an approval prompt and an API error", () => {
+    const state: ClassifyState = { detectedTool: "gemini" };
+    expect(classify(["⠧ Reading the files (esc to cancel, 4s)"], state, null).status).toBe("running");
+    expect(classify(["Allow execution of: 'npm test'?", "● 1. Allow once"], state, null).status).toBe("awaiting");
+    expect(classify(["✕ [API Error: quota exceeded]"], state, null).status).toBe("error");
+    expect(classify([">   Type your message or @path/to/file"], state, null).status).toBe("finished");
+  });
+});
+
 describe("classify: codex (best-effort placeholders)", () => {
   it("detects a generic approval prompt as awaiting", () => {
     const state: ClassifyState = { detectedTool: "codex" };

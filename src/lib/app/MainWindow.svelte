@@ -152,6 +152,7 @@
       for (const [action, tool] of [
         ["newClaude", "claude"],
         ["newCodex", "codex"],
+        ["newGemini", "gemini"],
       ] as const) {
         if (!eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut(action))) continue;
         event.preventDefault();

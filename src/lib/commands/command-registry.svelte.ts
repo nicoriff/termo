@@ -13,6 +13,7 @@ import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { themeStore } from "../theme/theme-store.svelte";
 import { requestAgentLaunch } from "../agent-launch/request-launch";
 import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
+import { TOOL_IDS } from "../ai-mode/pattern-table";
 import { newTabOptions } from "../layout/new-tab-options.svelte";
 import { agentsStore } from "../agents/agents-store.svelte";
 import type { Command } from "./commands";
@@ -111,7 +112,7 @@ export function buildCommands(): Command[] {
 
   // Left out when the CLI isn't installed: typing its command would only
   // print an error.
-  for (const tool of appConfigStore.aiModeEnabled ? (["claude", "codex"] as const) : []) {
+  for (const tool of appConfigStore.aiModeEnabled ? TOOL_IDS : []) {
     if (newTabOptions.agentClis?.[tool] === false) continue;
     commands.push({
       id: `tabs.newAgent.${tool}`,

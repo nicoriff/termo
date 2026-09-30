@@ -1,14 +1,14 @@
 <script lang="ts">
   /**
    * A small glyph per kind of console, for the new-tab menu: the shells by
-   * their detected id (see src-tauri/src/pty/shell_detect.rs) and the two
+   * their detected id (see src-tauri/src/pty/shell_detect.rs) and the
    * agents. Drawn here rather than taken from each vendor's logo, in each
    * one's usual color so they're told apart at a glance.
    */
   let { kind, size = 14 }: { kind: string; size?: number } = $props();
 
   const family = $derived(
-    kind === "claude" || kind === "codex"
+    kind === "claude" || kind === "codex" || kind === "gemini"
       ? kind
       : kind === "pwsh" || kind === "powershell"
         ? "powershell"
@@ -35,6 +35,9 @@
     <!-- A hexagon holding a prompt, in OpenAI's green. -->
     <path d="M8 1.2l5.9 3.4v6.8L8 14.8l-5.9-3.4V4.6z" fill="none" stroke="#10a37f" stroke-width="1.4" />
     <path d="M5.6 6.2l2 1.8-2 1.8M8.8 10h1.8" fill="none" stroke="#10a37f" stroke-width="1.3" stroke-linecap="round" />
+  {:else if family === "gemini"}
+    <!-- A four-point sparkle with curved sides, in Gemini's blue. -->
+    <path d="M8 1c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7z" fill="#4796e3" />
   {:else if family === "powershell"}
     <rect x="1" y="2" width="14" height="12" rx="2" fill="#2671be" />
     <path d="M4.2 5.2l3 2.8-3 2.8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" />

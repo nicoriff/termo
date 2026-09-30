@@ -1,6 +1,7 @@
 //! Turning each CLI's machine-readable output into one shape of event:
-//! Claude's `--output-format stream-json` and Codex's `exec --json` both
-//! print one JSON object per line, in different vocabularies.
+//! Claude's `--output-format stream-json`, Codex's `exec --json` and Gemini
+//! CLI's `--output-format stream-json` all print one JSON object per line, in
+//! different vocabularies.
 
 use serde::{Deserialize, Serialize};
 
@@ -65,16 +66,78 @@ fn describe_input(input: &serde_json::Value) -> String {
     String::new()
 }
 
-/// The events in one line of output (none for the many bookkeeping lines),
-/// plus what it says about the run's outcome.
-pub fn parse_line(engine: Engine, line: &str, at: i64) -> (Vec<RunEvent>, Outcome) {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
-        return (Vec::new(), Outcome::default());
-    };
-    match engine {
-        Engine::Claude => parse_claude(&value, at),
-        Engine::Codex => parse_codex(&value, at),
+/// Reads a run's output line by line. Claude's and Codex's lines each stand
+/// on their own; Gemini CLI streams its answer in pieces, gathered here into
+/// one Text event whenever it stops to use a tool, and into the Result at
+/// the end.
+pub struct Parser {
+    engine: Engine,
+    /// Gemini CLI's answer so far, since the last tool call.
+    pending: String,
+}
+
+impl Parser {
+    pub fn new(engine: Engine) -> Self {
+        Self { engine, pending: String::new() }
     }
+
+    /// The events in one line of output (none for the many bookkeeping
+    /// lines), plus what it says about the run's outcome.
+    pub fn line(&mut self, line: &str, at: i64) -> (Vec<RunEvent>, Outcome) {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
+            return (Vec::new(), Outcome::default());
+        };
+        match self.engine {
+            Engine::Claude => parse_claude(&value, at),
+            Engine::Codex => parse_codex(&value, at),
+            Engine::Gemini => self.gemini(&value, at),
+        }
+    }
+
+    /// What's left when the output ends without a result: the answer so far.
+    pub fn finish(&mut self, at: i64) -> Vec<RunEvent> {
+        self.flush(at).into_iter().collect()
+    }
+
+    fn flush(&mut self, at: i64) -> Option<RunEvent> {
+        let text = std::mem::take(&mut self.pending);
+        (!text.trim().is_empty()).then(|| event(EventKind::Text, "", text.trim().to_string(), at))
+    }
+
+    fn gemini(&mut self, value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
+        let mut events = Vec::new();
+        let mut outcome = Outcome::default();
+        let text = |key: &str| value.get(key).and_then(|text| text.as_str()).unwrap_or("");
+        match text("type") {
+            "message" if text("role") == "assistant" => self.pending.push_str(text("content")),
+            "tool_use" => {
+                events.extend(self.flush(at));
+                let detail = value.get("parameters").map(describe_input).unwrap_or_default();
+                events.push(event(EventKind::Tool, text("tool_name"), detail, at));
+            }
+            "tool_result" if text("status") == "error" => {
+                let message = value.pointer("/error/message").and_then(|message| message.as_str()).unwrap_or("");
+                events.push(event(EventKind::Stderr, "", message.to_string(), at));
+            }
+            "error" => events.push(event(EventKind::Stderr, "", text("message").to_string(), at)),
+            "result" => {
+                outcome.failed = text("status") != "success";
+                if let Some(message) = value.pointer("/error/message").and_then(|message| message.as_str()) {
+                    events.push(event(EventKind::Stderr, "", message.to_string(), at));
+                }
+                let answer = std::mem::take(&mut self.pending);
+                events.push(event(EventKind::Result, "", answer.trim().to_string(), at));
+            }
+            _ => {}
+        }
+        (events, outcome)
+    }
+}
+
+/// One line on its own, for the CLIs whose lines stand alone.
+#[cfg(test)]
+pub fn parse_line(engine: Engine, line: &str, at: i64) -> (Vec<RunEvent>, Outcome) {
+    Parser::new(engine).line(line, at)
 }
 
 fn event(kind: EventKind, tool: &str, text: String, at: i64) -> RunEvent {
@@ -216,6 +279,46 @@ mod tests {
         let (events, outcome) = parse_line(Engine::Codex, r#"{"type":"turn.failed","error":{"message":"quota"}}"#, 1);
         assert!(outcome.failed);
         assert_eq!(events[0].text, "quota");
+    }
+
+    /// Gemini CLI's pieces of text come out whole: one Text before a tool
+    /// call, the rest in the Result.
+    #[test]
+    fn gemini_answers_are_gathered_from_their_pieces() {
+        let mut parser = Parser::new(Engine::Gemini);
+        let lines = [
+            r#"{"type":"init","session_id":"s1","model":"gemini-2.5-pro"}"#,
+            r#"{"type":"message","role":"user","content":"Revisá"}"#,
+            r#"{"type":"message","role":"assistant","content":"Voy a ","delta":true}"#,
+            r#"{"type":"message","role":"assistant","content":"mirar.","delta":true}"#,
+            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"t1","parameters":{"file_path":"a.txt"}}"#,
+            r#"{"type":"tool_result","tool_id":"t1","status":"success","output":"hola"}"#,
+            r#"{"type":"message","role":"assistant","content":"Dice ","delta":true}"#,
+            r#"{"type":"message","role":"assistant","content":"hola.","delta":true}"#,
+            r#"{"type":"result","status":"success","stats":{}}"#,
+        ];
+        let events: Vec<RunEvent> = lines.iter().flat_map(|line| parser.line(line, 1).0).collect();
+        assert_eq!(
+            events,
+            vec![
+                event(EventKind::Text, "", "Voy a mirar.".into(), 1),
+                event(EventKind::Tool, "read_file", "a.txt".into(), 1),
+                event(EventKind::Result, "", "Dice hola.".into(), 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn gemini_failures_say_why() {
+        let mut parser = Parser::new(Engine::Gemini);
+        let (events, outcome) = parser.line(r#"{"type":"result","status":"error","error":{"type":"API","message":"quota"}}"#, 1);
+        assert!(outcome.failed);
+        assert_eq!(events[0], event(EventKind::Stderr, "", "quota".into(), 1));
+        let (events, _) = parser.line(r#"{"type":"tool_result","tool_id":"t","status":"error","error":{"message":"denied"}}"#, 1);
+        assert_eq!(events[0].text, "denied");
+        // Output that ends without a result keeps what was said.
+        parser.line(r#"{"type":"message","role":"assistant","content":"a medias","delta":true}"#, 1);
+        assert_eq!(parser.finish(2), vec![event(EventKind::Text, "", "a medias".into(), 2)]);
     }
 
     #[test]

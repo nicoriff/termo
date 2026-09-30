@@ -10,7 +10,7 @@
     <span>{t(SHORTCUT_LABEL_KEYS.newTab)}</span>
     <ShortcutRecorder action="newTab" />
   </div>
-  {#each ["newClaude", "newCodex", "toggleExplorer", "toggleAgents"] as const as action (action)}
+  {#each ["newClaude", "newCodex", "newGemini", "toggleExplorer", "toggleAgents"] as const as action (action)}
     <div class="shortcut-row">
       <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
       <ShortcutRecorder {action} />

@@ -371,7 +371,59 @@ pub fn install_mcp(request: &McpInstallRequest) -> Result<InstallOutcome, String
     match request.target {
         AgentTarget::Claude => install_mcp_claude(request),
         AgentTarget::Codex => install_mcp_codex(request),
+        AgentTarget::Gemini => install_mcp_gemini(request),
     }
+}
+
+/// Gemini CLI's user settings, where its MCP servers live.
+fn gemini_settings_file() -> Result<std::path::PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| home.join(".gemini").join("settings.json"))
+        .ok_or_else(|| tr(Msg::HomeDirNotFound))
+}
+
+/// Edits `mcpServers` in Gemini CLI's settings: the rest of the file is kept
+/// as it is, and it's replaced whole (written aside, then renamed) so a
+/// failure never leaves it half-written.
+fn edit_gemini_servers(edit: impl FnOnce(&mut serde_json::Map<String, Value>)) -> Result<(), String> {
+    let fail = |err: String| tr(Msg::MarketplaceCommandFailed(&err));
+    let file = gemini_settings_file()?;
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    let mut root = if text.trim().is_empty() {
+        serde_json::Map::new()
+    } else {
+        match serde_json::from_str::<Value>(&text).map_err(|err| fail(err.to_string()))? {
+            Value::Object(map) => map,
+            _ => return Err(tr(Msg::NotAJsonObject(&file.display().to_string()))),
+        }
+    };
+    let servers = root
+        .entry("mcpServers")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()))
+        .as_object_mut()
+        .ok_or_else(|| tr(Msg::NotAJsonObject("mcpServers")))?;
+    edit(servers);
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|err| fail(err.to_string()))?;
+    }
+    let body = serde_json::to_string_pretty(&root).map_err(|err| fail(err.to_string()))? + "\n";
+    let tmp = file.with_extension("termo-tmp");
+    std::fs::write(&tmp, body)
+        .and_then(|_| std::fs::rename(&tmp, &file))
+        .map_err(|err| fail(err.to_string()))
+}
+
+/// Into Gemini CLI's settings directly, not through `gemini mcp add`: a
+/// package's own arguments (`npx -y …`) start with dashes its argument
+/// parser would take for its own options. The same checked config Claude
+/// gets, in Gemini's shape (see spec::gemini_server).
+fn install_mcp_gemini(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+    agent_cli::require(AgentTarget::Gemini, None)?;
+    let config = crate::agents::spec::gemini_server(&server_config(request)?);
+    edit_gemini_servers(|servers| {
+        servers.insert(request.server_name.clone(), config);
+    })?;
+    Ok(InstallOutcome::Installed { message: String::new() })
 }
 
 fn install_mcp_claude(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
@@ -450,6 +502,9 @@ pub fn uninstall_mcp(request: &McpInstallRequest) -> Result<(), String> {
     match request.target {
         AgentTarget::Claude => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str(), "-s", "user"]).map(|_| ()),
         AgentTarget::Codex => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str()]).map(|_| ()),
+        AgentTarget::Gemini => edit_gemini_servers(|servers| {
+            servers.remove(&request.server_name);
+        }),
     }
 }
 

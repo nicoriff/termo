@@ -10,7 +10,7 @@
   import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
-  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
+  import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
 
   const MEMORY_POLL_MS = 2000;
 
@@ -101,7 +101,7 @@
     </span>
   {/if}
   <!-- Plan usage and cost are Modo IA's: only with it on. -->
-  {#if appConfigStore.aiModeEnabled && (activeTool || planWindows.length > 0)}
+  {#if appConfigStore.aiModeEnabled && ((activeTool && REPORTS_PLAN_USAGE[activeTool]) || planWindows.length > 0)}
     <span class="status-item status-plan" title={t("statusBar.planHint")}>
       {t("statusBar.plan")}
       {#each planWindows as usage (usage.label)}

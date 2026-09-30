@@ -7,6 +7,7 @@ describe("resumeCommand", () => {
   it("uses each tool's documented resume form", () => {
     expect(resumeCommand("claude", UUID)).toBe(`claude --resume ${UUID}`);
     expect(resumeCommand("codex", UUID)).toBe(`codex resume ${UUID}`);
+    expect(resumeCommand("gemini", UUID)).toBe(`gemini --resume ${UUID}`);
   });
 
   it("accepts Codex session names", () => {

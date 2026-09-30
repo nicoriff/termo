@@ -36,12 +36,14 @@ pub struct AgentUpdate {
     pub agent_cwd: Option<String>,
 }
 
-/// Notification types that mean the agent is blocked on the user.
+/// Notification types that mean the agent is blocked on the user: Claude
+/// Code's, and Gemini CLI's one (a tool waiting for approval).
 const NEEDS_USER: &[&str] = &[
     "permission_prompt",
     "agent_needs_input",
     "elicitation_dialog",
     "elicitation_url_dialog",
+    "ToolPermission",
 ];
 
 pub fn parse_line(line: &str) -> Option<AgentUpdate> {
@@ -52,12 +54,14 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
     let optional = |value: Option<&str>| value.filter(|text| !text.is_empty()).map(str::to_owned);
     let agent_session_id = optional(parts.next());
     let agent_cwd = optional(parts.next());
-    if tool != "claude" && tool != "codex" {
+    if !matches!(tool, "claude" | "codex" | "gemini") {
         return None;
     }
     let status = match event {
-        "SessionStart" | "Interrupt" | "Stop" => Some(AgentStatus::Finished),
+        // Gemini CLI: AfterAgent ends a turn as Stop does.
+        "SessionStart" | "Interrupt" | "Stop" | "AfterAgent" => Some(AgentStatus::Finished),
         "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure" => Some(AgentStatus::Running),
+        "BeforeAgent" | "BeforeTool" | "AfterTool" => Some(AgentStatus::Running),
         "PermissionRequest" => Some(AgentStatus::Awaiting),
         "Notification" if NEEDS_USER.contains(&detail) => Some(AgentStatus::Awaiting),
         "StopFailure" => Some(AgentStatus::Error),
@@ -88,6 +92,20 @@ mod tests {
         assert_eq!(status("claude\tStop\t"), Some(Some(AgentStatus::Finished)));
         assert_eq!(status("claude\tStopFailure\t"), Some(Some(AgentStatus::Error)));
         assert_eq!(status("codex\tInterrupt\t"), Some(Some(AgentStatus::Finished)));
+    }
+
+    #[test]
+    fn maps_gemini_clis_turn_lifecycle() {
+        assert_eq!(status("gemini\tSessionStart\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("gemini\tBeforeAgent\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("gemini\tBeforeTool\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("gemini\tNotification\tToolPermission"), Some(Some(AgentStatus::Awaiting)));
+        assert_eq!(status("gemini\tAfterTool\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("gemini\tAfterAgent\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("gemini\tSessionEnd\t"), Some(None));
+        let update = parse_line("gemini\tBeforeAgent\t\tsess-1\tE:/proj").unwrap();
+        assert_eq!(update.agent_session_id.as_deref(), Some("sess-1"));
+        assert_eq!(update.agent_cwd.as_deref(), Some("E:/proj"));
     }
 
     #[test]

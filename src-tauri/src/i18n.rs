@@ -39,6 +39,7 @@ pub enum Msg<'a> {
     FontFileNotFound(&'a str),
     ClaudeCliNotFound,
     CodexCliNotFound,
+    GeminiCliNotFound,
     MarketplaceCommandFailed(&'a str),
     InvalidComponentName(&'a str),
     CodexHasNoPlugins,
@@ -144,6 +145,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (CodexCliNotFound, Es) => "No se encontró el CLI de Codex".into(),
         (CodexCliNotFound, En) => "Couldn't find the Codex CLI".into(),
+        (GeminiCliNotFound, Es) => "No se encontró Gemini CLI".into(),
+        (GeminiCliNotFound, En) => "Couldn't find Gemini CLI".into(),
 
         (MarketplaceCommandFailed(detail), Es) => format!("Falló el comando: {detail}"),
         (MarketplaceCommandFailed(detail), En) => format!("The command failed: {detail}"),
@@ -324,6 +327,7 @@ mod tests {
             Msg::FontFileNotFound("Fira Code"),
             Msg::ClaudeCliNotFound,
             Msg::CodexCliNotFound,
+            Msg::GeminiCliNotFound,
             Msg::MarketplaceCommandFailed("exit 1"),
             Msg::InvalidComponentName("../x"),
             Msg::CodexHasNoPlugins,

@@ -22,6 +22,8 @@ export interface ShortcutsConfig {
   new_claude_other: string | null;
   new_codex_mac: string | null;
   new_codex_other: string | null;
+  new_gemini_mac: string | null;
+  new_gemini_other: string | null;
   toggle_explorer_mac: string | null;
   toggle_explorer_other: string | null;
   toggle_agents_mac: string | null;
@@ -73,10 +75,13 @@ export interface AppConfig {
   ai_notify_finished: boolean;
   ai_sound_claude_enabled: boolean;
   ai_sound_codex_enabled: boolean;
+  ai_sound_gemini_enabled: boolean;
   ai_sound_claude_awaiting: string;
   ai_sound_claude_finished: string;
   ai_sound_codex_awaiting: string;
   ai_sound_codex_finished: string;
+  ai_sound_gemini_awaiting: string;
+  ai_sound_gemini_finished: string;
   ai_sound_volume: number;
   ai_dock_badge: boolean;
   agents_in_activity_bar: boolean;

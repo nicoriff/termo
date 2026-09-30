@@ -107,6 +107,7 @@ export const en: Messages = {
     targets: {
       claude: "Claude Code",
       codex: "Codex",
+      gemini: "Gemini CLI",
     },
     filterInstalled: "Installed",
     filterSkills: "With skills",
@@ -726,6 +727,7 @@ export const en: Messages = {
           "The engine is the program that does the work: Claude Code or Codex, the ones you already use in the console, with your same account. Here you also choose where it works and how far it can go on its own.",
         claudeHint: "Anthropic's agent. Recommended for most tasks.",
         codexHint: "OpenAI's agent. Runs its commands inside a sandbox.",
+        geminiHint: "Google's agent. To only look it uses its plan mode, which only reads.",
         notInstalled: "Not installed on this computer.",
         workDir: "Working folder",
         workDirHint: "Where the agent works: one of your projects, or a folder of its own, kept apart.",
@@ -903,6 +905,7 @@ export const en: Messages = {
       newTab: "New tab",
       newClaude: "New Claude Code tab",
       newCodex: "New Codex tab",
+      newGemini: "New Gemini CLI tab",
       toggleExplorer: "File explorer",
       toggleAgents: "Agents panel",
       cycleTab: "Cycle tabs",
@@ -1088,7 +1091,7 @@ export const en: Messages = {
       statusLineHint:
         "Chains Termo onto Claude Code's status line in ~/.claude/settings.json without replacing yours: both get the same data. Shows the active console's 5-hour and weekly window usage. Pro or Max subscriptions only, and only after the session's first response.",
       hooksHint:
-        "Adds hooks to {claudeFile} and {codexFile} that tell Termo each session's exact state (asking for permission, working, done), instead of inferring it from the screen. Outside Termo they do nothing. A copy of the file is saved before the first change.",
+        "Adds hooks to {files} that tell Termo each session's exact state (asking for permission, working, done), instead of inferring it from the screen. Outside Termo they do nothing. A copy of the file is saved before the first change.",
     },
     ohMyPosh: {
       installation: "Installation",

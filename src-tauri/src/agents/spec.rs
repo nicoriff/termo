@@ -17,6 +17,7 @@ pub enum Engine {
     #[default]
     Claude,
     Codex,
+    Gemini,
 }
 
 /// How far the agent may go on its own, in the terms the wizard explains:
@@ -500,6 +501,10 @@ pub struct Invocation {
     pub args: Vec<String>,
     pub stdin: String,
     pub env: Vec<(String, String)>,
+    /// Gemini CLI only: the settings for this run (its own MCP servers, the
+    /// web tools left out), which the runner writes to a file and points
+    /// GEMINI_CLI_SYSTEM_SETTINGS_PATH at — system settings, above the user's.
+    pub settings: Option<String>,
 }
 
 /// `system_prompt_file`: where the runner wrote the agent's logic (Claude
@@ -514,6 +519,7 @@ pub fn build_invocation(
     match spec.engine {
         Engine::Claude => claude_invocation(spec, context, system_prompt_file, secrets),
         Engine::Codex => codex_invocation(spec, context, secrets),
+        Engine::Gemini => gemini_invocation(spec, context, secrets),
     }
 }
 
@@ -566,6 +572,7 @@ fn claude_invocation(
         args,
         stdin: with_context(&spec.task, context),
         env,
+        settings: None,
     }
 }
 
@@ -676,11 +683,101 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
         args,
         stdin: codex_prompt(spec, context),
         env,
+        settings: None,
     }
 }
 
-/// Codex has no separate system prompt flag, so the logic goes ahead of the
-/// task in the prompt itself.
+/// Gemini CLI's names for its two web tools, left out of a run without web.
+const GEMINI_WEB_TOOLS: &[&str] = &["google_web_search", "web_fetch"];
+
+/// Gemini CLI's name for a server that exists nowhere: the allowlist of MCP
+/// servers can't be empty (that means "no restriction"), so a run without
+/// servers allows only this one.
+const GEMINI_NO_SERVER: &str = "termo-none";
+
+fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<String, String>) -> Invocation {
+    // Its own approval modes match the three levels: `plan` only reads (no
+    // shell, no edits), `auto_edit` also edits, `yolo` runs anything. Run
+    // headless, what a mode doesn't approve on its own is refused.
+    let mode = match spec.autonomy {
+        Autonomy::Read => "plan",
+        Autonomy::Edit => "auto_edit",
+        Autonomy::Run => "yolo",
+    };
+    let mut args: Vec<String> = vec![
+        "--output-format".into(),
+        "stream-json".into(),
+        "--approval-mode".into(),
+        mode.into(),
+    ];
+    // Only its own servers, not whatever the user's settings or extensions
+    // bring: they could hand it tools nobody chose for it.
+    let servers: Vec<&str> = usable_servers(spec).map(|server| server.name.as_str()).collect();
+    for name in if servers.is_empty() { vec![GEMINI_NO_SERVER] } else { servers } {
+        args.push("--allowed-mcp-server-names".into());
+        args.push(name.into());
+    }
+    if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
+        args.push("-m".into());
+        args.push(spec.model.trim().into());
+    }
+    // Gemini CLI fills `${NAME}` in its settings from its environment, as
+    // Claude Code does: the same rule on what may go there.
+    let mut env: Vec<(String, String)> = secrets
+        .iter()
+        .filter(|(name, _)| *name == TEAM_TOKEN_VAR || (is_env_name(name) && !is_reserved_env(name)))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    env.sort();
+    Invocation {
+        args,
+        // The prompt comes from stdin, which also puts it in headless mode.
+        stdin: codex_prompt(spec, context),
+        env,
+        settings: Some(gemini_settings_json(spec)),
+    }
+}
+
+/// The run's settings for Gemini CLI: its MCP servers in Gemini's shape, and
+/// the web tools left out unless the agent has the web.
+pub fn gemini_settings_json(spec: &AgentSpec) -> String {
+    let servers: serde_json::Map<String, serde_json::Value> = usable_servers(spec)
+        .map(|server| (server.name.clone(), gemini_server(&server.config)))
+        .collect();
+    let mut settings = serde_json::json!({ "mcpServers": servers });
+    if !spec.tools.web {
+        settings["tools"] = serde_json::json!({ "exclude": GEMINI_WEB_TOOLS });
+    }
+    settings.to_string()
+}
+
+/// A server's `.mcp.json` config (Claude Code's shape, which the agents keep)
+/// in Gemini CLI's: a remote one by `httpUrl` (streamable HTTP) or `url`
+/// (SSE), a local one as it is; the tool timeout in milliseconds.
+pub fn gemini_server(config: &serde_json::Value) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    let text = |key: &str| config.get(key).and_then(|value| value.as_str());
+    if let Some(url) = text("url") {
+        let key = if text("type") == Some("sse") { "url" } else { "httpUrl" };
+        out.insert(key.into(), url.into());
+        if let Some(headers) = config.get("headers").filter(|headers| headers.is_object()) {
+            out.insert("headers".into(), headers.clone());
+        }
+    } else {
+        for key in ["command", "args", "env", "cwd"] {
+            if let Some(value) = config.get(key) {
+                out.insert(key.into(), value.clone());
+            }
+        }
+    }
+    if let Some(seconds) = config.get(TOOL_TIMEOUT_KEY).and_then(|value| value.as_u64()) {
+        out.insert("timeout".into(), (seconds * 1000).into());
+    }
+    serde_json::Value::Object(out)
+}
+
+/// Codex and Gemini CLI have no flag for adding to the system prompt, so the
+/// logic goes ahead of the task in the prompt itself.
 fn codex_prompt(spec: &AgentSpec, context: Option<&str>) -> String {
     let task = with_context(&spec.task, context);
     if spec.instructions.trim().is_empty() {
@@ -953,6 +1050,66 @@ mod tests {
             .output()
             .unwrap();
         assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "false");
+    }
+
+    /// Gemini CLI: its approval mode per level, its settings in a file of the
+    /// run's own, and only the agent's servers allowed.
+    #[test]
+    fn gemini_runs_at_the_agents_level_with_only_its_own_servers() {
+        let modes: Vec<String> = [Autonomy::Read, Autonomy::Edit, Autonomy::Run]
+            .into_iter()
+            .map(|autonomy| {
+                let run = build_invocation(&spec(Engine::Gemini, autonomy), None, None, &no_secrets());
+                value_after(&run.args, "--approval-mode").unwrap().to_string()
+            })
+            .collect();
+        assert_eq!(modes, ["plan", "auto_edit", "yolo"]);
+
+        let run = build_invocation(&spec(Engine::Gemini, Autonomy::Read), None, None, &no_secrets());
+        assert_eq!(value_after(&run.args, "--output-format"), Some("stream-json"));
+        // No servers of its own: none of the user's either.
+        assert_eq!(value_after(&run.args, "--allowed-mcp-server-names"), Some(GEMINI_NO_SERVER));
+        assert!(run.stdin.starts_with("Sé breve") && run.stdin.ends_with("Resumí los cambios"));
+        let settings: serde_json::Value = serde_json::from_str(run.settings.as_deref().unwrap()).unwrap();
+        assert_eq!(settings["tools"]["exclude"], serde_json::json!(GEMINI_WEB_TOOLS));
+        assert_eq!(settings["mcpServers"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn gemini_gets_its_servers_in_its_own_shape() {
+        let mut agent = spec(Engine::Gemini, Autonomy::Read);
+        agent.tools.web = true;
+        agent.tools.mcp = vec![
+            McpServer {
+                name: "docs".into(),
+                config: serde_json::json!({ "command": "npx", "args": ["-y", "docs"], "env": { "API_KEY": "${K}" } }),
+            },
+            McpServer {
+                name: "remote".into(),
+                config: serde_json::json!({ "type": "http", "url": "https://x.example/mcp", "headers": { "X-Team": "core" } }),
+            },
+            McpServer { name: "x,Bash".into(), config: serde_json::json!({ "command": "evil" }) },
+        ];
+        let agent = with_team_server(&agent, "http://127.0.0.1:47821/mcp");
+        let secrets = HashMap::from([("K".to_string(), "v".to_string()), ("PATH".to_string(), "C:\\evil".to_string())]);
+        let run = build_invocation(&agent, None, None, &secrets);
+
+        let allowed: Vec<&String> =
+            run.args.iter().enumerate().filter(|(i, _)| *i > 0 && run.args[i - 1] == "--allowed-mcp-server-names").map(|(_, a)| a).collect();
+        assert_eq!(allowed, ["docs", "remote", "termo"]);
+        let settings: serde_json::Value = serde_json::from_str(run.settings.as_deref().unwrap()).unwrap();
+        let servers = &settings["mcpServers"];
+        assert_eq!(servers["docs"], serde_json::json!({ "command": "npx", "args": ["-y", "docs"], "env": { "API_KEY": "${K}" } }));
+        assert_eq!(servers["remote"], serde_json::json!({ "httpUrl": "https://x.example/mcp", "headers": { "X-Team": "core" } }));
+        assert_eq!(servers["termo"]["httpUrl"], "http://127.0.0.1:47821/mcp");
+        assert_eq!(servers["termo"]["headers"]["Authorization"], format!("Bearer ${{{TEAM_TOKEN_VAR}}}"));
+        assert_eq!(servers["termo"]["timeout"], 15 * 60 * 1000);
+        assert!(servers.get("x,Bash").is_none());
+        // The web on: nothing left out.
+        assert!(settings.get("tools").is_none());
+        // Secrets through its environment, never a reserved one.
+        let names: Vec<&str> = run.env.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["K"]);
     }
 
     #[test]

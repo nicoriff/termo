@@ -12,11 +12,12 @@
     onpick: (target: AgentTarget) => void;
   }
 
-  const { all = ["claude", "codex"], supported, available, value, onpick }: Props = $props();
+  const { all = ["claude", "codex", "gemini"], supported, available, value, onpick }: Props = $props();
 
   const LABEL_KEYS: Record<AgentTarget, MessageKey> = {
     claude: "marketplace.targets.claude",
     codex: "marketplace.targets.codex",
+    gemini: "marketplace.targets.gemini",
   };
 
   function reasonFor(target: AgentTarget): MessageKey | null {

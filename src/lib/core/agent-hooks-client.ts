@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type AgentTool = "claude" | "codex";
+export type AgentTool = "claude" | "codex" | "gemini";
 
 export interface AgentHooksStatus {
   claude: boolean;
   codex: boolean;
+  gemini: boolean;
 }
 
 export function getAgentHooksStatus(): Promise<AgentHooksStatus> {

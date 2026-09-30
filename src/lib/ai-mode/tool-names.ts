@@ -5,4 +5,14 @@ import type { ToolId } from "./pattern-table";
 export const TOOL_DISPLAY_NAMES: Record<ToolId, string> = {
   claude: "Claude Code",
   codex: "Codex",
+  gemini: "Gemini CLI",
+};
+
+/** Which agents report their plan's usage: Claude Code through its status
+ * line, Codex through its rollout. Gemini CLI has no such source, so the
+ * status bar doesn't wait for a reading that would never come. */
+export const REPORTS_PLAN_USAGE: Record<ToolId, boolean> = {
+  claude: true,
+  codex: true,
+  gemini: false,
 };

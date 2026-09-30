@@ -106,12 +106,29 @@ pub fn available(engine: Engine) -> Vec<ModelOption> {
     let file = match engine {
         Engine::Claude => claude_dir().and_then(|dir| newest_json(&dir.join("cache").join("model-catalog"))),
         Engine::Codex => codex_home().map(|home| home.join("models_cache.json")),
+        Engine::Gemini => return gemini_models(),
     };
     let Some(text) = file.and_then(|file| std::fs::read_to_string(file).ok()) else { return Vec::new() };
     match engine {
         Engine::Claude => parse_claude(&text),
         Engine::Codex => parse_codex(&text),
+        Engine::Gemini => Vec::new(),
     }
+}
+
+/// Gemini CLI saves no list of models: its own aliases, which follow its
+/// current models from one version to the next ("pro" is today's Pro).
+fn gemini_models() -> Vec<ModelOption> {
+    [("auto", true), ("pro", true), ("flash", true), ("flash-lite", false)]
+        .into_iter()
+        .map(|(id, main)| ModelOption {
+            id: id.into(),
+            name: id.into(),
+            description: String::new(),
+            main,
+            note: String::new(),
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -27,6 +27,7 @@
   import GithubDeployPanel from "./GithubDeployPanel.svelte";
   import { AGENT_TEMPLATES, applyTemplate, type AgentTemplate } from "./agent-templates";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
+  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { collectTiles } from "$lib/layout/split-tree";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
@@ -84,6 +85,7 @@
   const ENGINES: { id: AgentEngine; label: string; hint: MessageKey }[] = [
     { id: "claude", label: "Claude Code", hint: "agents.wizard.engine.claudeHint" },
     { id: "codex", label: "Codex", hint: "agents.wizard.engine.codexHint" },
+    { id: "gemini", label: "Gemini CLI", hint: "agents.wizard.engine.geminiHint" },
   ];
 
   const AUTONOMY: { id: AgentAutonomy; title: MessageKey; text: MessageKey }[] = [
@@ -106,7 +108,7 @@
 
   /** The models each engine's CLI offers (loaded once; missing until then). */
   let models = $state<Partial<Record<AgentEngine, ModelOption[]>>>({});
-  for (const engine of ["claude", "codex"] as const) {
+  for (const { id: engine } of ENGINES) {
     void agentModels(engine)
       .then((list) => (models = { ...models, [engine]: list }))
       .catch(() => (models = { ...models, [engine]: [] }));
@@ -562,7 +564,7 @@
                 </select>
               </div>
               {#if models[spec.engine] && engineModels.length === 0}
-                <p class="hint">{t("agents.wizard.engine.modelsMissing", { engine: spec.engine === "claude" ? "Claude Code" : "Codex" })}</p>
+                <p class="hint">{t("agents.wizard.engine.modelsMissing", { engine: TOOL_DISPLAY_NAMES[spec.engine] })}</p>
               {/if}
               <div class="row">
                 <label class="label inline" for="agent-timeout">{t("agents.wizard.engine.timeout")}</label>

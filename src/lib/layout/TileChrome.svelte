@@ -24,7 +24,7 @@
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { requestAgentLaunch, requestLaunch } from "$lib/agent-launch/request-launch";
-  import type { ToolId } from "$lib/ai-mode/pattern-table";
+  import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
 
@@ -95,7 +95,7 @@
 
   const shells = $derived(newTabOptions.shells);
   const agentClis = $derived(newTabOptions.agentClis);
-  const AGENTS: ToolId[] = ["claude", "codex"];
+  const AGENTS = TOOL_IDS;
 
   /** Asks where to run it first, in this tile rather than the focused one. */
   function pickAgent(tool: ToolId) {

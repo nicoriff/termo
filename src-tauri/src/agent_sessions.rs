@@ -1,5 +1,6 @@
-//! Recent Claude Code / Codex sessions, so Modo IA can list them and reopen
-//! one later: `claude --resume <id>` and `codex resume <id>` both take the
+//! Recent Claude Code / Codex / Gemini CLI sessions, so Modo IA can list them
+//! and reopen one later: `claude --resume <id>`, `codex resume <id>` and
+//! `gemini --resume <id>` all take the
 //! agent's own session id, which arrives in the hook payload's common fields
 //! and in the status line's JSON (see pty/agent_hooks.rs, pty/status_line.rs).
 //!
@@ -21,7 +22,7 @@ const MAX_SESSIONS: usize = 20;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSession {
-    /// "claude" or "codex", matching ToolId on the frontend.
+    /// "claude", "codex" or "gemini", matching ToolId on the frontend.
     pub tool: String,
     /// The agent's own session id — what its resume command takes.
     pub agent_session_id: String,

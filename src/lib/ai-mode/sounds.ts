@@ -8,6 +8,8 @@
  * loads fine in Node for tests.
  */
 
+import type { ToolId } from "./pattern-table";
+
 export const SOUND_IDS = [
   "chime",
   "alert",
@@ -32,9 +34,10 @@ export type SoundEvent = "awaiting" | "finished";
 
 /** Different per agent out of the box, so they're told apart by ear before
  * anyone opens Preferences. Mirrors the defaults in config/schema.rs. */
-export const DEFAULT_SOUNDS: Record<"claude" | "codex", Record<SoundEvent, SoundChoice>> = {
+export const DEFAULT_SOUNDS: Record<ToolId, Record<SoundEvent, SoundChoice>> = {
   claude: { awaiting: "alert", finished: "chime" },
   codex: { awaiting: "pop", finished: "marimba" },
+  gemini: { awaiting: "doorbell", finished: "harp" },
 };
 
 export function isSoundChoice(value: string): value is SoundChoice {

@@ -41,9 +41,11 @@
     catalogStore.pendingApproval?.item.id === item.id ? catalogStore.pendingApproval : null,
   );
   const availableTargets = $derived<AgentTarget[]>(
-    [catalogStore.status?.claudeCli ? "claude" : null, catalogStore.status?.codexCli ? "codex" : null].filter(
-      (value): value is AgentTarget => value !== null,
-    ),
+    [
+      catalogStore.status?.claudeCli ? "claude" : null,
+      catalogStore.status?.codexCli ? "codex" : null,
+      catalogStore.status?.geminiCli ? "gemini" : null,
+    ].filter((value): value is AgentTarget => value !== null),
   );
   const commandPreview = $derived(
     item.detail.kind === "plugin" ? `claude plugin install ${item.detail.plugin_id}` : "",
@@ -80,6 +82,7 @@
   const TARGET_LABEL_KEYS: Record<AgentTarget, MessageKey> = {
     claude: "marketplace.targets.claude",
     codex: "marketplace.targets.codex",
+    gemini: "marketplace.targets.gemini",
   };
 
   /** Where the code actually comes from — the single most important thing to

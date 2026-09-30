@@ -1,4 +1,4 @@
-//! Opt-in integration with Claude Code and Codex lifecycle hooks, so Modo IA
+//! Opt-in integration with Claude Code, Codex and Gemini CLI lifecycle hooks, so Modo IA
 //! knows a session's exact state instead of inferring it from the screen.
 //!
 //! Installing adds one hook entry per lifecycle event to the tool's user
@@ -36,15 +36,17 @@ const LEGACY_SCRIPT_NAME: &str = "termini-agent-hook";
 pub enum AgentTool {
     Claude,
     Codex,
+    Gemini,
 }
 
 impl AgentTool {
-    const ALL: [AgentTool; 2] = [AgentTool::Claude, AgentTool::Codex];
+    const ALL: [AgentTool; 3] = [AgentTool::Claude, AgentTool::Codex, AgentTool::Gemini];
 
     fn name(self) -> &'static str {
         match self {
             AgentTool::Claude => "claude",
             AgentTool::Codex => "codex",
+            AgentTool::Gemini => "gemini",
         }
     }
 
@@ -73,6 +75,17 @@ impl AgentTool {
                 "Interrupt",
                 "SessionEnd",
             ],
+            // Gemini CLI's own names: a turn runs BeforeAgent…AfterAgent, and
+            // a permission prompt is a Notification of type ToolPermission.
+            AgentTool::Gemini => &[
+                "SessionStart",
+                "BeforeAgent",
+                "BeforeTool",
+                "AfterTool",
+                "Notification",
+                "AfterAgent",
+                "SessionEnd",
+            ],
         }
     }
 
@@ -85,6 +98,8 @@ impl AgentTool {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".codex"))
                 .join("hooks.json"),
+            // Its user settings, where hooks sit beside everything else.
+            AgentTool::Gemini => home.join(".gemini").join("settings.json"),
         })
     }
 }
@@ -102,7 +117,7 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
     )
 }
 
-/// Codex runs its hooks through PowerShell on Windows, and there a statement
+/// Codex and Gemini CLI run their hooks through PowerShell on Windows, and there a statement
 /// that opens with a quoted path is an expression, not a command: the
 /// arguments after it are a syntax error ("Unexpected token"), so the hook
 /// never ran and Modo IA never heard from Codex. The call operator makes it
@@ -111,7 +126,7 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
 #[cfg(windows)]
 fn call_prefix(tool: AgentTool) -> &'static str {
     match tool {
-        AgentTool::Codex => "& ",
+        AgentTool::Codex | AgentTool::Gemini => "& ",
         AgentTool::Claude => "",
     }
 }
@@ -184,14 +199,23 @@ pub(super) fn write_root(file: &Path, root: &Map<String, Value>) -> anyhow::Resu
     Ok(())
 }
 
+/// Keys of Gemini CLI's `hooks` object that are its own settings, not
+/// events: never touched here (`disabled: []` is the user's, empty or not).
+const HOOKS_SETTINGS: &[&str] = &["enabled", "disabled", "notifications"];
+
 /// Removes Termo's entries, and any event list that ends up empty.
 fn strip_ours(hooks: &mut Map<String, Value>) {
-    for entries in hooks.values_mut() {
+    for (event, entries) in hooks.iter_mut() {
+        if HOOKS_SETTINGS.contains(&event.as_str()) {
+            continue;
+        }
         if let Some(entries) = entries.as_array_mut() {
             entries.retain(|group| !is_our_group(group));
         }
     }
-    hooks.retain(|_, entries| !entries.as_array().is_some_and(Vec::is_empty));
+    hooks.retain(|event, entries| {
+        HOOKS_SETTINGS.contains(&event.as_str()) || !entries.as_array().is_some_and(Vec::is_empty)
+    });
 }
 
 fn add_ours(root: &mut Map<String, Value>, tool: AgentTool, exe: &Path) -> anyhow::Result<()> {
@@ -519,6 +543,37 @@ mod tests {
         assert_eq!(stop[0]["hooks"][0]["command"], hook_command(exe(), AgentTool::Claude, "Stop"));
     }
 
+    /// Gemini CLI keeps its hooks in its whole settings file, beside its own
+    /// `hooks` settings: Termo adds its entries and takes them away without
+    /// touching either.
+    #[test]
+    fn gemini_settings_keep_everything_but_termos_entries() {
+        let original: Map<String, Value> = serde_json::from_value(json!({
+            "security": { "auth": { "selectedType": "gemini-api-key" } },
+            "hooks": {
+                "enabled": true,
+                "disabled": [],
+                "AfterAgent": [{ "hooks": [{ "type": "command", "command": "say done" }] }]
+            }
+        }))
+        .unwrap();
+        let mut root = original.clone();
+
+        add_ours(&mut root, AgentTool::Gemini, exe()).unwrap();
+        assert!(has_ours(&root, AgentTool::Gemini));
+        for event in ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"] {
+            assert!(root["hooks"][event].as_array().is_some(), "{event}");
+        }
+        assert_eq!(root["hooks"]["AfterAgent"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            root["hooks"]["BeforeAgent"][0]["hooks"][0]["command"],
+            hook_command(exe(), AgentTool::Gemini, "BeforeAgent")
+        );
+
+        remove_ours(&mut root);
+        assert_eq!(root, original);
+    }
+
     #[test]
     fn files_without_termo_hooks_are_not_ours() {
         let root: Map<String, Value> = serde_json::from_value(json!({
@@ -537,15 +592,20 @@ mod tests {
         );
     }
 
-    /// Codex's PowerShell needs the call operator, and Claude's Git Bash must
-    /// not get it — without this Codex silently ran no hooks at all.
+    /// Codex's and Gemini CLI's PowerShell need the call operator, and
+    /// Claude's Git Bash must not get it — without this Codex silently ran no
+    /// hooks at all.
     #[cfg(windows)]
     #[test]
-    fn only_codex_gets_the_powershell_call_operator() {
+    fn only_the_powershell_tools_get_the_call_operator() {
         let exe = Path::new(r"C:\Program Files\Termo\termo.exe");
         assert_eq!(
             hook_command(exe, AgentTool::Codex, "Stop"),
             "& \"C:/Program Files/Termo/termo.exe\" --agent-hook codex Stop"
+        );
+        assert_eq!(
+            hook_command(exe, AgentTool::Gemini, "AfterAgent"),
+            "& \"C:/Program Files/Termo/termo.exe\" --agent-hook gemini AfterAgent"
         );
         assert!(!hook_command(exe, AgentTool::Claude, "Stop").starts_with('&'));
     }

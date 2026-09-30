@@ -8,7 +8,7 @@ import type { ToolId } from "$lib/ai-mode/pattern-table";
  * CLIs are installed. Loaded once at startup, so the menu opens already
  * filled — reading them on the first click (probing WSL included) showed a
  * "Loading…" row that then jumped to the full list — and refreshed in the
- * background on every open, so installing Claude or Codex while Termo runs
+ * background on every open, so installing Claude, Codex or Gemini while Termo runs
  * still shows up.
  */
 class NewTabOptions {
@@ -22,7 +22,10 @@ class NewTabOptions {
       .then((list) => (this.shells = list))
       .catch(() => {});
     marketplaceStatus()
-      .then((status) => (this.agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli }))
+      .then(
+        (status) =>
+          (this.agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli, gemini: !!status.geminiCli }),
+      )
       .catch(() => {});
   }
 }

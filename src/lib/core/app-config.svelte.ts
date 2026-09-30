@@ -18,6 +18,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_claude_other: null,
   new_codex_mac: null,
   new_codex_other: null,
+  new_gemini_mac: null,
+  new_gemini_other: null,
   toggle_explorer_mac: null,
   toggle_explorer_other: null,
   toggle_agents_mac: null,
@@ -52,6 +54,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
   newClaude: { mac: "new_claude_mac", other: "new_claude_other" },
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
+  newGemini: { mac: "new_gemini_mac", other: "new_gemini_other" },
   toggleExplorer: { mac: "toggle_explorer_mac", other: "toggle_explorer_other" },
   toggleAgents: { mac: "toggle_agents_mac", other: "toggle_agents_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
@@ -88,7 +91,7 @@ class AppConfigStore {
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
   /** Whether each agent's sounds play at all. */
-  aiSoundsEnabled = $state<Record<ToolId, boolean>>({ claude: true, codex: true });
+  aiSoundsEnabled = $state<Record<ToolId, boolean>>({ claude: true, codex: true, gemini: true });
   /** Per agent, so each can be told apart by ear. */
   aiSounds = $state<Record<ToolId, Record<SoundEvent, SoundChoice>>>(structuredClone(DEFAULT_SOUNDS));
   aiSoundVolume = $state(70);
@@ -158,7 +161,12 @@ class AppConfigStore {
     this.aiNotifyFinished = config.ai_notify_finished;
     // A name no longer in the bank (or a hand-edited typo) falls back to the
     // default rather than to silence.
-    this.aiSoundsEnabled = { claude: config.ai_sound_claude_enabled, codex: config.ai_sound_codex_enabled };
+    this.aiSoundsEnabled = {
+      claude: config.ai_sound_claude_enabled,
+      codex: config.ai_sound_codex_enabled,
+      // Absent in configs from before Gemini CLI was supported.
+      gemini: config.ai_sound_gemini_enabled ?? true,
+    };
     const sound = (value: string, fallback: SoundChoice) => (isSoundChoice(value) ? value : fallback);
     this.aiSounds = {
       claude: {
@@ -168,6 +176,10 @@ class AppConfigStore {
       codex: {
         awaiting: sound(config.ai_sound_codex_awaiting, DEFAULT_SOUNDS.codex.awaiting),
         finished: sound(config.ai_sound_codex_finished, DEFAULT_SOUNDS.codex.finished),
+      },
+      gemini: {
+        awaiting: sound(config.ai_sound_gemini_awaiting ?? "", DEFAULT_SOUNDS.gemini.awaiting),
+        finished: sound(config.ai_sound_gemini_finished ?? "", DEFAULT_SOUNDS.gemini.finished),
       },
     };
     this.aiSoundVolume = config.ai_sound_volume;
@@ -358,10 +370,13 @@ class AppConfigStore {
       ai_notify_finished: this.aiNotifyFinished,
       ai_sound_claude_enabled: this.aiSoundsEnabled.claude,
       ai_sound_codex_enabled: this.aiSoundsEnabled.codex,
+      ai_sound_gemini_enabled: this.aiSoundsEnabled.gemini,
       ai_sound_claude_awaiting: this.aiSounds.claude.awaiting,
       ai_sound_claude_finished: this.aiSounds.claude.finished,
       ai_sound_codex_awaiting: this.aiSounds.codex.awaiting,
       ai_sound_codex_finished: this.aiSounds.codex.finished,
+      ai_sound_gemini_awaiting: this.aiSounds.gemini.awaiting,
+      ai_sound_gemini_finished: this.aiSounds.gemini.finished,
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,

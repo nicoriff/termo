@@ -22,6 +22,7 @@ export type ShortcutAction =
   | "newTab"
   | "newClaude"
   | "newCodex"
+  | "newGemini"
   | "toggleExplorer"
   | "toggleAgents"
   | "cycleTab"
@@ -41,6 +42,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newTab",
   "newClaude",
   "newCodex",
+  "newGemini",
   "toggleExplorer",
   "toggleAgents",
   "cycleTab",
@@ -63,6 +65,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newTab: "shortcuts.labels.newTab",
   newClaude: "shortcuts.labels.newClaude",
   newCodex: "shortcuts.labels.newCodex",
+  newGemini: "shortcuts.labels.newGemini",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
   toggleAgents: "shortcuts.labels.toggleAgents",
   cycleTab: "shortcuts.labels.cycleTab",
@@ -231,6 +234,8 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   // # and friends.
   newClaude: { mac: "meta+shift+l", other: "ctrl+shift+l" },
   newCodex: { mac: "meta+shift+x", other: "ctrl+shift+x" },
+  // Not G (Agents has it) nor I (the dev tools in debug builds).
+  newGemini: { mac: "meta+shift+j", other: "ctrl+shift+j" },
   // Not plain Ctrl+B: the shell uses it to move the cursor back.
   toggleExplorer: { mac: "meta+shift+b", other: "ctrl+shift+b" },
   toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },

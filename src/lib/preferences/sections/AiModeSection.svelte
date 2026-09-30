@@ -8,11 +8,12 @@
     type AgentHooksStatus,
     type AgentTool,
   } from "$lib/core/agent-hooks-client";
-  import { t } from "$lib/i18n/i18n.svelte";
+  import { i18n, t } from "$lib/i18n/i18n.svelte";
   import { installStatusLine, isStatusLineInstalled, uninstallStatusLine } from "$lib/core/status-line-client";
   const TOOLS: { tool: AgentTool; label: string; file: string }[] = [
     { tool: "claude", label: "Claude Code", file: "~/.claude/settings.json" },
     { tool: "codex", label: "Codex", file: "~/.codex/hooks.json" },
+    { tool: "gemini", label: "Gemini CLI", file: "~/.gemini/settings.json" },
   ];
 
   let hooks = $state<AgentHooksStatus | null>(null);
@@ -84,7 +85,9 @@
       </div>
     {/each}
     <p class="setting-hint">
-      {t("preferences.aiMode.hooksHint", { claudeFile: TOOLS[0].file, codexFile: TOOLS[1].file })}
+      {t("preferences.aiMode.hooksHint", {
+        files: new Intl.ListFormat(i18n.locale, { type: "conjunction" }).format(TOOLS.map(({ file }) => file)),
+      })}
     </p>
 
   <div class="hook-row">

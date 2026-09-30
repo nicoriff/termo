@@ -8,11 +8,19 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 /**
  * The command that reopens a past conversation, or null when the id isn't safe
- * to type into a shell. Both forms come from the tools' own docs: `claude
+ * to type into a shell. Every form comes from the tools' own docs: `claude
  * --resume <id>` (searches the current project, its worktrees, then other
- * projects) and `codex resume <id>` (UUID or session name).
+ * projects), `codex resume <id>` (UUID or session name) and `gemini --resume
+ * <id>` (UUID, an index, or "latest").
  */
 export function resumeCommand(tool: ToolId, agentSessionId: string): string | null {
   if (!SAFE_ID.test(agentSessionId)) return null;
-  return tool === "claude" ? `claude --resume ${agentSessionId}` : `codex resume ${agentSessionId}`;
+  switch (tool) {
+    case "claude":
+      return `claude --resume ${agentSessionId}`;
+    case "codex":
+      return `codex resume ${agentSessionId}`;
+    case "gemini":
+      return `gemini --resume ${agentSessionId}`;
+  }
 }

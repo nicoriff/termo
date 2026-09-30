@@ -5,12 +5,14 @@
     "es": [
       "En Windows, **Ctrl+V pega** en la consola, también dentro de Claude Code, como en Windows Terminal. Lo que pegás con varias líneas llega entero, sin ejecutarse línea por línea. Ctrl+Shift+V también pega.",
       "**Modo IA es el interruptor general**: apagado, además del seguimiento de sesiones se apagan los agentes (no corre ninguno y no queda un puerto local abierto), las extensiones y los accesos a Claude y Codex.",
-      "**Un solo Termo a la vez**: abrirlo de nuevo trae al frente el que ya está abierto. Con dos abiertos, un agente que sigue a otro podía correr en el otro Termo sin que se viera, y un agente programado podía correr dos veces."
+      "**Un solo Termo a la vez**: abrirlo de nuevo trae al frente el que ya está abierto. Con dos abiertos, un agente que sigue a otro podía correr en el otro Termo sin que se viera, y un agente programado podía correr dos veces.",
+      "**Gemini CLI**, como Claude Code y Codex: en el “+”, la paleta y con Ctrl+Shift+J; su estado en las pestañas, avisos y sonidos propios, hooks para detectarlo con precisión y retomar sesiones; como motor de los agentes; y como destino de los servidores MCP de Extensiones."
     ],
     "en": [
       "On Windows, **Ctrl+V pastes** into the console, inside Claude Code too, as in Windows Terminal. A multi-line paste arrives whole instead of running line by line. Ctrl+Shift+V pastes too.",
       "**Modo IA is the master switch**: off, besides session tracking it turns off the agents (none runs and no local port stays open), extensions and the Claude and Codex shortcuts.",
-      "**One Termo at a time**: opening it again brings the one already open forward. With two open, an agent that follows another could run in the other Termo unseen, and a scheduled agent could run twice."
+      "**One Termo at a time**: opening it again brings the one already open forward. With two open, an agent that follows another could run in the other Termo unseen, and a scheduled agent could run twice.",
+      "**Gemini CLI**, like Claude Code and Codex: in the “+”, the palette and with Ctrl+Shift+J; its status in tabs, its own notices and sounds, hooks to track it precisely and resuming sessions; as an engine for agents; and as a target for Extensions' MCP servers."
     ]
   },
   {

@@ -40,6 +40,7 @@ pub fn require(target: AgentTarget, override_path: Option<&str>) -> Result<PathB
     locate(target, override_path).ok_or_else(|| match target {
         AgentTarget::Claude => tr(Msg::ClaudeCliNotFound),
         AgentTarget::Codex => tr(Msg::CodexCliNotFound),
+        AgentTarget::Gemini => tr(Msg::GeminiCliNotFound),
     })
 }
 

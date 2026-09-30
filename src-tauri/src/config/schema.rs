@@ -31,6 +31,8 @@ pub struct ShortcutsConfig {
     pub new_claude_other: Option<String>,
     pub new_codex_mac: Option<String>,
     pub new_codex_other: Option<String>,
+    pub new_gemini_mac: Option<String>,
+    pub new_gemini_other: Option<String>,
     pub toggle_explorer_mac: Option<String>,
     pub toggle_explorer_other: Option<String>,
     pub toggle_agents_mac: Option<String>,
@@ -110,6 +112,7 @@ pub struct AppConfig {
     /// picks below for when they're switched back on.
     pub ai_sound_claude_enabled: bool,
     pub ai_sound_codex_enabled: bool,
+    pub ai_sound_gemini_enabled: bool,
     /// Sound played when an agent's console starts waiting on the user /
     /// finishes a turn, per agent so they can be told apart by ear: one of
     /// the ids in src/lib/ai-mode/sounds.ts, or "none".
@@ -117,6 +120,8 @@ pub struct AppConfig {
     pub ai_sound_claude_finished: String,
     pub ai_sound_codex_awaiting: String,
     pub ai_sound_codex_finished: String,
+    pub ai_sound_gemini_awaiting: String,
+    pub ai_sound_gemini_finished: String,
     /// 0–100.
     pub ai_sound_volume: u8,
     /// App icon badge with the number of sessions waiting on the user.
@@ -162,10 +167,14 @@ impl Default for AppConfig {
             ai_notify_finished: true,
             ai_sound_claude_enabled: true,
             ai_sound_codex_enabled: true,
+            ai_sound_gemini_enabled: true,
             ai_sound_claude_awaiting: "alert".into(),
             ai_sound_claude_finished: "chime".into(),
             ai_sound_codex_awaiting: "pop".into(),
             ai_sound_codex_finished: "marimba".into(),
+            // Its own pair again, so all three agents are told apart by ear.
+            ai_sound_gemini_awaiting: "doorbell".into(),
+            ai_sound_gemini_finished: "harp".into(),
             ai_sound_volume: 70,
             ai_dock_badge: true,
             agents_in_activity_bar: true,

@@ -180,7 +180,7 @@ mod tests {
         // Not a field the registry publishes, but who owns the repository
         // is real information — the same signal the icon derives from.
         assert_eq!(item.author.as_deref(), Some("Hint-Services"));
-        assert_eq!(item.targets, vec![AgentTarget::Claude, AgentTarget::Codex]);
+        assert_eq!(item.targets, vec![AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini]);
         // No proxy for this one: the registry has no download counts at all.
         assert!(item.install_count.is_none());
         match &item.detail {
