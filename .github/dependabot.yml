@@ -1,0 +1,13 @@
+# Keeps the actions in .github/workflows current. They're pinned to commit
+# SHAs (a moved tag can't slip new code into the job that holds the signing
+# key), so Dependabot opens a PR with the new SHA and its version comment
+# instead. dtolnay/rust-toolchain follows a branch and is bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

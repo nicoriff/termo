@@ -5,12 +5,14 @@
     "es": [
       "En Windows, **Ctrl+C copia** lo que tengas seleccionado en la consola, como en Windows Terminal; sin selección sigue interrumpiendo. Ctrl+Shift+C también copia.",
       "**Ocho sonidos nuevos** para las notificaciones de Modo IA: Campana, Timbre, Blip, Gota, Logro, Toc toc, Arpa y Sonar.",
-      "Las listas desplegables de Preferencias se abren hacia arriba cuando no entran abajo, en vez de quedar cortadas."
+      "Las listas desplegables de Preferencias se abren hacia arriba cuando no entran abajo, en vez de quedar cortadas.",
+      "Actualización de seguridad de la librería TLS que usan las descargas y las actualizaciones."
     ],
     "en": [
       "On Windows, **Ctrl+C copies** what you have selected in the console, as in Windows Terminal; with nothing selected it still interrupts. Ctrl+Shift+C copies too.",
       "**Eight new sounds** for Modo IA notifications: Bell, Doorbell, Blip, Drop, Success, Knock, Harp and Sonar.",
-      "Dropdowns in Preferences open upwards when they don't fit below, instead of being cut off."
+      "Dropdowns in Preferences open upwards when they don't fit below, instead of being cut off.",
+      "Security update to the TLS library used by downloads and updates."
     ]
   },
   {
