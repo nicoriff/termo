@@ -160,6 +160,21 @@ export function eventMatchesKeybinding(event: KeyLike, binding: string, options?
   return event.key.toLowerCase() === parsed.key;
 }
 
+/**
+ * Whether a key press copies the console's selection: the Copy shortcut, or
+ * — on Windows, as in Windows Terminal — a plain Ctrl+C. Only asked while
+ * there IS a selection; with none, Ctrl+C stays the shell's interrupt.
+ */
+export function isCopyChord(event: KeyLike, copyBinding: string, windows: boolean): boolean {
+  return eventMatchesKeybinding(event, copyBinding) || (windows && isPlainCtrlC(event));
+}
+
+/** Ctrl+C and nothing else held: the chord that, copying, should also let go
+ * of the selection, so the next Ctrl+C interrupts again. */
+export function isPlainCtrlC(event: KeyLike): boolean {
+  return eventMatchesKeybinding(event, "ctrl+c");
+}
+
 /** Keys that produce a visible character on their own — recording one of
  * these with no modifier held is almost always the user just typing, not
  * trying to set a shortcut, so `normalizeEventToBinding` rejects it. */

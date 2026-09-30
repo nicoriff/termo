@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { tick } from "svelte";
+  import { placePanel, type PanelPlacement } from "./dropdown-placement";
+
   /**
    * The combo used by Preferences rows. A native <select> can't be styled to
    * match the rest of the app, so this reproduces one: same look as
@@ -26,8 +29,15 @@
   let open = $state(false);
   let highlighted = $state(0);
   let triggerEl: HTMLButtonElement | undefined = $state();
+  let panelEl: HTMLDivElement | undefined = $state();
+  let placement = $state<PanelPlacement | null>(null);
 
   const current = $derived(options.find((option) => option.value === value) ?? options[0]);
+
+  /** The panel's own cap, and roughly what one row takes (padding, text,
+   * the gap between rows) — to know whether it fits below before it's drawn. */
+  const MAX_PANEL_HEIGHT = 240;
+  const ROW_HEIGHT = 31;
 
   function toggle() {
     open = !open;
@@ -37,8 +47,36 @@
         0,
         options.findIndex((option) => option.value === value),
       );
+      if (triggerEl) {
+        const wanted = Math.min(MAX_PANEL_HEIGHT, options.length * ROW_HEIGHT + 8);
+        placement = placePanel(triggerEl.getBoundingClientRect(), window.innerHeight, wanted);
+      }
+      // The current pick in view, not scrolled off the bottom of a long list.
+      void tick().then(() => scrollToRow(highlighted));
     }
   }
+
+  function scrollToRow(index: number) {
+    panelEl?.children[index]?.scrollIntoView({ block: "nearest" });
+  }
+
+  // The panel is placed against the window, not the page: once the page
+  // scrolls or the window resizes it would float away from its trigger, so
+  // it closes instead — as a native select does. Scrolling the panel's own
+  // list doesn't count.
+  $effect(() => {
+    if (!open) return;
+    const dismiss = (event: Event) => {
+      if (event.type === "scroll" && panelEl?.contains(event.target as Node)) return;
+      open = false;
+    };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+    };
+  });
 
   function close() {
     open = false;
@@ -62,8 +100,10 @@
       close();
     } else if (event.key === "ArrowDown") {
       highlighted = (highlighted + 1) % options.length;
+      scrollToRow(highlighted);
     } else if (event.key === "ArrowUp") {
       highlighted = (highlighted - 1 + options.length) % options.length;
+      scrollToRow(highlighted);
     } else if (event.key === "Enter" || event.key === " ") {
       if (options[highlighted]) pick(options[highlighted].value);
     } else if (event.key === "Tab") {
@@ -95,7 +135,16 @@
   {#if open}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="dropdown-backdrop" onpointerdown={() => (open = false)}></div>
-    <div class="dropdown-panel" role="listbox">
+    <div
+      class="dropdown-panel"
+      role="listbox"
+      bind:this={panelEl}
+      style:left={placement ? `${placement.left}px` : undefined}
+      style:width={placement ? `${placement.width}px` : undefined}
+      style:top={placement?.top !== undefined ? `${placement.top}px` : undefined}
+      style:bottom={placement?.bottom !== undefined ? `${placement.bottom}px` : undefined}
+      style:max-height={placement ? `${placement.maxHeight}px` : undefined}
+    >
       {#each options as option, index (option.value)}
         <button
           class="dropdown-item"
@@ -171,18 +220,15 @@
     z-index: 199;
   }
 
+  /* Fixed, placed by placePanel: a scrolling section can't clip it, and it
+     opens upwards when the trigger is near the window's bottom. */
   .dropdown-panel {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 4px;
+    position: fixed;
     z-index: 200;
     display: flex;
     flex-direction: column;
     gap: 2px;
     padding: 4px;
-    max-height: 240px;
     overflow-y: auto;
     background: var(--tabbar-active-bg, #1e1e1e);
     border: 1px solid var(--tabbar-border, #2a2a2a);

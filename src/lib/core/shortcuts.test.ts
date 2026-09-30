@@ -4,6 +4,8 @@ import {
   findConflict,
   formatKeybindingLabel,
   getDefaultKeybinding,
+  isCopyChord,
+  isPlainCtrlC,
   normalizeEventToBinding,
   normalizeEventToZoomBinding,
   parseKeybinding,
@@ -15,6 +17,28 @@ import {
 function key(overrides: Partial<KeyLike> & { key: string }): KeyLike {
   return { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, ...overrides };
 }
+
+describe("isCopyChord", () => {
+  const ctrlC = key({ key: "c", ctrlKey: true });
+  const ctrlShiftC = key({ key: "C", ctrlKey: true, shiftKey: true });
+
+  it("takes plain Ctrl+C as copy on Windows, as Windows Terminal does", () => {
+    expect(isCopyChord(ctrlC, "ctrl+shift+c", true)).toBe(true);
+    expect(isPlainCtrlC(ctrlC)).toBe(true);
+  });
+
+  it("keeps the Copy shortcut working everywhere", () => {
+    expect(isCopyChord(ctrlShiftC, "ctrl+shift+c", true)).toBe(true);
+    expect(isCopyChord(ctrlShiftC, "ctrl+shift+c", false)).toBe(true);
+    expect(isPlainCtrlC(ctrlShiftC)).toBe(false);
+  });
+
+  it("leaves Ctrl+C to the shell on Linux, and other chords alone", () => {
+    expect(isCopyChord(ctrlC, "ctrl+shift+c", false)).toBe(false);
+    expect(isCopyChord(key({ key: "c", ctrlKey: true, altKey: true }), "ctrl+shift+c", true)).toBe(false);
+    expect(isCopyChord(key({ key: "v", ctrlKey: true }), "ctrl+shift+c", true)).toBe(false);
+  });
+});
 
 describe("parseKeybinding / serializeKeybinding", () => {
   it("round-trips a single-modifier binding", () => {

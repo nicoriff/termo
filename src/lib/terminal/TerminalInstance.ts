@@ -9,7 +9,7 @@ import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
 import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
-import { eventMatchesKeybinding } from "../core/shortcuts";
+import { eventMatchesKeybinding, isCopyChord, isPlainCtrlC } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
@@ -188,10 +188,17 @@ export class TerminalInstance {
       }
 
       // Copy only takes the key when there IS a selection: with none, Ctrl+C
-      // has to keep reaching the shell as the interrupt.
-      if (eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("copy")) && this.term.hasSelection()) {
+      // has to keep reaching the shell as the interrupt. On Windows plain
+      // Ctrl+C copies too (see isCopyChord), and lets go of the selection
+      // as it does, so pressing it again interrupts, as in Windows Terminal.
+      if (
+        this.term.hasSelection() &&
+        isCopyChord(event, appConfigStore.getEffectiveShortcut("copy"), isWindows)
+      ) {
         event.preventDefault();
-        void copySelection();
+        void copySelection().then(() => {
+          if (isPlainCtrlC(event)) this.term.clearSelection();
+        });
         return false;
       }
 

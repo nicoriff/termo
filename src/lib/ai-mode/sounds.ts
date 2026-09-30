@@ -8,7 +8,21 @@
  * loads fine in Node for tests.
  */
 
-export const SOUND_IDS = ["chime", "alert", "pop", "marimba", "soft"] as const;
+export const SOUND_IDS = [
+  "chime",
+  "alert",
+  "pop",
+  "marimba",
+  "soft",
+  "bell",
+  "doorbell",
+  "blip",
+  "drop",
+  "success",
+  "knock",
+  "harp",
+  "sonar",
+] as const;
 export type SoundId = (typeof SOUND_IDS)[number];
 /** What a setting holds: a sound, or none at all. */
 export type SoundChoice = SoundId | "none";
@@ -41,7 +55,7 @@ interface Note {
   attack?: number;
 }
 
-const SOUNDS: Record<SoundId, Note[]> = {
+export const SOUNDS: Record<SoundId, Note[]> = {
   // Two bell partials struck together, ringing out.
   chime: [
     { freq: 1318.5, at: 0, length: 1.1, level: 0.5 },
@@ -62,6 +76,54 @@ const SOUNDS: Record<SoundId, Note[]> = {
   ],
   // A low, slow swell for when anything sharper would be too much.
   soft: [{ freq: 440, at: 0, length: 0.9, level: 0.45, attack: 0.18 }],
+  // A church-bell strike: a low fundamental with the inharmonic partials
+  // (×2.76, ×5.4) that make metal sound like metal, the high ones dying first.
+  bell: [
+    { freq: 392, at: 0, length: 1.8, level: 0.45 },
+    { freq: 1082, at: 0, length: 1.0, level: 0.2 },
+    { freq: 2117, at: 0, length: 0.5, level: 0.1 },
+  ],
+  // Ding-dong: a falling third, like a doorbell.
+  doorbell: [
+    { freq: 659.3, at: 0, length: 0.55, wave: "triangle", level: 0.55 },
+    { freq: 523.3, at: 0.32, length: 0.9, wave: "triangle", level: 0.55 },
+  ],
+  // Two short square-wave beeps, old-computer style. Square waves carry more
+  // energy than sines, hence the lower level.
+  blip: [
+    { freq: 1318.5, at: 0, length: 0.07, wave: "square", level: 0.18, attack: 0.002 },
+    { freq: 1760, at: 0.09, length: 0.09, wave: "square", level: 0.18, attack: 0.002 },
+  ],
+  // A water drop: a fast upward glide, and a faint second one after it.
+  drop: [
+    { freq: 520, to: 1500, at: 0, length: 0.12, level: 0.6, attack: 0.003 },
+    { freq: 700, to: 1800, at: 0.16, length: 0.1, level: 0.2, attack: 0.003 },
+  ],
+  // A quick major arpeggio up to the octave: done, and done well.
+  success: [
+    { freq: 523.3, at: 0, length: 0.18, wave: "triangle", level: 0.45 },
+    { freq: 659.3, at: 0.07, length: 0.18, wave: "triangle", level: 0.45 },
+    { freq: 784, at: 0.14, length: 0.18, wave: "triangle", level: 0.45 },
+    { freq: 1046.5, at: 0.21, length: 0.5, wave: "triangle", level: 0.45 },
+  ],
+  // Two dull knocks on a door: low thumps that drop in pitch.
+  knock: [
+    { freq: 190, to: 110, at: 0, length: 0.09, level: 0.85, attack: 0.002 },
+    { freq: 190, to: 110, at: 0.17, length: 0.09, level: 0.85, attack: 0.002 },
+  ],
+  // A pentatonic run up the strings, each note left to ring.
+  harp: [
+    { freq: 523.3, at: 0, length: 0.9, level: 0.32 },
+    { freq: 587.3, at: 0.06, length: 0.9, level: 0.32 },
+    { freq: 659.3, at: 0.12, length: 0.9, level: 0.32 },
+    { freq: 784, at: 0.18, length: 0.9, level: 0.32 },
+    { freq: 880, at: 0.24, length: 1.1, level: 0.32 },
+  ],
+  // A sonar ping and its quieter echo.
+  sonar: [
+    { freq: 1175, at: 0, length: 1.0, level: 0.45, attack: 0.004 },
+    { freq: 1175, at: 0.5, length: 0.8, level: 0.14, attack: 0.004 },
+  ],
 };
 
 let context: AudioContext | null = null;
