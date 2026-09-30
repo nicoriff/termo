@@ -250,6 +250,13 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
     // front of that console — but only that one. always_on_top kept it over
     // every other app too; owned by the main window, it stays above Termo
     // alone and goes behind whatever window the user switches to.
+    //
+    // Not on macOS: there the owner makes it a child window through AppKit's
+    // addChildWindow, which puts it on screen however hidden it was built —
+    // so this preloaded window opened on every launch, and came back each
+    // time the main window came forward. Unowned, it can end up behind the
+    // main window there instead.
+    #[cfg(not(target_os = "macos"))]
     let builder = match app.get_webview_window("main") {
         Some(main) => builder.parent(&main).map_err(|err| err.to_string())?,
         None => builder,
