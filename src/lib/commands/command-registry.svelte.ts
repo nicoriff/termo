@@ -3,7 +3,7 @@ import { agentSessionsStore } from "../ai-mode/agent-sessions-store.svelte";
 import { canRestore, restoreSession, sessionLabel } from "../ai-mode/restore-session";
 import { appConfigStore } from "../core/app-config.svelte";
 import { resolveDefaultShell } from "../core/default-shell";
-import { openPreferencesWindow } from "../core/window-client";
+import { openNewWindow, openPreferencesWindow } from "../core/window-client";
 import { uiState } from "../core/ui-state.svelte";
 import { t } from "../i18n/i18n.svelte";
 import { layoutsStore } from "../layout/layouts-store.svelte";
@@ -36,6 +36,12 @@ function focusedTile() {
  * config or the language change. */
 export function buildCommands(): Command[] {
   const commands: Command[] = [
+    {
+      id: "navigation.newWindow",
+      group: "navigation",
+      label: t("shortcuts.labels.newWindow"),
+      run: () => void openNewWindow(),
+    },
     {
       id: "navigation.preferences",
       group: "navigation",

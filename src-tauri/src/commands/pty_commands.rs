@@ -17,6 +17,8 @@ fn parse_id(id: &str) -> Result<Uuid, String> {
 #[tauri::command]
 pub fn pty_spawn(
     app: tauri::AppHandle,
+    // The console belongs to the window that opened it (see terminal_windows.rs).
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, AppState>,
     shell_path: Option<String>,
     shell_args: Option<Vec<String>>,
@@ -78,7 +80,7 @@ pub fn pty_spawn(
 
     state
         .pty
-        .spawn(&path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
+        .spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
         .map(|id| id.to_string())
         .map_err(|err| err.to_string())
 }
@@ -153,13 +155,23 @@ pub async fn pty_memory(app: tauri::AppHandle, id: String) -> Result<Option<u64>
     .map_err(|err| err.to_string())
 }
 
-/// How many consoles have something running under their shell. Off the main
-/// thread for the same reason as pty_memory: it refreshes the process table.
+/// How many consoles have something running under their shell: every
+/// window's (quitting), or with `this_window` only the asking window's
+/// (closing it). Off the main thread for the same reason as pty_memory: it
+/// refreshes the process table.
 #[tauri::command]
-pub async fn busy_consoles(app: tauri::AppHandle) -> Result<usize, String> {
+pub async fn busy_consoles(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    this_window: Option<bool>,
+) -> Result<usize, String> {
+    let owner = this_window.unwrap_or(false).then(|| window.label().to_string());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let pids = state.pty.pids();
+        let pids = match &owner {
+            Some(owner) => state.pty.pids_of(owner),
+            None => state.pty.pids(),
+        };
         state.memory.busy_roots(&pids).len()
     })
     .await

@@ -48,9 +48,33 @@ export function setBackgroundBlur(enabled: boolean): Promise<void> {
   return invoke("set_background_blur", { enabled });
 }
 
-/** App icon badge (macOS Dock, some Linux docks); unsupported on Windows. */
-export function setBadgeCount(count?: number): Promise<void> {
-  return getCurrentWindow().setBadgeCount(count);
+/** This window's sessions waiting on the user. The app icon's badge (macOS
+ * Dock, some Linux docks; unsupported on Windows) is the app's, so the
+ * backend shows the sum of every window's (see terminal_windows.rs). */
+export function reportPending(count: number): Promise<void> {
+  return invoke("report_pending", { count });
+}
+
+/** One more console window, with its own tabs and panes. */
+export function openNewWindow(): Promise<void> {
+  return invoke("open_new_window");
+}
+
+/** Whether this is the window that speaks for all of them, where only one
+ * should (the notice that a background agent finished, say). */
+export function isPrimaryWindow(): Promise<boolean> {
+  return invoke("is_primary_window");
+}
+
+/** A console window, as opposed to Preferences: `main`, `main-2`… */
+export function isConsoleWindow(): boolean {
+  return getCurrentWindow().label !== "preferences";
+}
+
+/** The first console window, the one Termo opens with: the only one that
+ * restores the default layout and shows what an update brought. */
+export function isFirstWindow(): boolean {
+  return getCurrentWindow().label === "main";
 }
 
 export function isWindowFullscreen(): Promise<boolean> {

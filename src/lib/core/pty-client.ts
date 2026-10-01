@@ -60,9 +60,10 @@ export function getPtyMemory(id: string): Promise<number | null> {
 }
 
 /** How many consoles have a process running under their shell — a command in
- * progress, rather than a prompt sitting idle. */
-export function busyConsoles(): Promise<number> {
-  return invoke("busy_consoles");
+ * progress, rather than a prompt sitting idle. Every window's, or with
+ * `thisWindow` only this window's (what closing it would end). */
+export function busyConsoles(thisWindow = false): Promise<number> {
+  return invoke("busy_consoles", { thisWindow });
 }
 
 export function listShells(): Promise<ShellInfo[]> {

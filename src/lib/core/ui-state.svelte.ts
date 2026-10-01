@@ -42,9 +42,10 @@ class UiState {
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
   marketplaceOpen = $state(false);
-  /** What quitting would interrupt, when it's worth asking about (see
-   * app/quit.ts). Null while no such question is on screen. */
-  quitPrompt = $state<{ consoles: number; agents: number } | null>(null);
+  /** What quitting (`scope: "app"`) or closing this window would interrupt,
+   * when it's worth asking about (see app/quit.ts). Null while no such
+   * question is on screen. */
+  quitPrompt = $state<{ consoles: number; agents: number; scope: "app" | "window" } | null>(null);
   /** Where the console's right-click Edit menu is open, in window
    * coordinates. Deliberately not part of `overlayOpen`: it never takes the
    * keyboard from the console, so shortcuts keep working under it. */
@@ -115,7 +116,7 @@ class UiState {
     this.deleteLayoutTarget = null;
   }
 
-  askBeforeQuit(counts: { consoles: number; agents: number }): void {
+  askBeforeQuit(counts: { consoles: number; agents: number; scope: "app" | "window" }): void {
     this.quitPrompt = counts;
   }
 

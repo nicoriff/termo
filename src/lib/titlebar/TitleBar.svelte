@@ -15,14 +15,15 @@
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { requestQuit } from "$lib/app/quit";
+  import { requestCloseWindow } from "$lib/app/quit";
   import AppMenu from "./AppMenu.svelte";
   import KeepAwakeButton from "./KeepAwakeButton.svelte";
   import { DEFAULT_DECORATION_LAYOUT, parseDecorationLayout, type WindowButton } from "./decoration-layout";
 
-  // This bar is also the Preferences window's, where closing just hides it —
-  // only the main window's X ends the app, so only it asks first.
-  const isMainWindow = getCurrentWindow().label === "main";
+  // This bar is also the Preferences window's, where closing just hides it.
+  // A console window's X closes that window and its consoles, so it asks
+  // first (and the last one closing ends Termo).
+  const isConsoleWindow = getCurrentWindow().label !== "preferences";
 
   let {
     title = "Termo",
@@ -140,7 +141,7 @@
 <!-- Keeping the computer awake belongs to the app, not to a window: only
      the main window's bar offers it. -->
 {#snippet keepAwake()}
-  {#if isMainWindow && showSettingsButton && appConfigStore.keepAwakeButton}
+  {#if isConsoleWindow && showSettingsButton && appConfigStore.keepAwakeButton}
     <KeepAwakeButton />
   {/if}
 {/snippet}
@@ -196,7 +197,7 @@
     <button
       class="titlebar-button titlebar-close"
       aria-label={t("titlebar.close")}
-      onclick={() => void (isMainWindow ? requestQuit() : closeWindow())}
+      onclick={() => void (isConsoleWindow ? requestCloseWindow() : closeWindow())}
     >
       <svg viewBox="0 0 10 10" width="10" height="10">
         <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1" />

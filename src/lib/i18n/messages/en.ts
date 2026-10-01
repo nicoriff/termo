@@ -81,6 +81,9 @@ export const en: Messages = {
     warning: "Quitting closes them all and loses whatever they are doing.",
     cancel: "Cancel",
     confirm: "Quit anyway",
+    windowTitle: "Close window",
+    windowWarning: "Closing this window closes its consoles and loses whatever they are doing. The other windows stay open.",
+    windowConfirm: "Close anyway",
   },
   edit: {
     title: "Edit",
@@ -902,6 +905,7 @@ export const en: Messages = {
   },
   shortcuts: {
     labels: {
+      newWindow: "New window",
       newTab: "New tab",
       newClaude: "New Claude Code tab",
       newCodex: "New Codex tab",

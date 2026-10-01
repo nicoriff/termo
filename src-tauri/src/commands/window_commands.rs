@@ -45,13 +45,34 @@ pub fn decoration_layout() -> Option<String> {
     }
 }
 
-/// Ends the app outright. Closing the main window gets there too (lib.rs exits
-/// on its Destroyed event, which is what keeps the preloaded, hidden
-/// Preferences window from outliving it), but "Quit" shouldn't depend on that
-/// chain to mean what it says.
+/// Ends the app outright, every window with it. Closing the last console
+/// window gets there too (terminal_windows::on_destroyed, which is what keeps
+/// the preloaded, hidden Preferences window from outliving them), but "Quit"
+/// shouldn't depend on that chain to mean what it says.
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+/// One more console window (see terminal_windows.rs). Async, so it builds
+/// off the main thread.
+#[tauri::command]
+pub async fn open_new_window(app: tauri::AppHandle) -> Result<(), String> {
+    crate::terminal_windows::open_new(&app)
+}
+
+/// Whether the asking window is the one that speaks for all of them (see
+/// terminal_windows::is_primary).
+#[tauri::command]
+pub fn is_primary_window(app: tauri::AppHandle, window: tauri::WebviewWindow) -> bool {
+    crate::terminal_windows::is_primary(&app, window.label())
+}
+
+/// The asking window's sessions waiting on the user, for the app icon's
+/// badge (see terminal_windows::set_pending).
+#[tauri::command]
+pub fn report_pending(app: tauri::AppHandle, window: tauri::WebviewWindow, count: u32) {
+    crate::terminal_windows::set_pending(&app, window.label(), count);
 }
 
 const PREFERENCES: &str = "preferences";
@@ -62,6 +83,9 @@ static PREFERENCES_READY: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 /// An open request that arrived before the page was ready.
 static PREFERENCES_SHOW_PENDING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+
+/// The console window Preferences was last asked from, which it opens over.
+static OPENED_FROM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 const PRELOAD_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
 /// How long an open request waits for the page to report ready before
@@ -75,9 +99,11 @@ const READY_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
 /// Must stay `async`: on Windows, building a webview window from a sync
 /// command deadlocks (WebView2), leaving a blank window and a hung app.
 #[tauri::command]
-pub async fn open_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_preferences_window(app: tauri::AppHandle, from: tauri::WebviewWindow) -> Result<(), String> {
     use std::sync::atomic::Ordering::SeqCst;
 
+    // It opens over the console window it was asked from.
+    *OPENED_FROM.lock().unwrap() = Some(from.label().to_string());
     let window = ensure_preferences_window(&app)?;
     PREFERENCES_SHOW_PENDING.store(true, SeqCst);
     if PREFERENCES_READY.load(SeqCst) && PREFERENCES_SHOW_PENDING.swap(false, SeqCst) {
@@ -127,7 +153,8 @@ pub async fn set_ui_language(app: tauri::AppHandle, language: String) -> Result<
 pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoadPayload<'_>) {
     use tauri::webview::PageLoadEvent;
 
-    match (webview.label(), payload.event()) {
+    let label = webview.label();
+    match (label, payload.event()) {
         (PREFERENCES, PageLoadEvent::Started) => {
             PREFERENCES_READY.store(false, std::sync::atomic::Ordering::SeqCst)
         }
@@ -136,11 +163,11 @@ pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoad
         // — with no chance for their normal teardown (TerminalInstance.dispose,
         // which calls killPty) to run. Without this, each one orphans its
         // shell process, and anything running under it, for the rest of the
-        // app's lifetime.
-        ("main", PageLoadEvent::Started) => {
-            webview.app_handle().state::<crate::state::AppState>().pty.kill_all();
+        // app's lifetime. Only that window's: the others keep theirs.
+        (_, PageLoadEvent::Started) if crate::terminal_windows::is_terminal(label) => {
+            webview.app_handle().state::<crate::state::AppState>().pty.kill_owned_by(label);
         }
-        ("main", PageLoadEvent::Finished) => {
+        (_, PageLoadEvent::Finished) if crate::terminal_windows::is_terminal(label) => {
             let app = webview.app_handle().clone();
             // Off the main thread: this callback runs on it, and building a
             // webview window there deadlocks on Windows.
@@ -168,17 +195,23 @@ fn show_and_focus(window: &tauri::WebviewWindow) -> Result<(), String> {
     // Opening it lands it over the console it configures. Already open, it
     // stays wherever the user put it and just comes forward.
     if !window.is_visible().unwrap_or(false) {
-        center_over_main(window);
+        center_over_opener(window);
     }
     window.show().map_err(|err| err.to_string())?;
     window.set_focus().map_err(|err| err.to_string())
 }
 
-/// Centers `window` on the main window. Sizes go through logical units: the
-/// hidden window may still be measured on another monitor, at another scale,
-/// than the one it's about to appear on.
-fn center_over_main(window: &tauri::WebviewWindow) {
-    let Some(main) = window.app_handle().get_webview_window("main") else {
+/// Centers `window` on the console window it was opened from, or the first
+/// one open. Sizes go through logical units: the hidden window may still be
+/// measured on another monitor, at another scale, than the one it's about to
+/// appear on.
+fn center_over_opener(window: &tauri::WebviewWindow) {
+    let app = window.app_handle();
+    let opener = OPENED_FROM.lock().unwrap().clone();
+    let Some(main) = opener
+        .and_then(|label| app.get_webview_window(&label))
+        .or_else(|| crate::terminal_windows::labels(app).first().and_then(|label| app.get_webview_window(label)))
+    else {
         return;
     };
     let (Ok(main_pos), Ok(main_size), Ok(main_scale), Ok(size), Ok(scale)) = (
@@ -256,9 +289,13 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
     // so this preloaded window opened on every launch, and came back each
     // time the main window came forward. Unowned, it can end up behind the
     // main window there instead.
+    //
+    // Owned by the first console window open. Should that one close while
+    // others stay, Preferences goes with it and is built again on the next
+    // open (`get_webview_window` above finds nothing).
     #[cfg(not(target_os = "macos"))]
-    let builder = match app.get_webview_window("main") {
-        Some(main) => builder.parent(&main).map_err(|err| err.to_string())?,
+    let builder = match crate::terminal_windows::labels(app).first().and_then(|label| app.get_webview_window(label)) {
+        Some(owner) => builder.parent(&owner).map_err(|err| err.to_string())?,
         None => builder,
     };
 

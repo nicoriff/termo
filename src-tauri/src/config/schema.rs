@@ -33,6 +33,8 @@ pub struct ShortcutsConfig {
     pub new_codex_other: Option<String>,
     pub new_gemini_mac: Option<String>,
     pub new_gemini_other: Option<String>,
+    pub new_window_mac: Option<String>,
+    pub new_window_other: Option<String>,
     pub toggle_explorer_mac: Option<String>,
     pub toggle_explorer_other: Option<String>,
     pub toggle_agents_mac: Option<String>,

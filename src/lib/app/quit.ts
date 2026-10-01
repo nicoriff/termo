@@ -2,13 +2,15 @@ import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { busyConsoles } from "$lib/core/pty-client";
 import { uiState } from "$lib/core/ui-state.svelte";
-import { quitApp } from "$lib/core/window-client";
+import { closeWindow, quitApp } from "$lib/core/window-client";
 
 /** What closing Termo would cut short: consoles with a command running under
  * them, and agent sessions (Modo IA) mid-turn or waiting on the user. Also
- * what installing an update would (see updater.svelte.ts). */
-export async function runningWork(): Promise<{ consoles: number; agents: number }> {
-  const consoles = await busyConsoles().catch(() => 0);
+ * what installing an update would (see updater.svelte.ts). With
+ * `thisWindow`, only this window's consoles (what closing it would end).
+ * Agent sessions are this window's either way: each window tracks its own. */
+export async function runningWork(thisWindow = false): Promise<{ consoles: number; agents: number }> {
+  const consoles = await busyConsoles(thisWindow).catch(() => 0);
   const agents = appConfigStore.aiModeEnabled ? aiStatusStore.counts.running + aiStatusStore.counts.awaiting : 0;
   return { consoles, agents };
 }
@@ -28,5 +30,17 @@ export async function requestQuit(): Promise<void> {
     void quitApp();
     return;
   }
-  uiState.askBeforeQuit({ consoles, agents });
+  uiState.askBeforeQuit({ consoles, agents, scope: "app" });
+}
+
+/** The same for closing this window (its X): only its own consoles count,
+ * and the others stay. Closing the last window ends Termo
+ * (terminal_windows::on_destroyed). */
+export async function requestCloseWindow(): Promise<void> {
+  const { consoles, agents } = await runningWork(true);
+  if (consoles === 0 && agents === 0) {
+    void closeWindow();
+    return;
+  }
+  uiState.askBeforeQuit({ consoles, agents, scope: "window" });
 }

@@ -24,6 +24,8 @@ export interface ShortcutsConfig {
   new_codex_other: string | null;
   new_gemini_mac: string | null;
   new_gemini_other: string | null;
+  new_window_mac: string | null;
+  new_window_other: string | null;
   toggle_explorer_mac: string | null;
   toggle_explorer_other: string | null;
   toggle_agents_mac: string | null;

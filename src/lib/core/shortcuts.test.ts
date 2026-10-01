@@ -203,7 +203,12 @@ describe("findConflict", () => {
   });
 
   it("returns null when there's no conflict", () => {
-    expect(findConflict("ctrl+shift+n", "newTab", {}, false)).toBeNull();
+    expect(findConflict("ctrl+shift+u", "newTab", {}, false)).toBeNull();
+  });
+
+  it("covers the new window's default binding", () => {
+    expect(findConflict("ctrl+shift+n", "newTab", {}, false)).toBe("newWindow");
+    expect(findConflict("meta+n", "newTab", {}, true)).toBe("newWindow");
   });
 
   it("covers the command palette's own default binding", () => {

@@ -1,10 +1,12 @@
 <script lang="ts">
   import { fade, fly } from "svelte/transition";
   import { uiState } from "$lib/core/ui-state.svelte";
-  import { quitApp } from "$lib/core/window-client";
+  import { closeWindow, quitApp } from "$lib/core/window-client";
   import { t } from "$lib/i18n/i18n.svelte";
 
   const counts = $derived(uiState.quitPrompt);
+  /** Closing one window (its X) rather than quitting Termo. */
+  const closingWindow = $derived(counts?.scope === "window");
 
   let cancelEl: HTMLButtonElement | undefined = $state();
 
@@ -21,8 +23,9 @@
   }
 
   function confirm() {
+    const window = closingWindow;
     uiState.cancelQuit();
-    void quitApp();
+    void (window ? closeWindow() : quitApp());
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -46,12 +49,12 @@
     class="dialog"
     role="dialog"
     tabindex="-1"
-    aria-label={t("quit.title")}
+    aria-label={t(closingWindow ? "quit.windowTitle" : "quit.title")}
     onpointerdown={(e) => e.stopPropagation()}
     onkeydown={onKeydown}
     transition:fly={{ y: -16, duration: 140 }}
   >
-    <h2 class="dialog-title">{t("quit.title")}</h2>
+    <h2 class="dialog-title">{t(closingWindow ? "quit.windowTitle" : "quit.title")}</h2>
     <ul class="dialog-list">
       {#if counts && counts.consoles > 0}
         <li>{t("quit.busyConsoles", { count: String(counts.consoles) })}</li>
@@ -60,10 +63,12 @@
         <li>{t("quit.busyAgents", { count: String(counts.agents) })}</li>
       {/if}
     </ul>
-    <p class="dialog-text">{t("quit.warning")}</p>
+    <p class="dialog-text">{t(closingWindow ? "quit.windowWarning" : "quit.warning")}</p>
     <div class="dialog-actions">
       <button class="dialog-button" bind:this={cancelEl} onclick={close}>{t("quit.cancel")}</button>
-      <button class="dialog-button danger" onclick={confirm}>{t("quit.confirm")}</button>
+      <button class="dialog-button danger" onclick={confirm}>
+        {t(closingWindow ? "quit.windowConfirm" : "quit.confirm")}
+      </button>
     </div>
   </div>
 </div>

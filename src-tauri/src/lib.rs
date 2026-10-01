@@ -10,6 +10,7 @@ mod marketplace;
 mod migration;
 mod pty;
 mod state;
+mod terminal_windows;
 
 use state::AppState;
 use tauri::Manager;
@@ -41,18 +42,19 @@ pub fn run() {
     // Before anything reads the config folders (see migration.rs).
     migration::migrate_from_termini();
     let builder = tauri::Builder::default();
-    // One Termo at a time: opening it again brings the running one forward
-    // instead. Two would each run the agents over the same data — both
-    // taking from one queue, each blind to the other's runs. First, as the
-    // plugin asks. Left out of debug builds, so a dev build can run beside
-    // the installed one.
+    // One Termo process at a time: opening it again opens one more window of
+    // the running one instead (see terminal_windows.rs). Two processes would
+    // each run the agents over the same data — both taking from one queue,
+    // each blind to the other's runs. First, as the plugin asks. Left out of
+    // debug builds, so a dev build can run beside the installed one.
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        // Called on the main thread, where building a window deadlocks on
+        // Windows.
+        let app = app.clone();
+        std::thread::spawn(move || {
+            let _ = terminal_windows::open_new(&app);
+        });
     }));
     builder
         .plugin(tauri_plugin_opener::init())
@@ -63,17 +65,17 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .on_page_load(commands::window_commands::on_page_load)
+        // Any console window closing takes its consoles along, and the last
+        // one the app: the preloaded Preferences window only hides on close
+        // and would otherwise keep it running.
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) && terminal_windows::is_terminal(window.label()) {
+                terminal_windows::on_destroyed(window.app_handle(), window.label());
+            }
+        })
         .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window(terminal_windows::MAIN) {
                 commands::window_shape::attach(&window);
-                // The preloaded Preferences window only hides on close and
-                // would otherwise keep the app running without a main window.
-                let handle = app.handle().clone();
-                window.on_window_event(move |event| {
-                    if matches!(event, tauri::WindowEvent::Destroyed) {
-                        handle.exit(0);
-                    }
-                });
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
             pty::status_line::start_watcher(app.handle().clone());
@@ -105,6 +107,9 @@ pub fn run() {
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
             commands::window_commands::preferences_ready,
+            commands::window_commands::open_new_window,
+            commands::window_commands::is_primary_window,
+            commands::window_commands::report_pending,
             commands::window_commands::set_ui_language,
             commands::window_commands::set_background_blur,
             commands::window_commands::decoration_layout,

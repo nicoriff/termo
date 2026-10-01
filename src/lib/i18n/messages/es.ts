@@ -80,6 +80,9 @@ export const es = {
     warning: "Si salís se cierran todas y se pierde lo que estén haciendo.",
     cancel: "Cancelar",
     confirm: "Salir igual",
+    windowTitle: "Cerrar ventana",
+    windowWarning: "Si cerrás esta ventana se cierran sus consolas y se pierde lo que estén haciendo. Las otras ventanas siguen abiertas.",
+    windowConfirm: "Cerrar igual",
   },
   edit: {
     title: "Edición",
@@ -903,6 +906,7 @@ export const es = {
   },
   shortcuts: {
     labels: {
+      newWindow: "Nueva ventana",
       newTab: "Nueva pestaña",
       newClaude: "Nueva pestaña de Claude Code",
       newCodex: "Nueva pestaña de Codex",

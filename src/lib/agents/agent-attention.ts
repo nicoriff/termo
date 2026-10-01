@@ -1,6 +1,7 @@
 import { sendNotification } from "@tauri-apps/plugin-notification";
 import { onAgentRun, type RunRecord } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
+import { isPrimaryWindow } from "$lib/core/window-client";
 import { t } from "$lib/i18n/i18n.svelte";
 import { collectSessions } from "$lib/layout/split-tree";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -19,6 +20,9 @@ function watching(agentId: string): boolean {
 }
 
 async function announce(run: RunRecord) {
+  // Every console window hears every run; one of them speaks, or each would
+  // play the sound and post the notice again.
+  if (!(await isPrimaryWindow().catch(() => true))) return;
   const agent = agentsStore.agents.find((candidate) => candidate.id === run.agentId);
   // Tests from the wizard are watched as they happen; stopping one was the
   // user's own doing.

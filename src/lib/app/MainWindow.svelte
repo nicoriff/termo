@@ -33,7 +33,13 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { onWindowResized, setBackgroundBlur, setBadgeCount } from "$lib/core/window-client";
+  import {
+    isFirstWindow,
+    onWindowResized,
+    openNewWindow,
+    reportPending,
+    setBackgroundBlur,
+  } from "$lib/core/window-client";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { startAgentAttention } from "$lib/ai-mode/attention";
   import { resolveDefaultShell } from "$lib/core/default-shell";
@@ -54,10 +60,12 @@
       await layoutsStore.load();
       // Launching straight into the chosen layout, rather than opening a
       // console and replacing it a moment later. A name that no longer exists
-      // just falls through to the normal single console.
-      const preset = appConfigStore.defaultLayout
-        ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
-        : undefined;
+      // just falls through to the normal single console. Only the window Termo
+      // opens with: one opened later starts with a single console.
+      const preset =
+        isFirstWindow() && appConfigStore.defaultLayout
+          ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
+          : undefined;
       if (preset) {
         layoutsStore.apply(preset);
       } else {
@@ -70,8 +78,9 @@
         resizeDebounce = setTimeout(() => void appConfigStore.recordWindowSize(), 400);
       });
 
-      // After the consoles are up, so the dialog lands on a ready window.
-      void showWhatsNewOnce();
+      // After the consoles are up, so the dialog lands on a ready window. Once,
+      // in the window Termo opens with.
+      if (isFirstWindow()) void showWhatsNewOnce();
     })();
 
     return () => {
@@ -102,7 +111,7 @@
       appConfigStore.aiModeEnabled && appConfigStore.aiDockBadge
         ? aiStatusStore.counts.awaiting + aiStatusStore.counts.error
         : 0;
-    void setBadgeCount(pending > 0 ? pending : undefined).catch(() => {});
+    void reportPending(pending).catch(() => {});
   });
 
   // The zoom shortcut's ↓ (Alt+↓, Cmd+↓ on macOS, or whatever it's remapped
@@ -121,6 +130,12 @@
       event.preventDefault();
       event.stopPropagation();
       uiState.openCommandPalette();
+      return;
+    }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("newWindow"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      void openNewWindow();
       return;
     }
     if (

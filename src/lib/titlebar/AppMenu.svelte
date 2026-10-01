@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { openPreferencesWindow } from "$lib/core/window-client";
+  import { openNewWindow, openPreferencesWindow } from "$lib/core/window-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isMac } from "$lib/core/platform";
   import { formatKeybindingLabel, type ShortcutAction } from "$lib/core/shortcuts";
@@ -86,6 +86,11 @@
     void openPreferencesWindow();
   }
 
+  function newWindow() {
+    onclose();
+    void openNewWindow();
+  }
+
   /** Read once: the menu is mounted fresh on every open, and clicking it
    * doesn't change the console's selection (the title bar never takes focus
    * from the terminal). */
@@ -147,6 +152,16 @@
 <div class="app-menu-backdrop" onpointerdown={onclose}></div>
 
 <div class="app-menu" style="top:{pos.top}px; left:{pos.left}px" role="menu">
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={newWindow}>
+    <!-- Two overlapping windows: one more of them. -->
+    <svg class="app-menu-icon" viewBox="0 0 14 14" aria-hidden="true">
+      <rect x="1.5" y="3.5" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M4.5 3.5V1.5h8v8h-3" fill="none" stroke="currentColor" stroke-width="1" />
+    </svg>
+    <span class="app-menu-text">{t("shortcuts.labels.newWindow")}</span>
+    <span class="app-menu-hint">{hint("newWindow")}</span>
+  </button>
+
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={preferences}>
     <!-- Sliders: the app's established settings glyph (same as the title bar button). -->
     <svg class="app-menu-icon" viewBox="0 0 14 14" aria-hidden="true">

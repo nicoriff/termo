@@ -19,6 +19,7 @@
 import type { MessageKey } from "../i18n/translate";
 
 export type ShortcutAction =
+  | "newWindow"
   | "newTab"
   | "newClaude"
   | "newCodex"
@@ -39,6 +40,7 @@ export type ShortcutAction =
   | "aiNextPending";
 
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
+  "newWindow",
   "newTab",
   "newClaude",
   "newCodex",
@@ -62,6 +64,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 /** Catalog keys (translated by the UI with `t()`), keeping this module free of
  * the reactive i18n store so it stays testable in plain Node. */
 export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
+  newWindow: "shortcuts.labels.newWindow",
   newTab: "shortcuts.labels.newTab",
   newClaude: "shortcuts.labels.newClaude",
   newCodex: "shortcuts.labels.newCodex",
@@ -229,6 +232,8 @@ export function normalizeEventToZoomBinding(event: KeyLike): { binding: string }
 }
 
 const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }> = {
+  // Shift elsewhere: plain Ctrl+N belongs to the shell (next history line).
+  newWindow: { mac: "meta+n", other: "ctrl+shift+n" },
   newTab: { mac: "meta+t", other: "ctrl+t" },
   // Not Ctrl+Alt: on Spanish and other layouts that's AltGr, which types @,
   // # and friends.
