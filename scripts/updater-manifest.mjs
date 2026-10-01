@@ -3,20 +3,40 @@
 // build's `.sig`, after all of them are up — the builds run side by side,
 // and each rewriting a shared latest.json could drop another's platform.
 
+/** The architecture in a bundle's file name, as the updater names it. */
+function arch(name, armPattern = /aarch64|arm64/i) {
+  return armPattern.test(name) ? "aarch64" : "x86_64";
+}
+
 /**
- * The updater's platform key for a signature file, by the name the bundler
- * (and tauri-action) gives the file it signs; null for anything that isn't
- * an update artifact (an MSI, a .deb, a .dmg).
+ * The updater's platform keys for a signature file, by the name the bundler
+ * (and tauri-action) gives the file it signs; empty for anything that isn't
+ * an update artifact (a .dmg).
+ *
+ * The updater looks for `{os}-{arch}-{installer}` first — the installer
+ * Termo was installed with — and only then for plain `{os}-{arch}`. So each
+ * installer gets its own key: a Termo installed from the .deb must update
+ * from the .deb (with dpkg), never from the AppImage, which it can't
+ * install. The plain keys point at what an install of unknown origin can
+ * always take: the AppImage, the NSIS setup and the .app.
  */
-export function platformOf(sigName) {
+export function platformsOf(sigName) {
   const name = sigName.replace(/\.sig$/, "");
-  if (name.endsWith("-setup.exe")) return "windows-x86_64";
-  if (name.endsWith(".AppImage")) return /aarch64|arm64/i.test(name) ? "linux-aarch64" : "linux-x86_64";
-  if (name.endsWith(".app.tar.gz")) {
-    if (/aarch64|arm64/i.test(name)) return "darwin-aarch64";
-    if (/x64|x86_64|intel/i.test(name)) return "darwin-x86_64";
+  if (name.endsWith("-setup.exe")) return ["windows-x86_64", "windows-x86_64-nsis"];
+  if (name.endsWith(".msi")) return ["windows-x86_64-msi"];
+  if (name.endsWith(".AppImage")) {
+    const platform = `linux-${arch(name)}`;
+    return [platform, `${platform}-appimage`];
   }
-  return null;
+  if (name.endsWith(".deb")) return [`linux-${arch(name, /aarch64|arm64/i)}-deb`];
+  if (name.endsWith(".rpm")) return [`linux-${arch(name)}-rpm`];
+  if (name.endsWith(".app.tar.gz")) {
+    let platform = null;
+    if (/aarch64|arm64/i.test(name)) platform = "darwin-aarch64";
+    else if (/x64|x86_64|intel/i.test(name)) platform = "darwin-x86_64";
+    return platform ? [platform, `${platform}-app`] : [];
+  }
+  return [];
 }
 
 /**
@@ -28,10 +48,10 @@ export function platformOf(sigName) {
 export function buildManifest({ version, notes, pubDate, signatures, download }) {
   const platforms = {};
   for (const { name, signature } of signatures) {
-    const platform = platformOf(name);
-    if (!platform) continue;
-    if (platforms[platform]) throw new Error(`two update files for ${platform}: ${name}`);
-    platforms[platform] = { signature: signature.trim(), url: download(name.replace(/\.sig$/, "")) };
+    for (const platform of platformsOf(name)) {
+      if (platforms[platform]) throw new Error(`two update files for ${platform}: ${name}`);
+      platforms[platform] = { signature: signature.trim(), url: download(name.replace(/\.sig$/, "")) };
+    }
   }
   if (Object.keys(platforms).length === 0) throw new Error("no update files in the release");
   return { version, notes, pub_date: pubDate, platforms };

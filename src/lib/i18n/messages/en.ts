@@ -874,6 +874,7 @@ export const en: Messages = {
     downloadingPercent: "Downloading… {percent}%",
     downloadingSize: "Downloading… {size} MB",
     installing: "Installing. Termo will restart.",
+    installingLinuxHint: "If you installed it from the .deb or the .rpm, Linux asks for the administrator password in a separate window to finish.",
     busyAgents: "Agents working: {count}",
     busyWarning: "Installing the update closes the consoles and stops the agents.",
     installAnyway: "Install anyway",

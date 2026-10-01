@@ -875,6 +875,7 @@ export const es = {
     downloadingPercent: "Descargando… {percent}%",
     downloadingSize: "Descargando… {size} MB",
     installing: "Instalando. Termo se va a reiniciar.",
+    installingLinuxHint: "Si lo instalaste con el .deb o el .rpm, Linux te pide la contraseña de administrador en una ventana aparte para terminar.",
     busyAgents: "Agentes trabajando: {count}",
     busyWarning: "Instalar la actualización cierra las consolas y detiene los agentes.",
     installAnyway: "Instalar igual",

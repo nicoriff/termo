@@ -3,10 +3,12 @@
     "version": "0.9.2",
     "date": "2026-10-01",
     "es": [
-      "**Agentes con Copilot CLI más seguros**: ya no aprueban herramientas de servidores que nadie eligió para el agente, apagan todos los servidores de la carpeta y no leen la carpeta temporal del sistema. Si Termo se cierra a mitad de una corrida, al volver a abrirlo borra los archivos que la corrida dejó, secretos incluidos."
+      "**Agentes con Copilot CLI más seguros**: ya no aprueban herramientas de servidores que nadie eligió para el agente, apagan todos los servidores de la carpeta y no leen la carpeta temporal del sistema. Si Termo se cierra a mitad de una corrida, al volver a abrirlo borra los archivos que la corrida dejó, secretos incluidos.",
+      "En Linux, **Buscar actualizaciones funciona si instalaste con el .deb o el .rpm**: antes descargaba el AppImage, que esos paquetes no pueden instalar, y no avanzaba. Para terminar, Linux pide la contraseña de administrador."
     ],
     "en": [
-      "**Safer Copilot CLI agents**: they no longer approve tools from servers nobody chose for the agent, they turn off every server the folder brings, and they don't read the system's temp folder. If Termo closes mid-run, it removes the files the run left the next time it opens, secrets included."
+      "**Safer Copilot CLI agents**: they no longer approve tools from servers nobody chose for the agent, they turn off every server the folder brings, and they don't read the system's temp folder. If Termo closes mid-run, it removes the files the run left the next time it opens, secrets included.",
+      "On Linux, **Check for updates works if you installed from the .deb or the .rpm**: it used to download the AppImage, which those packages can't install, and got stuck. To finish, Linux asks for the administrator password."
     ]
   },
   {

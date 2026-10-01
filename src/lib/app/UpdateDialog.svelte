@@ -7,6 +7,7 @@
   import { renderMarkdownLite } from "$lib/agents/markdown-lite";
   import { notesFor } from "./release-notes";
   import { updater } from "./updater.svelte";
+  import { isLinux } from "$lib/core/platform";
 
   let version = $state<string | null>(null);
   let dialogEl: HTMLDivElement | undefined = $state();
@@ -106,6 +107,11 @@
         </p>
       {:else if status.kind === "installing"}
         <p class="line" aria-live="polite">{t("updates.installing")}</p>
+        {#if isLinux}
+          <!-- A .deb or .rpm installs with dpkg/rpm, as administrator: the
+               system asks for the password in a window of its own. -->
+          <p class="line hint">{t("updates.installingLinuxHint")}</p>
+        {/if}
       {:else if status.kind === "error"}
         <p class="line error" aria-live="polite">{t("updates.failed", { error: status.message })}</p>
       {/if}
@@ -182,6 +188,12 @@
     line-height: 1.5;
     opacity: 0.85;
     overflow-wrap: anywhere;
+  }
+
+  .line.hint {
+    margin-top: 6px;
+    font-size: 11px;
+    opacity: 0.65;
   }
 
   .line.error {
