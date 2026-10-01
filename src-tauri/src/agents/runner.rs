@@ -70,6 +70,26 @@ fn target(engine: Engine) -> AgentTarget {
     }
 }
 
+/// Removes the files runs leave next to their records while they last (the
+/// logic for Claude, a CLI's settings, which for Copilot hold the agent's
+/// secrets): a run that ended normally already took its own, so whatever is
+/// left at startup is from one Termo didn't see end — it was closed or
+/// crashed mid-run.
+pub fn remove_leftovers(app: &tauri::AppHandle) {
+    let Ok(root) = store::root(app) else { return };
+    let Ok(agents) = std::fs::read_dir(&root) else { return };
+    for agent in agents.flatten() {
+        let Ok(files) = std::fs::read_dir(agent.path().join("runs")) else { continue };
+        for file in files.flatten() {
+            let name = file.file_name();
+            let name = name.to_string_lossy();
+            if name.ends_with(".system.md") || name.ends_with("-settings.json") {
+                let _ = std::fs::remove_file(file.path());
+            }
+        }
+    }
+}
+
 /// The MCP configs Copilot CLI reads on its own: the user's, and the ones a
 /// folder can bring.
 fn copilot_configs(dir: &std::path::Path) -> Vec<serde_json::Value> {

@@ -92,6 +92,8 @@ pub enum Msg<'a> {
     AgentBadModel(&'a str),
     /// (agent, why)
     AgentImportRejected(&'a str, &'a str),
+    /// The agent CLI is installed under a path cmd.exe can't be trusted to read as one.
+    AgentLaunchUnsafePath(&'a str),
     /// runs a day
     ProjectDailyLimit(u32),
     ProjectNotFound,
@@ -275,6 +277,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         ),
         (AgentBadModel(model), Es) => format!("\"{model}\" no es un nombre de modelo"),
         (AgentBadModel(model), En) => format!("\"{model}\" isn't a model's name"),
+        (AgentLaunchUnsafePath(path), Es) => format!(
+            "No se abrió el agente: está instalado en una ruta con caracteres que la consola leería como comandos ({path}). Abrilo escribiendo su nombre en una consola."
+        ),
+        (AgentLaunchUnsafePath(path), En) => format!(
+            "The agent didn't open: it's installed under a path with characters the console would read as commands ({path}). Open it by typing its name in a console."
+        ),
         (AgentImportRejected(agent, why), Es) => format!("No se importó nada: el agente \"{agent}\" trae algo no permitido. {why}"),
         (AgentImportRejected(agent, why), En) => {
             format!("Nothing was imported: the agent \"{agent}\" holds something not allowed. {why}")
@@ -371,6 +379,7 @@ mod tests {
             Msg::AgentBadVariable("NODE_OPTIONS"),
             Msg::AgentBadModel("--x"),
             Msg::AgentImportRejected("Revisor", "bad name"),
+            Msg::AgentLaunchUnsafePath(r"C:\a&b\codex.cmd"),
             Msg::ProjectDailyLimit(20),
             Msg::ProjectNotFound,
             Msg::ProjectNoEntry,

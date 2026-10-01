@@ -86,6 +86,8 @@ pub fn run() {
             }
             pty::agent_hooks::start_watcher(app.handle().clone());
             pty::status_line::start_watcher(app.handle().clone());
+            // Before any run can start: files a run killed with Termo left.
+            agents::runner::remove_leftovers(app.handle());
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
             let ai_mode_on = config::store::load(app.handle()).ai_mode_enabled;

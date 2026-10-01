@@ -53,17 +53,23 @@ pub fn command(launch: &AgentLaunch, login_shell: &str) -> Result<(String, Vec<S
         return Err(tr(Msg::InvalidComponentName(bad)));
     }
     let path = agent_cli::require(target, None)?;
+    #[cfg(windows)]
+    if is_script(&path) && path.to_string_lossy().contains(CMD_SYNTAX) {
+        return Err(tr(Msg::AgentLaunchUnsafePath(&path.to_string_lossy())));
+    }
     Ok(build(&path, &launch.args, login_shell))
 }
 
+/// Characters cmd.exe reads as its own syntax even in a path; an install
+/// folder holding one would turn part of the path into another command.
+#[cfg(windows)]
+const CMD_SYNTAX: &[char] = &['&', '|', '<', '>', '^', '%', '"', '!'];
+
 #[cfg(windows)]
 fn build(path: &std::path::Path, args: &[String], _login_shell: &str) -> (String, Vec<String>) {
-    let is_script = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"));
+    let script = is_script(path);
     let path = path.to_string_lossy().into_owned();
-    if !is_script {
+    if !script {
         return (path, args.to_vec());
     }
     let comspec = std::env::var("ComSpec").unwrap_or_else(|_| r"C:\Windows\System32\cmd.exe".into());
@@ -71,6 +77,14 @@ fn build(path: &std::path::Path, args: &[String], _login_shell: &str) -> (String
     let mut cmd_args = vec!["/d".to_string(), "/c".to_string(), path];
     cmd_args.extend(args.iter().cloned());
     (comspec, cmd_args)
+}
+
+/// An npm shim, which only cmd.exe runs.
+#[cfg(windows)]
+fn is_script(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
 }
 
 #[cfg(not(windows))]
@@ -111,6 +125,11 @@ mod tests {
         let (program, args) = build(std::path::Path::new(r"C:\Users\me\.local\bin\claude.exe"), &[], "");
         assert_eq!(program, r"C:\Users\me\.local\bin\claude.exe");
         assert!(args.is_empty());
+
+        // cmd.exe would read these as its own syntax inside the path.
+        assert!(is_script(std::path::Path::new(r"C:\a&calc\codex.cmd")));
+        assert!(r"C:\a&calc\codex.cmd".contains(CMD_SYNTAX));
+        assert!(!r"D:\nodejs\codex.cmd".contains(CMD_SYNTAX));
     }
 
     #[cfg(not(windows))]

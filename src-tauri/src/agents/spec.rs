@@ -799,6 +799,9 @@ fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap
         "off".into(),
         // Its own GitHub server is a tool nobody chose for the agent either.
         "--disable-builtin-mcps".into(),
+        // Like Claude's runs, nothing outside the working folder: Copilot also
+        // reaches the system's temp folder unless told not to.
+        "--disallow-temp-dir".into(),
     ];
     let mut rule = |kind: &str, tool: &str| {
         args.push(kind.into());
@@ -806,7 +809,9 @@ fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap
     };
     // Its permissions go tool by tool: `write` is every edit, `shell` every
     // command. Run headless, what isn't allowed is refused rather than asked;
-    // the denials say so outright, and they win over any allowance.
+    // the denials say so outright, and they win over any allowance. Never
+    // --allow-all-tools, even to run commands: that would also approve the
+    // tools of any MCP server Copilot loads on its own (a plugin's, say).
     match spec.autonomy {
         Autonomy::Read => {
             rule("--deny-tool", "shell");
@@ -816,14 +821,16 @@ fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap
             rule("--allow-tool", "write");
             rule("--deny-tool", "shell");
         }
-        Autonomy::Run => rule("--allow-all-tools", ""),
+        Autonomy::Run => {
+            rule("--allow-tool", "write");
+            rule("--allow-tool", "shell");
+        }
     }
     rule(if spec.tools.web { "--allow-tool" } else { "--deny-tool" }, COPILOT_WEB_TOOL);
     // Every tool of each of the agent's own servers.
     for server in usable_servers(spec) {
         rule("--allow-tool", &server.name);
     }
-    args.retain(|arg| !arg.is_empty());
     if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
         args.push("--model".into());
         args.push(spec.model.trim().into());
@@ -910,15 +917,13 @@ pub fn copilot_foreign_server_args(spec: &AgentSpec, configs: &[serde_json::Valu
         .flat_map(|config| ["mcpServers", "servers"].map(|key| config.get(key).and_then(|value| value.as_object())))
         .flatten()
         .flat_map(|servers| servers.keys().map(String::as_str))
-        // Names go on the command line: nothing that could read as an option.
-        .filter(|name| !own.contains(name) && !name.starts_with('-'))
+        .filter(|name| !own.contains(name))
         .collect();
     names.sort_unstable();
     names.dedup();
-    names
-        .into_iter()
-        .flat_map(|name| ["--disable-mcp-server".to_string(), name.to_string()])
-        .collect()
+    // Joined to the flag with `=`, so a name that starts with a dash is still
+    // that flag's value and can't be skipped or read as an option.
+    names.into_iter().map(|name| format!("--disable-mcp-server={name}")).collect()
 }
 
 /// Codex, Gemini CLI and Copilot CLI have no flag for adding to the system
@@ -1271,6 +1276,7 @@ mod tests {
         assert!(run.args.contains(&"--disable-builtin-mcps".to_string()));
         assert_eq!(values_after(&run.args, "--deny-tool"), ["shell", "write", "url"]);
         assert!(values_after(&run.args, "--allow-tool").is_empty());
+        assert!(run.args.contains(&"--disallow-temp-dir".to_string()));
         assert!(run.stdin.starts_with("Sé breve") && run.stdin.ends_with("Resumí los cambios"));
         assert_eq!(run.settings, None);
 
@@ -1281,10 +1287,10 @@ mod tests {
         let mut agent = spec(Engine::Copilot, Autonomy::Run);
         agent.tools.web = true;
         let run = build_invocation(&agent, None, None, &no_secrets());
-        assert!(run.args.contains(&"--allow-all-tools".to_string()));
-        assert!(!run.args.iter().any(String::is_empty));
+        // Never everything: that would approve tools nobody chose for it.
+        assert!(!run.args.contains(&"--allow-all-tools".to_string()));
         assert!(values_after(&run.args, "--deny-tool").is_empty());
-        assert_eq!(values_after(&run.args, "--allow-tool"), ["url"]);
+        assert_eq!(values_after(&run.args, "--allow-tool"), ["write", "shell", "url"]);
     }
 
     #[test]
@@ -1337,9 +1343,10 @@ mod tests {
             serde_json::json!({ "mcpServers": { "github": {}, "docs": {} } }),
             serde_json::json!({ "servers": { "--evil": {}, "local-db": {} } }),
         ];
+        // A name that looks like an option is turned off like any other.
         assert_eq!(
             copilot_foreign_server_args(&agent, &configs),
-            ["--disable-mcp-server", "github", "--disable-mcp-server", "local-db"]
+            ["--disable-mcp-server=--evil", "--disable-mcp-server=github", "--disable-mcp-server=local-db"]
         );
     }
 
