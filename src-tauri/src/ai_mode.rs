@@ -52,6 +52,7 @@ fn turn_on(app: &tauri::AppHandle, runner: &Arc<Runner>) {
     webhook::start(app.clone(), runner.clone());
     pty::agent_hooks::refresh_installed(app);
     pty::status_line::refresh_installed(app);
+    pty::copilot_status::refresh_installed();
 }
 
 fn turn_off(runner: &Arc<Runner>) {

@@ -45,6 +45,7 @@
       catalogStore.status?.claudeCli ? "claude" : null,
       catalogStore.status?.codexCli ? "codex" : null,
       catalogStore.status?.geminiCli ? "gemini" : null,
+      catalogStore.status?.copilotCli ? "copilot" : null,
     ].filter((value): value is AgentTarget => value !== null),
   );
   const commandPreview = $derived(
@@ -83,6 +84,7 @@
     claude: "marketplace.targets.claude",
     codex: "marketplace.targets.codex",
     gemini: "marketplace.targets.gemini",
+    copilot: "marketplace.targets.copilot",
   };
 
   /** Where the code actually comes from — the single most important thing to

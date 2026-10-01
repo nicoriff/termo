@@ -41,6 +41,7 @@ pub fn require(target: AgentTarget, override_path: Option<&str>) -> Result<PathB
         AgentTarget::Claude => tr(Msg::ClaudeCliNotFound),
         AgentTarget::Codex => tr(Msg::CodexCliNotFound),
         AgentTarget::Gemini => tr(Msg::GeminiCliNotFound),
+        AgentTarget::Copilot => tr(Msg::CopilotCliNotFound),
     })
 }
 

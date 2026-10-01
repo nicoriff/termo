@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Mirrors src-tauri/src/agents/spec.rs. */
-export type AgentEngine = "claude" | "codex" | "gemini";
+export type AgentEngine = "claude" | "codex" | "gemini" | "copilot";
 export type AgentAutonomy = "read" | "edit" | "run";
 
 export interface McpServer {

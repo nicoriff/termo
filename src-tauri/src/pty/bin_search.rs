@@ -14,10 +14,23 @@ pub fn candidate_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
         .unwrap_or_default();
+    // A PATH is fixed when the process starts: a CLI installed since (or
+    // while Explorer still had the old PATH) is only found where installers
+    // put it.
     #[cfg(windows)]
-    if let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
-        dirs.push(local.join("Programs").join("oh-my-posh").join("bin"));
-        dirs.push(local.join("Microsoft").join("WindowsApps"));
+    {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+            dirs.push(local.join("Programs").join("oh-my-posh").join("bin"));
+            dirs.push(local.join("Microsoft").join("WindowsApps"));
+            dirs.push(local.join("Microsoft").join("WinGet").join("Links"));
+        }
+        // The GitHub CLI's installer (winget's too).
+        if let Some(programs) = std::env::var_os("ProgramFiles").map(PathBuf::from) {
+            dirs.push(programs.join("GitHub CLI"));
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
+            dirs.push(profile.join("scoop").join("shims"));
+        }
     }
     #[cfg(not(windows))]
     {

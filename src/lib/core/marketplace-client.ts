@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Mirrors src-tauri/src/marketplace/model.rs and catalog.rs.
 
 export type ComponentClass = "plugin" | "skill" | "mcp";
-export type AgentTarget = "claude" | "codex" | "gemini";
+export type AgentTarget = "claude" | "codex" | "gemini" | "copilot";
 
 export interface PluginDetail {
   kind: "plugin";
@@ -102,6 +102,7 @@ export interface MarketplaceStatus {
   claudeCli: string | null;
   codexCli: string | null;
   geminiCli: string | null;
+  copilotCli: string | null;
 }
 
 export function marketplaceStatus(): Promise<MarketplaceStatus> {

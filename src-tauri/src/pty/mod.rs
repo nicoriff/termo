@@ -5,6 +5,7 @@ pub mod agent_hooks;
 mod bash_colors;
 pub mod bin_search;
 mod codex_usage;
+pub mod copilot_status;
 pub mod cwd_report;
 mod manager;
 mod memory;

@@ -13,6 +13,9 @@
   import AiModeSection from "./sections/AiModeSection.svelte";
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import AiAgentsSection from "./sections/AiAgentsSection.svelte";
+  import AiToolSection from "./sections/AiToolSection.svelte";
+  import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
+  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import PlatformSection from "./sections/PlatformSection.svelte";
   import GeneralSection from "./sections/GeneralSection.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
@@ -27,6 +30,7 @@
     | "ai-mode"
     | "ai-notifications"
     | "ai-agents"
+    | `ai-tool-${ToolId}`
     | "mac"
     | "windows"
     | "linux";
@@ -37,7 +41,12 @@
   interface SectionNode {
     id: SectionId | GroupId;
     label: MessageKey;
-    children?: { id: SectionId; label: MessageKey }[];
+    /** A product name shows as it is (see CLAUDE.md), the rest translated. */
+    children?: ({ id: SectionId } & ({ label: MessageKey } | { name: string }))[];
+  }
+
+  function childLabel(child: NonNullable<SectionNode["children"]>[number]): string {
+    return "name" in child ? child.name : t(child.label);
   }
 
   const TREE: SectionNode[] = [
@@ -62,6 +71,8 @@
       children: [
         { id: "ai-notifications", label: "preferences.sidebar.aiNotifications" },
         { id: "ai-agents", label: "preferences.sidebar.aiAgents" },
+        // Each agent CLI's own settings: its tab, hooks, status bar and sounds.
+        ...TOOL_IDS.map((tool) => ({ id: `ai-tool-${tool}` as const, name: TOOL_DISPLAY_NAMES[tool] })),
       ],
     },
     {
@@ -163,7 +174,7 @@
             {#each node.children as child (child.id)}
               <div class="sidebar-row child" class:selected={selected === child.id}>
                 {@render chevronSpacer()}
-                <button class="sidebar-item" onclick={() => (selected = child.id)}>{t(child.label)}</button>
+                <button class="sidebar-item" onclick={() => (selected = child.id)}>{childLabel(child)}</button>
               </div>
             {/each}
           </div>
@@ -189,6 +200,10 @@
         <AiNotificationsSection />
       {:else if selected === "ai-agents"}
         <AiAgentsSection />
+      {:else if selected.startsWith("ai-tool-")}
+        {#key selected}
+          <AiToolSection tool={selected.slice("ai-tool-".length) as ToolId} />
+        {/key}
       {:else if selected === "mac"}
         <PlatformSection os="mac" />
       {:else if selected === "windows"}

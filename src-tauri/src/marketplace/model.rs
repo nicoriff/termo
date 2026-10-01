@@ -26,6 +26,7 @@ pub enum AgentTarget {
     Claude,
     Codex,
     Gemini,
+    Copilot,
 }
 
 impl AgentTarget {
@@ -34,19 +35,25 @@ impl AgentTarget {
             AgentTarget::Claude => "claude",
             AgentTarget::Codex => "codex",
             AgentTarget::Gemini => "gemini",
+            AgentTarget::Copilot => "copilot",
         }
     }
 }
 
 /// Which agents can take an item of this class, as a function of the class
 /// alone — not stored per item, because it isn't per-item data: only Claude
-/// has plugins, skills go to Claude and Codex, and MCP servers to all three.
+/// has plugins, skills go to Claude and Codex, and MCP servers to all of them.
 pub fn targets_for(class: ComponentClass) -> Vec<AgentTarget> {
     match class {
         ComponentClass::Plugin => vec![AgentTarget::Claude],
         ComponentClass::Skill => vec![AgentTarget::Claude, AgentTarget::Codex],
-        // An MCP server goes into Gemini CLI's settings too.
-        ComponentClass::Mcp => vec![AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini],
+        // An MCP server goes into Gemini CLI's and Copilot CLI's settings too.
+        ComponentClass::Mcp => vec![
+            AgentTarget::Claude,
+            AgentTarget::Codex,
+            AgentTarget::Gemini,
+            AgentTarget::Copilot,
+        ],
     }
 }
 
@@ -115,6 +122,7 @@ pub struct MarketplaceStatus {
     pub claude_cli: Option<String>,
     pub codex_cli: Option<String>,
     pub gemini_cli: Option<String>,
+    pub copilot_cli: Option<String>,
 }
 
 #[cfg(test)]

@@ -6,13 +6,16 @@
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { getPtyId } from "$lib/terminal/pty-registry";
-  import { t } from "$lib/i18n/i18n.svelte";
+  import { i18n, t } from "$lib/i18n/i18n.svelte";
+  import { getCopilotPlanUsage, type CopilotPlanUsage } from "$lib/core/copilot-usage-client";
   import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
   import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
 
   const MEMORY_POLL_MS = 2000;
+  /** A plan's monthly count barely moves; the backend keeps it as long. */
+  const COPILOT_POLL_MS = 5 * 60 * 1000;
 
   const activeSession = $derived.by(() => {
     if (!workspaceStore.root || !workspaceStore.focusedTileId) return null;
@@ -67,6 +70,62 @@
     });
   });
 
+  // Copilot's plan usage comes from GitHub rather than from the console
+  // (see src-tauri/src/copilot_quota.rs): asked while a Copilot console is
+  // the active one.
+  const showCopilotPlan = $derived(appConfigStore.aiModeEnabled && activeTool === "copilot");
+  let copilotUsage = $state<CopilotPlanUsage | null>(null);
+
+  $effect(() => {
+    if (!showCopilotPlan) return;
+    let cancelled = false;
+    const load = () =>
+      void getCopilotPlanUsage()
+        .then((usage) => {
+          if (!cancelled) copilotUsage = usage;
+        })
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, COPILOT_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  });
+
+  const copilotWindows = $derived(
+    copilotUsage?.kind === "ok"
+      ? copilotUsage.quotas.map((quota) => ({
+          label: t(quota.id === "chat" ? "statusBar.copilotChat" : "statusBar.copilotPremium"),
+          percent: quota.percentUsed,
+        }))
+      : [],
+  );
+
+  /** "2026-11-01" as a date in the current language, read as a local date. */
+  const copilotResets = $derived.by(() => {
+    if (copilotUsage?.kind !== "ok" || !copilotUsage.resetsOn) return null;
+    const [year, month, day] = copilotUsage.resetsOn.split("-").map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day).toLocaleDateString(i18n.locale, { day: "numeric", month: "long" });
+  });
+
+  const planTitle = $derived(
+    showCopilotPlan
+      ? copilotUsage?.kind === "noGh"
+        ? t("statusBar.copilotNeedsGhHint")
+        : copilotResets
+          ? t("statusBar.copilotPlanHint", { date: copilotResets })
+          : t("statusBar.planHint")
+      : t("statusBar.planHint"),
+  );
+
+  const shownWindows = $derived(showCopilotPlan ? copilotWindows : planWindows);
+
+  const contextPercent = $derived(
+    activeTabId ? (agentStatusStore.byTab[activeTabId]?.contextUsedPercentage ?? null) : null,
+  );
+
   // Claude only: Codex reports no cost for a subscription, so the item
   // simply isn't there for it.
   const costUsd = $derived(activeTabId ? (agentStatusStore.byTab[activeTabId]?.costUsd ?? null) : null);
@@ -101,10 +160,10 @@
     </span>
   {/if}
   <!-- Plan usage and cost are Modo IA's: only with it on. -->
-  {#if appConfigStore.aiModeEnabled && ((activeTool && REPORTS_PLAN_USAGE[activeTool]) || planWindows.length > 0)}
-    <span class="status-item status-plan" title={t("statusBar.planHint")}>
+  {#if appConfigStore.aiModeEnabled && (showCopilotPlan || (activeTool && REPORTS_PLAN_USAGE[activeTool]) || planWindows.length > 0)}
+    <span class="status-item status-plan" title={planTitle}>
       {t("statusBar.plan")}
-      {#each planWindows as usage (usage.label)}
+      {#each shownWindows as usage (usage.label)}
         <span class="plan-window">
           <span class="plan-label">{usage.label}</span>
           <span class="plan-gauge" style="--fill:{clamp(usage.percent)}%">
@@ -115,8 +174,18 @@
         <!-- No agent reports usage until its first response, and Claude's
              windows need a Pro/Max plan. Saying so beats the reading
              vanishing from the bar as if the console had none. -->
-        <span class="plan-pending">{t("statusBar.planPending")}</span>
+        <span class="plan-pending">
+          {t(showCopilotPlan && copilotUsage?.kind === "noGh" ? "statusBar.copilotNeedsGh" : "statusBar.planPending")}
+        </span>
       {/each}
+    </span>
+  {/if}
+  {#if appConfigStore.aiModeEnabled && contextPercent !== null}
+    <span class="status-item status-context" title={t("statusBar.contextHint")}>
+      {t("statusBar.context")}
+      <span class="plan-gauge" style="--fill:{clamp(contextPercent)}%">
+        <span class="plan-gauge-text">{Math.round(contextPercent)}%</span>
+      </span>
     </span>
   {/if}
   {#if appConfigStore.aiModeEnabled && costUsd !== null}
@@ -212,6 +281,13 @@
 
   .status-cost {
     margin-left: 12px;
+  }
+
+  .status-context {
+    margin-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .status-memory {

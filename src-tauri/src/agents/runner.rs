@@ -23,7 +23,7 @@ use crate::marketplace::model::AgentTarget;
 
 use super::events::{EventKind, Outcome, Parser, RunEvent};
 use super::secrets;
-use super::spec::{build_invocation, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
+use super::spec::{build_invocation, copilot_foreign_server_args, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
 use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
 use super::{projects, team, webhook};
 
@@ -66,7 +66,25 @@ fn target(engine: Engine) -> AgentTarget {
         Engine::Claude => AgentTarget::Claude,
         Engine::Codex => AgentTarget::Codex,
         Engine::Gemini => AgentTarget::Gemini,
+        Engine::Copilot => AgentTarget::Copilot,
     }
+}
+
+/// The MCP configs Copilot CLI reads on its own: the user's, and the ones a
+/// folder can bring.
+fn copilot_configs(dir: &std::path::Path) -> Vec<serde_json::Value> {
+    let mut files: Vec<PathBuf> = [".mcp.json", ".github/mcp.json", ".vscode/mcp.json"]
+        .iter()
+        .map(|file| dir.join(file))
+        .collect();
+    if let Some(home) = dirs::home_dir() {
+        files.push(crate::agents::spec::copilot_home(&home).join("mcp-config.json"));
+    }
+    files
+        .iter()
+        .filter_map(|file| std::fs::read_to_string(file).ok())
+        .filter_map(|text| serde_json::from_str(&text).ok())
+        .collect()
 }
 
 /// The folder the run works in: the agent's own, or a private workspace next
@@ -214,19 +232,31 @@ impl Runner {
             system_prompt.as_deref().and_then(|path| path.to_str()),
             &secret_values,
         );
-        // Gemini CLI's settings for this run (see spec::Invocation): a file it
-        // reads as system settings, removed when the run ends.
+        // The CLI's settings for this run (see spec::Invocation), removed when
+        // the run ends.
+        let engine_name = match spec.engine {
+            Engine::Copilot => "copilot",
+            _ => "gemini",
+        };
         let run_settings = invocation
             .settings
             .as_ref()
-            .map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.gemini-settings.json")));
+            .map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.{engine_name}-settings.json")));
         if let (Some(path), Some(text)) = (&run_settings, &invocation.settings) {
             let written = std::fs::create_dir_all(path.parent().expect("has a folder"))
                 .and_then(|_| std::fs::write(path, text));
             written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
         }
+        let mut args = invocation.args.clone();
+        if spec.engine == Engine::Copilot {
+            if let Some(path) = &run_settings {
+                args.push("--additional-mcp-config".into());
+                args.push(format!("@{}", path.display()));
+            }
+            args.extend(copilot_foreign_server_args(team_spec.as_ref().unwrap_or(spec), &copilot_configs(&dir)));
+        }
         let mut cmd = Command::new(&bin);
-        cmd.args(&invocation.args)
+        cmd.args(&args)
             .current_dir(&dir)
             // The prompt goes in through stdin, which is then closed: a CLI
             // that decides to ask something gets EOF instead of hanging.
@@ -239,7 +269,7 @@ impl Runner {
         }
         cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
         cmd.envs(GIT_SAFETY_ENV.iter().copied());
-        if let Some(path) = &run_settings {
+        if let Some(path) = run_settings.as_ref().filter(|_| spec.engine == Engine::Gemini) {
             cmd.env("GEMINI_CLI_SYSTEM_SETTINGS_PATH", path);
         }
         if team_token.is_some() && spec.engine == Engine::Claude {

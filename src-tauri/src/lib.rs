@@ -3,6 +3,7 @@ mod ai_mode;
 mod agents;
 mod commands;
 mod config;
+mod copilot_quota;
 mod i18n;
 mod keep_awake;
 mod layouts;
@@ -27,6 +28,12 @@ pub fn run_cli_mode_from_args() -> bool {
         }
         [flag, agent, event, ..] if flag == agents::git_hooks::RUN_FLAG => {
             agents::run_agent_cli(agent, event);
+            true
+        }
+        [flag, tool, rest @ ..]
+            if flag == pty::status_line::STATUS_LINE_FLAG && tool == pty::copilot_status::COPILOT_ARG =>
+        {
+            pty::copilot_status::run_cli(rest.first().map(String::as_str));
             true
         }
         [flag, ..] if flag == pty::status_line::STATUS_LINE_FLAG => {
@@ -177,6 +184,10 @@ pub fn run() {
             commands::agent_hook_commands::status_line_installed,
             commands::agent_hook_commands::install_status_line,
             commands::agent_hook_commands::uninstall_status_line,
+            commands::agent_hook_commands::copilot_status_line_installed,
+            commands::agent_hook_commands::install_copilot_status_line,
+            commands::agent_hook_commands::uninstall_copilot_status_line,
+            copilot_quota::copilot_plan_usage,
             commands::config_commands::get_config,
             commands::config_commands::save_config,
             commands::font_commands::list_google_monospace_fonts,

@@ -372,22 +372,29 @@ pub fn install_mcp(request: &McpInstallRequest) -> Result<InstallOutcome, String
         AgentTarget::Claude => install_mcp_claude(request),
         AgentTarget::Codex => install_mcp_codex(request),
         AgentTarget::Gemini => install_mcp_gemini(request),
+        AgentTarget::Copilot => install_mcp_copilot(request),
     }
 }
 
-/// Gemini CLI's user settings, where its MCP servers live.
-fn gemini_settings_file() -> Result<std::path::PathBuf, String> {
-    dirs::home_dir()
-        .map(|home| home.join(".gemini").join("settings.json"))
-        .ok_or_else(|| tr(Msg::HomeDirNotFound))
+/// The file where each of these CLIs keeps its user-level MCP servers:
+/// Gemini CLI in its whole settings, Copilot CLI in a file of their own.
+fn mcp_servers_file(target: AgentTarget) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| tr(Msg::HomeDirNotFound))?;
+    Ok(match target {
+        AgentTarget::Copilot => crate::agents::spec::copilot_home(&home).join("mcp-config.json"),
+        _ => home.join(".gemini").join("settings.json"),
+    })
 }
 
-/// Edits `mcpServers` in Gemini CLI's settings: the rest of the file is kept
+/// Edits `mcpServers` in a CLI's config file: the rest of the file is kept
 /// as it is, and it's replaced whole (written aside, then renamed) so a
 /// failure never leaves it half-written.
-fn edit_gemini_servers(edit: impl FnOnce(&mut serde_json::Map<String, Value>)) -> Result<(), String> {
+fn edit_mcp_servers(
+    target: AgentTarget,
+    edit: impl FnOnce(&mut serde_json::Map<String, Value>),
+) -> Result<(), String> {
     let fail = |err: String| tr(Msg::MarketplaceCommandFailed(&err));
-    let file = gemini_settings_file()?;
+    let file = mcp_servers_file(target)?;
     let text = std::fs::read_to_string(&file).unwrap_or_default();
     let mut root = if text.trim().is_empty() {
         serde_json::Map::new()
@@ -420,7 +427,19 @@ fn edit_gemini_servers(edit: impl FnOnce(&mut serde_json::Map<String, Value>)) -
 fn install_mcp_gemini(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
     agent_cli::require(AgentTarget::Gemini, None)?;
     let config = crate::agents::spec::gemini_server(&server_config(request)?);
-    edit_gemini_servers(|servers| {
+    edit_mcp_servers(AgentTarget::Gemini, |servers| {
+        servers.insert(request.server_name.clone(), config);
+    })?;
+    Ok(InstallOutcome::Installed { message: String::new() })
+}
+
+/// Into Copilot CLI's `mcp-config.json` directly, for the same reason as
+/// Gemini's: the same checked config, in Copilot's shape (see
+/// spec::copilot_server).
+fn install_mcp_copilot(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+    agent_cli::require(AgentTarget::Copilot, None)?;
+    let config = crate::agents::spec::copilot_server(&server_config(request)?);
+    edit_mcp_servers(AgentTarget::Copilot, |servers| {
         servers.insert(request.server_name.clone(), config);
     })?;
     Ok(InstallOutcome::Installed { message: String::new() })
@@ -502,7 +521,7 @@ pub fn uninstall_mcp(request: &McpInstallRequest) -> Result<(), String> {
     match request.target {
         AgentTarget::Claude => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str(), "-s", "user"]).map(|_| ()),
         AgentTarget::Codex => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str()]).map(|_| ()),
-        AgentTarget::Gemini => edit_gemini_servers(|servers| {
+        AgentTarget::Gemini | AgentTarget::Copilot => edit_mcp_servers(request.target, |servers| {
             servers.remove(&request.server_name);
         }),
     }

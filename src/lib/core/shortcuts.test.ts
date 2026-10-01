@@ -211,6 +211,11 @@ describe("findConflict", () => {
     expect(findConflict("meta+n", "newTab", {}, true)).toBe("newWindow");
   });
 
+  it("covers the Copilot CLI tab's default binding", () => {
+    expect(findConflict("ctrl+shift+o", "newTab", {}, false)).toBe("newCopilot");
+    expect(findConflict("meta+shift+o", "newTab", {}, true)).toBe("newCopilot");
+  });
+
   it("covers the command palette's own default binding", () => {
     expect(findConflict("ctrl+shift+p", "newTab", {}, false)).toBe("commandPalette");
     expect(findConflict("meta+shift+p", "newTab", {}, true)).toBe("commandPalette");

@@ -107,12 +107,13 @@ pub fn available(engine: Engine) -> Vec<ModelOption> {
         Engine::Claude => claude_dir().and_then(|dir| newest_json(&dir.join("cache").join("model-catalog"))),
         Engine::Codex => codex_home().map(|home| home.join("models_cache.json")),
         Engine::Gemini => return gemini_models(),
+        Engine::Copilot => return copilot_models(),
     };
     let Some(text) = file.and_then(|file| std::fs::read_to_string(file).ok()) else { return Vec::new() };
     match engine {
         Engine::Claude => parse_claude(&text),
         Engine::Codex => parse_codex(&text),
-        Engine::Gemini => Vec::new(),
+        Engine::Gemini | Engine::Copilot => Vec::new(),
     }
 }
 
@@ -129,6 +130,18 @@ fn gemini_models() -> Vec<ModelOption> {
             note: String::new(),
         })
         .collect()
+}
+
+/// Copilot CLI saves no list either, and which models it has depends on the
+/// account's plan: its own automatic pick is the one that always works.
+fn copilot_models() -> Vec<ModelOption> {
+    vec![ModelOption {
+        id: "auto".into(),
+        name: "auto".into(),
+        description: String::new(),
+        main: true,
+        note: String::new(),
+    }]
 }
 
 #[cfg(test)]

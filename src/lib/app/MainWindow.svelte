@@ -168,6 +168,7 @@
         ["newClaude", "claude"],
         ["newCodex", "codex"],
         ["newGemini", "gemini"],
+        ["newCopilot", "copilot"],
       ] as const) {
         if (!eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut(action))) continue;
         event.preventDefault();

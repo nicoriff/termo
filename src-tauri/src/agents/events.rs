@@ -1,7 +1,7 @@
 //! Turning each CLI's machine-readable output into one shape of event:
-//! Claude's `--output-format stream-json`, Codex's `exec --json` and Gemini
-//! CLI's `--output-format stream-json` all print one JSON object per line, in
-//! different vocabularies.
+//! Claude's `--output-format stream-json`, Codex's `exec --json`, Gemini
+//! CLI's `--output-format stream-json` and Copilot CLI's `--output-format
+//! json` all print one JSON object per line, in different vocabularies.
 
 use serde::{Deserialize, Serialize};
 
@@ -91,6 +91,7 @@ impl Parser {
             Engine::Claude => parse_claude(&value, at),
             Engine::Codex => parse_codex(&value, at),
             Engine::Gemini => self.gemini(&value, at),
+            Engine::Copilot => parse_copilot(&value, at),
         }
     }
 
@@ -181,6 +182,46 @@ fn parse_claude(value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) 
             outcome.cost_usd = value.get("total_cost_usd").and_then(|cost| cost.as_f64());
             let text = value.get("result").and_then(|text| text.as_str()).unwrap_or("");
             events.push(event(EventKind::Result, "", text.trim().to_string(), at));
+        }
+        _ => {}
+    }
+    (events, outcome)
+}
+
+/// Copilot CLI's events keep their fields under `data`. Its messages stand
+/// alone, like Codex's: the runner promotes the last one to the answer.
+fn parse_copilot(value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
+    let mut events = Vec::new();
+    let mut outcome = Outcome::default();
+    let data = value.get("data").unwrap_or(&serde_json::Value::Null);
+    let text = |pointer: &str| data.pointer(pointer).and_then(|text| text.as_str()).unwrap_or("");
+    match value.get("type").and_then(|kind| kind.as_str()) {
+        Some("assistant.message") => {
+            let content = text("/content").trim();
+            if !content.is_empty() {
+                events.push(event(EventKind::Text, "", content.to_string(), at));
+            }
+            let requests = data.get("toolRequests").and_then(|requests| requests.as_array());
+            for request in requests.into_iter().flatten() {
+                let name = request.get("name").and_then(|name| name.as_str()).unwrap_or("?");
+                let detail = request.get("arguments").map(describe_input).unwrap_or_default();
+                events.push(event(EventKind::Tool, name, detail, at));
+            }
+        }
+        Some("tool.execution_complete") if data.get("success").and_then(|flag| flag.as_bool()) == Some(false) => {
+            let message = ["/error/message", "/error", "/result/content"]
+                .iter()
+                .map(|pointer| text(pointer))
+                .find(|message| !message.is_empty())
+                .unwrap_or("");
+            events.push(event(EventKind::Stderr, "", clip(message, MAX_DETAIL), at));
+        }
+        Some("session.error") => {
+            outcome.failed = true;
+            events.push(event(EventKind::Stderr, "", text("/message").to_string(), at));
+        }
+        Some("result") => {
+            outcome.failed = value.get("exitCode").and_then(|code| code.as_i64()).is_some_and(|code| code != 0);
         }
         _ => {}
     }
@@ -319,6 +360,29 @@ mod tests {
         // Output that ends without a result keeps what was said.
         parser.line(r#"{"type":"message","role":"assistant","content":"a medias","delta":true}"#, 1);
         assert_eq!(parser.finish(2), vec![event(EventKind::Text, "", "a medias".into(), 2)]);
+    }
+
+    /// Copilot CLI: what it says and the tools it asks for come in one
+    /// message; a tool that failed says why.
+    #[test]
+    fn copilot_messages_tools_and_failures() {
+        let line = r#"{"type":"assistant.message","data":{"content":"Miro.","toolRequests":[{"toolCallId":"c1","name":"view","arguments":{"path":"README.md"}}]}}"#;
+        assert_eq!(
+            parse_line(Engine::Copilot, line, 1).0,
+            vec![
+                event(EventKind::Text, "", "Miro.".into(), 1),
+                event(EventKind::Tool, "view", "README.md".into(), 1),
+            ]
+        );
+        let failed = r#"{"type":"tool.execution_complete","data":{"toolCallId":"c1","success":false,"error":{"message":"denied"}}}"#;
+        assert_eq!(parse_line(Engine::Copilot, failed, 1).0[0], event(EventKind::Stderr, "", "denied".into(), 1));
+        let ok = r#"{"type":"tool.execution_complete","data":{"toolCallId":"c1","success":true,"result":{"content":"x"}}}"#;
+        assert!(parse_line(Engine::Copilot, ok, 1).0.is_empty());
+        let (events, outcome) = parse_line(Engine::Copilot, r#"{"type":"session.error","data":{"message":"quota"}}"#, 1);
+        assert!(outcome.failed);
+        assert_eq!(events[0].text, "quota");
+        assert!(parse_line(Engine::Copilot, r#"{"type":"result","exitCode":1}"#, 1).1.failed);
+        assert!(!parse_line(Engine::Copilot, r#"{"type":"result","exitCode":0}"#, 1).1.failed);
     }
 
     #[test]

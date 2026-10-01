@@ -4,10 +4,10 @@
  * below): add/adjust regexes, don't touch classifier.ts.
  */
 
-export type ToolId = "claude" | "codex" | "gemini";
+export type ToolId = "claude" | "codex" | "gemini" | "copilot";
 
 /** Every agent CLI Termo knows, in the order they're listed everywhere. */
-export const TOOL_IDS: readonly ToolId[] = ["claude", "codex", "gemini"];
+export const TOOL_IDS: readonly ToolId[] = ["claude", "codex", "gemini", "copilot"];
 
 export interface ToolPatternSet {
   tool: ToolId;
@@ -77,5 +77,19 @@ export const TOOL_PATTERNS: ToolPatternSet[] = [
     // A tool call waiting for approval.
     awaiting: [/Allow execution/i, /Apply this change\?/i, /Waiting for user confirmation/i],
     error: [/\[API Error/],
+  },
+  {
+    tool: "copilot",
+    // From Copilot CLI's documented interface, not yet checked against real
+    // screen captures; its hooks (see agent_hooks.rs) are the precise source
+    // and this only fills in without them.
+    confidence: "low",
+    processPathHints: ["copilot"],
+    // Its banner, and the footer that names the model it's using.
+    identity: [/GitHub Copilot/i, /Copilot CLI/i],
+    running: [/Esc to cancel/i],
+    // A tool call waiting for approval.
+    awaiting: [/Do you want to (run|allow|proceed)/i, /Allow this/i],
+    error: [/\bError:/],
   },
 ];

@@ -8,7 +8,7 @@
   let { kind, size = 14 }: { kind: string; size?: number } = $props();
 
   const family = $derived(
-    kind === "claude" || kind === "codex" || kind === "gemini"
+    kind === "claude" || kind === "codex" || kind === "gemini" || kind === "copilot"
       ? kind
       : kind === "pwsh" || kind === "powershell"
         ? "powershell"
@@ -38,6 +38,13 @@
   {:else if family === "gemini"}
     <!-- A four-point sparkle with curved sides, in Gemini's blue. -->
     <path d="M8 1c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7z" fill="#4796e3" />
+  {:else if family === "copilot"}
+    <!-- A pilot's goggles, in GitHub's violet. -->
+    <g fill="none" stroke="#8957e5" stroke-width="1.4">
+      <rect x="1.5" y="4.5" width="5.6" height="5" rx="2.2" />
+      <rect x="8.9" y="4.5" width="5.6" height="5" rx="2.2" />
+      <path d="M7.1 7h1.8M3 12.5c1.4 1 3.2 1.5 5 1.5s3.6-.5 5-1.5" stroke-linecap="round" />
+    </g>
   {:else if family === "powershell"}
     <rect x="1" y="2" width="14" height="12" rx="2" fill="#2671be" />
     <path d="M4.2 5.2l3 2.8-3 2.8" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" />

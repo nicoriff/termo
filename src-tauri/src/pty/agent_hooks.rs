@@ -1,4 +1,4 @@
-//! Opt-in integration with Claude Code, Codex and Gemini CLI lifecycle hooks, so Modo IA
+//! Opt-in integration with Claude Code, Codex, Gemini CLI and Copilot CLI lifecycle hooks, so Modo IA
 //! knows a session's exact state instead of inferring it from the screen.
 //!
 //! Installing adds one hook entry per lifecycle event to the tool's user
@@ -37,16 +37,18 @@ pub enum AgentTool {
     Claude,
     Codex,
     Gemini,
+    Copilot,
 }
 
 impl AgentTool {
-    const ALL: [AgentTool; 3] = [AgentTool::Claude, AgentTool::Codex, AgentTool::Gemini];
+    const ALL: [AgentTool; 4] = [AgentTool::Claude, AgentTool::Codex, AgentTool::Gemini, AgentTool::Copilot];
 
     fn name(self) -> &'static str {
         match self {
             AgentTool::Claude => "claude",
             AgentTool::Codex => "codex",
             AgentTool::Gemini => "gemini",
+            AgentTool::Copilot => "copilot",
         }
     }
 
@@ -86,6 +88,19 @@ impl AgentTool {
                 "AfterAgent",
                 "SessionEnd",
             ],
+            // Copilot CLI's own names (its camelCase ones are the ones its
+            // user-level hooks document).
+            AgentTool::Copilot => &[
+                "sessionStart",
+                "userPromptSubmitted",
+                "preToolUse",
+                "postToolUse",
+                "postToolUseFailure",
+                "permissionRequest",
+                "agentStop",
+                "errorOccurred",
+                "sessionEnd",
+            ],
         }
     }
 
@@ -100,7 +115,15 @@ impl AgentTool {
                 .join("hooks.json"),
             // Its user settings, where hooks sit beside everything else.
             AgentTool::Gemini => home.join(".gemini").join("settings.json"),
+            // A folder of hook files, one per owner: this one is Termo's alone.
+            AgentTool::Copilot => crate::agents::spec::copilot_home(&home).join("hooks").join("termo.json"),
         })
+    }
+
+    /// Whether the hooks file is Termo's own, written whole, rather than the
+    /// tool's shared settings that Termo's entries are merged into.
+    fn owns_file(self) -> bool {
+        self == AgentTool::Copilot
     }
 }
 
@@ -126,7 +149,7 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
 #[cfg(windows)]
 fn call_prefix(tool: AgentTool) -> &'static str {
     match tool {
-        AgentTool::Codex | AgentTool::Gemini => "& ",
+        AgentTool::Codex | AgentTool::Gemini | AgentTool::Copilot => "& ",
         AgentTool::Claude => "",
     }
 }
@@ -266,9 +289,54 @@ fn has_any_ours(root: &Map<String, Value>) -> bool {
     })
 }
 
+/// Copilot CLI's hook file, Termo's own (see AgentTool::owns_file): every
+/// event runs `termo --agent-hook copilot <event>`, through PowerShell on
+/// Windows and bash elsewhere — Copilot runs whichever field fits the
+/// platform, so both are always there.
+fn copilot_root(exe: &Path) -> Map<String, Value> {
+    let posix = format!("'{}'", exe.to_string_lossy().replace('\'', r"'\''"));
+    let powershell = format!("& '{}'", exe.to_string_lossy().replace('\'', "''"));
+    let hooks: Map<String, Value> = AgentTool::Copilot
+        .events()
+        .iter()
+        .map(|event| {
+            let args = format!("{HOOK_FLAG} copilot {event}");
+            let entry = json!({
+                "type": "command",
+                "bash": format!("{posix} {args}"),
+                "powershell": format!("{powershell} {args}"),
+                "timeoutSec": 10,
+            });
+            (event.to_string(), json!([entry]))
+        })
+        .collect();
+    let mut root = Map::new();
+    root.insert("version".into(), json!(1));
+    root.insert("hooks".into(), Value::Object(hooks));
+    root
+}
+
+/// Whether a Copilot hook file is Termo's: every command in it runs Termo.
+fn is_copilot_file_ours(root: &Map<String, Value>) -> bool {
+    let commands: Vec<&str> = root
+        .get("hooks")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|hooks| hooks.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .flat_map(|entry| ["bash", "powershell"].map(|key| entry.get(key).and_then(Value::as_str)))
+        .flatten()
+        .collect();
+    !commands.is_empty() && commands.iter().all(|command| command.contains(HOOK_FLAG))
+}
+
 pub fn install(tool: AgentTool) -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let file = tool.hooks_file()?;
+    if tool.owns_file() {
+        return write_root(&file, &copilot_root(&exe));
+    }
     let mut root = read_root(&file)?;
     // One-time safety copy of the user's file before Termo first edits it.
     let backup = file.with_extension("json.termo-backup");
@@ -285,14 +353,25 @@ pub fn uninstall(tool: AgentTool) -> anyhow::Result<()> {
         return Ok(());
     }
     let mut root = read_root(&file)?;
+    if tool.owns_file() {
+        // Only a file that is Termo's: one by that name the user made stays.
+        if is_copilot_file_ours(&root) {
+            fs::remove_file(&file)?;
+        }
+        return Ok(());
+    }
     remove_ours(&mut root);
     write_root(&file, &root)
 }
 
 pub fn is_installed(tool: AgentTool) -> bool {
-    tool.hooks_file()
-        .and_then(|file| read_root(&file))
-        .is_ok_and(|root| has_ours(&root, tool))
+    tool.hooks_file().and_then(|file| read_root(&file)).is_ok_and(|root| {
+        if tool.owns_file() {
+            is_copilot_file_ours(&root)
+        } else {
+            has_ours(&root, tool)
+        }
+    })
 }
 
 /// Points already-installed hooks at this executable (it moves between dev
@@ -315,6 +394,13 @@ pub fn refresh_installed(app: &tauri::AppHandle) {
         let Ok(root) = read_root(&file) else {
             continue;
         };
+        if tool.owns_file() {
+            let updated = copilot_root(&exe);
+            if is_copilot_file_ours(&root) && updated != root {
+                let _ = write_root(&file, &updated);
+            }
+            continue;
+        }
         if !has_any_ours(&root) {
             continue;
         }
@@ -369,7 +455,11 @@ fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str)
     };
     // Common hook fields: they identify the agent's own conversation, so Modo
     // IA can list it and resume it later (agent_sessions.rs).
-    let agent_session_id = string_at("session_id");
+    // Copilot CLI's payloads are camelCase.
+    let agent_session_id = match string_at("session_id") {
+        id if id.is_empty() => string_at("sessionId"),
+        id => id,
+    };
     let cwd = string_at("cwd");
 
     let field = |value: &str| value.replace(['\t', '\r', '\n'], " ");
@@ -572,6 +662,46 @@ mod tests {
 
         remove_ours(&mut root);
         assert_eq!(root, original);
+    }
+
+    /// Copilot CLI gets a hook file of its own, with a bash and a PowerShell
+    /// command per event since it runs whichever fits the platform.
+    #[test]
+    fn copilot_hook_file_runs_termo_for_every_event() {
+        let exe = Path::new("/opt/Ter'mo/termo");
+        let root = copilot_root(exe);
+        assert_eq!(root["version"], 1);
+        for event in AgentTool::Copilot.events() {
+            let entry = &root["hooks"][*event][0];
+            assert_eq!(entry["type"], "command");
+            assert_eq!(entry["bash"], format!(r"'/opt/Ter'\''mo/termo' --agent-hook copilot {event}"));
+            assert_eq!(entry["powershell"], format!("& '/opt/Ter''mo/termo' --agent-hook copilot {event}"));
+        }
+        assert!(is_copilot_file_ours(&root));
+    }
+
+    #[test]
+    fn a_copilot_hook_file_of_the_users_is_not_ours() {
+        let users: Map<String, Value> = serde_json::from_value(json!({
+            "version": 1,
+            "hooks": { "agentStop": [{ "type": "command", "bash": "say done" }] }
+        }))
+        .unwrap();
+        assert!(!is_copilot_file_ours(&users));
+        assert!(!is_copilot_file_ours(&Map::new()));
+    }
+
+    #[test]
+    fn copilot_payloads_name_the_session_in_camel_case() {
+        let dir = temp_dir();
+        append_event(&dir, "s1", "copilot", "agentStop", r#"{"sessionId":"abc-1","cwd":"E:/proj"}"#).unwrap();
+        let mut offset = 0;
+        let updates = read_new_lines(&dir.join("s1.jsonl"), &mut offset);
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].status, Some(AgentStatus::Finished));
+        assert_eq!(updates[0].agent_session_id.as_deref(), Some("abc-1"));
+        assert_eq!(updates[0].agent_cwd.as_deref(), Some("E:/proj"));
     }
 
     #[test]

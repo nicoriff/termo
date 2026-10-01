@@ -54,7 +54,7 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
     let optional = |value: Option<&str>| value.filter(|text| !text.is_empty()).map(str::to_owned);
     let agent_session_id = optional(parts.next());
     let agent_cwd = optional(parts.next());
-    if !matches!(tool, "claude" | "codex" | "gemini") {
+    if !matches!(tool, "claude" | "codex" | "gemini" | "copilot") {
         return None;
     }
     let status = match event {
@@ -65,7 +65,12 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
         "PermissionRequest" => Some(AgentStatus::Awaiting),
         "Notification" if NEEDS_USER.contains(&detail) => Some(AgentStatus::Awaiting),
         "StopFailure" => Some(AgentStatus::Error),
-        "SessionEnd" => None,
+        // Copilot CLI's camelCase names.
+        "sessionStart" | "agentStop" => Some(AgentStatus::Finished),
+        "userPromptSubmitted" | "preToolUse" | "postToolUse" | "postToolUseFailure" => Some(AgentStatus::Running),
+        "permissionRequest" => Some(AgentStatus::Awaiting),
+        "errorOccurred" => Some(AgentStatus::Error),
+        "SessionEnd" | "sessionEnd" => None,
         _ => return None,
     };
     Some(AgentUpdate {
@@ -106,6 +111,19 @@ mod tests {
         let update = parse_line("gemini\tBeforeAgent\t\tsess-1\tE:/proj").unwrap();
         assert_eq!(update.agent_session_id.as_deref(), Some("sess-1"));
         assert_eq!(update.agent_cwd.as_deref(), Some("E:/proj"));
+    }
+
+    #[test]
+    fn maps_copilot_clis_turn_lifecycle() {
+        assert_eq!(status("copilot\tsessionStart\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("copilot\tuserPromptSubmitted\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("copilot\tpreToolUse\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("copilot\tpermissionRequest\t"), Some(Some(AgentStatus::Awaiting)));
+        assert_eq!(status("copilot\tpostToolUseFailure\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("copilot\tagentStop\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("copilot\terrorOccurred\t"), Some(Some(AgentStatus::Error)));
+        assert_eq!(status("copilot\tsessionEnd\t"), Some(None));
+        assert_eq!(status("copilot\tsomethingElse\t"), None);
     }
 
     #[test]

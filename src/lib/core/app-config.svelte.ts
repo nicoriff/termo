@@ -20,6 +20,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_codex_other: null,
   new_gemini_mac: null,
   new_gemini_other: null,
+  new_copilot_mac: null,
+  new_copilot_other: null,
   new_window_mac: null,
   new_window_other: null,
   toggle_explorer_mac: null,
@@ -57,6 +59,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   newClaude: { mac: "new_claude_mac", other: "new_claude_other" },
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
   newGemini: { mac: "new_gemini_mac", other: "new_gemini_other" },
+  newCopilot: { mac: "new_copilot_mac", other: "new_copilot_other" },
   newWindow: { mac: "new_window_mac", other: "new_window_other" },
   toggleExplorer: { mac: "toggle_explorer_mac", other: "toggle_explorer_other" },
   toggleAgents: { mac: "toggle_agents_mac", other: "toggle_agents_other" },
@@ -96,7 +99,12 @@ class AppConfigStore {
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
   /** Whether each agent's sounds play at all. */
-  aiSoundsEnabled = $state<Record<ToolId, boolean>>({ claude: true, codex: true, gemini: true });
+  aiSoundsEnabled = $state<Record<ToolId, boolean>>({
+    claude: true,
+    codex: true,
+    gemini: true,
+    copilot: true,
+  });
   /** Per agent, so each can be told apart by ear. */
   aiSounds = $state<Record<ToolId, Record<SoundEvent, SoundChoice>>>(structuredClone(DEFAULT_SOUNDS));
   aiSoundVolume = $state(70);
@@ -172,6 +180,7 @@ class AppConfigStore {
       codex: config.ai_sound_codex_enabled,
       // Absent in configs from before Gemini CLI was supported.
       gemini: config.ai_sound_gemini_enabled ?? true,
+      copilot: config.ai_sound_copilot_enabled ?? true,
     };
     const sound = (value: string, fallback: SoundChoice) => (isSoundChoice(value) ? value : fallback);
     this.aiSounds = {
@@ -186,6 +195,10 @@ class AppConfigStore {
       gemini: {
         awaiting: sound(config.ai_sound_gemini_awaiting ?? "", DEFAULT_SOUNDS.gemini.awaiting),
         finished: sound(config.ai_sound_gemini_finished ?? "", DEFAULT_SOUNDS.gemini.finished),
+      },
+      copilot: {
+        awaiting: sound(config.ai_sound_copilot_awaiting ?? "", DEFAULT_SOUNDS.copilot.awaiting),
+        finished: sound(config.ai_sound_copilot_finished ?? "", DEFAULT_SOUNDS.copilot.finished),
       },
     };
     this.aiSoundVolume = config.ai_sound_volume;
@@ -383,12 +396,15 @@ class AppConfigStore {
       ai_sound_claude_enabled: this.aiSoundsEnabled.claude,
       ai_sound_codex_enabled: this.aiSoundsEnabled.codex,
       ai_sound_gemini_enabled: this.aiSoundsEnabled.gemini,
+      ai_sound_copilot_enabled: this.aiSoundsEnabled.copilot,
       ai_sound_claude_awaiting: this.aiSounds.claude.awaiting,
       ai_sound_claude_finished: this.aiSounds.claude.finished,
       ai_sound_codex_awaiting: this.aiSounds.codex.awaiting,
       ai_sound_codex_finished: this.aiSounds.codex.finished,
       ai_sound_gemini_awaiting: this.aiSounds.gemini.awaiting,
       ai_sound_gemini_finished: this.aiSounds.gemini.finished,
+      ai_sound_copilot_awaiting: this.aiSounds.copilot.awaiting,
+      ai_sound_copilot_finished: this.aiSounds.copilot.finished,
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,

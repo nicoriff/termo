@@ -1,5 +1,5 @@
 //! What an agent is: the definition the wizard builds, and how it turns into
-//! a run of the agent's own CLI (`claude -p` / `codex exec`).
+//! a run of the agent's own CLI (`claude -p`, `codex exec`, `gemini`, `copilot`).
 //!
 //! An agent here is configuration, not code. Everything it can do comes from
 //! the CLI the user already has installed and signed in to; this file only
@@ -18,6 +18,7 @@ pub enum Engine {
     Claude,
     Codex,
     Gemini,
+    Copilot,
 }
 
 /// How far the agent may go on its own, in the terms the wizard explains:
@@ -281,7 +282,8 @@ pub fn is_reserved_env(name: &str) -> bool {
         "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED", "ELECTRON_RUN_AS_NODE", "PERL5OPT", "PERL5LIB",
         "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "HTTP_PROXY",
         "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "ANTHROPIC_BASE_URL",
-        "OPENAI_BASE_URL", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "MCP_TOOL_TIMEOUT", TEAM_TOKEN_VAR,
+        "OPENAI_BASE_URL", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GEMINI_CLI_SYSTEM_SETTINGS_PATH",
+        "MCP_TOOL_TIMEOUT", TEAM_TOKEN_VAR,
     ];
     const PREFIXES: &[&str] = &["LD_", "DYLD_", "PYTHON", "NPM_CONFIG_", "GIT_", "CLAUDE_CODE_", "TERMO_MCP_"];
     let upper = name.to_ascii_uppercase();
@@ -501,9 +503,11 @@ pub struct Invocation {
     pub args: Vec<String>,
     pub stdin: String,
     pub env: Vec<(String, String)>,
-    /// Gemini CLI only: the settings for this run (its own MCP servers, the
-    /// web tools left out), which the runner writes to a file and points
-    /// GEMINI_CLI_SYSTEM_SETTINGS_PATH at — system settings, above the user's.
+    /// A file the runner writes for this run and removes after it. Gemini
+    /// CLI: its settings (its own MCP servers, the web tools left out), which
+    /// GEMINI_CLI_SYSTEM_SETTINGS_PATH points at — system settings, above the
+    /// user's. Copilot CLI: its MCP servers, passed as
+    /// `--additional-mcp-config @<file>`.
     pub settings: Option<String>,
 }
 
@@ -520,6 +524,7 @@ pub fn build_invocation(
         Engine::Claude => claude_invocation(spec, context, system_prompt_file, secrets),
         Engine::Codex => codex_invocation(spec, context, secrets),
         Engine::Gemini => gemini_invocation(spec, context, secrets),
+        Engine::Copilot => copilot_invocation(spec, context, secrets),
     }
 }
 
@@ -776,8 +781,148 @@ pub fn gemini_server(config: &serde_json::Value) -> serde_json::Value {
     serde_json::Value::Object(out)
 }
 
-/// Codex and Gemini CLI have no flag for adding to the system prompt, so the
-/// logic goes ahead of the task in the prompt itself.
+/// Copilot CLI's folder: COPILOT_HOME when it's set, `~/.copilot` otherwise.
+pub fn copilot_home(home: &std::path::Path) -> std::path::PathBuf {
+    std::env::var_os("COPILOT_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| home.join(".copilot"))
+}
+
+/// Copilot CLI's permission for fetching URLs.
+const COPILOT_WEB_TOOL: &str = "url";
+
+fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<String, String>) -> Invocation {
+    let mut args: Vec<String> = vec![
+        "--output-format".into(),
+        "json".into(),
+        "--stream".into(),
+        "off".into(),
+        // Its own GitHub server is a tool nobody chose for the agent either.
+        "--disable-builtin-mcps".into(),
+    ];
+    let mut rule = |kind: &str, tool: &str| {
+        args.push(kind.into());
+        args.push(tool.into());
+    };
+    // Its permissions go tool by tool: `write` is every edit, `shell` every
+    // command. Run headless, what isn't allowed is refused rather than asked;
+    // the denials say so outright, and they win over any allowance.
+    match spec.autonomy {
+        Autonomy::Read => {
+            rule("--deny-tool", "shell");
+            rule("--deny-tool", "write");
+        }
+        Autonomy::Edit => {
+            rule("--allow-tool", "write");
+            rule("--deny-tool", "shell");
+        }
+        Autonomy::Run => rule("--allow-all-tools", ""),
+    }
+    rule(if spec.tools.web { "--allow-tool" } else { "--deny-tool" }, COPILOT_WEB_TOOL);
+    // Every tool of each of the agent's own servers.
+    for server in usable_servers(spec) {
+        rule("--allow-tool", &server.name);
+    }
+    args.retain(|arg| !arg.is_empty());
+    if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
+        args.push("--model".into());
+        args.push(spec.model.trim().into());
+    }
+    Invocation {
+        args,
+        // The prompt comes from stdin, which also makes the run non-interactive.
+        stdin: codex_prompt(spec, context),
+        env: Vec::new(),
+        settings: copilot_mcp_config_json(spec, secrets),
+    }
+}
+
+/// The run's MCP servers in Copilot CLI's shape, with the secrets they take
+/// already in place: it has no `${NAME}` of its own to fill them from its
+/// environment. None without servers.
+pub fn copilot_mcp_config_json(spec: &AgentSpec, secrets: &HashMap<String, String>) -> Option<String> {
+    let expand = |value: &serde_json::Value| match value.as_str() {
+        Some(text) => {
+            let mut out = text.to_string();
+            for (name, secret) in secrets {
+                out = out.replace(&format!("${{{name}}}"), secret);
+            }
+            serde_json::Value::String(out)
+        }
+        None => value.clone(),
+    };
+    let servers: serde_json::Map<String, serde_json::Value> = usable_servers(spec)
+        .map(|server| {
+            let mut config = copilot_server(&server.config);
+            for key in ["env", "headers"] {
+                if let Some(map) = config.get_mut(key).and_then(|value| value.as_object_mut()) {
+                    // Only names that are what they say: a variable that
+                    // changes how the server starts never comes from a secret.
+                    map.retain(|name, value| key == "headers" || !(refers_to_secret(value) && is_reserved_env(name)));
+                    for value in map.values_mut() {
+                        *value = expand(value);
+                    }
+                }
+            }
+            (server.name.clone(), config)
+        })
+        .collect();
+    if servers.is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({ "mcpServers": servers }).to_string())
+}
+
+/// A server's `.mcp.json` config in Copilot CLI's: a local one is `local`, a
+/// remote one keeps `http` or `sse`; every tool of it is on, and the tool
+/// timeout goes in milliseconds.
+pub fn copilot_server(config: &serde_json::Value) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    let text = |key: &str| config.get(key).and_then(|value| value.as_str());
+    if let Some(url) = text("url") {
+        out.insert("type".into(), if text("type") == Some("sse") { "sse" } else { "http" }.into());
+        out.insert("url".into(), url.into());
+        if let Some(headers) = config.get("headers").filter(|headers| headers.is_object()) {
+            out.insert("headers".into(), headers.clone());
+        }
+    } else {
+        out.insert("type".into(), "local".into());
+        for key in ["command", "args", "env", "cwd"] {
+            if let Some(value) = config.get(key) {
+                out.insert(key.into(), value.clone());
+            }
+        }
+    }
+    out.insert("tools".into(), serde_json::json!(["*"]));
+    if let Some(seconds) = config.get(TOOL_TIMEOUT_KEY).and_then(|value| value.as_u64()) {
+        out.insert("timeout".into(), (seconds * 1000).into());
+    }
+    serde_json::Value::Object(out)
+}
+
+/// `--disable-mcp-server` for every server Copilot CLI would load on its own
+/// (the user's config, the folder's) that isn't one of the agent's: they could
+/// hand it tools nobody chose for it. `configs` are those files' contents.
+pub fn copilot_foreign_server_args(spec: &AgentSpec, configs: &[serde_json::Value]) -> Vec<String> {
+    let own: Vec<&str> = usable_servers(spec).map(|server| server.name.as_str()).collect();
+    let mut names: Vec<&str> = configs
+        .iter()
+        .flat_map(|config| ["mcpServers", "servers"].map(|key| config.get(key).and_then(|value| value.as_object())))
+        .flatten()
+        .flat_map(|servers| servers.keys().map(String::as_str))
+        // Names go on the command line: nothing that could read as an option.
+        .filter(|name| !own.contains(name) && !name.starts_with('-'))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
+        .into_iter()
+        .flat_map(|name| ["--disable-mcp-server".to_string(), name.to_string()])
+        .collect()
+}
+
+/// Codex, Gemini CLI and Copilot CLI have no flag for adding to the system
+/// prompt, so the logic goes ahead of the task in the prompt itself.
 fn codex_prompt(spec: &AgentSpec, context: Option<&str>) -> String {
     let task = with_context(&spec.task, context);
     if spec.instructions.trim().is_empty() {
@@ -1110,6 +1255,92 @@ mod tests {
         // Secrets through its environment, never a reserved one.
         let names: Vec<&str> = run.env.iter().map(|(name, _)| name.as_str()).collect();
         assert_eq!(names, ["K"]);
+    }
+
+    /// The rules after each `flag`, in order.
+    fn values_after<'a>(args: &'a [String], flag: &str) -> Vec<&'a str> {
+        args.windows(2).filter(|pair| pair[0] == flag).map(|pair| pair[1].as_str()).collect()
+    }
+
+    /// Copilot CLI: its tool permissions per level, never the shell below
+    /// Run, and the web only when the agent has it.
+    #[test]
+    fn copilot_runs_at_the_agents_level() {
+        let run = build_invocation(&spec(Engine::Copilot, Autonomy::Read), None, None, &no_secrets());
+        assert_eq!(value_after(&run.args, "--output-format"), Some("json"));
+        assert!(run.args.contains(&"--disable-builtin-mcps".to_string()));
+        assert_eq!(values_after(&run.args, "--deny-tool"), ["shell", "write", "url"]);
+        assert!(values_after(&run.args, "--allow-tool").is_empty());
+        assert!(run.stdin.starts_with("Sé breve") && run.stdin.ends_with("Resumí los cambios"));
+        assert_eq!(run.settings, None);
+
+        let run = build_invocation(&spec(Engine::Copilot, Autonomy::Edit), None, None, &no_secrets());
+        assert_eq!(values_after(&run.args, "--allow-tool"), ["write"]);
+        assert_eq!(values_after(&run.args, "--deny-tool"), ["shell", "url"]);
+
+        let mut agent = spec(Engine::Copilot, Autonomy::Run);
+        agent.tools.web = true;
+        let run = build_invocation(&agent, None, None, &no_secrets());
+        assert!(run.args.contains(&"--allow-all-tools".to_string()));
+        assert!(!run.args.iter().any(String::is_empty));
+        assert!(values_after(&run.args, "--deny-tool").is_empty());
+        assert_eq!(values_after(&run.args, "--allow-tool"), ["url"]);
+    }
+
+    #[test]
+    fn copilot_gets_its_servers_in_its_own_shape() {
+        let mut agent = spec(Engine::Copilot, Autonomy::Read);
+        agent.tools.mcp = vec![
+            McpServer {
+                name: "docs".into(),
+                config: serde_json::json!({
+                    "command": "npx",
+                    "args": ["-y", "docs"],
+                    "env": { "API_KEY": "${K}", "NODE_OPTIONS": "${K}", "MODE": "ro" }
+                }),
+            },
+            McpServer {
+                name: "remote".into(),
+                config: serde_json::json!({ "type": "sse", "url": "https://x.example/mcp", "headers": { "X-Team": "core" } }),
+            },
+            McpServer { name: "x,Bash".into(), config: serde_json::json!({ "command": "evil" }) },
+        ];
+        let agent = with_team_server(&agent, "http://127.0.0.1:47821/mcp");
+        let secrets = HashMap::from([("K".to_string(), "v".to_string()), (TEAM_TOKEN_VAR.to_string(), "t0k".to_string())]);
+        let run = build_invocation(&agent, None, None, &secrets);
+
+        assert_eq!(values_after(&run.args, "--allow-tool"), ["docs", "remote", "termo"]);
+        assert!(run.env.is_empty());
+        let config: serde_json::Value = serde_json::from_str(run.settings.as_deref().unwrap()).unwrap();
+        let servers = &config["mcpServers"];
+        assert_eq!(
+            servers["docs"],
+            serde_json::json!({
+                "type": "local",
+                "command": "npx",
+                "args": ["-y", "docs"],
+                "env": { "API_KEY": "v", "MODE": "ro" },
+                "tools": ["*"]
+            })
+        );
+        assert_eq!(
+            servers["remote"],
+            serde_json::json!({ "type": "sse", "url": "https://x.example/mcp", "headers": { "X-Team": "core" }, "tools": ["*"] })
+        );
+        assert_eq!(servers["termo"]["type"], "http");
+        assert_eq!(servers["termo"]["headers"]["Authorization"], "Bearer t0k");
+        assert_eq!(servers["termo"]["timeout"], 15 * 60 * 1000);
+        assert!(servers.get("x,Bash").is_none());
+
+        // The user's and the folder's own servers are turned off for the run.
+        let configs = [
+            serde_json::json!({ "mcpServers": { "github": {}, "docs": {} } }),
+            serde_json::json!({ "servers": { "--evil": {}, "local-db": {} } }),
+        ];
+        assert_eq!(
+            copilot_foreign_server_args(&agent, &configs),
+            ["--disable-mcp-server", "github", "--disable-mcp-server", "local-db"]
+        );
     }
 
     #[test]
