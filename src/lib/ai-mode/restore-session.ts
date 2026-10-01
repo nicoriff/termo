@@ -4,7 +4,7 @@ import { workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { getPtyId } from "$lib/terminal/pty-registry";
 import type { AgentSession } from "$lib/core/agent-sessions-client";
 import type { ToolId } from "./pattern-table";
-import { resumeCommand } from "./resume-command";
+import { resumeArgs, resumeCommand } from "./resume-command";
 import { TOOL_DISPLAY_NAMES } from "./tool-names";
 
 /** How long to keep looking for the new tab's console: spawning it is a round
@@ -26,14 +26,14 @@ export function canRestore(session: AgentSession): boolean {
 }
 
 /**
- * Opens a console in the session's folder and types the agent's resume command
- * into it. Typed rather than passed as shell arguments so it works the same in
- * PowerShell and bash, and so the user sees exactly what ran.
+ * Opens a console in the session's folder running the agent's resume command
+ * as its own process, like a new agent tab (see launch-agent.ts): the default
+ * shell is what it falls back to once the agent exits.
  */
 export async function restoreSession(session: AgentSession, targetTileId?: string): Promise<void> {
-  const command = resumeCommand(session.tool, session.agentSessionId);
+  const args = resumeArgs(session.tool, session.agentSessionId);
   const tileId = targetTileId ?? workspaceStore.focusedTileId;
-  if (!command || !tileId) return;
+  if (!args || !tileId) return;
 
   const shell = await resolveDefaultShell();
   // Named after the shell, like any other console: the tab outlives the
@@ -41,17 +41,10 @@ export async function restoreSession(session: AgentSession, targetTileId?: strin
   // sitting in the title long after the session was over — and with Codex
   // running in it. The automatic title (see tab-title.ts) says what is
   // actually running at any moment.
-  const tabId = workspaceStore.addTab(
-    tileId,
-    shell.path,
-    shell.args,
-    shell.title,
-    session.cwd ?? session.projectDir ?? undefined,
-  );
-  if (!tabId) return;
-
-  const ptyId = await waitForConsole(tabId);
-  if (ptyId) await writePty(ptyId, `${command}\r`);
+  workspaceStore.addTab(tileId, shell.path, shell.args, shell.title, session.cwd ?? session.projectDir ?? undefined, {
+    tool: session.tool,
+    args,
+  });
 }
 
 /** Reopens a conversation in a console that already exists — what restoring a

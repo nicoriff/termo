@@ -5,6 +5,8 @@ export interface SpawnOptions {
   shellPath?: string;
   shellArgs?: string[];
   cwd?: string;
+  /** Start this agent CLI instead of the shell (see SessionTab.agent). */
+  agent?: { tool: string; args?: string[] };
   cols: number;
   rows: number;
   onData: (bytes: Uint8Array) => void;
@@ -29,6 +31,7 @@ export async function spawnPty(opts: SpawnOptions): Promise<string> {
     shellPath: opts.shellPath,
     shellArgs: opts.shellArgs,
     cwd: opts.cwd,
+    agent: opts.agent ?? null,
     cols: opts.cols,
     rows: opts.rows,
     onEvent: channel,

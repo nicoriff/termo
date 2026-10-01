@@ -2,6 +2,7 @@
 mod foreground;
 mod agent_events;
 pub mod agent_hooks;
+pub mod agent_launch;
 mod bash_colors;
 pub mod bin_search;
 mod codex_usage;

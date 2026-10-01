@@ -11,6 +11,7 @@ import { isMac, isWindows } from "../core/platform";
 import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
 import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
+import type { AgentLaunch } from "../layout/split-tree";
 import { toXtermTheme } from "../theme/theme-loader";
 import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
@@ -279,7 +280,13 @@ export class TerminalInstance {
     });
   }
 
-  async mount(container: HTMLElement, shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
+  async mount(
+    container: HTMLElement,
+    shellPath?: string,
+    shellArgs?: string[],
+    cwd?: string,
+    agent?: AgentLaunch,
+  ): Promise<void> {
     this.container = container;
     this.term.open(container);
     this.fit.fit();
@@ -287,40 +294,83 @@ export class TerminalInstance {
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
     );
 
+    if (agent) {
+      // Known from the start, rather than waiting for its banner or its first
+      // hook: the status bar and the tab show the agent right away.
+      this.classifyState.detectedTool = agent.tool;
+      // The agent as the console's own process; once it exits, the shell in
+      // its place, so leaving it drops you at a prompt in that folder.
+      const started = await this.start({ shellPath, shellArgs, cwd, agent }, () =>
+        void this.fallBackToShell(shellPath, shellArgs, cwd),
+      );
+      if (started || this.disposed) return;
+      // It couldn't start (uninstalled since): the shell, under the reason.
+    }
+    await this.start({ shellPath, shellArgs, cwd });
+  }
+
+  /** After the agent a console started with exits: its shell, in the same
+   * tab and the same xterm, so what the agent left on screen stays above. */
+  private async fallBackToShell(shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
+    if (this.disposed) return;
+    unregisterPty(this.tabId);
+    this.sessionId = null;
+    workspaceStore.dropAgent(this.tabId);
+    // A shell now: nothing of the agent's state or usage applies any more.
+    this.classifyState.detectedTool = null;
+    aiStatusStore.remove(this.tabId);
+    agentStatusStore.remove(this.tabId);
+    this.term.write("\r\n");
+    await this.start({ shellPath, shellArgs, cwd });
+  }
+
+  /** Spawns the console's process. False when an agent couldn't be started,
+   * with the reason written to the console. `afterExit` replaces `onExit`. */
+  private async start(
+    opts: { shellPath?: string; shellArgs?: string[]; cwd?: string; agent?: AgentLaunch },
+    afterExit?: () => void,
+  ): Promise<boolean> {
+    const { shellPath } = opts;
     const spawnSize = { cols: this.term.cols, rows: this.term.rows };
-    const spawned = await spawnPty({
-      shellPath,
-      shellArgs,
-      cwd,
-      ...spawnSize,
-      // Every callback below bails once this instance is gone. A console being
-      // torn down keeps producing output (and finally an exit) for a moment,
-      // and writing that into an already-disposed xterm throws — inside the
-      // Tauri channel's message handler, which is the same dispatch every
-      // other console's output rides on. Restoring a layout is exactly when
-      // that matters: consoles are created while others are being killed.
-      onForegroundProcess: (path) => {
-        if (this.disposed) return;
-        this.lastForegroundProcessPath = path;
-        tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
-      },
-      onData: (bytes) => {
-        if (this.disposed) return;
-        const decoded = this.decoder.decode(bytes, { stream: true });
-        const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
-        this.term.write(themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text);
-      },
-      onExit: (code) => {
-        if (this.disposed) return;
-        this.onExit?.(code);
-      },
-    });
+    let spawned: string;
+    try {
+      spawned = await spawnPty({
+        ...opts,
+        ...spawnSize,
+        // Every callback below bails once this instance is gone. A console being
+        // torn down keeps producing output (and finally an exit) for a moment,
+        // and writing that into an already-disposed xterm throws — inside the
+        // Tauri channel's message handler, which is the same dispatch every
+        // other console's output rides on. Restoring a layout is exactly when
+        // that matters: consoles are created while others are being killed.
+        onForegroundProcess: (path) => {
+          if (this.disposed) return;
+          this.lastForegroundProcessPath = path;
+          tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
+        },
+        onData: (bytes) => {
+          if (this.disposed) return;
+          const decoded = this.decoder.decode(bytes, { stream: true });
+          const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
+          this.term.write(themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text);
+        },
+        onExit: (code) => {
+          if (this.disposed) return;
+          if (afterExit) afterExit();
+          else this.onExit?.(code);
+        },
+      });
+    } catch (err) {
+      if (!opts.agent || this.disposed) throw err;
+      this.term.write(`\x1b[31m${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
+      return false;
+    }
     // Disposed while the spawn was in flight (a layout restore replaces tiles
     // faster than a console starts): adopt the session only to kill it, or it
     // would outlive its terminal as an orphan shell.
     if (this.disposed) {
       void killPty(spawned);
-      return;
+      return true;
     }
     this.sessionId = spawned;
     // Whatever xterm produced while the spawn was in flight goes out now, in
@@ -354,6 +404,7 @@ export class TerminalInstance {
     // (e.g. claude) that position output based on their believed terminal
     // size. Re-sync once a session exists to correct any such drift.
     this.resize({ immediate: true });
+    return true;
   }
 
   applyTheme(theme: Theme, options: ThemeApplyOptions): void {

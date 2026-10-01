@@ -3,6 +3,7 @@ use tauri::Manager;
 use uuid::Uuid;
 
 use crate::config::store;
+use crate::pty::agent_launch::{self, AgentLaunch};
 use crate::pty::{
     agent_hooks, bash_color_env, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
     utf8_console, zsh_init,
@@ -25,8 +26,24 @@ pub fn pty_spawn(
     cwd: Option<String>,
     cols: u16,
     rows: u16,
+    // Start this agent CLI as the console's own process (see agent_launch.rs)
+    // rather than the shell, which is then only what it falls back to.
+    agent: Option<AgentLaunch>,
     on_event: Channel<PtyEvent>,
 ) -> Result<String, String> {
+    if let Some(agent) = agent {
+        let (path, args) = agent_launch::command(&agent, &default_shell().path)?;
+        // None of the shell integrations below: there's no shell prompt.
+        let mut env = Vec::new();
+        if let Ok(dir) = agent_hooks::events_dir(&app) {
+            env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
+        }
+        return state
+            .pty
+            .spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event)
+            .map(|id| id.to_string())
+            .map_err(|err| err.to_string());
+    }
     let (path, args) = match shell_path {
         Some(path) => (path, shell_args.unwrap_or_default()),
         None => {

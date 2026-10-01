@@ -17,6 +17,7 @@ import {
   splitLeaf,
   updateLeaf,
   updateRatio,
+  type AgentLaunch,
   type DropZone,
   type SessionTab,
   type SplitDirection,
@@ -56,9 +57,16 @@ class WorkspaceStore {
 
   /** Returns the new tab's id, so callers that need to talk to its console
    * (restoring an agent session types a command into it) can find it. */
-  addTab(tileId: string, shellPath?: string, shellArgs?: string[], title = "Shell", cwd?: string): string | null {
+  addTab(
+    tileId: string,
+    shellPath?: string,
+    shellArgs?: string[],
+    title = "Shell",
+    cwd?: string,
+    agent?: AgentLaunch,
+  ): string | null {
     if (!this.root) return null;
-    const session = makeSession(title, shellPath, shellArgs, cwd);
+    const session = { ...makeSession(title, shellPath, shellArgs, cwd), ...(agent ? { agent } : {}) };
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],
@@ -68,6 +76,23 @@ class WorkspaceStore {
     this.root = updated;
     this.focusedTileId = tileId;
     return session.id;
+  }
+
+  /** The agent a console started with has exited and the console now runs
+   * its shell (see TerminalInstance). */
+  dropAgent(sessionId: string): void {
+    if (!this.root) return;
+    const loc = collectSessions(this.root).find((candidate) => candidate.session.id === sessionId);
+    if (!loc?.session.agent) return;
+    const updated = updateLeaf(this.root, loc.tileId, (tile) => ({
+      ...tile,
+      sessions: tile.sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+        const { agent: _agent, ...rest } = session;
+        return rest;
+      }),
+    }));
+    if (updated) this.root = updated;
   }
 
   /** Ctrl+T: opens a new tab in the focused tile, cloning the shell

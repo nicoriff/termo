@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.1",
+    "date": "2026-10-01",
+    "es": [
+      "**Los agentes abren directo**: Claude Code, Codex, Gemini CLI y Copilot CLI arrancan en su pestaña sin pasar antes por PowerShell ni tipear el comando, también al retomar una sesión. Al salir del agente, la pestaña queda en tu consola, en esa misma carpeta."
+    ],
+    "en": [
+      "**Agents open directly**: Claude Code, Codex, Gemini CLI and Copilot CLI start in their tab without PowerShell starting first or the command being typed, resuming a session too. When you leave the agent, the tab drops you into your console, in that same folder."
+    ]
+  },
+  {
     "version": "0.9.0",
     "date": "2026-10-01",
     "es": [

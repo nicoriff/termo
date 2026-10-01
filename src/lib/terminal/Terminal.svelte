@@ -4,14 +4,23 @@
   import { TerminalInstance } from "./TerminalInstance";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
+  import type { AgentLaunch } from "$lib/layout/split-tree";
 
   let {
     sessionId,
     shellPath = undefined,
     shellArgs = undefined,
     cwd = undefined,
+    agent = undefined,
     active = false,
-  }: { sessionId: string; shellPath?: string; shellArgs?: string[]; cwd?: string; active?: boolean } = $props();
+  }: {
+    sessionId: string;
+    shellPath?: string;
+    shellArgs?: string[];
+    cwd?: string;
+    agent?: AgentLaunch;
+    active?: boolean;
+  } = $props();
 
   let container: HTMLDivElement;
   let instance: TerminalInstance | null = null;
@@ -22,7 +31,7 @@
     // not the PTY id spawnPty() hands back later — Modo IA's status store
     // is keyed by the former since that's what TileChrome looks up by.
     instance = new TerminalInstance(sessionId);
-    void instance.mount(container, shellPath, shellArgs, cwd);
+    void instance.mount(container, shellPath, shellArgs, cwd, agent);
 
     resizeObserver = new ResizeObserver(() => instance?.resize());
     resizeObserver.observe(container);

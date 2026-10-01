@@ -1,5 +1,14 @@
 export type SplitDirection = "row" | "col";
 
+import type { ToolId } from "../ai-mode/pattern-table";
+
+/** An agent CLI a console starts as its own process (see
+ * src-tauri/src/pty/agent_launch.rs), with what follows its command. */
+export interface AgentLaunch {
+  tool: ToolId;
+  args?: string[];
+}
+
 export interface SessionTab {
   id: string;
   title: string;
@@ -8,6 +17,10 @@ export interface SessionTab {
   /** Directory the console starts in. Only set when something asked for it
    * (restoring an agent session); otherwise the shell's own default wins. */
   cwd?: string;
+  /** Set while the console runs an agent CLI as its own process; the shell
+   * fields are then what it falls back to once the agent exits. Never saved
+   * with a layout: a restored tab opens the shell. */
+  agent?: AgentLaunch;
   /** Set on a tab that shows a file in the editor rather than a console
    * (see isFileTab); the shell fields are then unused. */
   filePath?: string;
