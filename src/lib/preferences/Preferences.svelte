@@ -14,6 +14,7 @@
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import AiAgentsSection from "./sections/AiAgentsSection.svelte";
   import AiToolSection from "./sections/AiToolSection.svelte";
+  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import PlatformSection from "./sections/PlatformSection.svelte";
@@ -42,7 +43,7 @@
     id: SectionId | GroupId;
     label: MessageKey;
     /** A product name shows as it is (see CLAUDE.md), the rest translated. */
-    children?: ({ id: SectionId } & ({ label: MessageKey } | { name: string }))[];
+    children?: ({ id: SectionId; tool?: ToolId } & ({ label: MessageKey } | { name: string }))[];
   }
 
   function childLabel(child: NonNullable<SectionNode["children"]>[number]): string {
@@ -72,7 +73,7 @@
         { id: "ai-notifications", label: "preferences.sidebar.aiNotifications" },
         { id: "ai-agents", label: "preferences.sidebar.aiAgents" },
         // Each agent CLI's own settings: its tab, hooks, status bar and sounds.
-        ...TOOL_IDS.map((tool) => ({ id: `ai-tool-${tool}` as const, name: TOOL_DISPLAY_NAMES[tool] })),
+        ...TOOL_IDS.map((tool) => ({ id: `ai-tool-${tool}` as const, name: TOOL_DISPLAY_NAMES[tool], tool })),
       ],
     },
     {
@@ -174,7 +175,13 @@
             {#each node.children as child (child.id)}
               <div class="sidebar-row child" class:selected={selected === child.id}>
                 {@render chevronSpacer()}
-                <button class="sidebar-item" onclick={() => (selected = child.id)}>{childLabel(child)}</button>
+                <button class="sidebar-item" onclick={() => (selected = child.id)}>
+                  {#if child.tool}
+                    <!-- The agent's own small logo, as in the "+" menu. -->
+                    <span class="sidebar-icon"><ConsoleIcon kind={child.tool} size={12} /></span>
+                  {/if}
+                  {childLabel(child)}
+                </button>
               </div>
             {/each}
           </div>
@@ -323,6 +330,12 @@
     color: inherit;
     font-size: 12px;
     cursor: pointer;
+  }
+
+  .sidebar-icon {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-right: 6px;
   }
 
   .sidebar-row.child .sidebar-item {

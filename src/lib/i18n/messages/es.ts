@@ -1021,6 +1021,9 @@ export const es = {
     appearance: {
       theme: "Tema",
       transparency: "Transparencia",
+      tabs: "Pestañas",
+      tabsFillWidth: "Pestañas a todo el ancho",
+      tabsFillWidthHint: "Las pestañas de cada grupo se reparten todo el ancho de su barra. Con muchas pestañas, la barra se desplaza.",
       opacity: "Opacidad del fondo",
       blur: "Desenfocar lo que está detrás",
       blurUnavailableLinux: "No disponible en Linux.",

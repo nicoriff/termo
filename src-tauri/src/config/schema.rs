@@ -107,9 +107,9 @@ pub struct AppConfig {
     /// Opt-in (macOS/Linux): new zsh sessions get a navigable completion
     /// menu on Tab, Tab — see pty/zsh_init.rs.
     pub zsh_menu_complete: bool,
-    /// Opt-in: tracks Claude Code/Codex session state (running/awaiting/
-    /// error/finished) via terminal screen-buffer pattern matching, shown
-    /// in a top panel, per-tab status dots, and the app status bar.
+    /// On by default: the master switch for everything AI (see ai_mode.rs) —
+    /// tracking the agent CLIs' sessions (running/awaiting/error/finished) in
+    /// tabs, the panel and the status bar, plus agents and extensions.
     pub ai_mode_enabled: bool,
     /// Modo IA system notifications, per status transition.
     pub ai_notify_awaiting: bool,
@@ -140,6 +140,8 @@ pub struct AppConfig {
     pub agents_in_activity_bar: bool,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
+    /// Tabs share their strip's whole width instead of keeping their own size.
+    pub tabs_fill_width: bool,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -172,7 +174,7 @@ impl Default for AppConfig {
             oh_my_posh_enabled: false,
             oh_my_posh_theme: "jandedobbeleer".into(),
             zsh_menu_complete: false,
-            ai_mode_enabled: false,
+            ai_mode_enabled: true,
             ai_notify_awaiting: true,
             ai_notify_error: true,
             ai_notify_finished: true,
@@ -193,6 +195,7 @@ impl Default for AppConfig {
             ai_dock_badge: true,
             agents_in_activity_bar: true,
             keep_awake_button: true,
+            tabs_fill_width: false,
             status_line_wrapped: None,
             last_seen_version: None,
             default_layout: None,

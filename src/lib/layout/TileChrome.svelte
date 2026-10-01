@@ -403,6 +403,7 @@
   class="tile-chrome"
   data-tile-id={tile.id}
   class:focused={workspaceStore.focusedTileId === tile.id}
+  class:fill-width={appConfigStore.tabsFillWidth}
   style="left:calc({rect.left * 100}% + {insets.left}px); top:calc({rect.top * 100}% + {insets.top}px); width:calc({rect.width *
     100}% - {insets.left + insets.right}px); height:calc({rect.height * 100}% - {insets.top + insets.bottom}px)"
 >
@@ -787,7 +788,13 @@
      split panes — otherwise every pane's active tab looks identical. */
   .tile-chrome.focused .tile-tab.active {
     background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
-    box-shadow: inset 0 -2px 0 0 var(--tab-focus-border, #3a6df0);
+  }
+
+  /* Appearance → Tabs: the tabs share the whole strip in equal parts, down
+     to a width that still shows a title; past that the strip scrolls. */
+  .tile-chrome.fill-width .tile-tab {
+    flex: 1 1 0;
+    max-width: none;
   }
 
   .tile-tab-title {

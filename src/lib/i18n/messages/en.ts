@@ -1020,6 +1020,9 @@ export const en: Messages = {
     appearance: {
       theme: "Theme",
       transparency: "Transparency",
+      tabs: "Tabs",
+      tabsFillWidth: "Tabs fill the whole width",
+      tabsFillWidthHint: "Each group's tabs share their strip's whole width. With many tabs, the strip scrolls.",
       opacity: "Background opacity",
       blur: "Blur what's behind",
       blurUnavailableLinux: "Not available on Linux.",
@@ -1067,7 +1070,7 @@ export const en: Messages = {
     },
     aiMode: {
       title: "AI Mode",
-      detect: "Turn on Modo IA",
+      detect: "Turn on AI Mode",
       detectHint:
         "Turns on everything AI: tracking Claude Code, Codex, Gemini CLI and Copilot CLI in tabs (panel, states, notices and sounds), agents and their local server, extensions and opening them from the “+”. Off, Termo is just a terminal.",
       perAgentHint: "What belongs to each one (its shortcut, its hooks, the status bar and its sounds) is in its own section, below.",
@@ -1084,7 +1087,7 @@ export const en: Messages = {
       soundPreview: "Play",
       soundsOnFor: "{tool} sounds on",
       soundsHint: "They follow the same rule as notifications: only when that console isn't in view.",
-      soundsPerAgent: "What plays for each agent is picked in its section, under Modo IA.",
+      soundsPerAgent: "What plays for each agent is picked in its section, under AI Mode.",
       soundsToolHint: "They play under the same rule as notifications: only if that console isn't in view. The volume is set in Notifications.",
       tabs: "Tabs",
       hooksFor: "{tool} hooks",

@@ -3,10 +3,16 @@
     "version": "0.9.1",
     "date": "2026-10-01",
     "es": [
-      "**Los agentes abren directo**: Claude Code, Codex, Gemini CLI y Copilot CLI arrancan en su pestaña sin pasar antes por PowerShell ni tipear el comando, también al retomar una sesión. Al salir del agente, la pestaña queda en tu consola, en esa misma carpeta."
+      "**Los agentes abren directo**: Claude Code, Codex, Gemini CLI y Copilot CLI arrancan en su pestaña sin pasar antes por PowerShell ni tipear el comando, también al retomar una sesión. Al salir del agente, la pestaña queda en tu consola, en esa misma carpeta.",
+      "**Pestañas a todo el ancho**: una opción nueva en Preferencias → Apariencia hace que las pestañas de cada grupo se repartan todo el ancho de su barra. La pestaña seleccionada ya no lleva la línea de abajo.",
+      "**Modo IA viene activado** en las instalaciones nuevas.",
+      "En Preferencias, cada agente muestra su logo en el menú lateral."
     ],
     "en": [
-      "**Agents open directly**: Claude Code, Codex, Gemini CLI and Copilot CLI start in their tab without PowerShell starting first or the command being typed, resuming a session too. When you leave the agent, the tab drops you into your console, in that same folder."
+      "**Agents open directly**: Claude Code, Codex, Gemini CLI and Copilot CLI start in their tab without PowerShell starting first or the command being typed, resuming a session too. When you leave the agent, the tab drops you into your console, in that same folder.",
+      "**Tabs fill the whole width**: a new option in Preferences → Appearance makes each group's tabs share their strip's whole width. The selected tab no longer has a line under it.",
+      "**AI Mode comes on** in new installs, and it's now called AI Mode everywhere in English.",
+      "In Preferences, each agent shows its logo in the sidebar."
     ]
   },
   {
@@ -26,13 +32,13 @@
     ],
     "en": [
       "On Windows, **Ctrl+V pastes** into the console, inside Claude Code too, as in Windows Terminal. A multi-line paste arrives whole instead of running line by line. Ctrl+Shift+V pastes too.",
-      "**Modo IA is the master switch**: off, besides session tracking it turns off the agents (none runs and no local port stays open), extensions and the Claude and Codex shortcuts.",
+      "**AI Mode is the master switch**: off, besides session tracking it turns off the agents (none runs and no local port stays open), extensions and the Claude and Codex shortcuts.",
       "**Several windows**: New window (Ctrl+Shift+N, Cmd+N on Mac) opens another with its own tabs and panes, and so does opening Termo again. They all share the agents, Preferences and settings. A window's X closes just that one and its consoles; Quit closes everything.",
       "**One Termo at a time**: with two Termo open, an agent that follows another could run in the other one unseen, and a scheduled agent could run twice. Now it's a single Termo, with as many windows as you like.",
       "**Gemini CLI**, like Claude Code and Codex: in the “+”, the palette and with Ctrl+Shift+J; its status in tabs, its own notices and sounds, hooks to track it precisely and resuming sessions; as an engine for agents; and as a target for Extensions' MCP servers.",
       "The status bar shows the active console's **context used**. With Copilot CLI it also shows **your plan's usage for the month** (chat or premium), read from GitHub with your GitHub CLI session.",
       "GitHub's **Copilot CLI**, like the others: in the “+”, the palette and with Ctrl+Shift+O; its status in tabs through its hooks, its own notices and sounds, resuming sessions; as an engine for agents; and as a target for Extensions' MCP servers.",
-      "Modo IA preferences tidied up: **each agent has its own section** with its shortcut, its hooks, the status bar and its sounds.",
+      "AI Mode preferences tidied up: **each agent has its own section** with its shortcut, its hooks, the status bar and its sounds.",
       "On macOS, the Preferences window no longer opens by itself when Termo starts.",
       "**Better Unicode**: newer emoji, flags, skin tones and families (👨‍👩‍👧) take exactly their room and no longer shift the cursor. On Windows, PowerShell and CMD start in UTF-8, so Python, Node or git show accents and emoji correctly (it can be turned off in Preferences)."
     ]
@@ -48,7 +54,7 @@
     ],
     "en": [
       "On Windows, **Ctrl+C copies** what you have selected in the console, as in Windows Terminal; with nothing selected it still interrupts. Ctrl+Shift+C copies too.",
-      "**Eight new sounds** for Modo IA notifications: Bell, Doorbell, Blip, Drop, Success, Knock, Harp and Sonar.",
+      "**Eight new sounds** for AI Mode notifications: Bell, Doorbell, Blip, Drop, Success, Knock, Harp and Sonar.",
       "Dropdowns in Preferences open upwards when they don't fit below, instead of being cut off.",
       "Security update to the TLS library used by downloads and updates."
     ]

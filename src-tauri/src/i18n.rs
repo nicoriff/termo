@@ -308,7 +308,7 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KeepAwakeReason, En) => "Termo is keeping the computer awake".into(),
 
         (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
-        (AiModeOff, En) => "Modo IA is off: turn it on in Preferences to use agents".into(),
+        (AiModeOff, En) => "AI Mode is off: turn it on in Preferences to use agents".into(),
 
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
     }

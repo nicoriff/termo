@@ -81,6 +81,19 @@
   </p>
 </section>
 
+<section>
+  <h3>{t("preferences.appearance.tabs")}</h3>
+  <label class="toggle-row">
+    <span>{t("preferences.appearance.tabsFillWidth")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.tabsFillWidth}
+      onchange={(e) => appConfigStore.setTabsFillWidth(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.appearance.tabsFillWidthHint")}</p>
+</section>
+
 <style>
   section {
     margin-bottom: 20px;

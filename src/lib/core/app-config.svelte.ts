@@ -94,7 +94,7 @@ class AppConfigStore {
   ohMyPoshTheme = $state("jandedobbeleer");
   zshMenuComplete = $state(false);
   backgroundBlur = $state(false);
-  aiModeEnabled = $state(false);
+  aiModeEnabled = $state(true);
   aiNotifyAwaiting = $state(true);
   aiNotifyError = $state(true);
   aiNotifyFinished = $state(true);
@@ -113,6 +113,7 @@ class AppConfigStore {
   agentsInActivityBar = $state(true);
   /** The keep-awake button in the title bar. */
   keepAwakeButton = $state(true);
+  tabsFillWidth = $state(false);
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
@@ -205,6 +206,8 @@ class AppConfigStore {
     this.aiDockBadge = config.ai_dock_badge;
     this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
     this.keepAwakeButton = config.keep_awake_button ?? true;
+    // Absent in configs from before it was an option: as tabs looked then.
+    this.tabsFillWidth = config.tabs_fill_width ?? false;
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.lastSeenVersion = config.last_seen_version ?? null;
@@ -322,6 +325,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setTabsFillWidth(fill: boolean): void {
+    this.tabsFillWidth = fill;
+    void this.persist();
+  }
+
   setLastSeenVersion(version: string): void {
     this.lastSeenVersion = version;
     void this.persist();
@@ -409,6 +417,7 @@ class AppConfigStore {
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,
       keep_awake_button: this.keepAwakeButton,
+      tabs_fill_width: this.tabsFillWidth,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       last_seen_version: this.lastSeenVersion,

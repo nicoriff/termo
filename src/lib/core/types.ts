@@ -94,6 +94,7 @@ export interface AppConfig {
   ai_dock_badge: boolean;
   agents_in_activity_bar: boolean;
   keep_awake_button: boolean;
+  tabs_fill_width: boolean;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;
