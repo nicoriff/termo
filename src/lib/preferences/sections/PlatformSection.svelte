@@ -32,6 +32,20 @@
       </label>
       <p class="setting-hint">{t("preferences.platform.psreadlineHint")}</p>
     </section>
+
+    <section>
+      <h3>{t("preferences.platform.encoding")}</h3>
+      <label class="toggle-row">
+        <span>{t("preferences.platform.utf8")}</span>
+        <input
+          type="checkbox"
+          checked={appConfigStore.consoleUtf8}
+          disabled={!active}
+          onchange={(e) => appConfigStore.setConsoleUtf8(e.currentTarget.checked)}
+        />
+      </label>
+      <p class="setting-hint">{t("preferences.platform.utf8Hint")}</p>
+    </section>
   {:else}
     <section>
       <h3>zsh</h3>

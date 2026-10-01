@@ -1036,6 +1036,10 @@ export const es = {
       onlyEditableOn: "Solo se puede editar esta sección en {os}.",
       menuComplete: "Menú de autocompletado (Tab, Tab)",
       psreadlineHint: "Solo afecta sesiones nuevas de PowerShell/pwsh abiertas desde Termo.",
+      encoding: "Codificación",
+      utf8: "Consolas en UTF-8 (PowerShell y CMD)",
+      utf8Hint:
+        "Los programas que escriben UTF-8 (Python, herramientas de Node, git) muestran bien acentos, ñ y emojis. Solo afecta sesiones nuevas; desactivalo si algún programa viejo espera la página de códigos clásica.",
       zshHint:
         "Tab muestra las opciones y un segundo Tab abre un menú que se recorre con las flechas. Solo afecta sesiones nuevas de zsh; no modifica tu ~/.zshrc.",
       bashColors: "Prompt con colores (usuario, carpeta y rama de git)",

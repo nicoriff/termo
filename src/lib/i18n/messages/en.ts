@@ -1035,6 +1035,10 @@ export const en: Messages = {
       onlyEditableOn: "This section can only be edited on {os}.",
       menuComplete: "Completion menu (Tab, Tab)",
       psreadlineHint: "Only affects new PowerShell/pwsh sessions opened from Termo.",
+      encoding: "Encoding",
+      utf8: "UTF-8 consoles (PowerShell and CMD)",
+      utf8Hint:
+        "Programs that write UTF-8 (Python, Node tools, git) show accents and emoji correctly. Only affects new sessions; turn it off if an old program expects the classic code page.",
       zshHint:
         "Tab shows the options and a second Tab opens a menu you move through with the arrow keys. Only affects new zsh sessions; doesn't change your ~/.zshrc.",
       bashColors: "Colored prompt (user, folder and git branch)",

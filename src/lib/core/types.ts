@@ -65,6 +65,7 @@ export interface AppConfig {
   background_blur: boolean;
   output_highlighting: boolean;
   psreadline_menu_complete: boolean;
+  console_utf8: boolean;
   bash_prompt_colors: boolean;
   oh_my_posh_enabled: boolean;
   oh_my_posh_theme: string;

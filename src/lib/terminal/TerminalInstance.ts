@@ -1,7 +1,7 @@
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import { agentStatusStore } from "../ai-mode/agent-status-store.svelte";
 import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
@@ -100,9 +100,11 @@ export class TerminalInstance {
     this.term.loadAddon(this.fit);
     this.term.loadAddon(new WebLinksAddon());
 
-    const unicode11 = new Unicode11Addon();
-    this.term.loadAddon(unicode11);
-    this.term.unicode.activeVersion = "11";
+    // Unicode 15 widths, and grapheme clusters taken as one character: a ZWJ
+    // family (👨‍👩‍👧), a flag, a skin tone, a newer emoji (🫠) take the cells
+    // the program counted, so the cursor and the columns after them line up.
+    this.term.loadAddon(new UnicodeGraphemesAddon());
+    this.term.unicode.activeVersion = "15-graphemes";
 
     // Buffered until the PTY id arrives rather than dropped. The console's
     // output channel is wired before pty_spawn's reply comes back, so its very

@@ -88,6 +88,9 @@ pub struct AppConfig {
     /// (Tab completes, Tab,Tab opens a navigable menu) injected at startup.
     /// Left off by default since it changes shell startup behavior.
     pub psreadline_menu_complete: bool,
+    /// Windows: new PowerShell and CMD sessions start in UTF-8 (see
+    /// pty/utf8_console.rs). On by default — also for configs from before it.
+    pub console_utf8: bool,
     /// Opt-in (macOS/Linux): new bash sessions get a colored prompt, colored
     /// `ls`, and no macOS "default shell is now zsh" notice — see
     /// pty/bash_colors.rs.
@@ -157,6 +160,7 @@ impl Default for AppConfig {
             background_blur: false,
             output_highlighting: true,
             psreadline_menu_complete: false,
+            console_utf8: true,
             bash_prompt_colors: false,
             oh_my_posh_enabled: false,
             oh_my_posh_theme: "jandedobbeleer".into(),

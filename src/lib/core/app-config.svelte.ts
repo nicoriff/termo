@@ -81,6 +81,8 @@ class AppConfigStore {
   language = $state<LanguagePreference>("system");
   defaultShellId = $state<string | null>(null);
   psreadlineMenuComplete = $state(false);
+  /** Windows: new PowerShell and CMD sessions start in UTF-8. */
+  consoleUtf8 = $state(true);
   bashPromptColors = $state(false);
   ohMyPoshEnabled = $state(false);
   ohMyPoshTheme = $state("jandedobbeleer");
@@ -150,6 +152,7 @@ class AppConfigStore {
     i18n.setPreference(this.language);
     this.defaultShellId = config.default_shell_id;
     this.psreadlineMenuComplete = config.psreadline_menu_complete;
+    this.consoleUtf8 = config.console_utf8 ?? true;
     this.bashPromptColors = config.bash_prompt_colors;
     this.ohMyPoshEnabled = config.oh_my_posh_enabled;
     this.ohMyPoshTheme = config.oh_my_posh_theme;
@@ -215,6 +218,11 @@ class AppConfigStore {
 
   setDefaultShell(id: string): void {
     this.defaultShellId = id;
+    void this.persist();
+  }
+
+  setConsoleUtf8(enabled: boolean): void {
+    this.consoleUtf8 = enabled;
     void this.persist();
   }
 
@@ -359,6 +367,7 @@ class AppConfigStore {
       theme: themeStore.current.name,
       default_shell_id: this.defaultShellId,
       psreadline_menu_complete: this.psreadlineMenuComplete,
+      console_utf8: this.consoleUtf8,
       bash_prompt_colors: this.bashPromptColors,
       oh_my_posh_enabled: this.ohMyPoshEnabled,
       oh_my_posh_theme: this.ohMyPoshTheme,

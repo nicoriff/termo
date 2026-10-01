@@ -10,6 +10,7 @@ mod manager;
 mod memory;
 pub mod oh_my_posh;
 pub mod powershell_keys;
+pub mod utf8_console;
 mod recorder;
 mod session;
 mod shell_detect;
