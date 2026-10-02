@@ -1,3 +1,4 @@
+import type { AgentFavorite } from "./agent-favorites-client";
 import type { SavedLayout } from "./layouts-client";
 import type { LaunchTarget } from "$lib/agent-launch/launch-target";
 import type { AgentSpec, Project } from "./agents-client";
@@ -10,6 +11,10 @@ class UiState {
   /** The "save layout" name prompt, opened from the title bar menu or the
    * palette. Like the palette, it owns the keyboard while it's up. */
   saveLayoutPromptOpen = $state(false);
+  /** The conversation being added to the favorites, or the favorite being
+   * renamed (see FavoriteDialog). */
+  favoriteDialog = $state<AgentFavorite | null>(null);
+  favoritesManagerOpen = $state(false);
   /** The layout waiting on its "this closes everything you have open"
    * confirmation, set from both places that can restore one. */
   restoreLayoutTarget = $state<SavedLayout | null>(null);
@@ -61,6 +66,8 @@ class UiState {
     return (
       this.commandPaletteOpen ||
       this.saveLayoutPromptOpen ||
+      this.favoriteDialog !== null ||
+      this.favoritesManagerOpen ||
       this.layoutManagerOpen ||
       this.aboutOpen ||
       this.updatesOpen ||
@@ -94,6 +101,22 @@ class UiState {
 
   closeSaveLayoutPrompt(): void {
     this.saveLayoutPromptOpen = false;
+  }
+
+  openFavoriteDialog(favorite: AgentFavorite): void {
+    this.favoriteDialog = favorite;
+  }
+
+  closeFavoriteDialog(): void {
+    this.favoriteDialog = null;
+  }
+
+  openFavoritesManager(): void {
+    this.favoritesManagerOpen = true;
+  }
+
+  closeFavoritesManager(): void {
+    this.favoritesManagerOpen = false;
   }
 
   /** Restoring never happens straight away: it closes every console that's

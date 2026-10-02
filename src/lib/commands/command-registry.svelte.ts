@@ -16,6 +16,7 @@ import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
 import { TOOL_IDS } from "../ai-mode/pattern-table";
 import { newTabOptions } from "../layout/new-tab-options.svelte";
 import { agentsStore } from "../agents/agents-store.svelte";
+import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
 import type { Command } from "./commands";
 
 /** themeStore's setters never persist on their own — the Preferences sections
@@ -249,6 +250,33 @@ export function buildCommands(): Command[] {
       label: t("commands.aiNextPending"),
       run: () => focusNextPending(),
     });
+
+    // The conversation in the focused console, as a favorite to add or edit.
+    const current = tile?.activeSessionId ? favoriteDraftForTab(tile.activeSessionId) : null;
+    if (current) {
+      const saved = favoritesStore.byId.has(current.agentSessionId);
+      commands.push({
+        id: "aiMode.favorite",
+        group: "aiMode",
+        label: t(saved ? "commands.editFavorite" : "commands.addFavorite"),
+        run: () => uiState.openFavoriteDialog(current),
+      });
+    }
+    commands.push({
+      id: "aiMode.manageFavorites",
+      group: "aiMode",
+      label: t("commands.manageFavorites"),
+      run: () => uiState.openFavoritesManager(),
+    });
+    for (const favorite of favoritesStore.favorites) {
+      if (!canRestore(favorite)) continue;
+      commands.push({
+        id: `aiMode.favorite.${favorite.agentSessionId}`,
+        group: "aiMode",
+        label: t("commands.openFavorite", { name: favoriteLabel(favorite) }),
+        run: () => void restoreSession(favorite),
+      });
+    }
 
     // Same rule as the "+" menu: recent sessions only surface while AI Mode
     // is on, since that's what records them.

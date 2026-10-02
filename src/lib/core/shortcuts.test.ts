@@ -216,6 +216,11 @@ describe("findConflict", () => {
     expect(findConflict("meta+shift+o", "newTab", {}, true)).toBe("newCopilot");
   });
 
+  it("covers the favorite-tab shortcut's default binding", () => {
+    expect(findConflict("ctrl+shift+f", "newTab", {}, false)).toBe("favoriteTab");
+    expect(findConflict("meta+shift+f", "newTab", {}, true)).toBe("favoriteTab");
+  });
+
   it("covers the command palette's own default binding", () => {
     expect(findConflict("ctrl+shift+p", "newTab", {}, false)).toBe("commandPalette");
     expect(findConflict("meta+shift+p", "newTab", {}, true)).toBe("commandPalette");

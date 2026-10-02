@@ -35,6 +35,8 @@ pub struct ShortcutsConfig {
     pub new_gemini_other: Option<String>,
     pub new_copilot_mac: Option<String>,
     pub new_copilot_other: Option<String>,
+    pub favorite_tab_mac: Option<String>,
+    pub favorite_tab_other: Option<String>,
     pub new_window_mac: Option<String>,
     pub new_window_other: Option<String>,
     pub toggle_explorer_mac: Option<String>,

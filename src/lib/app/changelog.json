@@ -3,10 +3,12 @@
     "version": "0.9.3",
     "date": "2026-10-02",
     "es": [
-      "En Windows 10, **las consolas ya no se desacomodan al maximizar o cambiar el tamaño**: la línea de estado de Claude Code y el prompt de Oh My Posh se duplicaban y el cursor quedaba una fila corrido. Pasaba porque la consola de Windows 10 mide algunos emojis nuevos con otro ancho que Termo; ahora Termo los mide igual que ella."
+      "En Windows 10, **las consolas ya no se desacomodan al maximizar o cambiar el tamaño**: la línea de estado de Claude Code y el prompt de Oh My Posh se duplicaban y el cursor quedaba una fila corrido. Pasaba porque la consola de Windows 10 mide algunos emojis nuevos con otro ancho que Termo; ahora Termo los mide igual que ella.",
+      "**Sesiones favoritas** en Modo IA: con clic derecho sobre la pestaña o la consola de un agente, con Ctrl+Shift+F o desde la paleta, guardás esa conversación en favoritos, con un nombre si querés. La reabrís desde el «+» de cada grupo o desde el menú, en Favoritos (donde también los gestionás), o desde la paleta, y la pestaña que la tiene abierta muestra una ★."
     ],
     "en": [
-      "On Windows 10, **consoles no longer get scrambled when maximizing or resizing**: Claude Code's status line and Oh My Posh's prompt were duplicated and the cursor sat a row off. Windows 10's console measures some newer emoji at a different width than Termo did; Termo now measures them the same way."
+      "On Windows 10, **consoles no longer get scrambled when maximizing or resizing**: Claude Code's status line and Oh My Posh's prompt were duplicated and the cursor sat a row off. Windows 10's console measures some newer emoji at a different width than Termo did; Termo now measures them the same way.",
+      "**Favorite sessions** in AI Mode: right-click an agent's tab or console, press Ctrl+Shift+F, or use the palette to save that conversation as a favorite, with a name if you like. Reopen it from each group's “+” or the menu, under Favorites (where you also manage them), or from the palette, and the tab that has it open shows a ★."
     ]
   },
   {

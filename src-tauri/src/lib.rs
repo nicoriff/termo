@@ -1,3 +1,4 @@
+mod agent_favorites;
 mod agent_sessions;
 mod ai_mode;
 mod agents;
@@ -128,6 +129,9 @@ pub fn run() {
             commands::agent_hook_commands::uninstall_agent_hooks,
             commands::agent_session_commands::list_agent_sessions,
             commands::agent_session_commands::forget_agent_session,
+            commands::agent_session_commands::list_agent_favorites,
+            commands::agent_session_commands::save_agent_favorite,
+            commands::agent_session_commands::remove_agent_favorite,
             commands::window_commands::quit_app,
             commands::pty_commands::busy_consoles,
             commands::layout_commands::list_layouts,

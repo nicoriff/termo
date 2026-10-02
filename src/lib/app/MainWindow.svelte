@@ -6,6 +6,9 @@
   import TileOverviewMap from "$lib/layout/TileOverviewMap.svelte";
   import CommandPalette from "$lib/commands/CommandPalette.svelte";
   import SaveLayoutDialog from "$lib/layout/SaveLayoutDialog.svelte";
+  import FavoriteDialog from "$lib/ai-mode/FavoriteDialog.svelte";
+  import { favoriteDraftForFocusedTab } from "$lib/ai-mode/favorites-store.svelte";
+  import FavoritesManagerDialog from "$lib/ai-mode/FavoritesManagerDialog.svelte";
   import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
   import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
@@ -163,6 +166,18 @@
       agentsStore.toggle();
       return;
     }
+    // The focused tab's conversation, as a favorite to add or edit (Modo IA).
+    if (
+      !workspaceStore.overviewOpen &&
+      appConfigStore.aiModeEnabled &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("favoriteTab"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      const draft = favoriteDraftForFocusedTab();
+      if (draft) uiState.openFavoriteDialog(draft);
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, tool] of [
         ["newClaude", "claude"],
@@ -248,6 +263,13 @@
     {/if}
     {#if uiState.saveLayoutPromptOpen}
       <SaveLayoutDialog />
+    {/if}
+    {#if uiState.favoritesManagerOpen}
+      <FavoritesManagerDialog />
+    {/if}
+    <!-- After the manager: renaming from it opens this on top. -->
+    {#if uiState.favoriteDialog}
+      <FavoriteDialog />
     {/if}
     {#if uiState.layoutManagerOpen}
       <LayoutManagerDialog />

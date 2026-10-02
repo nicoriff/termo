@@ -17,6 +17,10 @@
   import { layoutHasSessions } from "$lib/layout/layout-snapshot";
   import type { SavedLayout } from "$lib/core/layouts-client";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
+  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
+  import { favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
+  import { canRestore, restoreSession } from "$lib/ai-mode/restore-session";
+  import type { AgentFavorite } from "$lib/core/agent-favorites-client";
 
   let { anchor, onclose }: { anchor?: HTMLElement; onclose: () => void } = $props();
 
@@ -48,10 +52,15 @@
   let editPos = $state({ top: 0, left: 0 });
   let editRowEl = $state<HTMLButtonElement | undefined>(undefined);
 
-  /** Only one flyout at a time, and every other row closes both. */
+  let favoritesOpen = $state(false);
+  let favoritesPos = $state({ top: 0, left: 0 });
+  let favoritesRowEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  /** Only one flyout at a time, and every other row closes them. */
   function closeSubmenus() {
     restoreOpen = false;
     editOpen = false;
+    favoritesOpen = false;
   }
 
   /** Where a flyout for `row` fits: beside it, flipped to its left when the
@@ -70,6 +79,7 @@
   function openRestore() {
     if (!restoreRowEl) return;
     editOpen = false;
+    favoritesOpen = false;
     restorePos = flyoutPos(restoreRowEl, SUBMENU_MAX_HEIGHT);
     restoreOpen = true;
   }
@@ -77,8 +87,28 @@
   function openEdit() {
     if (!editRowEl) return;
     restoreOpen = false;
+    favoritesOpen = false;
     editPos = flyoutPos(editRowEl, EDIT_SUBMENU_HEIGHT);
     editOpen = true;
+  }
+
+  function openFavorites() {
+    if (!favoritesRowEl) return;
+    restoreOpen = false;
+    editOpen = false;
+    favoritesPos = flyoutPos(favoritesRowEl, SUBMENU_MAX_HEIGHT);
+    favoritesOpen = true;
+  }
+
+  /** Opens it in the focused tile, as reopening a recent session does. */
+  function openFavorite(favorite: AgentFavorite) {
+    onclose();
+    void restoreSession(favorite);
+  }
+
+  function manageFavorites() {
+    onclose();
+    uiState.openFavoritesManager();
   }
 
   function preferences() {
@@ -242,8 +272,51 @@
     <span class="app-menu-text">{t("layouts.manage")}</span>
   </button>
 
-  <!-- Extensions and Agents are Modo IA's: only with it on. -->
+  <!-- Extensions, Agents and favorites are Modo IA's: only with it on. -->
   {#if appConfigStore.aiModeEnabled}
+  <button
+    class="app-menu-item"
+    class:open={favoritesOpen}
+    role="menuitem"
+    bind:this={favoritesRowEl}
+    aria-haspopup="menu"
+    aria-expanded={favoritesOpen}
+    onmouseenter={openFavorites}
+    onclick={() => (favoritesOpen ? (favoritesOpen = false) : openFavorites())}
+  >
+    <!-- A star: the favorite conversations. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M6 1.2l1.45 3 3.3.45-2.4 2.3.58 3.25L6 8.65 3.07 10.2l.58-3.25-2.4-2.3 3.3-.45z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="app-menu-text">{t("favorites.title")}</span>
+    <svg class="app-menu-chevron" viewBox="0 0 6 10" aria-hidden="true">
+      <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+    </svg>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={manageFavorites}>
+    <!-- The star again, with the list it belongs to. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M1.5 3h4M1.5 6h3M1.5 9h4" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
+      <path
+        d="M8.5 3.5l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L5.6 5.6l2-.3z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="0.9"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="app-menu-text">{t("favorites.manage")}</span>
+  </button>
+
+  <div class="app-menu-divider"></div>
+
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={browseExtensions}>
     <!-- A puzzle piece: the usual mark for an extension. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -319,6 +392,24 @@
     <button class="app-menu-item" role="menuitem" onclick={() => runEdit(clearConsole)}>
       <span class="app-menu-text">{t("edit.clear")}</span>
     </button>
+  </div>
+{/if}
+
+{#if favoritesOpen}
+  <div class="app-submenu" style="top:{favoritesPos.top}px; left:{favoritesPos.left}px" role="menu">
+    {#each favoritesStore.favorites.filter(canRestore) as favorite (favorite.agentSessionId)}
+      <button
+        class="app-menu-item"
+        role="menuitem"
+        title={favorite.cwd ?? favorite.projectDir ?? ""}
+        onclick={() => openFavorite(favorite)}
+      >
+        <span class="app-menu-agent"><ConsoleIcon kind={favorite.tool} size={12} /></span>
+        <span class="app-menu-text">{favoriteLabel(favorite)}</span>
+      </button>
+    {:else}
+      <p class="app-menu-empty">{t("favorites.empty")}</p>
+    {/each}
   </div>
 {/if}
 
@@ -437,6 +528,12 @@
     height: 10px;
     flex-shrink: 0;
     opacity: 0.7;
+  }
+
+  /* The agent's own icon in place of a menu icon. */
+  .app-menu-agent {
+    display: flex;
+    flex-shrink: 0;
   }
 
   /* Marks a layout that also carries agent conversations. */

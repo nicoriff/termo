@@ -5,14 +5,22 @@
   import { formatKeybindingLabel, type ShortcutAction } from "$lib/core/shortcuts";
   import { t } from "$lib/i18n/i18n.svelte";
   import { clearConsole, copySelection, focusedHasSelection, pasteClipboard, selectAll } from "./terminal-clipboard";
+  import { favoriteDraftForFocusedTab, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
 
   // Fixed size so the position math can clamp against the window without
   // waiting on a post-render measurement — same approach as the app menu.
   const WIDTH = 210;
-  const HEIGHT = 140;
+  const BASE_HEIGHT = 140;
+  const FAVORITE_ROW_HEIGHT = 38;
   const MARGIN = 8;
 
   const at = $derived(uiState.terminalContextMenu);
+
+  /** The conversation in the console that was right-clicked (the focused
+   * tab: the click focused it), as a favorite to add or edit. Modo IA only. */
+  const favorite = $derived(appConfigStore.aiModeEnabled ? favoriteDraftForFocusedTab() : null);
+  const isFavorite = $derived(favorite !== null && favoritesStore.byId.has(favorite.agentSessionId));
+  const HEIGHT = $derived(BASE_HEIGHT + (favorite ? FAVORITE_ROW_HEIGHT : 0));
 
   const pos = $derived.by(() => {
     if (!at) return { top: 0, left: 0 };
@@ -61,6 +69,14 @@
   <button class="context-item" role="menuitem" onclick={() => run(clearConsole)}>
     <span class="context-text">{t("edit.clear")}</span>
   </button>
+  {#if favorite}
+    <div class="context-divider"></div>
+    <button class="context-item" role="menuitem" onclick={() => run(() => uiState.openFavoriteDialog(favorite))}>
+      <span class="context-text">{t(isFavorite ? "favorites.edit" : "favorites.add")}</span>
+      <span class="context-hint">{hint("favoriteTab")}</span>
+      <span class="context-star" class:on={isFavorite} aria-hidden="true">{isFavorite ? "★" : "☆"}</span>
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -111,6 +127,16 @@
 
   .context-text {
     flex: 1;
+  }
+
+  .context-star {
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .context-star.on {
+    color: #e5c07b;
+    opacity: 1;
   }
 
   .context-hint {

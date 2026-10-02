@@ -26,6 +26,8 @@ export interface ShortcutsConfig {
   new_gemini_other: string | null;
   new_copilot_mac: string | null;
   new_copilot_other: string | null;
+  favorite_tab_mac: string | null;
+  favorite_tab_other: string | null;
   new_window_mac: string | null;
   new_window_other: string | null;
   toggle_explorer_mac: string | null;

@@ -12,8 +12,11 @@ import { TOOL_DISPLAY_NAMES } from "./tool-names";
 const WAIT_FOR_CONSOLE_MS = 5000;
 const POLL_MS = 100;
 
+/** What reopening a conversation needs: a recent session or a favorite. */
+export type ResumableSession = Pick<AgentSession, "tool" | "agentSessionId" | "cwd" | "projectDir">;
+
 /** The folder name, which is what identifies a session at a glance. */
-export function sessionLabel(session: AgentSession): string {
+export function sessionLabel(session: ResumableSession): string {
   const path = session.cwd ?? session.projectDir;
   const folder = path?.split(/[\\/]/).filter(Boolean).pop();
   return folder ? `${TOOL_DISPLAY_NAMES[session.tool]} · ${folder}` : TOOL_DISPLAY_NAMES[session.tool];
@@ -21,7 +24,7 @@ export function sessionLabel(session: AgentSession): string {
 
 /** Whether this session can be reopened: it needs an id safe to type and a
  * console to type it into. */
-export function canRestore(session: AgentSession): boolean {
+export function canRestore(session: Pick<ResumableSession, "tool" | "agentSessionId">): boolean {
   return resumeCommand(session.tool, session.agentSessionId) !== null;
 }
 
@@ -30,7 +33,7 @@ export function canRestore(session: AgentSession): boolean {
  * as its own process, like a new agent tab (see launch-agent.ts): the default
  * shell is what it falls back to once the agent exits.
  */
-export async function restoreSession(session: AgentSession, targetTileId?: string): Promise<void> {
+export async function restoreSession(session: ResumableSession, targetTileId?: string): Promise<void> {
   const args = resumeArgs(session.tool, session.agentSessionId);
   const tileId = targetTileId ?? workspaceStore.focusedTileId;
   if (!args || !tileId) return;

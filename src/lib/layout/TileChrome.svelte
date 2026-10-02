@@ -20,6 +20,8 @@
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
   import { canRestore, restoreSession, sessionLabel } from "$lib/ai-mode/restore-session";
   import type { AgentSession } from "$lib/core/agent-sessions-client";
+  import type { AgentFavorite } from "$lib/core/agent-favorites-client";
+  import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
   import { newTabOptions } from "./new-tab-options.svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -70,7 +72,7 @@
 
   function toggleShellPicker() {
     shellPickerOpen = !shellPickerOpen;
-    recentOpen = false;
+    submenu = null;
     if (shellPickerOpen && addGroupEl) {
       // Rendered via position:fixed (not nested/absolute) because
       // .tile-tabstrip sets overflow-x:auto, which per the CSS spec forces
@@ -105,7 +107,7 @@
 
   function closeShellPicker() {
     shellPickerOpen = false;
-    recentOpen = false;
+    submenu = null;
   }
 
   /** Shift+click is the keyboard-hand's way to the folder icon. */
@@ -147,17 +149,26 @@
     appConfigStore.aiModeEnabled ? agentSessionsStore.sessions.filter(canRestore) : [],
   );
 
-  let recentOpen = $state(false);
+  /** The conversations marked as favorites, reopened the same way. */
+  const favoriteSessions = $derived(
+    appConfigStore.aiModeEnabled ? favoritesStore.favorites.filter(canRestore) : [],
+  );
+
+  /** Which of the picker's two flyouts is open. */
+  let submenu = $state<"recent" | "favorites" | null>(null);
+  const recentOpen = $derived(submenu === "recent");
   let recentPos = $state({ top: 0, left: 0 });
-  // $state (unlike addButtonEl): this row lives inside an {#if}, so bind:this
-  // reassigns it as the row appears and disappears.
+  // $state (unlike addButtonEl): these rows live inside an {#if}, so bind:this
+  // reassigns them as the rows appear and disappear.
   let recentRowEl = $state<HTMLButtonElement | undefined>(undefined);
+  let favoritesRowEl = $state<HTMLButtonElement | undefined>(undefined);
 
   /** Flies out beside the picker, flipping to its left when the window edge is
    * too close — same clamping idea as the picker itself. */
-  function openRecent() {
-    if (!recentRowEl) return;
-    const box = recentRowEl.getBoundingClientRect();
+  function openSubmenu(kind: "recent" | "favorites") {
+    const row = kind === "recent" ? recentRowEl : favoritesRowEl;
+    if (!row) return;
+    const box = row.getBoundingClientRect();
     const toTheRight = box.right + 4;
     const left =
       toTheRight + RECENT_SUBMENU_WIDTH + SHELL_PICKER_MARGIN > window.innerWidth
@@ -165,7 +176,17 @@
         : toTheRight;
     const top = Math.min(box.top, window.innerHeight - SHELL_PICKER_MAX_HEIGHT - SHELL_PICKER_MARGIN);
     recentPos = { top, left };
-    recentOpen = true;
+    submenu = kind;
+  }
+
+  function toggleSubmenu(kind: "recent" | "favorites") {
+    if (submenu === kind) submenu = null;
+    else openSubmenu(kind);
+  }
+
+  function pickFavorite(favorite: AgentFavorite) {
+    closeShellPicker();
+    void restoreSession(favorite, tile.id);
   }
 
   function pickRecent(session: AgentSession) {
@@ -372,6 +393,34 @@
     window.addEventListener("pointerup", onUp);
   }
 
+  /** Right-clicking a tab: its own small menu, at the pointer. The tab becomes
+   * the active one first, as a click would make it. */
+  const TAB_MENU_WIDTH = 220;
+  let tabMenu = $state<{ x: number; y: number; sessionId: string } | null>(null);
+  const tabMenuFavorite = $derived(
+    tabMenu && appConfigStore.aiModeEnabled ? favoriteDraftForTab(tabMenu.sessionId) : null,
+  );
+
+  function onTabContextMenu(event: MouseEvent, sessionId: string) {
+    event.preventDefault();
+    workspaceStore.setActiveSession(tile.id, sessionId);
+    const x = Math.min(event.clientX, window.innerWidth - TAB_MENU_WIDTH - SHELL_PICKER_MARGIN);
+    const y = Math.min(event.clientY, window.innerHeight - 90 - SHELL_PICKER_MARGIN);
+    tabMenu = { x, y, sessionId };
+  }
+
+  function favoriteFromTabMenu() {
+    const draft = tabMenuFavorite;
+    tabMenu = null;
+    if (draft) uiState.openFavoriteDialog(draft);
+  }
+
+  function closeFromTabMenu(event: Event) {
+    const sessionId = tabMenu?.sessionId;
+    tabMenu = null;
+    if (sessionId) closeTab(event, sessionId);
+  }
+
   function closeTab(event: Event, sessionId: string) {
     event.stopPropagation();
     // A file with unsaved changes asks first (see CloseFileDialog).
@@ -410,6 +459,7 @@
   <div class="tile-tabstrip" data-tile-id={tile.id}>
     {#each tile.sessions as session (session.id)}
       {@const aiStatus = aiStatusStore.byId[session.id]}
+      {@const favorite = appConfigStore.aiModeEnabled ? favoritesStore.forTab(session.id) : null}
       <div
         class="tile-tab"
         class:active={tile.activeSessionId === session.id}
@@ -418,6 +468,7 @@
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}
         onpointerdown={(e) => onTabPointerDown(e, session.id)}
+        oncontextmenu={(e) => onTabContextMenu(e, session.id)}
         onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") workspaceStore.setActiveSession(tile.id, session.id);
         }}
@@ -441,14 +492,18 @@
             <path d="M7 4V2 M5 8h.01 M9 8h.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
           </svg>
         {/if}
+        {#if favorite}
+          <span class="tile-tab-favorite" title={t("favorites.tabHint", { name: favoriteLabel(favorite) })}>★</span>
+        {/if}
         <span
           class="tile-tab-title"
-          title={session.filePath ??
+          title={favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
             (session.agentRun || session.projectView
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >
-          {tabTitleStore.titleFor(session.id, session.title)}
+          <!-- A favorite with a name of its own goes by it. -->
+          {favorite?.name ?? tabTitleStore.titleFor(session.id, session.title)}
         </span>
         {#if fileTabs.dirty[session.id]}
           <span class="tile-tab-dirty" title={t("editor.unsaved")}>●</span>
@@ -509,7 +564,7 @@
       >
         {#each shells as shell (shell.id)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="shell-picker-row" onmouseenter={() => (recentOpen = false)}>
+          <div class="shell-picker-row" onmouseenter={() => (submenu = null)}>
             <button class="shell-picker-item" onclick={(e) => onShellClick(e, shell)}>
               <ConsoleIcon kind={shell.id} />
               <span class="shell-picker-label">{shell.display_name}</span>
@@ -539,7 +594,7 @@
           <button
             class="shell-picker-item"
             disabled={!installed}
-            onmouseenter={() => (recentOpen = false)}
+            onmouseenter={() => (submenu = null)}
             onclick={() => pickAgent(tool)}
           >
             <ConsoleIcon kind={tool} />
@@ -549,16 +604,34 @@
             {/if}
           </button>
         {/each}
-        {#if recentSessions.length > 0}
+        {#if recentSessions.length > 0 || favoriteSessions.length > 0}
           <div class="shell-picker-divider"></div>
+        {/if}
+        {#if favoriteSessions.length > 0}
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={submenu === "favorites"}
+            bind:this={favoritesRowEl}
+            aria-haspopup="menu"
+            aria-expanded={submenu === "favorites"}
+            onmouseenter={() => openSubmenu("favorites")}
+            onclick={() => toggleSubmenu("favorites")}
+          >
+            <span><span class="favorite-star" aria-hidden="true">★</span> {t("favorites.title")}</span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+        {/if}
+        {#if recentSessions.length > 0}
           <button
             class="shell-picker-item shell-picker-submenu-row"
             class:open={recentOpen}
             bind:this={recentRowEl}
             aria-haspopup="menu"
             aria-expanded={recentOpen}
-            onmouseenter={openRecent}
-            onclick={() => (recentOpen ? (recentOpen = false) : openRecent())}
+            onmouseenter={() => openSubmenu("recent")}
+            onclick={() => toggleSubmenu("recent")}
           >
             <span>{t("aiMode.recent")}</span>
             <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
@@ -567,6 +640,26 @@
           </button>
         {/if}
       </div>
+      {#if submenu === "favorites"}
+        <div
+          class="recent-submenu"
+          style="top:{recentPos.top}px; left:{recentPos.left}px"
+          role="menu"
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
+          {#each favoriteSessions as favorite (favorite.agentSessionId)}
+            <button
+              class="shell-picker-item"
+              role="menuitem"
+              title={favorite.cwd ?? favorite.projectDir ?? ""}
+              onclick={() => pickFavorite(favorite)}
+            >
+              <ConsoleIcon kind={favorite.tool} />
+              <span class="shell-picker-label">{favoriteLabel(favorite)}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if recentOpen}
         <div
           class="recent-submenu"
@@ -581,11 +674,43 @@
               title={session.cwd ?? session.projectDir ?? ""}
               onclick={() => pickRecent(session)}
             >
-              {sessionLabel(session)}
+              <ConsoleIcon kind={session.tool} />
+              <span class="shell-picker-label">{sessionLabel(session)}</span>
             </button>
           {/each}
         </div>
       {/if}
+    </div>
+  {/if}
+
+  {#if tabMenu}
+    <div use:portal>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="shell-picker-backdrop"
+        onpointerdown={() => (tabMenu = null)}
+        oncontextmenu={(e) => {
+          e.preventDefault();
+          tabMenu = null;
+        }}
+      ></div>
+      <div class="tab-menu" style="top:{tabMenu.y}px; left:{tabMenu.x}px" role="menu">
+        {#if tabMenuFavorite}
+          {@const saved = favoritesStore.byId.has(tabMenuFavorite.agentSessionId)}
+          <button class="shell-picker-item" role="menuitem" onclick={favoriteFromTabMenu}>
+            <span class="tab-menu-star" class:on={saved} aria-hidden="true">{saved ? "★" : "☆"}</span>
+            <span class="shell-picker-label">{t(saved ? "favorites.edit" : "favorites.add")}</span>
+            <span class="tab-menu-hint">
+              {formatKeybindingLabel(appConfigStore.getEffectiveShortcut("favoriteTab"), isMac)}
+            </span>
+          </button>
+          <div class="shell-picker-divider"></div>
+        {/if}
+        <button class="shell-picker-item" role="menuitem" onclick={closeFromTabMenu}>
+          <span class="tab-menu-star" aria-hidden="true"></span>
+          <span class="shell-picker-label">{t("tabs.close")}</span>
+        </button>
+      </div>
     </div>
   {/if}
 
@@ -823,6 +948,51 @@
   .tile-tab-kind {
     display: flex;
     flex-shrink: 0;
+  }
+
+  /* Right-click on a tab: above the backdrop it shares with the picker. */
+  .tab-menu {
+    position: fixed;
+    pointer-events: auto;
+    z-index: 200;
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    background: var(--tabbar-active-bg, #1e1e1e);
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .tab-menu-star {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    opacity: 0.6;
+  }
+
+  .tab-menu-star.on {
+    color: #e5c07b;
+    opacity: 1;
+  }
+
+  .tab-menu-hint {
+    flex-shrink: 0;
+    font-size: 10px;
+    opacity: 0.5;
+  }
+
+  /* A favorite conversation is open in this tab (see favorites-store). */
+  .tile-tab-favorite {
+    flex-shrink: 0;
+    font-size: 11px;
+    line-height: 1;
+    color: #e5c07b;
+  }
+
+  .favorite-star {
+    color: #e5c07b;
   }
 
   .tile-tab-ai-dot {

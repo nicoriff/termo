@@ -10,6 +10,8 @@ import { aiStatusStore, type AiSessionEntry } from "./ai-status-store.svelte";
 import { agentStatusStore, type AgentStatus } from "./agent-status-store.svelte";
 import { TOOL_DISPLAY_NAMES } from "./tool-names";
 import { agentSessionsStore } from "./agent-sessions-store.svelte";
+import { favoritesStore } from "./favorites-store.svelte";
+import type { AgentFavorite } from "$lib/core/agent-favorites-client";
 import { tabAgentSessions } from "./tab-sessions.svelte";
 import type { AgentSession } from "$lib/core/agent-sessions-client";
 import type { AiSessionStatus } from "./classifier";
@@ -124,6 +126,11 @@ export function startAgentAttention(): () => void {
   });
   // Past conversations Modo IA can reopen, recorded by both channels.
   void agentSessionsStore.load();
+  // The ones marked as favorites; any window can change them.
+  void favoritesStore.load();
+  const unlistenFavorites = listen<AgentFavorite[]>("agent-favorites", ({ payload }) => {
+    favoritesStore.set(payload);
+  });
   const unlistenSessions = listen<AgentSession[]>("agent-sessions", ({ payload }) => {
     agentSessionsStore.set(payload);
   });
@@ -132,5 +139,6 @@ export function startAgentAttention(): () => void {
     void unlisten.then((stop) => stop());
     void unlistenStatus.then((stop) => stop());
     void unlistenSessions.then((stop) => stop());
+    void unlistenFavorites.then((stop) => stop());
   };
 }

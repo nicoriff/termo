@@ -94,6 +94,8 @@ pub enum Msg<'a> {
     AgentImportRejected(&'a str, &'a str),
     /// The agent CLI is installed under a path cmd.exe can't be trusted to read as one.
     AgentLaunchUnsafePath(&'a str),
+    /// A favorite for an unknown agent or with an id that can't be reopened.
+    AgentFavoriteInvalid,
     /// runs a day
     ProjectDailyLimit(u32),
     ProjectNotFound,
@@ -277,6 +279,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         ),
         (AgentBadModel(model), Es) => format!("\"{model}\" no es un nombre de modelo"),
         (AgentBadModel(model), En) => format!("\"{model}\" isn't a model's name"),
+        (AgentFavoriteInvalid, Es) => "Esta sesión no se puede guardar en favoritos: no es de un agente conocido o su identificador no se puede reabrir.".into(),
+        (AgentFavoriteInvalid, En) => "This session can't be saved as a favorite: it isn't from a known agent or its id can't be reopened.".into(),
         (AgentLaunchUnsafePath(path), Es) => format!(
             "No se abrió el agente: está instalado en una ruta con caracteres que la consola leería como comandos ({path}). Abrilo escribiendo su nombre en una consola."
         ),
@@ -380,6 +384,7 @@ mod tests {
             Msg::AgentBadModel("--x"),
             Msg::AgentImportRejected("Revisor", "bad name"),
             Msg::AgentLaunchUnsafePath(r"C:\a&b\codex.cmd"),
+            Msg::AgentFavoriteInvalid,
             Msg::ProjectDailyLimit(20),
             Msg::ProjectNotFound,
             Msg::ProjectNoEntry,
