@@ -8,7 +8,7 @@ import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
-import { killPty, promptRedrawPty, resizePty, spawnPty, writePty } from "../core/pty-client";
+import { killPty, promptRedrawPty, resizePty, spawnPty, windowsBuild, writePty } from "../core/pty-client";
 import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import type { AgentLaunch } from "../layout/split-tree";
@@ -36,6 +36,10 @@ const CLASSIFY_ROW_COUNT = 20;
 function withMonospaceFallback(family: string): string {
   return family.includes(",") ? family : `"${family}", monospace`;
 }
+
+// The first Windows build whose ConPTY no longer reflows on its own and
+// measures characters as current terminals do; xterm's own threshold too.
+const OLD_CONPTY_BEFORE_BUILD = 21376;
 
 // How long the container size must stay put before the PTY hears about it.
 // Each PTY resize makes the shell (and ConPTY on Windows) reflow and redraw
@@ -293,6 +297,8 @@ export class TerminalInstance {
     void this.remeasureWhenFontLoads(
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
     );
+    await this.matchConPty();
+    if (this.disposed) return;
 
     if (agent) {
       // Known from the start, rather than waiting for its banner or its first
@@ -307,6 +313,24 @@ export class TerminalInstance {
       // It couldn't start (uninstalled since): the shell, under the reason.
     }
     await this.start({ shellPath, shellArgs, cwd });
+  }
+
+  /** On Windows every console reaches xterm through ConPTY, which lays the
+   * screen out itself, so xterm has to read it ConPTY's way. Told it's
+   * ConPTY, xterm leaves reflowing on a resize to it. And the one Windows 10
+   * ships (before build 21376) measures characters with an older table:
+   * newer emoji (🟢) are one column to it, two to Unicode 15. A line it
+   * fills to the edge — Claude Code's status line, Oh My Posh's right-hand
+   * prompt — then runs one column past xterm's edge, wraps, and scrolls
+   * the screen, after which everything ConPTY places lands a row off:
+   * duplicated footers and prompts, the cursor beside its line. So there
+   * xterm measures with its own classic table, the one that agrees. */
+  private async matchConPty(): Promise<void> {
+    if (!isWindows) return;
+    const buildNumber = await windowsBuild();
+    if (this.disposed) return;
+    this.term.options.windowsPty = { backend: "conpty", ...(buildNumber ? { buildNumber } : {}) };
+    if (!buildNumber || buildNumber < OLD_CONPTY_BEFORE_BUILD) this.term.unicode.activeVersion = "6";
   }
 
   /** After the agent a console started with exits: its shell, in the same

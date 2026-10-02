@@ -69,6 +69,14 @@ export function busyConsoles(thisWindow = false): Promise<number> {
   return invoke("busy_consoles", { thisWindow });
 }
 
+let windowsBuildRequest: Promise<number | null> | null = null;
+
+/** The Windows build number (null elsewhere), asked once per window. */
+export function windowsBuild(): Promise<number | null> {
+  windowsBuildRequest ??= invoke<number | null>("windows_build").catch(() => null);
+  return windowsBuildRequest;
+}
+
 export function listShells(): Promise<ShellInfo[]> {
   return invoke("list_shells");
 }

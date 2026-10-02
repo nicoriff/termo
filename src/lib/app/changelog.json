@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.3",
+    "date": "2026-10-02",
+    "es": [
+      "En Windows 10, **las consolas ya no se desacomodan al maximizar o cambiar el tamaño**: la línea de estado de Claude Code y el prompt de Oh My Posh se duplicaban y el cursor quedaba una fila corrido. Pasaba porque la consola de Windows 10 mide algunos emojis nuevos con otro ancho que Termo; ahora Termo los mide igual que ella."
+    ],
+    "en": [
+      "On Windows 10, **consoles no longer get scrambled when maximizing or resizing**: Claude Code's status line and Oh My Posh's prompt were duplicated and the cursor sat a row off. Windows 10's console measures some newer emoji at a different width than Termo did; Termo now measures them the same way."
+    ]
+  },
+  {
     "version": "0.9.2",
     "date": "2026-10-01",
     "es": [

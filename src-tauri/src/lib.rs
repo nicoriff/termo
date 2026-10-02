@@ -102,6 +102,7 @@ pub fn run() {
             commands::pty_commands::pty_kill,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
+            commands::pty_commands::windows_build,
             commands::folder_commands::list_folder_roots,
             commands::folder_commands::list_folders,
             commands::folder_commands::create_folder,

@@ -199,3 +199,61 @@ pub async fn busy_consoles(
 pub fn list_shells() -> Vec<ShellInfo> {
     detect_shells()
 }
+
+/// The Windows build, for how xterm reads a console's output (see
+/// TerminalInstance.mount): consoles reach it through ConPTY, and the one
+/// Windows 10 ships (before build 21376) reflows the screen itself on a
+/// resize and measures characters with an older table than xterm's.
+/// RtlGetVersion rather than GetVersionEx, which reports whatever the
+/// application manifest claims. None outside Windows.
+#[tauri::command]
+pub fn windows_build() -> Option<u32> {
+    #[cfg(windows)]
+    {
+        #[repr(C)]
+        struct OsVersionInfoW {
+            size: u32,
+            major: u32,
+            minor: u32,
+            build: u32,
+            platform: u32,
+            service_pack: [u16; 128],
+        }
+        #[link(name = "ntdll")]
+        extern "system" {
+            fn RtlGetVersion(info: *mut OsVersionInfoW) -> i32;
+        }
+        let mut info = OsVersionInfoW {
+            size: std::mem::size_of::<OsVersionInfoW>() as u32,
+            major: 0,
+            minor: 0,
+            build: 0,
+            platform: 0,
+            service_pack: [0; 128],
+        };
+        // SAFETY: `info` is a correctly sized OSVERSIONINFOW whose size field
+        // is set, as RtlGetVersion requires; it only writes into it.
+        let status = unsafe { RtlGetVersion(&mut info) };
+        (status == 0 && info.build > 0).then_some(info.build)
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn reads_the_real_windows_build() {
+        // Windows 10's first build was 10240; anything older isn't supported.
+        assert!(windows_build().is_some_and(|build| build >= 10240));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn has_no_windows_build_elsewhere() {
+        assert_eq!(windows_build(), None);
+    }
+}
