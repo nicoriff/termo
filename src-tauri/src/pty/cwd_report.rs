@@ -48,7 +48,13 @@ mod tests {
     fn powershell_gets_a_prompt_wrapper_and_bash_an_env_var() {
         let mut args = Vec::new();
         let mut env = Vec::new();
-        apply(r"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe", &mut args, &mut env);
+        // Use native separators so the executable stem is tested on every OS.
+        let powershell = Path::new("WINDOWS")
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("powershell.exe");
+        apply(&powershell.to_string_lossy(), &mut args, &mut env);
         assert!(args.iter().any(|arg| arg.contains("__termoCwdPrompt")));
         assert!(env.is_empty());
 

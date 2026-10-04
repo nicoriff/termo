@@ -233,9 +233,11 @@ mod tests {
 
     #[test]
     fn repository_metadata_and_temporary_files_dont_count() {
-        assert!(counts(Path::new("C:\\dl\\report.pdf")));
-        assert!(!counts(Path::new("C:\\repo\\.git\\index")));
-        assert!(!counts(Path::new("C:\\dl\\movie.mp4.crdownload")));
-        assert!(!counts(Path::new("/p/node_modules/x/y.js")));
+        // Watchers report native paths. A Windows path is a single filename
+        // on Unix, so build components with the host's separator.
+        assert!(counts(&Path::new("dl").join("report.pdf")));
+        assert!(!counts(&Path::new("repo").join(".git").join("index")));
+        assert!(!counts(&Path::new("dl").join("movie.mp4.crdownload")));
+        assert!(!counts(&Path::new("p").join("node_modules").join("x").join("y.js")));
     }
 }
