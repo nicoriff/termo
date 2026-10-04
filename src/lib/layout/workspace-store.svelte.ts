@@ -183,10 +183,12 @@ class WorkspaceStore {
 
   /** Shows an orchestration in a tab: the one it already has, brought
    * forward, or a new one in the focused tile. */
-  openOrchestration(orchestrationId: string, title: string): void {
+  openOrchestration(orchestrationId: string, title: string, console = false): void {
     if (!this.root) return;
     const open = collectSessions(this.root).find(
-      (loc) => loc.session.orchestrationView?.orchestrationId === orchestrationId,
+      (loc) =>
+        loc.session.orchestrationView?.orchestrationId === orchestrationId &&
+        (loc.session.orchestrationView.console === true) === console,
     );
     if (open) {
       const updated = updateLeaf(this.root, open.tileId, (tile) => ({
@@ -200,7 +202,7 @@ class WorkspaceStore {
     }
     const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
     if (!tileId) return;
-    const session = makeOrchestrationSession(title, orchestrationId);
+    const session = makeOrchestrationSession(title, orchestrationId, console);
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],

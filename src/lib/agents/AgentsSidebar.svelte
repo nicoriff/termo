@@ -21,7 +21,7 @@
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { SIDEBAR_WIDTH, agentsStore } from "./agents-store.svelte";
+  import { SIDEBAR_WIDTH, agentsStore, type AgentsSection } from "./agents-store.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
   import type { MessageKey } from "$lib/i18n/translate";
   import OrchestrationList from "./OrchestrationList.svelte";
@@ -362,33 +362,14 @@
     menuFor = menuFor === id ? null : id;
   }
 
-  /** The panel's two sections: teams designed for one job, and the agents
-   * the user builds and keeps. Which one was open is remembered. */
-  type Section = "orchestration" | "local";
-  const SECTIONS: { id: Section; label: MessageKey }[] = [
-    { id: "orchestration", label: "agents.sections.orchestration" },
+  /** The panel's two sections; the activity bar has a button for each, and
+   * without it, they're tabs here. */
+  const SECTIONS: { id: AgentsSection; label: MessageKey }[] = [
     { id: "local", label: "agents.sections.local" },
+    { id: "orchestration", label: "agents.sections.orchestration" },
   ];
-  const SECTION_KEY = "termo.agents.section";
-
-  function loadSection(): Section {
-    try {
-      return localStorage.getItem(SECTION_KEY) === "orchestration" ? "orchestration" : "local";
-    } catch {
-      return "local";
-    }
-  }
-
-  let section = $state<Section>(loadSection());
-
-  function setSection(next: Section) {
-    section = next;
-    try {
-      localStorage.setItem(SECTION_KEY, next);
-    } catch {
-      // Only a convenience.
-    }
-  }
+  const section = $derived(agentsStore.section);
+  const sectionTabs = $derived(!(appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar));
 
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
 </script>
@@ -426,7 +407,7 @@
   ></div>
   <div class="agents-inner">
     <header class="agents-header">
-      <span class="agents-title">{t("agents.title")}</span>
+      <span class="agents-title">{sectionTabs ? t("agents.title") : t(SECTIONS.find((item) => item.id === section)!.label)}</span>
       {#if section === "local" && agentsStore.localAgents.length > 0}
         <span class="agents-count">{agentsStore.localAgents.length}</span>
       {/if}
@@ -494,6 +475,7 @@
       </button>
     </header>
 
+    {#if sectionTabs}
     <div class="sections" role="tablist" aria-label={t("agents.sections.label")}>
       {#each SECTIONS as item (item.id)}
         <button
@@ -501,12 +483,13 @@
           class:current={section === item.id}
           role="tab"
           aria-selected={section === item.id}
-          onclick={() => setSection(item.id)}
+          onclick={() => agentsStore.setSection(item.id)}
         >
           {t(item.label)}
         </button>
       {/each}
     </div>
+    {/if}
 
     {#if section === "orchestration"}
       <OrchestrationList />

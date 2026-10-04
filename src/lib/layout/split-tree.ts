@@ -29,8 +29,9 @@ export interface SessionTab {
   agentRun?: { agentId: string; runId: string };
   /** Set on a tab that shows a project of agents (see ProjectView). */
   projectView?: { projectId: string };
-  /** Set on a tab that shows an orchestration (see OrchestrationView). */
-  orchestrationView?: { orchestrationId: string };
+  /** Set on a tab that shows an orchestration (see OrchestrationView), or
+   * with `console`, everything its agents did (see OrchestrationConsole). */
+  orchestrationView?: { orchestrationId: string; console?: boolean };
 }
 
 export function isFileTab(session: SessionTab): session is SessionTab & { filePath: string } {
@@ -56,8 +57,12 @@ export function makeProjectSession(title: string, projectId: string): SessionTab
   return { id: crypto.randomUUID(), title, projectView: { projectId } };
 }
 
-export function makeOrchestrationSession(title: string, orchestrationId: string): SessionTab {
-  return { id: crypto.randomUUID(), title, orchestrationView: { orchestrationId } };
+export function makeOrchestrationSession(title: string, orchestrationId: string, console = false): SessionTab {
+  return {
+    id: crypto.randomUUID(),
+    title,
+    orchestrationView: console ? { orchestrationId, console } : { orchestrationId },
+  };
 }
 
 /** A file's name, which titles its tab. */

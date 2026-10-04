@@ -513,6 +513,84 @@ pub fn over_budget(orchestration: &Orchestration) -> bool {
     budget > 0.0 && spent_usd(&orchestration.plan) + orchestration.overhead_usd > budget
 }
 
+/// A plan the user edited after approving it (by hand or with the
+/// orchestrator's help), onto the one that has been running. What has run
+/// stays exactly as it was saved: a task that's done or running, and the
+/// agent that did it. The rest follows the edit — agents added, renamed,
+/// moved to another engine or model, given other instructions; tasks added,
+/// reworded, reassigned or re-ordered — and a task that's left out is
+/// dropped rather than erased, so its history stays. The result goes through
+/// sanitize like any plan.
+pub fn edit_plan(current: &Plan, incoming: &Plan, catalog: &Catalog) -> Plan {
+    let ran = |task: &PlannedTask| matches!(task.status, TaskStatus::Running | TaskStatus::Done);
+    // Agents with a task that ran can't leave the plan.
+    let pinned: HashSet<&str> = current.tasks.iter().filter(|task| ran(task)).map(|task| task.agent.as_str()).collect();
+
+    let mut agents: Vec<PlannedAgent> = Vec::new();
+    for edited in &incoming.agents {
+        let key = slug(&edited.key);
+        let next = match current.agents.iter().find(|agent| agent.key == key) {
+            Some(saved) => PlannedAgent {
+                name: edited.name.clone(),
+                specialty: edited.specialty.clone(),
+                engine: edited.engine,
+                model: edited.model.clone(),
+                instructions: edited.instructions.clone(),
+                autonomy: edited.autonomy,
+                web: edited.web,
+                // Which saved agent it is never comes from the screen.
+                ..saved.clone()
+            },
+            None => PlannedAgent { key: key.clone(), agent_id: String::new(), ..edited.clone() },
+        };
+        agents.push(next);
+    }
+    for saved in &current.agents {
+        if pinned.contains(saved.key.as_str()) && !agents.iter().any(|agent| agent.key == saved.key) {
+            agents.push(saved.clone());
+        }
+    }
+
+    let mut tasks: Vec<PlannedTask> = Vec::new();
+    for saved in &current.tasks {
+        if ran(saved) {
+            tasks.push(saved.clone());
+            continue;
+        }
+        match incoming.tasks.iter().find(|task| slug(&task.key) == saved.key) {
+            Some(edited) => tasks.push(PlannedTask {
+                title: edited.title.clone(),
+                description: edited.description.clone(),
+                agent: edited.agent.clone(),
+                depends_on: edited.depends_on.clone(),
+                done_when: edited.done_when.clone(),
+                tokens_in: edited.tokens_in,
+                tokens_out: edited.tokens_out,
+                // How it went so far is the saved record's, not the screen's.
+                ..saved.clone()
+            }),
+            // Left out: dropped, so what waits for it stops waiting.
+            None => tasks.push(PlannedTask { status: TaskStatus::Dropped, ..saved.clone() }),
+        }
+    }
+    for edited in &incoming.tasks {
+        let key = slug(&edited.key);
+        if current.tasks.iter().any(|task| task.key == key) {
+            continue;
+        }
+        tasks.push(PlannedTask {
+            key,
+            status: TaskStatus::Pending,
+            run_id: String::new(),
+            summary: String::new(),
+            cost_usd: None,
+            attempts: 0,
+            ..edited.clone()
+        });
+    }
+    sanitize(Plan { agents, tasks }, catalog)
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
@@ -561,6 +639,70 @@ pub(super) mod tests {
 
     fn plan(agents: Vec<PlannedAgent>, tasks: Vec<PlannedTask>) -> Plan {
         sanitize(Plan { agents, tasks }, &catalog())
+    }
+
+    fn ran_plan() -> Plan {
+        let mut current = plan(
+            vec![agent("dev", Autonomy::Edit), agent("doc", Autonomy::Read)],
+            vec![task("a", "dev", &[]), task("b", "dev", &["a"]), task("c", "doc", &["b"])],
+        );
+        current.agents[0].agent_id = "saved-dev".into();
+        current.tasks[0].status = TaskStatus::Done;
+        current.tasks[0].summary = "did a".into();
+        current
+    }
+
+    /// Editing after approval changes what hasn't run, and nothing of what
+    /// has: the done task, its agent, which saved agent each one is.
+    #[test]
+    fn an_edit_after_approval_keeps_what_ran() {
+        let current = ran_plan();
+        let mut incoming = current.clone();
+        incoming.agents[0].instructions = "  Be brief.  ".into();
+        incoming.agents[0].model = "claude-opus-5-5".into();
+        incoming.agents[0].agent_id = "forged".into();
+        incoming.tasks[0].description = "rewrite a".into();
+        incoming.tasks[1].description = "do b differently".into();
+        incoming.tasks[1].done_when = "tests pass".into();
+        incoming.tasks[1].status = TaskStatus::Done;
+
+        let edited = edit_plan(&current, &incoming, &catalog());
+        assert_eq!(edited.agents[0].instructions, "Be brief.");
+        assert_eq!(edited.agents[0].model, "claude-opus-5-5");
+        assert_eq!(edited.agents[0].agent_id, "saved-dev");
+        assert_eq!(edited.tasks[0].description, "do a");
+        assert_eq!(edited.tasks[0].status, TaskStatus::Done);
+        assert_eq!(edited.tasks[1].description, "do b differently");
+        assert_eq!(edited.tasks[1].done_when, "tests pass");
+        assert_eq!(edited.tasks[1].status, TaskStatus::Pending);
+    }
+
+    /// Agents and tasks come and go: a new one is added as never run, one
+    /// left out is dropped (a task) or removed (an agent with nothing run),
+    /// and an agent whose task ran stays even when left out.
+    #[test]
+    fn an_edit_after_approval_can_change_the_team() {
+        let current = ran_plan();
+        let mut incoming = current.clone();
+        incoming.agents.retain(|agent| agent.key == "doc");
+        incoming.agents.push(agent("tester", Autonomy::Run));
+        incoming.tasks.retain(|task| task.key != "c");
+        let mut new_task = task("t", "tester", &["b"]);
+        new_task.status = TaskStatus::Done;
+        new_task.run_id = "forged".into();
+        incoming.tasks.push(new_task);
+
+        let edited = edit_plan(&current, &incoming, &catalog());
+        let keys: Vec<&str> = edited.agents.iter().map(|agent| agent.key.as_str()).collect();
+        // "dev" ran a task: it stays. "doc" left out of nothing; "tester" is new.
+        assert_eq!(keys, ["doc", "tester", "dev"]);
+        assert_eq!(edited.agents[1].agent_id, "");
+        let status = |key: &str| edited.tasks.iter().find(|task| task.key == key).map(|task| task.status);
+        assert_eq!(status("a"), Some(TaskStatus::Done));
+        assert_eq!(status("c"), Some(TaskStatus::Dropped));
+        let added = edited.tasks.iter().find(|task| task.key == "t").unwrap();
+        assert_eq!((added.status, added.run_id.as_str()), (TaskStatus::Pending, ""));
+        assert_eq!(added.depends_on, ["b"]);
     }
 
     #[test]

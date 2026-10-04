@@ -2,7 +2,7 @@ use tauri::{Emitter, State};
 
 use crate::agents::orchestration::executor::ensure_team;
 use crate::agents::orchestration::plan::{
-    self, apply, max_autonomy, sanitize, Catalog, Orchestration, Plan, RevisionState, Status, TaskStatus,
+    self, apply, edit_plan, max_autonomy, sanitize, Catalog, Orchestration, Plan, RevisionState, Status, TaskStatus,
 };
 use crate::agents::orchestration::{planner, store};
 use crate::agents::projects;
@@ -98,6 +98,73 @@ pub fn orchestration_approve(
     ensure_team(&root, &mut orchestration)?;
     orchestration.status = Status::Running;
     commit(&app, &state, &root, orchestration)
+}
+
+/// Saves changes to the plan of one that isn't running — stopped, paused,
+/// failed or done — keeping what has run (see plan::edit_plan), and updates
+/// its team's agents to match. Resuming it picks up from there.
+#[tauri::command]
+pub fn orchestration_edit_plan(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    plan: Plan,
+) -> Result<Orchestration, String> {
+    let root = root(&app)?;
+    let mut orchestration = orchestration(&root, &id)?;
+    let editable = matches!(orchestration.status, Status::Stopped | Status::Paused | Status::Failed | Status::Done);
+    if !editable || state.orchestrator.is_active(&id) {
+        return Err(tr(Msg::OrchestrationWrongState));
+    }
+    orchestration.plan = edit_plan(&orchestration.plan, &plan, &planner::catalog());
+    if orchestration.plan.tasks.is_empty() {
+        return Err(tr(Msg::OrchestrationEmptyPlan));
+    }
+    // The user's own edit: how far its agents may go is what they left.
+    orchestration.max_autonomy = max_autonomy(&orchestration.plan);
+    ensure_team(&root, &mut orchestration)?;
+    commit(&app, &state, &root, orchestration)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisedPlan {
+    plan: Plan,
+    note: String,
+    orchestration: Orchestration,
+}
+
+/// Asks the orchestrator to work the user's changes into the plan being
+/// reviewed — a draft's, or one being edited after it ran. Nothing changes
+/// until the user approves or saves what comes back; only what asking cost
+/// is kept, with the rest of the orchestration's overhead.
+#[tauri::command]
+pub async fn orchestration_revise(
+    app: tauri::AppHandle,
+    id: String,
+    plan: Plan,
+    instructions: String,
+) -> Result<RevisedPlan, String> {
+    let root = root(&app)?;
+    let current = orchestration(&root, &id)?;
+    let reviewable = matches!(
+        current.status,
+        Status::Draft | Status::Stopped | Status::Paused | Status::Failed | Status::Done
+    );
+    if !reviewable || instructions.trim().is_empty() {
+        return Err(tr(Msg::OrchestrationWrongState));
+    }
+    let asked = current.clone();
+    let (revised, note, cost) =
+        tauri::async_runtime::spawn_blocking(move || planner::revise(&asked, &plan, instructions.trim()))
+            .await
+            .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
+    // Read again: it may have changed while the orchestrator was thinking.
+    let mut orchestration = orchestration(&root, &id)?;
+    orchestration.overhead_usd += cost;
+    let orchestration = saved(store::save_in(&root, orchestration))?;
+    let _ = app.emit("orchestration", &orchestration);
+    Ok(RevisedPlan { plan: revised, note, orchestration })
 }
 
 #[tauri::command]

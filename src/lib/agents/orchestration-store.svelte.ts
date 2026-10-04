@@ -1,5 +1,7 @@
 import {
   approveOrchestration,
+  editOrchestrationPlan,
+  reviseOrchestration,
   deleteOrchestration,
   listOrchestrations,
   onOrchestration,
@@ -74,6 +76,18 @@ class OrchestrationStore {
 
   async approve(id: string, chosen: string, plan: Plan, budgetUsd: number): Promise<void> {
     this.take(await approveOrchestration(id, chosen, $state.snapshot(plan), budgetUsd));
+  }
+
+  async editPlan(id: string, plan: Plan): Promise<void> {
+    this.take(await editOrchestrationPlan(id, $state.snapshot(plan)));
+  }
+
+  /** The plan with the user's changes worked in by the orchestrator, and its
+   * note on them; nothing of it is saved yet. */
+  async revise(id: string, plan: Plan, instructions: string): Promise<{ plan: Plan; note: string }> {
+    const revised = await reviseOrchestration(id, $state.snapshot(plan), instructions);
+    this.take(revised.orchestration);
+    return { plan: revised.plan, note: revised.note };
   }
 
   stop(id: string): Promise<void> {

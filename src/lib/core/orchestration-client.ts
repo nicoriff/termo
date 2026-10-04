@@ -142,6 +142,25 @@ export function approveOrchestration(id: string, chosen: string, plan: Plan, bud
   return invoke("orchestration_approve", { id, chosen, plan, budgetUsd });
 }
 
+/** Saves changes to the plan of one that isn't running, keeping what has run. */
+export function editOrchestrationPlan(id: string, plan: Plan): Promise<Orchestration> {
+  return invoke("orchestration_edit_plan", { id, plan });
+}
+
+export interface RevisedPlan {
+  plan: Plan;
+  /** The orchestrator's note on what it changed. */
+  note: string;
+  /** Saved with what asking cost added to its overhead. */
+  orchestration: Orchestration;
+}
+
+/** Asks the orchestrator to work these changes into the plan under review.
+ * Nothing is saved but the cost: the plan comes back to review. */
+export function reviseOrchestration(id: string, plan: Plan, instructions: string): Promise<RevisedPlan> {
+  return invoke("orchestration_revise", { id, plan, instructions });
+}
+
 export function stopOrchestration(id: string): Promise<void> {
   return invoke("orchestration_stop", { id });
 }

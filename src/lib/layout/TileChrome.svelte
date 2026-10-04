@@ -484,6 +484,11 @@
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <path d="M1.5 3.5h4l1.5 1.5h5.5v7h-11z" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.orchestrationView?.console}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1" />
+            <path d="M4 5.5l2 1.5-2 1.5M7.5 9h2.5" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
         {:else if session.orchestrationView}
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <circle cx="7" cy="3" r="1.6" fill="none" stroke="currentColor" stroke-width="1" />

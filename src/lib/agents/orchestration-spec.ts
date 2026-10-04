@@ -1,4 +1,4 @@
-import type { AgentEngine } from "$lib/core/agents-client";
+import type { AgentEngine, RunEvent } from "$lib/core/agents-client";
 import type {
   Catalog,
   CatalogModel,
@@ -13,7 +13,7 @@ import type {
   TaskStatus,
 } from "$lib/core/orchestration-client";
 import type { MessageKey } from "$lib/i18n/translate";
-import type { AgentTone } from "./agent-spec";
+import { withoutEchoes, type AgentTone } from "./agent-spec";
 
 /** Room over the estimate for the budget a plan starts with (the same the
  * backend gives a draft: see planner.rs). */
@@ -171,6 +171,167 @@ export function withModel(plan: Plan, agentKey: string, engine: AgentEngine, mod
     ...plan,
     agents: plan.agents.map((agent) => (agent.key === agentKey ? { ...agent, engine, model } : agent)),
   };
+}
+
+export function withInstructions(plan: Plan, agentKey: string, instructions: string): Plan {
+  return {
+    ...plan,
+    agents: plan.agents.map((agent) => (agent.key === agentKey ? { ...agent, instructions } : agent)),
+  };
+}
+
+/** The request of one task: what it asks for and when it's done. */
+export function withTaskRequest(plan: Plan, taskKey: string, description: string, doneWhen: string): Plan {
+  return {
+    ...plan,
+    tasks: plan.tasks.map((task) => (task.key === taskKey ? { ...task, description, doneWhen } : task)),
+  };
+}
+
+export interface ConsoleLine {
+  source: string;
+  event: RunEvent;
+}
+
+/** Several runs' steps as one console: in the order they happened, each
+ * run's own order kept on a tie, a step heard twice (read from disk and
+ * heard live) once, and a result's text not repeated as the text before it. */
+export function mergeRunLogs(logs: { source: string; events: RunEvent[] }[]): ConsoleLine[] {
+  const lines = logs.flatMap(({ source, events }) => {
+    const seen = new Set<string>();
+    const unique = events.filter((event) => {
+      const key = `${event.at}|${event.kind}|${event.tool ?? ""}|${event.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return withoutEchoes(unique).map((event) => ({ source, event }));
+  });
+  return lines.sort((a, b) => a.event.at - b.event.at);
+}
+
+/** A key not used by any of `taken`: the base, or the base with a number. */
+export function uniqueKey(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  let n = 2;
+  while (taken.includes(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+/** Whether any of the agent's tasks has run: then it can't leave the plan. */
+export function agentHasRun(plan: Plan, agentKey: string): boolean {
+  return plan.tasks.some((task) => task.agent === agentKey && !isTaskEditable(task));
+}
+
+/** A new agent on `engine`'s default model, that only looks until told more. */
+export function addAgent(plan: Plan, engine: AgentEngine, name: string): { plan: Plan; key: string } {
+  const key = uniqueKey("agent", plan.agents.map((agent) => agent.key));
+  const agent: PlannedAgent = {
+    key,
+    name,
+    icon: "🤖",
+    specialty: "",
+    engine,
+    model: "",
+    whyModel: "",
+    autonomy: "read",
+    web: false,
+    instructions: "",
+    agentId: "",
+  };
+  return { plan: { ...plan, agents: [...plan.agents, agent] }, key };
+}
+
+/** The agent and its tasks, and every mention of those tasks. */
+export function removeAgent(plan: Plan, agentKey: string): Plan {
+  const gone = new Set(plan.tasks.filter((task) => task.agent === agentKey).map((task) => task.key));
+  return {
+    agents: plan.agents.filter((agent) => agent.key !== agentKey),
+    tasks: plan.tasks
+      .filter((task) => !gone.has(task.key))
+      .map((task) => ({ ...task, dependsOn: task.dependsOn.filter((key) => !gone.has(key)) })),
+  };
+}
+
+export function withAgentFields(
+  plan: Plan,
+  agentKey: string,
+  fields: Partial<Pick<PlannedAgent, "name" | "specialty" | "autonomy" | "web">>,
+): Plan {
+  return { ...plan, agents: plan.agents.map((agent) => (agent.key === agentKey ? { ...agent, ...fields } : agent)) };
+}
+
+/** A new task for the agent, after its last one so they run in order. */
+export function addTask(plan: Plan, agentKey: string, title: string): { plan: Plan; key: string } {
+  const key = uniqueKey("task", plan.tasks.map((task) => task.key));
+  const last = plan.tasks.filter((task) => task.agent === agentKey).at(-1);
+  const task: PlannedTask = {
+    key,
+    title,
+    description: "",
+    agent: agentKey,
+    dependsOn: last ? [last.key] : [],
+    doneWhen: "",
+    tokensIn: 300_000,
+    tokensOut: 10_000,
+    status: "pending",
+    runId: "",
+    summary: "",
+    costUsd: null,
+    attempts: 0,
+  };
+  return { plan: { ...plan, tasks: [...plan.tasks, task] }, key };
+}
+
+/** The task, and every other task's wait for it. */
+export function removeTask(plan: Plan, taskKey: string): Plan {
+  return {
+    ...plan,
+    tasks: plan.tasks
+      .filter((task) => task.key !== taskKey)
+      .map((task) => ({ ...task, dependsOn: task.dependsOn.filter((key) => key !== taskKey) })),
+  };
+}
+
+export function withTaskFields(
+  plan: Plan,
+  taskKey: string,
+  fields: Partial<Pick<PlannedTask, "title" | "agent" | "dependsOn">>,
+): Plan {
+  return { ...plan, tasks: plan.tasks.map((task) => (task.key === taskKey ? { ...task, ...fields } : task)) };
+}
+
+/** Whether `taskKey` may wait for `otherKey`: not itself, and not a task
+ * that already waits for it (directly or further down), which would loop. */
+export function canDependOn(plan: Plan, taskKey: string, otherKey: string): boolean {
+  if (taskKey === otherKey) return false;
+  const seen = new Set<string>();
+  const stack = [otherKey];
+  while (stack.length > 0) {
+    const key = stack.pop()!;
+    if (key === taskKey) return false;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    stack.push(...(plan.tasks.find((task) => task.key === key)?.dependsOn ?? []));
+  }
+  return true;
+}
+
+/** Tasks a run would skip: nothing asked of them. */
+export function tasksWithoutRequest(plan: Plan): PlannedTask[] {
+  return plan.tasks.filter((task) => isTaskEditable(task) && task.description.trim() === "");
+}
+
+/** Whether a task's request can still change: it hasn't run, or it has to
+ * run again. */
+export function isTaskEditable(task: PlannedTask): boolean {
+  return task.status !== "running" && task.status !== "done";
+}
+
+/** Whether the plan of an orchestration that isn't a draft can be edited:
+ * when nothing of it is running. */
+export function canEditPlan(status: OrchestrationStatus): boolean {
+  return status === "stopped" || status === "paused" || status === "failed" || status === "done";
 }
 
 export interface TreeBranch {
