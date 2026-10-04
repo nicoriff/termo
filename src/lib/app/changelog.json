@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.9.4",
+    "date": "2026-10-03",
+    "es": [
+      "**«Buscar actualizaciones» ya no se queda en «Buscando actualizaciones…»**: cuando encontraba una versión nueva y no había nada en curso en las consolas, mostraba la versión pero nunca la descargaba. Ahora la descarga y la instala."
+    ],
+    "en": [
+      "**“Check for updates” no longer gets stuck on “Checking for updates…”**: when it found a new version and nothing was running in the consoles, it showed the version but never downloaded it. It now downloads and installs it."
+    ]
+  },
+  {
     "version": "0.9.3",
     "date": "2026-10-02",
     "es": [
