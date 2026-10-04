@@ -253,6 +253,7 @@ pub fn export_project(project: &Project, specs: &[AgentSpec], now: i64) -> Strin
     let project = Project {
         id: String::new(),
         entry_agent_id: to_file_ref(&project.entry_agent_id, specs).unwrap_or_default(),
+        orchestration_id: String::new(),
         created_at: 0,
         updated_at: 0,
         ..project.clone()

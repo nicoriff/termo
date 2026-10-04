@@ -14,6 +14,8 @@ use crate::i18n::{self, tr, Lang, Msg};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
+use super::spec::{claude_allowed_tools, claude_settings_json, is_valid_model, AgentSpec, Autonomy, GIT_SAFETY_ENV};
+
 /// Drafting is a single answer, no tools: anything longer has gone wrong.
 const TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -170,12 +172,45 @@ pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft,
 /// One structured answer from Claude Code: `text` as the prompt, the answer
 /// shaped by `schema`. Errors come untranslated, for the caller to word.
 pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
+    let ask = Ask { dir: scratch, model: "sonnet", read_files: false, timeout };
+    ask_claude_with(&ask, text, schema).map(|answer| answer.value)
+}
+
+/// How one structured answer is asked for.
+pub struct Ask<'a> {
+    /// Where the CLI runs. Without `read_files` it's an empty folder, so
+    /// there's nothing around for it to go looking at.
+    pub dir: &'a Path,
+    /// Empty: the CLI's default.
+    pub model: &'a str,
+    /// Lets it look at `dir` before answering — read, search, and the git
+    /// commands that only read, the same an agent that can "only look" gets —
+    /// and nothing outside it.
+    pub read_files: bool,
+    pub timeout: Duration,
+}
+
+pub struct Answer {
+    pub value: serde_json::Value,
+    /// What the answer cost, as the CLI reports it.
+    pub cost_usd: Option<f64>,
+}
+
+/// What the CLI says its answer cost.
+pub fn parse_cost(stdout: &str) -> Option<f64> {
+    let value: serde_json::Value = serde_json::from_str(stdout.trim()).ok()?;
+    value.get("total_cost_usd").and_then(|cost| cost.as_f64())
+}
+
+pub fn ask_claude_with(ask: &Ask, text: String, schema: &serde_json::Value) -> Result<Answer, String> {
     // Drafting with AI is an AI feature too (see ai_mode.rs).
     if !crate::ai_mode::enabled() {
         return Err(crate::i18n::tr(crate::i18n::Msg::AiModeOff));
     }
     let bin = agent_cli::require(AgentTarget::Claude, None)?;
-    std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
+    if !ask.read_files {
+        std::fs::create_dir_all(ask.dir).map_err(|err| err.to_string())?;
+    }
     let mut cmd = Command::new(bin);
     // The prompt (the user's description, several lines) goes through stdin:
     // see spec::Invocation for why no free text rides on the command line.
@@ -185,20 +220,26 @@ pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, time
         "json",
         "--json-schema",
         &schema.to_string(),
-        // A single answer: no tools to wait on and no servers to start.
+        // Nobody is there to approve anything: what isn't allowed is denied.
         "--permission-mode",
         "dontAsk",
+        // No servers to start, and none of the user's own tools.
         "--strict-mcp-config",
-        "--model",
-        "sonnet",
-    ])
-    // An empty folder, so there's nothing around for it to go looking at.
-    .current_dir(scratch)
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    // Never read: piped, a chatty stderr would fill up and stall the CLI.
-    .stderr(Stdio::null())
-    .env("NO_COLOR", "1");
+    ]);
+    if ask.read_files {
+        let reader = AgentSpec { autonomy: Autonomy::Read, ..AgentSpec::default() };
+        cmd.args(["--allowedTools", &claude_allowed_tools(&reader).join(","), "--settings", &claude_settings_json(&reader)]);
+        cmd.envs(GIT_SAFETY_ENV.iter().copied());
+    }
+    if !ask.model.trim().is_empty() && is_valid_model(ask.model) {
+        cmd.args(["--model", ask.model.trim()]);
+    }
+    cmd.current_dir(ask.dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        // Never read: piped, a chatty stderr would fill up and stall the CLI.
+        .stderr(Stdio::null())
+        .env("NO_COLOR", "1");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -218,7 +259,7 @@ pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, time
         let _ = stdout.read_to_string(&mut text);
         text
     });
-    let deadline = Instant::now() + timeout;
+    let deadline = Instant::now() + ask.timeout;
     loop {
         if child.try_wait().ok().flatten().is_some() {
             break;
@@ -230,7 +271,8 @@ pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, time
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    parse_structured(&reader.join().unwrap_or_default())
+    let stdout = reader.join().unwrap_or_default();
+    Ok(Answer { value: parse_structured(&stdout)?, cost_usd: parse_cost(&stdout) })
 }
 
 #[cfg(test)]
@@ -261,6 +303,13 @@ mod tests {
         let draft = parse_answer(&answer.to_string()).unwrap();
         assert_eq!(draft.name, "Resumen");
         assert_eq!(draft.schedule.at, "09:00");
+    }
+
+    #[test]
+    fn reads_what_the_answer_cost() {
+        let answer = serde_json::json!({ "type": "result", "is_error": false, "total_cost_usd": 0.04, "structured_output": {} });
+        assert_eq!(parse_cost(&answer.to_string()), Some(0.04));
+        assert_eq!(parse_cost("{}"), None);
     }
 
     #[test]

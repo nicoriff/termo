@@ -89,6 +89,7 @@ pub fn run() {
             pty::status_line::start_watcher(app.handle().clone());
             // Before any run can start: files a run killed with Termo left.
             agents::runner::remove_leftovers(app.handle());
+            agents::orchestration::executor::recover(app.handle());
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
             let ai_mode_on = config::store::load(app.handle()).ai_mode_enabled;
@@ -175,6 +176,14 @@ pub fn run() {
             commands::project_commands::project_runs,
             commands::project_commands::project_export,
             commands::project_commands::project_import,
+            commands::orchestration_commands::orchestration_catalog,
+            commands::orchestration_commands::orchestration_list,
+            commands::orchestration_commands::orchestration_plan,
+            commands::orchestration_commands::orchestration_approve,
+            commands::orchestration_commands::orchestration_stop,
+            commands::orchestration_commands::orchestration_resume,
+            commands::orchestration_commands::orchestration_resolve_revision,
+            commands::orchestration_commands::orchestration_delete,
             commands::project_commands::project_draft,
             commands::project_commands::project_create,
             commands::project_commands::project_improve,

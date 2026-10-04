@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::agents::orchestration::executor::Orchestrator;
 use crate::agents::runner::Runner;
 use crate::keep_awake::KeepAwake;
 use crate::marketplace::catalog::CatalogCache;
@@ -11,5 +12,6 @@ pub struct AppState {
     pub memory: MemorySampler,
     pub marketplace: CatalogCache,
     pub agents: Arc<Runner>,
+    pub orchestrator: Arc<Orchestrator>,
     pub keep_awake: Arc<KeepAwake>,
 }

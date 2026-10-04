@@ -9,6 +9,7 @@ pub mod github;
 pub mod integrations;
 pub mod mcp_server;
 pub mod models;
+pub mod orchestration;
 pub mod portable;
 pub mod project_ai;
 pub mod projects;

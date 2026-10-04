@@ -61,7 +61,7 @@ const INHERITED_NOISE: &[&str] = &[
     "TERMO_EVENTS_DIR",
 ];
 
-fn target(engine: Engine) -> AgentTarget {
+pub(super) fn target(engine: Engine) -> AgentTarget {
     match engine {
         Engine::Claude => AgentTarget::Claude,
         Engine::Codex => AgentTarget::Codex,

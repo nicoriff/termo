@@ -59,6 +59,8 @@ pub enum RunTrigger {
     Agent,
     /// Another agent left it a message.
     Message,
+    /// A task of an orchestration's plan (see orchestration/).
+    Orchestrator,
 }
 
 /// Where a run sits in a conversation between agents: the run that set it

@@ -110,6 +110,31 @@ pub enum Msg<'a> {
     KeepAwakeReason,
     /// An agent run asked for while Modo IA is off (see ai_mode.rs).
     AiModeOff,
+    /// the planner's error
+    OrchestrationPlanFailed(&'a str),
+    /// the folder
+    OrchestrationNoFolder(&'a str),
+    OrchestrationNotFound,
+    /// Approving, resuming or resolving something its state doesn't allow.
+    OrchestrationWrongState,
+    OrchestrationEmptyPlan,
+    OrchestrationSaveFailed(&'a str),
+    /// Notes an orchestration is left with (see orchestration/executor.rs).
+    OrchestrationStopped,
+    OrchestrationInterrupted,
+    /// what it spent, the budget
+    OrchestrationOverBudget(&'a str, &'a str),
+    OrchestrationBlocked,
+    /// the supervisor's error
+    OrchestrationNoReview(&'a str),
+    /// The task an orchestration's agent stands for between tasks.
+    OrchestrationAgentTask,
+    /// Labels around what an agent of an orchestration is given: the line
+    /// before "done when", the heading of the results it builds on, and the
+    /// one over its own failed attempt.
+    OrchestrationDoneWhen,
+    OrchestrationBuildsOn,
+    OrchestrationLastAttempt,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -319,6 +344,40 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KeepAwakeReason, Es) => "Termo mantiene la computadora despierta".into(),
         (KeepAwakeReason, En) => "Termo is keeping the computer awake".into(),
 
+        (OrchestrationPlanFailed(error), Es) => format!("No se pudo armar el plan: {error}"),
+        (OrchestrationPlanFailed(error), En) => format!("Couldn't build the plan: {error}"),
+        (OrchestrationNoFolder(path), Es) => format!("La carpeta no existe: {path}"),
+        (OrchestrationNoFolder(path), En) => format!("The folder doesn't exist: {path}"),
+        (OrchestrationNotFound, Es) => "La orquestación ya no existe".into(),
+        (OrchestrationNotFound, En) => "The orchestration no longer exists".into(),
+        (OrchestrationWrongState, Es) => "La orquestación ya no está en ese estado".into(),
+        (OrchestrationWrongState, En) => "The orchestration is no longer in that state".into(),
+        (OrchestrationEmptyPlan, Es) => "El plan no tiene tareas para ejecutar".into(),
+        (OrchestrationEmptyPlan, En) => "The plan has no tasks to run".into(),
+        (OrchestrationSaveFailed(error), Es) => format!("No se pudo guardar la orquestación: {error}"),
+        (OrchestrationSaveFailed(error), En) => format!("Couldn't save the orchestration: {error}"),
+        (OrchestrationStopped, Es) => "Detenida. Podés reanudarla cuando quieras.".into(),
+        (OrchestrationStopped, En) => "Stopped. You can resume it whenever you like.".into(),
+        (OrchestrationInterrupted, Es) => "Termo se cerró mientras corría. Podés reanudarla.".into(),
+        (OrchestrationInterrupted, En) => "Termo was closed while it ran. You can resume it.".into(),
+        (OrchestrationOverBudget(spent, budget), Es) => {
+            format!("En pausa: lleva gastados {spent} y el presupuesto es {budget}. Subí el presupuesto para seguir.")
+        }
+        (OrchestrationOverBudget(spent, budget), En) => {
+            format!("Paused: it has spent {spent} and the budget is {budget}. Raise the budget to go on.")
+        }
+        (OrchestrationBlocked, Es) => "Hay tareas que fallaron y nada más para ejecutar.".into(),
+        (OrchestrationBlocked, En) => "Some tasks failed and there's nothing else to run.".into(),
+        (OrchestrationNoReview(error), Es) => format!("El orquestador no pudo revisar el plan: {error}"),
+        (OrchestrationNoReview(error), En) => format!("The orchestrator couldn't review the plan: {error}"),
+        (OrchestrationAgentTask, Es) => "Hacé la tarea que te asigne el orquestador.".into(),
+        (OrchestrationAgentTask, En) => "Do the task the orchestrator assigns you.".into(),
+        (OrchestrationDoneWhen, Es) => "Está listo cuando:".into(),
+        (OrchestrationDoneWhen, En) => "Done when:".into(),
+        (OrchestrationBuildsOn, Es) => "Resultados de las tareas anteriores de las que depende esta:".into(),
+        (OrchestrationBuildsOn, En) => "Results of the earlier tasks this one builds on:".into(),
+        (OrchestrationLastAttempt, Es) => "Tu intento anterior de esta tarea falló así:".into(),
+        (OrchestrationLastAttempt, En) => "Your previous attempt at this task failed like this:".into(),
         (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
         (AiModeOff, En) => "AI Mode is off: turn it on in Preferences to use agents".into(),
 
@@ -395,6 +454,21 @@ mod tests {
             Msg::KeepAwakeFailed("access denied"),
             Msg::KeepAwakeReason,
             Msg::AiModeOff,
+            Msg::OrchestrationPlanFailed("timeout"),
+            Msg::OrchestrationNoFolder("/x"),
+            Msg::OrchestrationNotFound,
+            Msg::OrchestrationWrongState,
+            Msg::OrchestrationEmptyPlan,
+            Msg::OrchestrationSaveFailed("x"),
+            Msg::OrchestrationStopped,
+            Msg::OrchestrationInterrupted,
+            Msg::OrchestrationOverBudget("$2.00", "$1.00"),
+            Msg::OrchestrationBlocked,
+            Msg::OrchestrationNoReview("timeout"),
+            Msg::OrchestrationAgentTask,
+            Msg::OrchestrationDoneWhen,
+            Msg::OrchestrationBuildsOn,
+            Msg::OrchestrationLastAttempt,
         ]
     }
 
