@@ -26,5 +26,6 @@ describe("bundled themes", () => {
   // What decides the color-scheme of scrollbars and other native controls.
   it.each(BUNDLED_THEMES.map((theme) => [theme.name, theme] as const))("%s is read as light or dark correctly", (name, theme) => {
     expect(isDarkColor(theme.ui.background)).toBe(!LIGHT_THEMES.has(name));
+    expect(theme.appearance).toBe(LIGHT_THEMES.has(name) ? "light" : "dark");
   });
 });

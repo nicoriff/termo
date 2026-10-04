@@ -199,6 +199,7 @@ export function buildCommands(): Command[] {
       group: "appearance",
       label: t("commands.setTheme", { theme: theme.name }),
       run: () => {
+        // Explicit theme commands select a manual theme and turn OS sync off.
         themeStore.setTheme(theme.name);
         persist();
       },

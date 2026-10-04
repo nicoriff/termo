@@ -39,8 +39,11 @@ export interface ThemeFont {
   lineHeight: number;
 }
 
+export type Appearance = "light" | "dark";
+
 export interface Theme {
   name: string;
+  appearance: Appearance;
   colors: ThemeAnsiColors;
   ui: ThemeUi;
   font: ThemeFont;
