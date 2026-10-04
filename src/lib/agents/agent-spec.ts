@@ -28,6 +28,7 @@ export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {
   chain: "agents.run.trigger.chain",
   agent: "agents.run.trigger.agent",
   message: "agents.run.trigger.message",
+  orchestrator: "agents.run.trigger.orchestrator",
 };
 
 export const AUTONOMY_TITLE_KEYS: Record<AgentAutonomy, MessageKey> = {

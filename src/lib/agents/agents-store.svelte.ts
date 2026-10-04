@@ -105,6 +105,25 @@ class AgentsStore {
     await this.refreshNextRuns();
   }
 
+  /** The lists again, after the backend saved agents on its own (an
+   * orchestration's team: see orchestration-store). */
+  async reload(): Promise<void> {
+    this.agents = await listAgents().catch(() => this.agents);
+    this.projects = await listProjects().catch(() => this.projects);
+  }
+
+  /** The user's own projects: an orchestration's team shows with its
+   * orchestration instead. */
+  get localProjects(): Project[] {
+    return this.projects.filter((project) => !project.orchestrationId);
+  }
+
+  /** The user's own agents: not the ones an orchestration made. */
+  get localAgents(): AgentSpec[] {
+    const teams = new Set(this.projects.filter((project) => project.orchestrationId).map((project) => project.id));
+    return teams.size === 0 ? this.agents : this.agents.filter((agent) => !teams.has(agent.projectId));
+  }
+
   async refreshNextRuns(): Promise<void> {
     this.nextRun = await agentsNextRuns().catch(() => this.nextRun);
   }

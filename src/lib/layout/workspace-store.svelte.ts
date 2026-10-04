@@ -8,6 +8,7 @@ import {
   isConsoleTab,
   isFileTab,
   makeAgentRunSession,
+  makeOrchestrationSession,
   makeProjectSession,
   makeFileSession,
   computeLayout,
@@ -170,6 +171,36 @@ class WorkspaceStore {
     const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
     if (!tileId) return;
     const session = makeProjectSession(title, projectId);
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
+  }
+
+  /** Shows an orchestration in a tab: the one it already has, brought
+   * forward, or a new one in the focused tile. */
+  openOrchestration(orchestrationId: string, title: string): void {
+    if (!this.root) return;
+    const open = collectSessions(this.root).find(
+      (loc) => loc.session.orchestrationView?.orchestrationId === orchestrationId,
+    );
+    if (open) {
+      const updated = updateLeaf(this.root, open.tileId, (tile) => ({
+        ...tile,
+        sessions: tile.sessions.map((session) => (session.id === open.session.id ? { ...session, title } : session)),
+        activeSessionId: open.session.id,
+      }));
+      if (updated) this.root = updated;
+      this.focusedTileId = open.tileId;
+      return;
+    }
+    const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
+    if (!tileId) return;
+    const session = makeOrchestrationSession(title, orchestrationId);
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],
@@ -424,7 +455,7 @@ class WorkspaceStore {
  * reported, else where it opened), or the folder of the file it shows. */
 export function sessionFolder(session: SessionTab): string | undefined {
   if (isFileTab(session)) return fileFolder(session.filePath);
-  if (session.agentRun || session.projectView) return undefined;
+  if (session.agentRun || session.projectView || session.orchestrationView) return undefined;
   return tabCwd.byTab[session.id] ?? session.cwd;
 }
 

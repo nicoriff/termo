@@ -1,0 +1,243 @@
+import type { AgentEngine } from "$lib/core/agents-client";
+import type {
+  Catalog,
+  CatalogModel,
+  Orchestration,
+  OrchestrationStatus,
+  Plan,
+  PlanChange,
+  PlannedAgent,
+  PlannedTask,
+  Price,
+  RevisionHold,
+  TaskStatus,
+} from "$lib/core/orchestration-client";
+import type { MessageKey } from "$lib/i18n/translate";
+import type { AgentTone } from "./agent-spec";
+
+/** Room over the estimate for the budget a plan starts with (the same the
+ * backend gives a draft: see planner.rs). */
+const BUDGET_MARGIN = 1.3;
+/** An estimate is a guess about tokens: shown as a range around it. */
+const RANGE = { low: 0.6, high: 1.6 };
+
+export const ENGINE_NAMES: Record<AgentEngine, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini CLI",
+  copilot: "Copilot CLI",
+};
+
+export const STATUS_KEYS: Record<OrchestrationStatus, MessageKey> = {
+  draft: "agents.orchestration.status.draft",
+  running: "agents.orchestration.status.running",
+  awaitingApproval: "agents.orchestration.status.awaitingApproval",
+  paused: "agents.orchestration.status.paused",
+  done: "agents.orchestration.status.done",
+  failed: "agents.orchestration.status.failed",
+  stopped: "agents.orchestration.status.stopped",
+};
+
+export const TASK_STATUS_KEYS: Record<TaskStatus, MessageKey> = {
+  pending: "agents.orchestration.task.pending",
+  running: "agents.orchestration.task.running",
+  done: "agents.orchestration.task.done",
+  failed: "agents.orchestration.task.failed",
+  dropped: "agents.orchestration.task.dropped",
+};
+
+export const HOLD_KEYS: Record<Exclude<RevisionHold, "none">, MessageKey> = {
+  budget: "agents.orchestration.hold.budget",
+  autonomy: "agents.orchestration.hold.autonomy",
+  limit: "agents.orchestration.hold.limit",
+};
+
+export function statusTone(status: OrchestrationStatus): AgentTone {
+  if (status === "running") return "running";
+  if (status === "done") return "success";
+  if (status === "failed") return "error";
+  if (status === "awaitingApproval" || status === "paused") return "paused";
+  return "idle";
+}
+
+export function taskTone(status: TaskStatus): AgentTone {
+  if (status === "running") return "running";
+  if (status === "done") return "success";
+  if (status === "failed") return "error";
+  return "idle";
+}
+
+export function modelsOf(catalog: Catalog, engine: AgentEngine): CatalogModel[] {
+  return catalog.find((entry) => entry.engine === engine)?.models ?? [];
+}
+
+/** The price of a model on this computer's catalog; null when it has none
+ * (the engine's default, Copilot, a model the catalog doesn't list). */
+export function priceOf(catalog: Catalog, engine: AgentEngine, model: string): Price | null {
+  return modelsOf(catalog, engine).find((option) => option.id === model)?.price ?? null;
+}
+
+export function agentOf(plan: Plan, task: PlannedTask): PlannedAgent | undefined {
+  return plan.agents.find((agent) => agent.key === task.agent);
+}
+
+/** What one run of the task is expected to cost in USD; null without a price. */
+export function taskEstimate(plan: Plan, task: PlannedTask, catalog: Catalog): number | null {
+  const agent = agentOf(plan, task);
+  const price = agent ? priceOf(catalog, agent.engine, agent.model) : null;
+  if (!price) return null;
+  return (task.tokensIn * price.input + task.tokensOut * price.output) / 1_000_000;
+}
+
+export interface Totals {
+  tasks: number;
+  tokensIn: number;
+  tokensOut: number;
+  /** The estimate for what has a price. */
+  usd: number;
+  /** Tasks whose model has no known price: not in `usd`. */
+  unpriced: number;
+}
+
+function totalsOf(plan: Plan, tasks: PlannedTask[], catalog: Catalog): Totals {
+  const totals: Totals = { tasks: 0, tokensIn: 0, tokensOut: 0, usd: 0, unpriced: 0 };
+  for (const task of tasks) {
+    if (task.status === "dropped") continue;
+    totals.tasks += 1;
+    totals.tokensIn += task.tokensIn;
+    totals.tokensOut += task.tokensOut;
+    const estimate = taskEstimate(plan, task, catalog);
+    if (estimate === null) totals.unpriced += 1;
+    else totals.usd += estimate;
+  }
+  return totals;
+}
+
+/** What the plan was estimated at, before anything ran. */
+export function planTotals(plan: Plan, catalog: Catalog): Totals {
+  return totalsOf(plan, plan.tasks, catalog);
+}
+
+export function agentTotals(plan: Plan, agentKey: string, catalog: Catalog): Totals {
+  return totalsOf(
+    plan,
+    plan.tasks.filter((task) => task.agent === agentKey),
+    catalog,
+  );
+}
+
+/** What its runs are known to have cost so far. */
+export function spentUsd(plan: Plan): number {
+  return plan.tasks.reduce((sum, task) => sum + (task.costUsd ?? 0), 0);
+}
+
+/** What the whole plan is expected to cost, start to end: what's known for
+ * what ran, the estimate for the rest (the backend's rule: see plan.rs). */
+export function projectedUsd(plan: Plan, catalog: Catalog): number {
+  let total = 0;
+  for (const task of plan.tasks) {
+    const estimate = taskEstimate(plan, task, catalog) ?? 0;
+    if (task.status === "dropped") total += task.costUsd ?? 0;
+    else if (task.status === "done" && task.costUsd !== null) total += task.costUsd;
+    else total += (task.costUsd ?? 0) + estimate;
+  }
+  return total;
+}
+
+/** The budget a plan starts with; 0 (no limit) when nothing has a price. */
+export function defaultBudget(plan: Plan, catalog: Catalog): number {
+  return Math.round(planTotals(plan, catalog).usd * BUDGET_MARGIN * 100) / 100;
+}
+
+export function costRange(usd: number): { low: number; high: number } {
+  return { low: usd * RANGE.low, high: usd * RANGE.high };
+}
+
+export function formatUsd(usd: number): string {
+  const digits = usd > 0 && usd < 0.1 ? 3 : 2;
+  return `US$ ${usd.toFixed(digits)}`;
+}
+
+/** 1 250 000 → "1.3M", 42 000 → "42k". */
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
+  return String(tokens);
+}
+
+/** The plan with one agent moved to another engine and model. */
+export function withModel(plan: Plan, agentKey: string, engine: AgentEngine, model: string): Plan {
+  return {
+    ...plan,
+    agents: plan.agents.map((agent) => (agent.key === agentKey ? { ...agent, engine, model } : agent)),
+  };
+}
+
+export interface TreeBranch {
+  agent: PlannedAgent;
+  tasks: PlannedTask[];
+}
+
+/** The tree the plan is shown as: the orchestrator at the root, each agent
+ * under it, and under each agent its tasks in the order they'll run. */
+export function treeOf(plan: Plan): TreeBranch[] {
+  return plan.agents.map((agent) => ({ agent, tasks: plan.tasks.filter((task) => task.agent === agent.key) }));
+}
+
+/** The titles of the tasks one depends on, for "after …". */
+export function dependencyTitles(plan: Plan, task: PlannedTask): string[] {
+  return task.dependsOn.map((key) => plan.tasks.find((other) => other.key === key)?.title ?? key);
+}
+
+export interface Progress {
+  done: number;
+  total: number;
+  running: number;
+  failed: number;
+}
+
+export function progressOf(plan: Plan): Progress {
+  const live = plan.tasks.filter((task) => task.status !== "dropped");
+  return {
+    done: live.filter((task) => task.status === "done").length,
+    total: live.length,
+    running: live.filter((task) => task.status === "running").length,
+    failed: live.filter((task) => task.status === "failed").length,
+  };
+}
+
+/** One change of a revision, in words. */
+export function changeLabel(change: PlanChange, plan: Plan): { key: MessageKey; params: Record<string, string> } {
+  const task = (key: string) => plan.tasks.find((other) => other.key === key)?.title ?? key;
+  const agent = (key: string) => plan.agents.find((other) => other.key === key)?.name ?? key;
+  switch (change.kind) {
+    case "addAgent":
+      return { key: "agents.orchestration.change.addAgent", params: { agent: change.agent.name || change.agent.key } };
+    case "addTask":
+      return {
+        key: "agents.orchestration.change.addTask",
+        params: { task: change.task.title || change.task.key, agent: agent(change.task.agent) },
+      };
+    case "reassign":
+      return { key: "agents.orchestration.change.reassign", params: { task: task(change.task), agent: agent(change.agent) } };
+    case "changeModel":
+      return {
+        key: "agents.orchestration.change.changeModel",
+        params: { agent: agent(change.agent), model: `${ENGINE_NAMES[change.engine]} · ${change.model || "—"}` },
+      };
+    case "dropTask":
+      return { key: "agents.orchestration.change.dropTask", params: { task: task(change.task) } };
+    case "retryTask":
+      return { key: "agents.orchestration.change.retryTask", params: { task: task(change.task) } };
+  }
+}
+
+/** The revision waiting for the user's answer, if any. */
+export function pendingRevision(orchestration: Orchestration) {
+  return orchestration.revisions.find((revision) => revision.state === "pending") ?? null;
+}
+
+/** Whether "Resume" applies: it stopped, ran out of budget or failed. */
+export function canResume(status: OrchestrationStatus): boolean {
+  return status === "stopped" || status === "paused" || status === "failed";
+}

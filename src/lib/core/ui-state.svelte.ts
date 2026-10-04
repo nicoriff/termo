@@ -43,6 +43,8 @@ class UiState {
   agentWizard = $state<{ spec: AgentSpec | null; isNew: boolean } | null>(null);
   /** The project dialog: a new project (null) or one's settings. */
   projectDialog = $state<{ project: Project | null } | null>(null);
+  /** "New orchestration": the work to plan (see OrchestrationDialog). */
+  orchestrationDialog = $state(false);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -76,6 +78,7 @@ class UiState {
       this.closeFileTarget !== null ||
       this.agentWizard !== null ||
       this.projectDialog !== null ||
+      this.orchestrationDialog ||
       this.marketplaceOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
@@ -217,6 +220,16 @@ class UiState {
     this.refocusTerminals();
   }
 
+  openOrchestrationDialog(): void {
+    if (!appConfigStore.aiModeEnabled) return;
+    this.orchestrationDialog = true;
+  }
+
+  closeOrchestrationDialog(): void {
+    this.orchestrationDialog = false;
+    this.refocusTerminals();
+  }
+
   closeAgentLaunch(): void {
     this.agentLaunch = null;
   }
@@ -230,6 +243,7 @@ class UiState {
   closeAiSurfaces(): void {
     this.agentWizard = null;
     this.projectDialog = null;
+    this.orchestrationDialog = false;
     if (this.agentLaunch?.target.kind === "agent") this.agentLaunch = null;
     this.marketplaceOpen = false;
   }

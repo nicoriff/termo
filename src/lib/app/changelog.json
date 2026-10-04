@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.10.0",
+    "date": "2026-10-04",
+    "es": [
+      "**Orquestación de agentes**: describís una funcionalidad y Termo analiza el proyecto, diseña un equipo a medida — cuántos agentes, qué especialidad tiene cada uno y con qué modelo de Claude, GPT, Gemini o Copilot corre — y te muestra el plan como un árbol, con dos o tres estrategias para comparar y el costo estimado de cada agente y de cada tarea. Antes de aprobar podés cambiar el modelo de cualquier agente y fijar un presupuesto; nada se ejecuta hasta entonces.",
+      "Durante la ejecución, un **orquestador supervisa** cada tanda de tareas: reintenta lo que falla, reasigna, cambia de modelo o suma tareas. Lo que entra en el presupuesto y en los permisos aprobados lo hace solo; lo que no, espera tu aprobación.",
+      "El panel de agentes ahora tiene dos secciones: **Orquestación** y **Agentes locales**, con los agentes y proyectos de siempre."
+    ],
+    "en": [
+      "**Agent orchestration**: describe a feature and Termo reads the project, designs a team for it — how many agents, what each one specializes in and which Claude, GPT, Gemini or Copilot model it runs on — and shows the plan as a tree, with two or three strategies to compare and the estimated cost of every agent and task. Before approving you can change any agent's model and set a budget; nothing runs until then.",
+      "While it runs, an **orchestrator supervises** each round of tasks: it retries what fails, reassigns, switches models or adds tasks. What fits the budget and the permissions you approved goes ahead on its own; anything else waits for your approval.",
+      "The agents panel now has two sections: **Orchestration** and **Local agents**, with the agents and projects you already had."
+    ]
+  },
+  {
     "version": "0.9.4",
     "date": "2026-10-03",
     "es": [

@@ -484,6 +484,13 @@
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <path d="M1.5 3.5h4l1.5 1.5h5.5v7h-11z" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.orchestrationView}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <circle cx="7" cy="3" r="1.6" fill="none" stroke="currentColor" stroke-width="1" />
+            <circle cx="3" cy="11" r="1.6" fill="none" stroke="currentColor" stroke-width="1" />
+            <circle cx="11" cy="11" r="1.6" fill="none" stroke="currentColor" stroke-width="1" />
+            <path d="M7 4.6v2.4M7 7L3.6 9.6M7 7l3.4 2.6" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
         {:else if !session.agentRun}
           <span class="tile-tab-kind"><ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} /></span>
         {:else if session.agentRun}
@@ -498,7 +505,7 @@
         <span
           class="tile-tab-title"
           title={favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
-            (session.agentRun || session.projectView
+            (session.agentRun || session.projectView || session.orchestrationView
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >

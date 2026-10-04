@@ -114,6 +114,7 @@ pub enum Msg<'a> {
     OrchestrationPlanFailed(&'a str),
     /// the folder
     OrchestrationNoFolder(&'a str),
+    OrchestrationFolderRequired,
     OrchestrationNotFound,
     /// Approving, resuming or resolving something its state doesn't allow.
     OrchestrationWrongState,
@@ -348,6 +349,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (OrchestrationPlanFailed(error), En) => format!("Couldn't build the plan: {error}"),
         (OrchestrationNoFolder(path), Es) => format!("La carpeta no existe: {path}"),
         (OrchestrationNoFolder(path), En) => format!("The folder doesn't exist: {path}"),
+        (OrchestrationFolderRequired, Es) => "Elegí la carpeta del proyecto: los agentes trabajan ahí".into(),
+        (OrchestrationFolderRequired, En) => "Choose the project's folder: the agents work there".into(),
         (OrchestrationNotFound, Es) => "La orquestación ya no existe".into(),
         (OrchestrationNotFound, En) => "The orchestration no longer exists".into(),
         (OrchestrationWrongState, Es) => "La orquestación ya no está en ese estado".into(),
@@ -456,6 +459,7 @@ mod tests {
             Msg::AiModeOff,
             Msg::OrchestrationPlanFailed("timeout"),
             Msg::OrchestrationNoFolder("/x"),
+            Msg::OrchestrationFolderRequired,
             Msg::OrchestrationNotFound,
             Msg::OrchestrationWrongState,
             Msg::OrchestrationEmptyPlan,

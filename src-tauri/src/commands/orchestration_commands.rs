@@ -50,8 +50,7 @@ pub async fn orchestration_plan(
     model: String,
 ) -> Result<Orchestration, String> {
     let root = root(&app)?;
-    let scratch = root.join(".draft");
-    let planned = tauri::async_runtime::spawn_blocking(move || planner::generate(&scratch, &prompt, &work_dir, &model))
+    let planned = tauri::async_runtime::spawn_blocking(move || planner::generate(&prompt, &work_dir, &model))
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
     let orchestration = saved(store::save_in(&root, planned))?;

@@ -58,7 +58,7 @@ export interface AgentSpec {
 export type AfterOutcome = "success" | "failure" | "any";
 
 export type RunStatus = "running" | "success" | "error" | "stopped" | "timedOut";
-export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook" | "chain" | "agent" | "message";
+export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook" | "chain" | "agent" | "message" | "orchestrator";
 
 /** Where a run sits in a conversation between agents. */
 export interface RunLink {
@@ -145,6 +145,8 @@ export interface Project {
   /** The agent "Run project" starts. */
   entryAgentId: string;
   limits: { maxRunsPerDay: number };
+  /** Set on the team an orchestration runs; empty for the user's own. */
+  orchestrationId: string;
   createdAt: number;
   updatedAt: number;
 }

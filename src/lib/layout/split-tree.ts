@@ -29,6 +29,8 @@ export interface SessionTab {
   agentRun?: { agentId: string; runId: string };
   /** Set on a tab that shows a project of agents (see ProjectView). */
   projectView?: { projectId: string };
+  /** Set on a tab that shows an orchestration (see OrchestrationView). */
+  orchestrationView?: { orchestrationId: string };
 }
 
 export function isFileTab(session: SessionTab): session is SessionTab & { filePath: string } {
@@ -38,7 +40,12 @@ export function isFileTab(session: SessionTab): session is SessionTab & { filePa
 /** Whether the tab is a console, as opposed to a file, an agent's runs or a
  * project. */
 export function isConsoleTab(session: SessionTab): boolean {
-  return session.filePath === undefined && session.agentRun === undefined && session.projectView === undefined;
+  return (
+    session.filePath === undefined &&
+    session.agentRun === undefined &&
+    session.projectView === undefined &&
+    session.orchestrationView === undefined
+  );
 }
 
 export function makeAgentRunSession(title: string, agentId: string, runId: string): SessionTab {
@@ -47,6 +54,10 @@ export function makeAgentRunSession(title: string, agentId: string, runId: strin
 
 export function makeProjectSession(title: string, projectId: string): SessionTab {
   return { id: crypto.randomUUID(), title, projectView: { projectId } };
+}
+
+export function makeOrchestrationSession(title: string, orchestrationId: string): SessionTab {
+  return { id: crypto.randomUUID(), title, orchestrationView: { orchestrationId } };
 }
 
 /** A file's name, which titles its tab. */

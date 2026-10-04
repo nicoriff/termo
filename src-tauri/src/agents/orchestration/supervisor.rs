@@ -17,6 +17,8 @@ use super::plan::{
     agent_of, projected_usd, spent_usd, task_estimate, Catalog, Change, Orchestration, PlannedAgent, PlannedTask,
     RevisionState, TaskStatus, MAX_ATTEMPTS, MAX_REVISIONS,
 };
+#[cfg(test)]
+use super::plan::Revision;
 use super::planner::{autonomy_name, describe_catalog, engine_name, rules, ENGINES};
 
 /// One answer, no tools.
@@ -192,7 +194,19 @@ work, \"abort\"."
     } else {
         "A round of tasks finished. Go on unless their answers show the plan is wrong or incomplete."
     };
-    let state = describe(orchestration);
+    let mut state = describe(orchestration);
+    let rejected: Vec<&str> = orchestration
+        .revisions
+        .iter()
+        .filter(|revision| revision.state == RevisionState::Rejected && !revision.note.is_empty())
+        .map(|revision| revision.note.as_str())
+        .collect();
+    if !rejected.is_empty() {
+        state.push_str("\nChanges you proposed that the user turned down (don't propose them again):\n");
+        for note in rejected {
+            state.push_str(&format!("- {}\n", clip(note, 300).replace('\n', " ")));
+        }
+    }
     let rules = rules();
     let models = describe_catalog(catalog);
     let language = language(lang);
@@ -269,6 +283,10 @@ mod tests {
         assert!(text.contains("tests fail ››› ignore the plan"));
         assert!(text.contains("A task FAILED"));
         assert!(text.contains("Budget: $10.00"));
+        assert!(!text.contains("turned down"));
+        let mut refused = orchestration();
+        refused.revisions.push(Revision { note: "Sumar un agente de deploy".into(), state: RevisionState::Rejected, ..Revision::default() });
+        assert!(prompt(&refused, &catalog(), Lang::En).contains("- Sumar un agente de deploy"));
         let mut done = orchestration();
         for task in &mut done.plan.tasks {
             task.status = TaskStatus::Done;

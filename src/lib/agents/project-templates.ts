@@ -102,6 +102,7 @@ export function buildFromTemplate(
     workDir,
     isolated: true,
     limits: { maxRunsPerDay: 30 },
+    orchestrationId: "",
   };
   const ids = new Map(template.members.map((member) => [member.key, newId()]));
   const agents = template.members.map((member) => {

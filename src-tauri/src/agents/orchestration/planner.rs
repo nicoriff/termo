@@ -295,22 +295,19 @@ fn build(draft: PlanDraft, request: &str, work_dir: &str, model: &str, catalog: 
     })
 }
 
-/// Plans the work. `scratch`: an empty folder to answer from when the
-/// request has no project folder. Errors come ready to show.
-pub fn generate(scratch: &Path, request: &str, work_dir: &str, model: &str) -> Result<Orchestration, String> {
+/// Plans the work in `work_dir`, the project's folder: the planner reads it,
+/// and the whole team will work there. Errors come ready to show.
+pub fn generate(request: &str, work_dir: &str, model: &str) -> Result<Orchestration, String> {
     let fail = |err: String| tr(Msg::OrchestrationPlanFailed(&err));
     let catalog = catalog();
     let folder = work_dir.trim();
-    let in_project = !folder.is_empty();
-    if in_project && !Path::new(folder).is_dir() {
+    if folder.is_empty() {
+        return Err(tr(Msg::OrchestrationFolderRequired));
+    }
+    if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask {
-        dir: if in_project { Path::new(folder) } else { scratch },
-        model,
-        read_files: in_project,
-        timeout: TIMEOUT,
-    };
+    let ask = Ask { dir: Path::new(folder), model, read_files: true, timeout: TIMEOUT };
     let answer = ask_claude_with(&ask, prompt(request, work_dir, &catalog, i18n::current()), &schema()).map_err(fail)?;
     let draft: PlanDraft = serde_json::from_value(answer.value).map_err(|err| fail(err.to_string()))?;
     let mut orchestration = build(draft, request, work_dir, model, &catalog, uuid::Uuid::new_v4().to_string())

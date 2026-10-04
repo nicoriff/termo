@@ -13,6 +13,7 @@
 import {
   makeAgentRunSession,
   makeFileSession,
+  makeOrchestrationSession,
   makeProjectSession,
   makeSession,
   makeTile,
@@ -32,6 +33,8 @@ export interface LayoutSession {
   agentRun?: { agentId: string; runId: string };
   /** A project's tab. */
   projectView?: { projectId: string };
+  /** An orchestration's tab. */
+  orchestrationView?: { orchestrationId: string };
   /** The agent conversation this console had open, when the layout was saved
    * with sessions. Restoring reopens it with the agent's own resume command. */
   agentTool?: ToolId;
@@ -83,6 +86,10 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
       }
       if (session.projectView !== undefined) {
         stored.projectView = { ...session.projectView };
+        return stored;
+      }
+      if (session.orchestrationView !== undefined) {
+        stored.orchestrationView = { ...session.orchestrationView };
         return stored;
       }
       if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
@@ -137,6 +144,8 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string):
       if (session.agentRun)
         return withId(makeAgentRunSession(session.title, session.agentRun.agentId, session.agentRun.runId), newId);
       if (session.projectView) return withId(makeProjectSession(session.title, session.projectView.projectId), newId);
+      if (session.orchestrationView)
+        return withId(makeOrchestrationSession(session.title, session.orchestrationView.orchestrationId), newId);
       const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
       if (session.agentTool && session.agentSessionId) {
         resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });

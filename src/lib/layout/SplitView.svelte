@@ -14,6 +14,7 @@
   import FileEditor from "$lib/editor/FileEditor.svelte";
   import AgentRunView from "$lib/agents/AgentRunView.svelte";
   import ProjectView from "$lib/agents/ProjectView.svelte";
+  import OrchestrationView from "$lib/agents/OrchestrationView.svelte";
   import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
@@ -94,6 +95,8 @@
           <AgentRunView agentId={loc.session.agentRun.agentId} runId={loc.session.agentRun.runId} />
         {:else if loc.session.projectView}
           <ProjectView projectId={loc.session.projectView.projectId} />
+        {:else if loc.session.orchestrationView}
+          <OrchestrationView orchestrationId={loc.session.orchestrationView.orchestrationId} />
         {:else}
           <Terminal
             sessionId={loc.session.id}
