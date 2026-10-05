@@ -78,6 +78,21 @@ export interface Revision {
   estimateUsd: number;
 }
 
+export type Outcome = "success" | "partial" | "failed";
+
+/** What came of it, as the orchestrator tells the user once it ends. */
+export interface Report {
+  at: number;
+  outcome: Outcome;
+  headline: string;
+  /** Markdown. */
+  summary: string;
+  changes: string[];
+  issues: string[];
+  nextSteps: string[];
+  costUsd: number;
+}
+
 export interface Orchestration {
   id: string;
   name: string;
@@ -100,6 +115,13 @@ export interface Orchestration {
   /** What planning and supervising cost. */
   overheadUsd: number;
   note: string;
+  /** The final report, once it ended (or when the user asked for one). */
+  report: Report | null;
+  /** The orchestrator is writing the report now. */
+  reporting: boolean;
+  /** Unix ms; 0: not yet. */
+  startedAt: number;
+  endedAt: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -167,6 +189,11 @@ export function stopOrchestration(id: string): Promise<void> {
 
 export function resumeOrchestration(id: string, budgetUsd: number | null): Promise<Orchestration> {
   return invoke("orchestration_resume", { id, budgetUsd });
+}
+
+/** Has the orchestrator write (again) its report on how it went. */
+export function writeOrchestrationReport(id: string): Promise<Orchestration> {
+  return invoke("orchestration_report", { id });
 }
 
 export function resolveRevision(id: string, revisionId: string, approve: boolean): Promise<Orchestration> {

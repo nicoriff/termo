@@ -14,6 +14,7 @@ import {
   dependencyTitles,
   formatTokens,
   formatUsd,
+  hasEnded,
   isTaskEditable,
   mergeRunLogs,
   planTotals,
@@ -23,6 +24,7 @@ import {
   removeAgent,
   removeTask,
   spentUsd,
+  taskCounts,
   tasksWithoutRequest,
   uniqueKey,
   withAgentFields,
@@ -245,5 +247,20 @@ describe("the console", () => {
   it("doesn't repeat a result as text", () => {
     const lines = mergeRunLogs([{ source: "r", events: [step(1, "done"), step(2, "done", "result")] }]);
     expect(lines.map((line) => line.event.kind)).toEqual(["result"]);
+  });
+});
+
+describe("the summary", () => {
+  it("counts how the tasks ended", () => {
+    const ended: Plan = {
+      ...plan,
+      tasks: [
+        { ...plan.tasks[0], status: "done" },
+        { ...plan.tasks[1], status: "failed" },
+        { ...plan.tasks[2], status: "dropped" },
+      ],
+    };
+    expect(taskCounts(ended)).toEqual({ total: 3, done: 1, failed: 1, dropped: 1, pending: 0 });
+    expect(hasEnded("done") && hasEnded("stopped") && !hasEnded("running") && !hasEnded("draft")).toBe(true);
   });
 });

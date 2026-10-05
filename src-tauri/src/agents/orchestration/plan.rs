@@ -165,6 +165,34 @@ pub struct Revision {
     pub estimate_usd: f64,
 }
 
+/// How it went, in the orchestrator's final report.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum Outcome {
+    Success,
+    Partial,
+    #[default]
+    Failed,
+}
+
+/// What came of it, as the orchestrator tells the user once it ends (see
+/// report.rs).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Report {
+    /// Unix milliseconds.
+    pub at: i64,
+    pub outcome: Outcome,
+    pub headline: String,
+    /// Markdown.
+    pub summary: String,
+    pub changes: Vec<String>,
+    pub issues: Vec<String>,
+    pub next_steps: Vec<String>,
+    /// What writing it cost (also in the overhead).
+    pub cost_usd: f64,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Orchestration {
@@ -197,6 +225,14 @@ pub struct Orchestration {
     /// The orchestrator's last word: what it's waiting for, why it stopped,
     /// or how the work went.
     pub note: String,
+    /// The final report, once it ended (or when the user asked for one).
+    pub report: Option<Report>,
+    /// The orchestrator is writing the report now.
+    pub reporting: bool,
+    /// When it first started running and when it last ended (Unix ms; 0:
+    /// not yet).
+    pub started_at: i64,
+    pub ended_at: i64,
     /// Unix seconds.
     pub created_at: i64,
     pub updated_at: i64,

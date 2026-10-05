@@ -28,6 +28,7 @@ use super::plan::{
     self, agent_of, apply, hold_for, Hold, Orchestration, PlannedTask, Revision, RevisionState, Status, TaskStatus,
 };
 use super::planner::catalog;
+use super::report;
 use super::store;
 use super::supervisor::{self, Verdict};
 
@@ -143,6 +144,10 @@ pub fn recover(app: &tauri::AppHandle) {
             orchestration.note = tr(Msg::OrchestrationInterrupted);
         });
     }
+    // A report Termo closed in the middle of: it can be asked for again.
+    for orchestration in store::list_in(&root).into_iter().filter(|orchestration| orchestration.reporting) {
+        store::update_in(&root, &orchestration.id, |orchestration| orchestration.reporting = false);
+    }
 }
 
 /// Tasks that were running go back to waiting: their runs are gone.
@@ -187,6 +192,9 @@ impl Orchestrator {
         let orchestrator = self.clone();
         std::thread::spawn(move || {
             run.drive();
+            // Still active while the report is written: nothing resumes or
+            // edits it from under the orchestrator.
+            run.finish();
             orchestrator.active.lock().unwrap().remove(&run.id);
             // A stop that arrived as the thread was ending still shows.
             if let Some(orchestration) = store::get_in(&run.root, &run.id) {
@@ -375,6 +383,34 @@ impl Run {
                 !held
             }
         }
+    }
+
+    /// When it ended — done, or failed for good — notes when, and has the
+    /// orchestrator write its report on how it went.
+    fn finish(&self) {
+        let Some(orchestration) = store::get_in(&self.root, &self.id) else { return };
+        if self.stopped() || !matches!(orchestration.status, Status::Done | Status::Failed) {
+            return;
+        }
+        let Some(orchestration) = self.update(|orchestration| {
+            orchestration.ended_at = now_millis();
+            orchestration.reporting = true;
+        }) else {
+            return;
+        };
+        let written = report::write(&orchestration);
+        self.update(|orchestration| {
+            orchestration.reporting = false;
+            match written {
+                Ok(report) => {
+                    orchestration.overhead_usd += report.cost_usd;
+                    orchestration.report = Some(report);
+                }
+                // The plan's own results still show; the report can be
+                // asked for again.
+                Err(error) => orchestration.note = format!("{}\n{error}", orchestration.note).trim().to_string(),
+            }
+        });
     }
 
     fn drive(&self) {

@@ -139,7 +139,7 @@ fn money(usd: f64) -> String {
 /// Where the plan stands, as the orchestrator reads it. What the agents
 /// answered is their own text — fenced, so nothing in it reads as an
 /// instruction to the orchestrator.
-fn describe(orchestration: &Orchestration) -> String {
+pub fn describe(orchestration: &Orchestration) -> String {
     let plan = &orchestration.plan;
     let mut text = String::from("Agents:\n");
     for agent in &plan.agents {

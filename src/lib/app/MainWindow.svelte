@@ -286,7 +286,7 @@
     {#if uiState.whatsNew}
       <WhatsNewDialog />
     {/if}
-    {#if uiState.agentLaunch}
+    {#if uiState.agentLaunch && uiState.agentLaunch.target.kind !== "folder"}
       <AgentLaunchDialog />
     {/if}
     {#if uiState.closeFileTarget}
@@ -300,6 +300,10 @@
     {/if}
     {#if uiState.orchestrationDialog}
       <OrchestrationDialog />
+    {/if}
+    <!-- Picking a folder for one of the forms above: on top of it. -->
+    {#if uiState.agentLaunch?.target.kind === "folder"}
+      <AgentLaunchDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

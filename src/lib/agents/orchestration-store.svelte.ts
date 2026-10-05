@@ -2,6 +2,7 @@ import {
   approveOrchestration,
   editOrchestrationPlan,
   reviseOrchestration,
+  writeOrchestrationReport,
   deleteOrchestration,
   listOrchestrations,
   onOrchestration,
@@ -96,6 +97,10 @@ class OrchestrationStore {
 
   async resume(id: string, budgetUsd: number | null): Promise<void> {
     this.take(await resumeOrchestration(id, budgetUsd));
+  }
+
+  async report(id: string): Promise<void> {
+    this.take(await writeOrchestrationReport(id));
   }
 
   async resolve(id: string, revisionId: string, approve: boolean): Promise<void> {

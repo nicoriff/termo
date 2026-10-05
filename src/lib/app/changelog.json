@@ -5,12 +5,22 @@
     "es": [
       "**Orquestación de agentes**: describís una funcionalidad y Termo analiza el proyecto, diseña un equipo a medida — cuántos agentes, qué especialidad tiene cada uno y con qué modelo de Claude, GPT, Gemini o Copilot corre — y te muestra el plan como un árbol, con dos o tres estrategias para comparar y el costo estimado de cada agente y de cada tarea. Antes de aprobar podés cambiar el modelo de cualquier agente y fijar un presupuesto; nada se ejecuta hasta entonces.",
       "Durante la ejecución, un **orquestador supervisa** cada tanda de tareas: reintenta lo que falla, reasigna, cambia de modelo o suma tareas. Lo que entra en el presupuesto y en los permisos aprobados lo hace solo; lo que no, espera tu aprobación.",
-      "El panel de agentes ahora tiene dos secciones: **Orquestación** y **Agentes locales**, con los agentes y proyectos de siempre."
+      "La barra lateral tiene dos botones: **Agentes locales**, con los agentes y proyectos de siempre, y **Agentes de orquestación**. En la lista de orquestaciones podés **ocultar las finalizadas**.",
+      "El plan se ve como un **organigrama**: el orquestador arriba, sus agentes y las tareas de cada uno debajo. Mientras corre, el agente y la tarea en curso **se iluminan**, y lo terminado queda **en verde con un tilde**.",
+      "**Editá el plan** antes de aprobarlo o después de que corrió: las instrucciones de cada agente, el pedido de cada tarea, y el equipo mismo (sumar o quitar agentes y tareas, reasignar, dependencias). Lo que ya corrió se conserva. O pedile los cambios al orquestador con **Modificar con IA**.",
+      "Nueva pestaña **Consola**: todo lo que hicieron los agentes de una orquestación, en el orden en que pasó y en vivo, con filtro por agente.",
+      "Al terminar, el orquestador escribe un **informe final**: si se cumplió el objetivo, qué cambió, los problemas y los próximos pasos, con el costo, la duración y el resultado de cada tarea. Se puede plegar y copiar en Markdown.",
+      "Los campos de carpeta de agentes, proyectos y orquestaciones usan el **mismo navegador de carpetas** que las consolas nuevas."
     ],
     "en": [
       "**Agent orchestration**: describe a feature and Termo reads the project, designs a team for it — how many agents, what each one specializes in and which Claude, GPT, Gemini or Copilot model it runs on — and shows the plan as a tree, with two or three strategies to compare and the estimated cost of every agent and task. Before approving you can change any agent's model and set a budget; nothing runs until then.",
       "While it runs, an **orchestrator supervises** each round of tasks: it retries what fails, reassigns, switches models or adds tasks. What fits the budget and the permissions you approved goes ahead on its own; anything else waits for your approval.",
-      "The agents panel now has two sections: **Orchestration** and **Local agents**, with the agents and projects you already had."
+      "The side bar has two buttons: **Local agents**, with the agents and projects you already had, and **Orchestration agents**. The orchestration list can **hide finished ones**.",
+      "The plan shows as an **org chart**: the orchestrator on top, its agents and each one's tasks below. While it runs, the agent and task at work **light up**, and what's done turns **green with a tick**.",
+      "**Edit the plan** before approving it or after it ran: each agent's instructions, each task's request, and the team itself (add or remove agents and tasks, reassign, dependencies). What already ran is kept. Or ask the orchestrator for the changes with **Modify with AI**.",
+      "New **Console** tab: everything an orchestration's agents did, in the order it happened and live, filterable by agent.",
+      "When it ends, the orchestrator writes a **final report**: whether the goal was met, what changed, the issues and next steps, with the cost, the duration and each task's result. It can be collapsed and copied as Markdown.",
+      "The folder fields of agents, projects and orchestrations use the **same folder browser** as new consoles."
     ]
   },
   {

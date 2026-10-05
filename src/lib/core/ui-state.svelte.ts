@@ -230,6 +230,12 @@ class UiState {
     this.refocusTerminals();
   }
 
+  /** The where-to-run dialog as a plain folder picker, over the form that
+   * asked for it. */
+  pickFolder(current: string | null, onPick: (path: string) => void): void {
+    this.agentLaunch = { target: { kind: "folder", current, onPick }, tileId: "", here: null };
+  }
+
   closeAgentLaunch(): void {
     this.agentLaunch = null;
   }

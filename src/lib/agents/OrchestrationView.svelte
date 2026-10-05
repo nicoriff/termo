@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { slide } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import type { AgentAutonomy, AgentEngine } from "$lib/core/agents-client";
-  import type { Plan, PlannedAgent, PlannedTask } from "$lib/core/orchestration-client";
-  import { AUTONOMY_TITLE_KEYS, type AgentTone } from "./agent-spec";
+  import type { Outcome, Plan, PlannedAgent, PlannedTask } from "$lib/core/orchestration-client";
+  import type { MessageKey } from "$lib/i18n/translate";
+  import { AUTONOMY_TITLE_KEYS, formatDuration, type AgentTone } from "./agent-spec";
+  import { renderMarkdownLite } from "./markdown-lite";
   import { agentsStore } from "./agents-store.svelte";
   import { orchestrationStore } from "./orchestration-store.svelte";
   import {
@@ -26,6 +30,7 @@
     dependencyTitles,
     formatTokens,
     formatUsd,
+    hasEnded,
     isTaskEditable,
     modelsOf,
     pendingRevision,
@@ -37,6 +42,7 @@
     spentUsd,
     statusTone,
     taskEstimate,
+    taskCounts,
     taskTone,
     tasksWithoutRequest,
     treeOf,
@@ -150,6 +156,106 @@
     ),
   );
   const engines = $derived(catalog.filter((entry) => entry.installed).map((entry) => entry.engine));
+
+  // ---- The final summary
+  const ended = $derived(!!orchestration && !isDraft && hasEnded(orchestration.status));
+  const counts = $derived(taskCounts(plan));
+  /** The report's word on it, or — without one yet — what the tasks say. */
+  const outcome = $derived<Outcome>(
+    orchestration?.report?.outcome ??
+      (orchestration?.status === "done" && counts.failed === 0
+        ? "success"
+        : counts.done === 0
+          ? "failed"
+          : "partial"),
+  );
+  const OUTCOME_KEYS: Record<Outcome, MessageKey> = {
+    success: "agents.orchestration.result.outcome.success",
+    partial: "agents.orchestration.result.outcome.partial",
+    failed: "agents.orchestration.result.outcome.failed",
+  };
+  const OUTCOME_ICONS: Record<Outcome, string> = { success: "✓", partial: "◐", failed: "✕" };
+  let copied = $state(false);
+
+  /** Folded result sections, by orchestration (remembered per computer). */
+  const FOLDED_KEY = "termo.orchestration.resultFolded";
+  function loadFolded(): string[] {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "[]");
+      return Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  let folded = $state<string[]>(loadFolded());
+  const resultOpen = $derived(!folded.includes(orchestrationId));
+
+  function toggleResult() {
+    folded = resultOpen ? [...folded, orchestrationId] : folded.filter((id) => id !== orchestrationId);
+    try {
+      localStorage.setItem(FOLDED_KEY, JSON.stringify(folded));
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  function outcomeColor(value: Outcome): string {
+    const c = themeStore.current.colors;
+    return value === "success" ? c.green : value === "partial" ? c.yellow : c.red;
+  }
+
+  const duration = $derived(
+    orchestration && orchestration.startedAt > 0 && orchestration.endedAt > orchestration.startedAt
+      ? formatDuration(orchestration.endedAt - orchestration.startedAt)
+      : null,
+  );
+
+  const writeReport = () => act(() => orchestrationStore.report(orchestrationId));
+
+  /** The summary as Markdown, to paste in a PR, a ticket or a chat. */
+  function reportMarkdown(): string {
+    if (!orchestration) return "";
+    const report = orchestration.report;
+    const lines = [`# ${orchestration.icon || "🧭"} ${orchestration.name}`, ""];
+    lines.push(`**${t(OUTCOME_KEYS[outcome])}**${report?.headline ? ` — ${report.headline}` : ""}`, "");
+    if (report?.summary) lines.push(report.summary, "");
+    const list = (key: MessageKey, items: string[]) => {
+      if (items.length === 0) return;
+      lines.push(`## ${t(key)}`, ...items.map((item) => `- ${item}`), "");
+    };
+    if (report) {
+      list("agents.orchestration.result.changes", report.changes);
+      list("agents.orchestration.result.issues", report.issues);
+      list("agents.orchestration.result.nextSteps", report.nextSteps);
+    }
+    lines.push(`## ${t("agents.orchestration.result.tasks")}`);
+    for (const task of plan.tasks) {
+      const by = agentOf(plan, task)?.name ?? "";
+      const cost = task.costUsd !== null ? ` — ${formatUsd(task.costUsd)}` : "";
+      lines.push(`- ${OUTCOME_TASK_MARK[task.status]} ${task.title} (${by}, ${t(TASK_STATUS_KEYS[task.status])})${cost}`);
+    }
+    lines.push("", `${t("agents.orchestration.result.cost")}: ${formatUsd(spent)}`);
+    if (duration) lines.push(`${t("agents.orchestration.result.duration")}: ${duration}`);
+    return lines.join("\n");
+  }
+
+  const OUTCOME_TASK_MARK: Record<PlannedTask["status"], string> = {
+    done: "✓",
+    failed: "✕",
+    dropped: "–",
+    pending: "·",
+    running: "…",
+  };
+
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(reportMarkdown());
+      copied = true;
+      setTimeout(() => (copied = false), 1600);
+    } catch (reason) {
+      error = String(reason);
+    }
+  }
 
   function toneColor(tone: AgentTone): string {
     const c = themeStore.current.colors;
@@ -751,6 +857,132 @@
     {/if}
 
     <div class="body">
+      {#if ended}
+        {@const report = orchestration.report}
+        <section class="result" style="--outcome:{outcomeColor(outcome)}" aria-label={t("agents.orchestration.result.title")}>
+          <header class="result-head">
+            <button
+              class="result-toggle"
+              aria-expanded={resultOpen}
+              title={resultOpen ? t("agents.orchestration.result.collapse") : t("agents.orchestration.result.expand")}
+              onclick={toggleResult}
+            >
+              <svg class="chevron" class:open={resultOpen} viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M3 1.5L6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+              </svg>
+              <span class="outcome-icon">{OUTCOME_ICONS[outcome]}</span>
+              <span class="heading">
+                <span class="result-kicker">{t("agents.orchestration.result.title")} · {t(OUTCOME_KEYS[outcome])}</span>
+                <span class="result-title">{report?.headline || t(STATUS_KEYS[orchestration.status])}</span>
+              </span>
+            </button>
+            <button class="button small" disabled={busy} onclick={() => void copyReport()}>
+              {copied ? t("agents.orchestration.result.copied") : t("agents.orchestration.result.copy")}
+            </button>
+            {#if !orchestration.reporting}
+              <button class="button small" disabled={busy} onclick={() => void writeReport()}>
+                ✨ {report ? t("agents.orchestration.result.regenerate") : t("agents.orchestration.result.generate")}
+              </button>
+            {/if}
+          </header>
+
+          {#if resultOpen}
+          <div class="result-body" transition:slide={{ duration: 160, easing: cubicOut }}>
+          <div class="result-stats">
+            <div class="stat">
+              <span class="stat-value">{counts.done}/{counts.total}</span>
+              <span class="stat-label">{t("agents.orchestration.result.tasksDone")}</span>
+              {#if counts.failed + counts.dropped + counts.pending > 0}
+                <span class="stat-extra">
+                  {#if counts.failed > 0}<span class="bad">{t("agents.orchestration.result.failed", { n: String(counts.failed) })}</span>{/if}
+                  {#if counts.dropped > 0}<span>{t("agents.orchestration.result.dropped", { n: String(counts.dropped) })}</span>{/if}
+                  {#if counts.pending > 0}<span>{t("agents.orchestration.result.pending", { n: String(counts.pending) })}</span>{/if}
+                </span>
+              {/if}
+            </div>
+            <div class="stat">
+              <span class="stat-value">{formatUsd(spent)}</span>
+              <span class="stat-label">{t("agents.orchestration.result.cost")}</span>
+              <span class="stat-extra">
+                {orchestration.budgetUsd > 0
+                  ? t("agents.orchestration.result.budget", { budget: formatUsd(orchestration.budgetUsd) })
+                  : t("agents.orchestration.result.noBudget")}
+              </span>
+            </div>
+            {#if duration}
+              <div class="stat">
+                <span class="stat-value">{duration}</span>
+                <span class="stat-label">{t("agents.orchestration.result.duration")}</span>
+              </div>
+            {/if}
+            <div class="stat">
+              <span class="stat-value">{plan.agents.length}</span>
+              <span class="stat-label">{t("agents.orchestration.result.agents")}</span>
+              {#if orchestration.revisions.some((revision) => revision.state === "applied")}
+                <span class="stat-extra">
+                  {t("agents.orchestration.result.revisions", {
+                    n: String(orchestration.revisions.filter((revision) => revision.state === "applied").length),
+                  })}
+                </span>
+              {/if}
+            </div>
+          </div>
+
+          {#if orchestration.reporting}
+            <p class="writing">✨ {t("agents.orchestration.result.writing")}</p>
+          {:else if report}
+            <div class="result-summary">{@html renderMarkdownLite(report.summary)}</div>
+            {#if report.changes.length + report.issues.length + report.nextSteps.length > 0}
+              <div class="result-lists">
+                {#each [{ key: "agents.orchestration.result.changes", items: report.changes, tone: "changes" }, { key: "agents.orchestration.result.issues", items: report.issues, tone: "issues" }, { key: "agents.orchestration.result.nextSteps", items: report.nextSteps, tone: "next" }] as group (group.key)}
+                  {#if group.items.length > 0}
+                    <div class="result-list {group.tone}">
+                      <h4>{t(group.key as MessageKey)}</h4>
+                      <ul>
+                        {#each group.items as item, index (index)}
+                          <li>{@html renderMarkdownLite(item)}</li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          {:else}
+            <p class="muted small">{t("agents.orchestration.result.noReport")}</p>
+          {/if}
+
+          <h4 class="tasks-title">{t("agents.orchestration.result.tasks")}</h4>
+          <div class="task-results">
+            {#each plan.tasks as task (task.key)}
+              {@const by = agentOf(plan, task)}
+              <details class="task-result" class:failed={task.status === "failed"}>
+                <summary>
+                  <span class="mark {task.status}">{OUTCOME_TASK_MARK[task.status]}</span>
+                  <span class="task-name">{task.title}</span>
+                  <span class="muted small">{by?.icon || "🤖"} {by?.name ?? ""}</span>
+                  <span class="task-cost muted small">
+                    {task.costUsd !== null ? formatUsd(task.costUsd) : t(TASK_STATUS_KEYS[task.status])}
+                  </span>
+                </summary>
+                <div class="task-answer">
+                  {#if task.summary.trim()}
+                    {@html renderMarkdownLite(task.summary)}
+                  {:else}
+                    <p class="muted small">{t("agents.orchestration.result.noAnswer")}</p>
+                  {/if}
+                  {#if task.runId && by?.agentId}
+                    <button class="button small" onclick={() => openRun(task)}>{t("agents.orchestration.detail.openRun")}</button>
+                  {/if}
+                </div>
+              </details>
+            {/each}
+          </div>
+          </div>
+          {/if}
+        </section>
+      {/if}
+
       {#if orchestration.note && !isDraft}
         <p class="ai-note">{orchestration.note}</p>
       {/if}
@@ -1443,6 +1675,243 @@
 
   .ai-note.revised {
     margin: 8px 16px 0;
+  }
+
+  /* The final summary: how it went, at a glance, then the detail. */
+  .result {
+    margin-bottom: 14px;
+    padding: 12px 14px 10px;
+    border: 1px solid color-mix(in srgb, var(--outcome) 55%, transparent);
+    border-left: 4px solid var(--outcome);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--outcome) 6%, transparent);
+  }
+
+  .result-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* The whole left side folds and unfolds the detail. */
+  .result-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .result-toggle .heading {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .result-toggle .result-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chevron {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: transform 150ms ease;
+  }
+
+  .chevron.open {
+    transform: rotate(90deg);
+  }
+
+  .outcome-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--outcome);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .result-kicker {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--outcome);
+  }
+
+  .result-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .result-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    margin: 12px 0 4px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 10px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 6px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    opacity: 0.65;
+  }
+
+  .stat-extra {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  .stat-extra .bad {
+    color: var(--error-fg, #f48771);
+  }
+
+  .writing {
+    margin: 10px 0 4px;
+    opacity: 0.8;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  .result-summary {
+    margin: 10px 0 4px;
+    line-height: 1.5;
+  }
+
+  .result-summary :global(p) {
+    margin: 0 0 6px;
+  }
+
+  .result-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .result-list h4,
+  .tasks-title {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.65;
+  }
+
+  .result-list.issues h4 {
+    color: var(--error-fg, #f48771);
+    opacity: 0.9;
+  }
+
+  .result-list ul {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.45;
+  }
+
+  .tasks-title {
+    margin-top: 12px;
+  }
+
+  .task-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .task-result summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .task-result summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .task-result summary:hover {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.05));
+  }
+
+  .task-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .task-cost {
+    flex-shrink: 0;
+  }
+
+  .mark {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .mark.done {
+    color: var(--done, #4ec27a);
+  }
+
+  .mark.failed {
+    color: var(--error-fg, #f48771);
+  }
+
+  .mark.dropped,
+  .mark.pending {
+    opacity: 0.5;
+  }
+
+  .task-answer {
+    margin: 2px 0 8px 28px;
+    padding: 8px 10px;
+    border-left: 2px solid var(--tabbar-border, #3a3a3a);
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .task-answer :global(p) {
+    margin: 0 0 6px;
   }
 
   .diagram-frame {

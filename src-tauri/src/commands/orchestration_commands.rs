@@ -4,7 +4,8 @@ use crate::agents::orchestration::executor::ensure_team;
 use crate::agents::orchestration::plan::{
     self, apply, edit_plan, max_autonomy, sanitize, Catalog, Orchestration, Plan, RevisionState, Status, TaskStatus,
 };
-use crate::agents::orchestration::{planner, store};
+use crate::agents::orchestration::{planner, report, store};
+use crate::agents::store::now_millis;
 use crate::agents::projects;
 use crate::commands::agent_commands::{delete_agent, root};
 use crate::i18n::{tr, Msg};
@@ -97,6 +98,7 @@ pub fn orchestration_approve(
     orchestration.note = String::new();
     ensure_team(&root, &mut orchestration)?;
     orchestration.status = Status::Running;
+    orchestration.started_at = now_millis();
     commit(&app, &state, &root, orchestration)
 }
 
@@ -197,8 +199,55 @@ pub fn orchestration_resume(
         }
     }
     orchestration.note = String::new();
+    // A new end gets a new report.
+    orchestration.report = None;
     orchestration.status = Status::Running;
     commit(&app, &state, &root, orchestration)
+}
+
+/// Has the orchestrator write (again) its report on how it went — for one
+/// that was stopped or paused, or to replace the one it wrote.
+#[tauri::command]
+pub async fn orchestration_report(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Orchestration, String> {
+    let root = root(&app)?;
+    let current = orchestration(&root, &id)?;
+    let ended = matches!(current.status, Status::Done | Status::Failed | Status::Stopped | Status::Paused);
+    if !ended || current.reporting || state.orchestrator.is_active(&id) {
+        return Err(tr(Msg::OrchestrationWrongState));
+    }
+    let mark = |reporting: bool| {
+        store::update_in(&root, &id, |orchestration| orchestration.reporting = reporting)
+            .inspect(|orchestration| {
+                let _ = app.emit("orchestration", orchestration);
+            })
+    };
+    mark(true);
+    let written = tauri::async_runtime::spawn_blocking(move || report::write(&current))
+        .await
+        .map_err(|err| tr(Msg::OrchestrationReportFailed(&err.to_string())))
+        .and_then(|written| written);
+    let report = match written {
+        Ok(report) => report,
+        Err(error) => {
+            mark(false);
+            return Err(error);
+        }
+    };
+    let updated = store::update_in(&root, &id, |orchestration| {
+        orchestration.reporting = false;
+        orchestration.overhead_usd += report.cost_usd;
+        if orchestration.ended_at == 0 {
+            orchestration.ended_at = report.at;
+        }
+        orchestration.report = Some(report);
+    })
+    .ok_or_else(|| tr(Msg::OrchestrationNotFound))?;
+    let _ = app.emit("orchestration", &updated);
+    Ok(updated)
 }
 
 /// The user's answer to a change the orchestrator couldn't make on its own.

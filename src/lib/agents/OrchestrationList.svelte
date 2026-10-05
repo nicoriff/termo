@@ -7,6 +7,32 @@
   import { orchestrationStore } from "./orchestration-store.svelte";
   import { STATUS_KEYS, progressOf, statusTone } from "./orchestration-spec";
 
+  /** Finished ones out of the way: the list is about what's left to do.
+   * Remembered per computer. */
+  const HIDE_KEY = "termo.orchestration.hideDone";
+  function loadHide(): boolean {
+    try {
+      return localStorage.getItem(HIDE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+  let hideDone = $state(loadHide());
+
+  function setHideDone(hide: boolean) {
+    hideDone = hide;
+    try {
+      localStorage.setItem(HIDE_KEY, hide ? "1" : "0");
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  const doneCount = $derived(orchestrationStore.all.filter((item) => item.status === "done").length);
+  const shown = $derived(
+    hideDone ? orchestrationStore.all.filter((item) => item.status !== "done") : orchestrationStore.all,
+  );
+
   function toneColor(tone: AgentTone): string {
     const c = themeStore.current.colors;
     if (tone === "running") return c.blue;
@@ -17,6 +43,13 @@
   }
 </script>
 
+{#if doneCount > 0}
+  <label class="filter">
+    <input type="checkbox" checked={hideDone} onchange={(e) => setHideDone(e.currentTarget.checked)} />
+    {t("agents.orchestration.list.hideDone", { n: String(doneCount) })}
+  </label>
+{/if}
+
 <div class="list">
   {#if orchestrationStore.planning}
     <div class="row planning" aria-live="polite">
@@ -24,7 +57,7 @@
       <span class="text"><span class="state">{t("agents.orchestration.dialog.planning")}</span></span>
     </div>
   {/if}
-  {#each orchestrationStore.all as orchestration (orchestration.id)}
+  {#each shown as orchestration (orchestration.id)}
     {@const progress = progressOf(orchestration.plan)}
     <button
       class="row"
@@ -48,7 +81,9 @@
       </span>
     </button>
   {:else}
-    {#if !orchestrationStore.planning}
+    {#if hideDone && doneCount > 0}
+      <p class="all-hidden">{t("agents.orchestration.list.allHidden", { n: String(doneCount) })}</p>
+    {:else if !orchestrationStore.planning}
       <div class="empty">
         <div class="empty-icon">🧭</div>
         <p class="empty-title">{t("agents.orchestration.empty.title")}</p>
@@ -62,6 +97,31 @@
 </div>
 
 <style>
+  .filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+    font-size: 11.5px;
+    opacity: 0.8;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .filter input {
+    margin: 0;
+    accent-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .all-hidden {
+    margin: 0;
+    padding: 18px 12px;
+    font-size: 11.5px;
+    text-align: center;
+    opacity: 0.6;
+  }
+
   .list {
     flex: 1;
     min-height: 0;

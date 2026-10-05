@@ -188,6 +188,23 @@ export function withTaskRequest(plan: Plan, taskKey: string, description: string
   };
 }
 
+/** How the tasks ended up: for the final summary. */
+export function taskCounts(plan: Plan): { total: number; done: number; failed: number; dropped: number; pending: number } {
+  const count = (status: PlannedTask["status"]) => plan.tasks.filter((task) => task.status === status).length;
+  return {
+    total: plan.tasks.length,
+    done: count("done"),
+    failed: count("failed"),
+    dropped: count("dropped"),
+    pending: count("pending") + count("running"),
+  };
+}
+
+/** Whether it has ended in a way there's something to sum up. */
+export function hasEnded(status: OrchestrationStatus): boolean {
+  return status === "done" || status === "failed" || status === "stopped" || status === "paused";
+}
+
 export interface ConsoleLine {
   source: string;
   event: RunEvent;

@@ -112,6 +112,8 @@ pub enum Msg<'a> {
     AiModeOff,
     /// the planner's error
     OrchestrationPlanFailed(&'a str),
+    /// the error
+    OrchestrationReportFailed(&'a str),
     /// the folder
     OrchestrationNoFolder(&'a str),
     OrchestrationFolderRequired,
@@ -347,6 +349,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (OrchestrationPlanFailed(error), Es) => format!("No se pudo armar el plan: {error}"),
         (OrchestrationPlanFailed(error), En) => format!("Couldn't build the plan: {error}"),
+        (OrchestrationReportFailed(error), Es) => format!("No se pudo escribir el informe final: {error}"),
+        (OrchestrationReportFailed(error), En) => format!("Couldn't write the final report: {error}"),
         (OrchestrationNoFolder(path), Es) => format!("La carpeta no existe: {path}"),
         (OrchestrationNoFolder(path), En) => format!("The folder doesn't exist: {path}"),
         (OrchestrationFolderRequired, Es) => "Elegí la carpeta del proyecto: los agentes trabajan ahí".into(),
@@ -458,6 +462,7 @@ mod tests {
             Msg::KeepAwakeReason,
             Msg::AiModeOff,
             Msg::OrchestrationPlanFailed("timeout"),
+            Msg::OrchestrationReportFailed("timeout"),
             Msg::OrchestrationNoFolder("/x"),
             Msg::OrchestrationFolderRequired,
             Msg::OrchestrationNotFound,

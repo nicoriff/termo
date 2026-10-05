@@ -183,6 +183,7 @@ pub fn run() {
             commands::orchestration_commands::orchestration_stop,
             commands::orchestration_commands::orchestration_edit_plan,
             commands::orchestration_commands::orchestration_revise,
+            commands::orchestration_commands::orchestration_report,
             commands::orchestration_commands::orchestration_resume,
             commands::orchestration_commands::orchestration_resolve_revision,
             commands::orchestration_commands::orchestration_delete,
