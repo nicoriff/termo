@@ -163,11 +163,14 @@ pub struct Collaboration {
     /// Whether it may ask agents allowed to do more than itself (a "only
     /// look" agent asking one that runs commands). Off, they're refused.
     pub allow_escalation: bool,
+    /// Asking the user something mid-task and waiting for the answer (see
+    /// orchestration/questions.rs). Only an orchestration's agents.
+    pub ask_user: bool,
 }
 
 impl Collaboration {
     pub fn is_on(&self) -> bool {
-        !self.contacts.is_empty() || self.board
+        !self.contacts.is_empty() || self.board || self.ask_user
     }
 }
 

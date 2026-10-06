@@ -4,12 +4,34 @@ use crate::agents::orchestration::executor::ensure_team;
 use crate::agents::orchestration::plan::{
     self, apply, edit_plan, max_autonomy, sanitize, Catalog, Orchestration, Plan, RevisionState, Status, TaskStatus,
 };
-use crate::agents::orchestration::{planner, report, store};
+use crate::agents::orchestration::{planner, questions, report, store};
+use crate::agents::draft::Step;
 use crate::agents::store::now_millis;
 use crate::agents::projects;
 use crate::commands::agent_commands::{delete_agent, root};
 use crate::i18n::{tr, Msg};
 use crate::state::AppState;
+
+/// A step of the orchestrator thinking — planning, asking, revising — for
+/// the window waiting on it.
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Progress {
+    /// "clarify", "plan" or "revise".
+    phase: &'static str,
+    /// The orchestration being revised; none while planning a new one.
+    id: Option<String>,
+    step: Step,
+    at: i64,
+}
+
+/// Tells every window each step the orchestrator takes in `phase`.
+fn progress(app: &tauri::AppHandle, phase: &'static str, id: Option<String>) -> impl Fn(Step) {
+    let app = app.clone();
+    move |step| {
+        let _ = app.emit("orchestration-progress", Progress { phase, id: id.clone(), step, at: now_millis() });
+    }
+}
 
 fn orchestration(root: &std::path::Path, id: &str) -> Result<Orchestration, String> {
     store::get_in(root, id).ok_or_else(|| tr(Msg::OrchestrationNotFound))
@@ -41,19 +63,40 @@ pub fn orchestration_list(app: tauri::AppHandle) -> Result<Vec<Orchestration>, S
     Ok(store::list_in(&root(&app)?))
 }
 
-/// Plans the work with AI and saves the plan as a draft to review: nothing
-/// runs until it's approved.
+/// What the planner would ask about the request before planning; nothing
+/// is saved.
+#[tauri::command]
+pub async fn orchestration_clarify(
+    app: tauri::AppHandle,
+    prompt: String,
+    work_dir: String,
+    model: String,
+) -> Result<planner::Clarifying, String> {
+    let on_step = progress(&app, "clarify", None);
+    tauri::async_runtime::spawn_blocking(move || planner::clarify(&prompt, &work_dir, &model, &on_step))
+        .await
+        .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))?
+}
+
+/// Plans the work with AI — with what the user answered before, if asked —
+/// and saves the plan as a draft to review: nothing runs until it's
+/// approved. `overhead_usd`: what asking those questions cost.
 #[tauri::command]
 pub async fn orchestration_plan(
     app: tauri::AppHandle,
     prompt: String,
     work_dir: String,
     model: String,
+    answers: Option<Vec<planner::Answered>>,
+    overhead_usd: Option<f64>,
 ) -> Result<Orchestration, String> {
     let root = root(&app)?;
-    let planned = tauri::async_runtime::spawn_blocking(move || planner::generate(&prompt, &work_dir, &model))
+    let request = planner::with_answers(&prompt, &answers.unwrap_or_default());
+    let on_step = progress(&app, "plan", None);
+    let mut planned = tauri::async_runtime::spawn_blocking(move || planner::generate(&request, &work_dir, &model, &on_step))
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
+    planned.overhead_usd += overhead_usd.filter(|usd| usd.is_finite() && *usd > 0.0).unwrap_or(0.0);
     let orchestration = saved(store::save_in(&root, planned))?;
     let _ = app.emit("orchestration", &orchestration);
     Ok(orchestration)
@@ -87,6 +130,7 @@ pub fn orchestration_approve(
         task.summary = String::new();
         task.cost_usd = None;
         task.attempts = 0;
+        task.failure = None;
     }
     if plan.tasks.is_empty() {
         return Err(tr(Msg::OrchestrationEmptyPlan));
@@ -157,8 +201,9 @@ pub async fn orchestration_revise(
         return Err(tr(Msg::OrchestrationWrongState));
     }
     let asked = current.clone();
+    let on_step = progress(&app, "revise", Some(id.clone()));
     let (revised, note, cost) =
-        tauri::async_runtime::spawn_blocking(move || planner::revise(&asked, &plan, instructions.trim()))
+        tauri::async_runtime::spawn_blocking(move || planner::revise(&asked, &plan, instructions.trim(), &on_step))
             .await
             .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
     // Read again: it may have changed while the orchestrator was thinking.
@@ -167,6 +212,26 @@ pub async fn orchestration_revise(
     let orchestration = saved(store::save_in(&root, orchestration))?;
     let _ = app.emit("orchestration", &orchestration);
     Ok(RevisedPlan { plan: revised, note, orchestration })
+}
+
+/// The user's answer to what one of its agents asked; the agent, waiting on
+/// it, goes on.
+#[tauri::command]
+pub fn orchestration_answer(app: tauri::AppHandle, id: String, question_id: String, answer: String) -> Result<Orchestration, String> {
+    let root = root(&app)?;
+    if answer.trim().is_empty() {
+        return Err(tr(Msg::OrchestrationWrongState));
+    }
+    let mut answered = false;
+    let updated = store::update_in(&root, &id, |orchestration| {
+        answered = questions::answer(orchestration, &question_id, &answer);
+    })
+    .ok_or_else(|| tr(Msg::OrchestrationNotFound))?;
+    if !answered {
+        return Err(tr(Msg::OrchestrationQuestionClosed));
+    }
+    let _ = app.emit("orchestration", &updated);
+    Ok(updated)
 }
 
 #[tauri::command]

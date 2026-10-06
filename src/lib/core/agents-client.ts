@@ -45,6 +45,8 @@ export interface AgentSpec {
     board: boolean;
     /** Whether it may ask agents allowed to do more than itself. */
     allowEscalation: boolean;
+    /** Asking the user mid-task (an orchestration's agents only). */
+    askUser?: boolean;
   };
   secrets: string[];
   enabled: boolean;
@@ -85,6 +87,8 @@ export interface RunRecord {
   link: RunLink | null;
   /** A rehearsal: it could only look. */
   rehearsal: boolean;
+  /** Why it failed, said precisely. */
+  failure?: RunFailure;
 }
 
 /** The conversation a run belongs to: its parent's, or its own. */
@@ -258,13 +262,78 @@ export function restoreProject(id: string, at: number): Promise<[Project[], Agen
   return invoke("project_restore", { id, at });
 }
 
-export type RunEventKind = "started" | "tool" | "text" | "result" | "stderr" | "ended";
+export type RunEventKind =
+  | "started"
+  | "session"
+  | "usage"
+  | "failure"
+  | "tool"
+  | "text"
+  | "result"
+  | "stderr"
+  | "ended";
+
+/** Who answered with an error (see src-tauri/src/agents/diagnose.rs). */
+export type Provider = "anthropic" | "openai" | "google" | "github" | "local";
+
+export type FailureKind =
+  | "auth"
+  | "modelAccess"
+  | "rateLimit"
+  | "quota"
+  | "overloaded"
+  | "server"
+  | "badRequest"
+  | "network"
+  | "timeout"
+  | "unknown";
+
+/** Why a run failed, said precisely. */
+export interface RunFailure {
+  provider: Provider;
+  engine: AgentEngine;
+  kind: FailureKind;
+  /** The HTTP status the service answered with, when it said. */
+  status: number | null;
+  message: string;
+  requestId: string;
+  model: string;
+  exitCode: number | null;
+  /** The last lines the CLI printed on stderr. */
+  stderr: string[];
+}
+
+/** What ran a run: Termo's side at the start, the CLI's report after. */
+export interface SessionInfo {
+  engine: AgentEngine;
+  version: string;
+  model: string;
+  /** "subscription", "apiKey" or "". */
+  auth: string;
+  authSource: string;
+  cwd: string;
+  command: string;
+  mcp: { name: string; status: string }[];
+}
+
+/** A usage-limit warning from the CLI. */
+export interface UsageInfo {
+  window: string;
+  status: string;
+  /** 0 to 1. */
+  utilization: number;
+  /** Unix ms; 0: not said. */
+  resetsAt: number;
+}
 
 export interface RunEvent {
   kind: RunEventKind;
   tool?: string;
   text: string;
   at: number;
+  session?: SessionInfo;
+  usage?: UsageInfo;
+  failure?: RunFailure;
 }
 
 export function listAgents(): Promise<AgentSpec[]> {

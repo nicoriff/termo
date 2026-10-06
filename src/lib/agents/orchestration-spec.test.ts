@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "$lib/core/agents-client";
-import type { Catalog, Plan, PlannedAgent, PlannedTask } from "$lib/core/orchestration-client";
+import type { Catalog, Orchestration, Plan, PlannedAgent, PlannedTask } from "$lib/core/orchestration-client";
 import {
   addAgent,
   addTask,
   agentHasRun,
+  askingTasks,
   agentTotals,
   canDependOn,
   canEditPlan,
@@ -19,6 +20,7 @@ import {
   mergeRunLogs,
   planTotals,
   priceOf,
+  pendingQuestions,
   progressOf,
   projectedUsd,
   removeAgent,
@@ -262,5 +264,27 @@ describe("the summary", () => {
     };
     expect(taskCounts(ended)).toEqual({ total: 3, done: 1, failed: 1, dropped: 1, pending: 0 });
     expect(hasEnded("done") && hasEnded("stopped") && !hasEnded("running") && !hasEnded("draft")).toBe(true);
+  });
+});
+
+describe("questions to the user", () => {
+  it("knows what still waits and on which task", () => {
+    const question = (id: string, task: string, state: "pending" | "answered" | "expired") => ({
+      id,
+      task,
+      agent: "DEV",
+      question: "?",
+      options: [],
+      state,
+      answer: "",
+      askedAt: 0,
+      answeredAt: 0,
+    });
+    const orchestration = {
+      questions: [question("1", "a", "pending"), question("2", "b", "answered"), question("3", "c", "expired")],
+    } as unknown as Orchestration;
+    expect(pendingQuestions(orchestration).map((item) => item.id)).toEqual(["1"]);
+    expect([...askingTasks(orchestration)]).toEqual(["a"]);
+    expect(pendingQuestions({} as Orchestration)).toEqual([]);
   });
 });

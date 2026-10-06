@@ -6,6 +6,13 @@
   import type { AgentTone } from "./agent-spec";
   import { orchestrationStore } from "./orchestration-store.svelte";
   import { STATUS_KEYS, progressOf, statusTone } from "./orchestration-spec";
+  import { stepLine } from "./planning-progress";
+
+  /** What the orchestrator is doing now, while it plans. */
+  const lastStep = $derived.by(() => {
+    const steps = orchestrationStore.planningSteps;
+    return steps.length > 0 ? stepLine(steps[steps.length - 1], t) : null;
+  });
 
   /** Finished ones out of the way: the list is about what's left to do.
    * Remembered per computer. */
@@ -54,7 +61,10 @@
   {#if orchestrationStore.planning}
     <div class="row planning" aria-live="polite">
       <span class="icon">🧭</span>
-      <span class="text"><span class="state">{t("agents.orchestration.dialog.planning")}</span></span>
+      <span class="text">
+        <span class="state">{t("agents.orchestration.dialog.planning")}</span>
+        {#if lastStep}<span class="step-now">{lastStep.icon} {lastStep.text}</span>{/if}
+      </span>
     </div>
   {/if}
   {#each shown as orchestration (orchestration.id)}
@@ -178,6 +188,14 @@
     gap: 5px;
     font-size: 11px;
     opacity: 0.65;
+  }
+
+  .step-now {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    opacity: 0.55;
   }
 
   .planning .state {

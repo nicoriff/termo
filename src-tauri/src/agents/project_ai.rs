@@ -633,6 +633,7 @@ mod tests {
             cost_usd: None,
             link: None,
             rehearsal: false,
+            failure: None,
         };
         let project = Project { name: "P".into(), ..Project::default() };
         let text = improve_prompt(&project, &[spec], &[run], Lang::Es);

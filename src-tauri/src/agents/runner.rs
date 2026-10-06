@@ -21,7 +21,8 @@ use crate::i18n::{tr, Msg};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
-use super::events::{EventKind, Outcome, Parser, RunEvent};
+use super::diagnose::{diagnose, Facts};
+use super::events::{EventKind, Outcome, Parser, RunEvent, SessionInfo};
 use super::secrets;
 use super::spec::{build_invocation, copilot_foreign_server_args, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
 use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
@@ -340,6 +341,7 @@ impl Runner {
             cost_usd: None,
             link,
             rehearsal,
+            failure: None,
         };
         let _ = store::save_run_in(&root, &record);
         let shared = Arc::new(Mutex::new(record.clone()));
@@ -365,6 +367,16 @@ impl Runner {
             tool: String::new(),
             text: format!("{} {}", bin.display(), dir.display()),
             at: now_millis(),
+            // What Termo asked for; the CLI's own report follows, when it
+            // gives one (EventKind::Session).
+            session: Some(SessionInfo {
+                engine: spec.engine,
+                model: spec.model.clone(),
+                cwd: dir.display().to_string(),
+                command: bin.display().to_string(),
+                ..SessionInfo::default()
+            }),
+            ..RunEvent::default()
         });
 
         let failed = Arc::new(AtomicBool::new(false));
@@ -404,6 +416,8 @@ impl Runner {
                 }
                 // What a CLI said before its output ended without a result.
                 handle(parser.finish(now_millis()), Outcome::default());
+                // To explain a failure: what it reported, and its model.
+                (parser.errors, parser.model)
             })
         });
         let stderr_tail = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -425,6 +439,7 @@ impl Runner {
                         tool: String::new(),
                         text: line,
                         at: now_millis(),
+                        ..RunEvent::default()
                     });
                 }
             })
@@ -434,6 +449,7 @@ impl Runner {
         let runner = Arc::clone(self);
         let agent_id = spec.id.clone();
         let agent_name = spec.name.clone();
+        let (engine_kind, engine_model) = (spec.engine, spec.model.clone());
         std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(u64::from(timeout_min) * 60);
             let (exit, forced) = loop {
@@ -453,9 +469,8 @@ impl Runner {
                 std::thread::sleep(Duration::from_millis(300));
             };
             // Whatever the CLI printed last is in by now.
-            if let Some(handle) = stdout {
-                let _ = handle.join();
-            }
+            let (reported_errors, reported_model) =
+                stdout.and_then(|handle| handle.join().ok()).unwrap_or_default();
             if let Some(handle) = stderr {
                 let _ = handle.join();
             }
@@ -478,11 +493,35 @@ impl Runner {
                 _ => answer,
             };
 
+            // Why it failed, said precisely: which service, which status.
+            let failure = matches!(status, RunStatus::Error | RunStatus::TimedOut).then(|| {
+                let stderr = stderr_tail.lock().unwrap().clone();
+                let model = if reported_model.is_empty() { engine_model.as_str() } else { reported_model.as_str() };
+                diagnose(&Facts {
+                    engine: engine_kind,
+                    model,
+                    errors: &reported_errors,
+                    stderr: &stderr,
+                    exit_code: exit.and_then(|status| status.code()),
+                    timed_out: status == RunStatus::TimedOut,
+                })
+            });
+            if let Some(failure) = &failure {
+                log.step(RunEvent {
+                    kind: EventKind::Failure,
+                    text: failure.message.clone(),
+                    at: now_millis(),
+                    failure: Some(failure.clone()),
+                    ..RunEvent::default()
+                });
+            }
+
             let mut record = shared.lock().unwrap();
             record.status = status;
             record.ended_at = Some(now_millis());
             record.summary = summary;
             record.activity = String::new();
+            record.failure = failure;
             let finished = record.clone();
             drop(record);
 
@@ -501,6 +540,7 @@ impl Runner {
                 tool: String::new(),
                 text: finished.summary.clone(),
                 at: now_millis(),
+                ..RunEvent::default()
             });
             runner.active.lock().unwrap().remove(&agent_id);
             let _ = log.app.emit("agent-run", &finished);

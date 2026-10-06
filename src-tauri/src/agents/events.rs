@@ -3,17 +3,28 @@
 //! CLI's `--output-format stream-json` and Copilot CLI's `--output-format
 //! json` all print one JSON object per line, in different vocabularies.
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
+use super::diagnose::Failure;
 use super::spec::Engine;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum EventKind {
     Started,
+    /// What the CLI said about itself when it started: its version, the
+    /// model it really uses, how it's logged in (`session`).
+    Session,
+    /// The CLI warned about the plan's usage limits (`usage`).
+    Usage,
+    /// Why the run failed, said precisely (`failure`).
+    Failure,
     /// The agent used a tool: `tool` is its name, `text` what it did it on.
     Tool,
     /// Something the agent said.
+    #[default]
     Text,
     /// The run's final answer.
     Result,
@@ -22,7 +33,7 @@ pub enum EventKind {
     Ended,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RunEvent {
     pub kind: EventKind,
@@ -32,6 +43,55 @@ pub struct RunEvent {
     pub text: String,
     /// Unix milliseconds.
     pub at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<UsageInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Failure>,
+}
+
+/// What ran a run: Termo's side when it starts (the CLI, the model asked
+/// for, the folder), and the CLI's own report when it gives one.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionInfo {
+    pub engine: Engine,
+    /// The CLI's version, when it says.
+    pub version: String,
+    /// The model: asked for (empty: the CLI's default), or in use.
+    pub model: String,
+    /// How the CLI is logged in: "subscription", "apiKey" or empty.
+    pub auth: String,
+    /// Where the key comes from, when it's one (an environment variable…).
+    pub auth_source: String,
+    pub cwd: String,
+    /// The executable, at the start.
+    pub command: String,
+    /// The MCP servers the CLI reported and their state ("connected",
+    /// "failed"…), when it reported them.
+    pub mcp: Vec<McpState>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct McpState {
+    pub name: String,
+    pub status: String,
+}
+
+/// A usage-limit warning from the CLI (Claude Code reports these).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UsageInfo {
+    /// "five_hour", "seven_day"… as the CLI names the window.
+    pub window: String,
+    /// "allowed_warning", "rejected"…
+    pub status: String,
+    /// 0 to 1.
+    pub utilization: f64,
+    /// When the window starts over (Unix ms; 0: not said).
+    pub resets_at: i64,
 }
 
 /// What a line said about the run as a whole, beyond the event itself.
@@ -56,7 +116,7 @@ fn clip(text: &str, max: usize) -> String {
 
 /// One line saying what a Claude tool call was about: the command, the file,
 /// the pattern, the URL.
-fn describe_input(input: &serde_json::Value) -> String {
+pub fn describe_input(input: &serde_json::Value) -> String {
     // "agent" and "key": Termo's own tools for working with other agents.
     for key in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt", "agent", "key"] {
         if let Some(value) = input.get(key).and_then(|value| value.as_str()) {
@@ -74,11 +134,17 @@ pub struct Parser {
     engine: Engine,
     /// Gemini CLI's answer so far, since the last tool call.
     pending: String,
+    /// The errors the CLI reported, to explain a failure (see diagnose.rs).
+    pub errors: Vec<String>,
+    /// The model the CLI said it uses, when it said.
+    pub model: String,
+    /// Usage warnings already shown: once per window and state.
+    warned: HashSet<String>,
 }
 
 impl Parser {
     pub fn new(engine: Engine) -> Self {
-        Self { engine, pending: String::new() }
+        Self { engine, pending: String::new(), errors: Vec::new(), model: String::new(), warned: HashSet::new() }
     }
 
     /// The events in one line of output (none for the many bookkeeping
@@ -87,12 +153,89 @@ impl Parser {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
             return (Vec::new(), Outcome::default());
         };
-        match self.engine {
+        let (mut events, outcome) = match self.engine {
             Engine::Claude => parse_claude(&value, at),
             Engine::Codex => parse_codex(&value, at),
             Engine::Gemini => self.gemini(&value, at),
             Engine::Copilot => parse_copilot(&value, at),
+        };
+        events.extend(self.notice(&value, at));
+        // What it reported as errors, kept to explain a failure.
+        let failed_result = outcome.failed && self.engine == Engine::Claude;
+        for event in &events {
+            let error = match event.kind {
+                EventKind::Stderr => true,
+                EventKind::Result => failed_result,
+                _ => false,
+            };
+            if error && !event.text.trim().is_empty() {
+                self.errors.push(event.text.clone());
+            }
         }
+        (events, outcome)
+    }
+
+    /// What the CLI says about itself and its limits, beyond the run's own
+    /// steps: the session it started, usage warnings.
+    fn notice(&mut self, value: &serde_json::Value, at: i64) -> Option<RunEvent> {
+        let text = |key: &str| value.get(key).and_then(|text| text.as_str()).unwrap_or("").to_string();
+        let kind = text("type");
+        // Claude Code's first line; Gemini CLI's.
+        let started = (self.engine == Engine::Claude && kind == "system" && text("subtype") == "init")
+            || (self.engine == Engine::Gemini && kind == "init");
+        if started {
+            let model = text("model");
+            self.model.clone_from(&model);
+            let key_source = text("apiKeySource");
+            let (auth, auth_source) = match key_source.as_str() {
+                "" => (String::new(), String::new()),
+                // Logged in with a Claude account, no key.
+                "none" => ("subscription".to_string(), String::new()),
+                source => ("apiKey".to_string(), source.to_string()),
+            };
+            let mcp = value
+                .get("mcp_servers")
+                .and_then(|servers| servers.as_array())
+                .into_iter()
+                .flatten()
+                .map(|server| McpState {
+                    name: server.get("name").and_then(|name| name.as_str()).unwrap_or("").to_string(),
+                    status: server.get("status").and_then(|status| status.as_str()).unwrap_or("").to_string(),
+                })
+                .filter(|server| !server.name.is_empty())
+                .collect();
+            let session = SessionInfo {
+                engine: self.engine,
+                version: text("claude_code_version"),
+                model,
+                auth,
+                auth_source,
+                cwd: text("cwd"),
+                mcp,
+                ..SessionInfo::default()
+            };
+            return Some(RunEvent { kind: EventKind::Session, at, session: Some(session), ..RunEvent::default() });
+        }
+        if self.engine == Engine::Claude && kind == "rate_limit_event" {
+            let info = value.get("rate_limit_info")?;
+            let field = |key: &str| info.get(key).and_then(|text| text.as_str()).unwrap_or("").to_string();
+            let status = field("status");
+            // Only what's worth a line: a warning, or a refusal.
+            if status.is_empty() || status == "allowed" {
+                return None;
+            }
+            let usage = UsageInfo {
+                window: field("rateLimitType"),
+                utilization: info.get("utilization").and_then(|value| value.as_f64()).unwrap_or(0.0),
+                resets_at: info.get("resetsAt").and_then(|value| value.as_i64()).unwrap_or(0) * 1000,
+                status,
+            };
+            if !self.warned.insert(format!("{}:{}", usage.window, usage.status)) {
+                return None;
+            }
+            return Some(RunEvent { kind: EventKind::Usage, at, usage: Some(usage), ..RunEvent::default() });
+        }
+        None
     }
 
     /// What's left when the output ends without a result: the answer so far.
@@ -141,12 +284,13 @@ pub fn parse_line(engine: Engine, line: &str, at: i64) -> (Vec<RunEvent>, Outcom
     Parser::new(engine).line(line, at)
 }
 
-fn event(kind: EventKind, tool: &str, text: String, at: i64) -> RunEvent {
+pub fn event(kind: EventKind, tool: &str, text: String, at: i64) -> RunEvent {
     RunEvent {
         kind,
         tool: tool.to_string(),
         text,
         at,
+        ..RunEvent::default()
     }
 }
 
@@ -306,7 +450,7 @@ mod tests {
 
     #[test]
     fn bookkeeping_and_garbage_lines_are_ignored() {
-        assert!(parse_line(Engine::Claude, r#"{"type":"system","subtype":"init"}"#, 1).0.is_empty());
+        assert!(parse_line(Engine::Claude, r#"{"type":"system","subtype":"hook_started"}"#, 1).0.is_empty());
         assert!(parse_line(Engine::Claude, "not json", 1).0.is_empty());
         assert!(parse_line(Engine::Codex, r#"{"type":"turn.started"}"#, 1).0.is_empty());
     }
@@ -339,8 +483,10 @@ mod tests {
             r#"{"type":"result","status":"success","stats":{}}"#,
         ];
         let events: Vec<RunEvent> = lines.iter().flat_map(|line| parser.line(line, 1).0).collect();
+        // The first line says which model it is.
+        assert_eq!(events[0].session.as_ref().map(|session| session.model.as_str()), Some("gemini-2.5-pro"));
         assert_eq!(
-            events,
+            events[1..].to_vec(),
             vec![
                 event(EventKind::Text, "", "Voy a mirar.".into(), 1),
                 event(EventKind::Tool, "read_file", "a.txt".into(), 1),
@@ -383,6 +529,49 @@ mod tests {
         assert_eq!(events[0].text, "quota");
         assert!(parse_line(Engine::Copilot, r#"{"type":"result","exitCode":1}"#, 1).1.failed);
         assert!(!parse_line(Engine::Copilot, r#"{"type":"result","exitCode":0}"#, 1).1.failed);
+    }
+
+    /// Claude Code's first line says what really runs: the model, the
+    /// version, how it's logged in and its MCP servers.
+    #[test]
+    fn claude_says_what_runs_it() {
+        let mut parser = Parser::new(Engine::Claude);
+        let init = r#"{"type":"system","subtype":"init","cwd":"E:/p","model":"claude-opus-5-5","claude_code_version":"2.1.290","apiKeySource":"none","mcp_servers":[{"name":"termo","status":"connected"},{"name":"x","status":"failed"}]}"#;
+        let (events, _) = parser.line(init, 1);
+        let session = events[0].session.clone().unwrap();
+        assert_eq!(events[0].kind, EventKind::Session);
+        assert_eq!((session.model.as_str(), session.version.as_str(), session.auth.as_str()), ("claude-opus-5-5", "2.1.290", "subscription"));
+        assert_eq!(session.mcp[1], McpState { name: "x".into(), status: "failed".into() });
+        assert_eq!(parser.model, "claude-opus-5-5");
+        let (events, _) = parser.line(r#"{"type":"system","subtype":"init","apiKeySource":"ANTHROPIC_API_KEY"}"#, 1);
+        let session = events[0].session.clone().unwrap();
+        assert_eq!((session.auth.as_str(), session.auth_source.as_str()), ("apiKey", "ANTHROPIC_API_KEY"));
+    }
+
+    #[test]
+    fn usage_warnings_show_once() {
+        let mut parser = Parser::new(Engine::Claude);
+        let warning = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791273600,"rateLimitType":"seven_day","utilization":0.92}}"#;
+        let (events, _) = parser.line(warning, 1);
+        let usage = events[0].usage.clone().unwrap();
+        assert_eq!((usage.window.as_str(), usage.utilization, usage.resets_at), ("seven_day", 0.92, 1_791_273_600_000));
+        assert!(parser.line(warning, 2).0.is_empty());
+        let fine = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour"}}"#;
+        assert!(parser.line(fine, 3).0.is_empty());
+    }
+
+    /// What a CLI reports as an error is kept to explain the failure; a
+    /// result that isn't one isn't.
+    #[test]
+    fn errors_are_kept_for_the_diagnosis() {
+        let mut parser = Parser::new(Engine::Claude);
+        parser.line(r#"{"type":"result","subtype":"success","is_error":false,"result":"Listo"}"#, 1);
+        assert!(parser.errors.is_empty());
+        parser.line(r#"{"type":"result","subtype":"success","is_error":true,"result":"Failed to authenticate. API Error: 403 x"}"#, 1);
+        assert_eq!(parser.errors, ["Failed to authenticate. API Error: 403 x"]);
+        let mut codex = Parser::new(Engine::Codex);
+        codex.line(r#"{"type":"error","message":"unexpected status 401 Unauthorized"}"#, 1);
+        assert_eq!(codex.errors, ["unexpected status 401 Unauthorized"]);
     }
 
     #[test]

@@ -7,8 +7,10 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { agentsStore } from "./agents-store.svelte";
   import { renderMarkdownLite } from "./markdown-lite";
+  import RunFailureCard from "./RunFailureCard.svelte";
+  import RunNotice from "./RunNotice.svelte";
   import { orchestrationStore } from "./orchestration-store.svelte";
-  import { STATUS_KEYS, agentOf, mergeRunLogs, progressOf, statusTone } from "./orchestration-spec";
+  import { STATUS_KEYS, agentOf, mergeRunLogs, pendingQuestions, progressOf, statusTone } from "./orchestration-spec";
 
   /** Everything an orchestration's agents did, as one console: every task's
    * run, step by step in the order it happened, live while it runs. */
@@ -17,6 +19,7 @@
   const orchestration = $derived(orchestrationStore.get(orchestrationId));
   const plan = $derived(orchestration?.plan ?? { agents: [], tasks: [] });
   const progress = $derived(progressOf(plan));
+  const waiting = $derived(orchestration ? pendingQuestions(orchestration) : []);
 
   interface Source {
     task: PlannedTask;
@@ -145,6 +148,14 @@
       </button>
     </header>
 
+    {#each waiting as question (question.id)}
+      <button class="asked" onclick={() => workspaceStore.openOrchestration(orchestration.id, orchestration.name)}>
+        <strong>❓ {t("agents.orchestration.questions.asks", { agent: question.agent })}</strong>
+        <span class="asked-text">{question.question}</span>
+        <span class="asked-go">{t("agents.orchestration.questions.answerInPlan")}</span>
+      </button>
+    {/each}
+
     <div class="filters" role="group" aria-label={t("agents.orchestration.console.filter")}>
       {#each plan.agents as agent (agent.key)}
         {@const working = running.some((source) => source.agent.key === agent.key)}
@@ -187,7 +198,13 @@
             {:else if line.event.kind === "stderr"}
               <span class="step stderr">{line.event.text}</span>
             {:else if line.event.kind === "started"}
-              <span class="step marker">{t("agents.run.started")}</span>
+              <span class="step marker">
+                {t("agents.run.started")}{#if line.event.session}{" · "}{line.event.session.model || t("agents.diagnosis.defaultModel")}{/if}
+              </span>
+            {:else if line.event.kind === "session" || line.event.kind === "usage"}
+              <span class="step wide"><RunNotice event={line.event} /></span>
+            {:else if line.event.kind === "failure" && line.event.failure}
+              <span class="step wide"><RunFailureCard failure={line.event.failure} at={line.event.at} /></span>
             {:else}
               <span class="step marker">{t("agents.run.ended")}</span>
             {/if}
@@ -250,6 +267,36 @@
     align-items: center;
     gap: 6px;
     font-size: 11.5px;
+  }
+
+  .asked {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 16px 0;
+    padding: 8px 10px;
+    border: 1px solid #d7a72a;
+    border-radius: 6px;
+    background: rgba(215, 167, 42, 0.12);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .asked-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.85;
+  }
+
+  .asked-go {
+    flex-shrink: 0;
+    font-size: 11.5px;
+    text-decoration: underline;
   }
 
   .filters {
@@ -370,6 +417,10 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     opacity: 0.6;
+  }
+
+  .step.wide {
+    flex: 1;
   }
 
   .step.stderr {

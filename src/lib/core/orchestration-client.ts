@@ -1,3 +1,4 @@
+import type { RunFailure } from "./agents-client";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AgentAutonomy, AgentEngine } from "./agents-client";
@@ -40,6 +41,8 @@ export interface PlannedTask {
   /** What its runs cost, when the CLI says (only Claude Code does). */
   costUsd: number | null;
   attempts: number;
+  /** Why its last run failed, said precisely. */
+  failure?: RunFailure | null;
 }
 
 export interface Plan {
@@ -76,6 +79,39 @@ export interface Revision {
   hold: RevisionHold;
   /** What the whole plan is expected to cost with it. */
   estimateUsd: number;
+}
+
+export type QuestionState = "pending" | "answered" | "expired";
+
+/** Something an agent asked the user mid-task. */
+export interface UserQuestion {
+  id: string;
+  /** The key of the task it was doing. */
+  task: string;
+  agent: string;
+  question: string;
+  options: string[];
+  state: QuestionState;
+  answer: string;
+  askedAt: number;
+  answeredAt: number;
+}
+
+/** A question about the request, before planning. */
+export interface ClarifyQuestion {
+  question: string;
+  options: string[];
+}
+
+export interface Clarifying {
+  /** Empty: clear enough to plan. */
+  questions: ClarifyQuestion[];
+  costUsd: number;
+}
+
+export interface Answered {
+  question: string;
+  answer: string;
 }
 
 export type Outcome = "success" | "partial" | "failed";
@@ -115,6 +151,8 @@ export interface Orchestration {
   /** What planning and supervising cost. */
   overheadUsd: number;
   note: string;
+  /** What its agents asked the user, answered or not. */
+  questions: UserQuestion[];
   /** The final report, once it ended (or when the user asked for one). */
   report: Report | null;
   /** The orchestrator is writing the report now. */
@@ -156,8 +194,25 @@ export function listOrchestrations(): Promise<Orchestration[]> {
 }
 
 /** Plans the work with AI: a draft to review, nothing runs yet. */
-export function planOrchestration(prompt: string, workDir: string, model: string): Promise<Orchestration> {
-  return invoke("orchestration_plan", { prompt, workDir, model });
+/** What the planner would ask about the request first, if anything. */
+export function clarifyOrchestration(prompt: string, workDir: string, model: string): Promise<Clarifying> {
+  return invoke("orchestration_clarify", { prompt, workDir, model });
+}
+
+/** `answers`: to the questions asked first; `overheadUsd`: what asking them cost. */
+export function planOrchestration(
+  prompt: string,
+  workDir: string,
+  model: string,
+  answers: Answered[] = [],
+  overheadUsd = 0,
+): Promise<Orchestration> {
+  return invoke("orchestration_plan", { prompt, workDir, model, answers, overheadUsd });
+}
+
+/** The user's answer to what an agent asked; the agent goes on. */
+export function answerOrchestration(id: string, questionId: string, answer: string): Promise<Orchestration> {
+  return invoke("orchestration_answer", { id, questionId, answer });
 }
 
 export function approveOrchestration(id: string, chosen: string, plan: Plan, budgetUsd: number): Promise<Orchestration> {
@@ -202,6 +257,25 @@ export function resolveRevision(id: string, revisionId: string, approve: boolean
 
 export function deleteOrchestration(id: string): Promise<Orchestration[]> {
   return invoke("orchestration_delete", { id });
+}
+
+/** A step the orchestrator takes while it thinks (see draft.rs Step). */
+export type PlanStep =
+  | { kind: "tool"; name: string; detail: string }
+  | { kind: "text"; text: string }
+  | { kind: "thinking"; text: string };
+
+export interface OrchestrationProgress {
+  phase: "clarify" | "plan" | "revise";
+  /** The orchestration being revised; null while planning a new one. */
+  id: string | null;
+  step: PlanStep;
+  at: number;
+}
+
+/** Each step of the orchestrator thinking, as it happens. */
+export function onOrchestrationProgress(handler: (progress: OrchestrationProgress) => void): Promise<UnlistenFn> {
+  return listen<OrchestrationProgress>("orchestration-progress", (event) => handler(event.payload));
 }
 
 /** Every change to an orchestration, as saved. */

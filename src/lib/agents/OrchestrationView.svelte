@@ -9,6 +9,8 @@
   import type { MessageKey } from "$lib/i18n/translate";
   import { AUTONOMY_TITLE_KEYS, formatDuration, type AgentTone } from "./agent-spec";
   import { renderMarkdownLite } from "./markdown-lite";
+  import RunFailureCard from "./RunFailureCard.svelte";
+  import PlanningProgress from "./PlanningProgress.svelte";
   import { agentsStore } from "./agents-store.svelte";
   import { orchestrationStore } from "./orchestration-store.svelte";
   import {
@@ -19,6 +21,7 @@
     addAgent,
     addTask,
     agentHasRun,
+    askingTasks,
     agentOf,
     agentTotals,
     canDependOn,
@@ -35,6 +38,7 @@
     modelsOf,
     pendingRevision,
     planTotals,
+    pendingQuestions,
     progressOf,
     projectedUsd,
     removeAgent,
@@ -77,6 +81,7 @@
   let reviseText = $state("");
   let revising = $state(false);
   let reviseNote = $state("");
+  let reviseStartedAt = $state(0);
 
   type Selection = { kind: "orchestrator" } | { kind: "agent"; key: string } | { kind: "task"; key: string };
   let selected = $state<Selection | null>(null);
@@ -144,6 +149,24 @@
   });
   /** The agents with a task running now: lit up in the diagram. */
   const working = $derived(new Set(plan.tasks.filter((task) => task.status === "running").map((task) => task.agent)));
+  /** What its agents asked that waits for the user, and the tasks waiting. */
+  const waiting = $derived(orchestration ? pendingQuestions(orchestration) : []);
+  const asking = $derived(orchestration ? askingTasks(orchestration) : new Set<string>());
+  /** The agents with a task waiting on an answer. */
+  const askingAgents = $derived(
+    new Set(plan.tasks.filter((task) => asking.has(task.key)).map((task) => task.agent)),
+  );
+  /** What the user is writing back, by question. */
+  let replies = $state<Record<string, string>>({});
+
+  const sendAnswer = (questionId: string) => {
+    const text = (replies[questionId] ?? "").trim();
+    if (!text) return;
+    return act(async () => {
+      await orchestrationStore.answer(orchestrationId, questionId, text);
+      replies = { ...replies, [questionId]: "" };
+    });
+  };
   /** The agents that did every task they had: shown as done. */
   const finished = $derived(
     new Set(
@@ -395,6 +418,7 @@
     // After it ran, changes go on a copy saved with "Save changes".
     if (!isDraft && !editing) startEditing();
     revising = true;
+    reviseStartedAt = Date.now();
     error = "";
     try {
       const revised = await orchestrationStore.revise(orchestrationId, plan, instructions);
@@ -753,16 +777,39 @@
       {/if}
     {/if}
 
-    {#if task.summary}
+    {#if task.failure}
+      <div class="cell wide">
+        <div class="label">{t("agents.diagnosis.lastFailure")}</div>
+        <RunFailureCard failure={task.failure} />
+      </div>
+    {:else if task.summary}
       <div class="cell wide">
         <div class="label">{t("agents.orchestration.detail.result")}</div>
         <pre>{task.summary}</pre>
       </div>
     {/if}
+
+    {#if (orchestration?.questions ?? []).some((question) => question.task === task.key)}
+      <div class="cell wide">
+        <div class="label">{t("agents.orchestration.questions.history")}</div>
+        {#each (orchestration?.questions ?? []).filter((question) => question.task === task.key) as question (question.id)}
+          <div class="qa">
+            <p class="qa-question">❓ {question.question}</p>
+            <p class="qa-answer" class:muted={question.state !== "answered"}>
+              {question.state === "answered"
+                ? `↳ ${question.answer}`
+                : question.state === "pending"
+                  ? t("agents.orchestration.questions.waiting")
+                  : t("agents.orchestration.questions.expired")}
+            </p>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 {/snippet}
 
-<section class="orchestration-view">
+<section class="orchestration-view" style="--question:{themeStore.current.colors.yellow}">
   {#if !orchestration}
     <p class="muted center">{t("agents.orchestration.view.missing")}</p>
   {:else}
@@ -841,6 +888,15 @@
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void revise();
           }}
         ></textarea>
+        {#if revising}
+          <div class="revise-progress">
+            <PlanningProgress
+              phase="revise"
+              steps={orchestrationStore.revisingSteps[orchestrationId] ?? []}
+              startedAt={reviseStartedAt}
+            />
+          </div>
+        {/if}
         <div class="row">
           <button class="button primary" disabled={revising || !reviseText.trim()} onclick={() => void revise()}>
             {revising ? t("agents.orchestration.edit.revising") : t("agents.orchestration.edit.reviseSend")}
@@ -857,6 +913,55 @@
     {/if}
 
     <div class="body">
+      {#each waiting as question (question.id)}
+        {@const task = plan.tasks.find((candidate) => candidate.key === question.task)}
+        <section class="question" aria-label={t("agents.orchestration.questions.title")}>
+          <header class="question-head">
+            <span class="question-icon">?</span>
+            <span class="heading">
+              <span class="question-kicker">{t("agents.orchestration.questions.asks", { agent: question.agent })}</span>
+              {#if task}<span class="muted small">{task.title}</span>{/if}
+            </span>
+          </header>
+          <div class="question-text">{@html renderMarkdownLite(question.question)}</div>
+          {#if question.options.length > 0}
+            <div class="question-options">
+              {#each question.options as option (option)}
+                <button
+                  class="chip"
+                  class:picked={replies[question.id] === option}
+                  disabled={busy}
+                  onclick={() => (replies = { ...replies, [question.id]: option })}
+                >
+                  {option}
+                </button>
+              {/each}
+            </div>
+          {/if}
+          <textarea
+            class="field"
+            rows="2"
+            placeholder={t("agents.orchestration.questions.placeholder")}
+            aria-label={t("agents.orchestration.questions.placeholder")}
+            value={replies[question.id] ?? ""}
+            oninput={(e) => (replies = { ...replies, [question.id]: e.currentTarget.value })}
+            onkeydown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void sendAnswer(question.id);
+            }}
+          ></textarea>
+          <div class="row">
+            <button
+              class="button primary"
+              disabled={busy || !(replies[question.id] ?? "").trim()}
+              onclick={() => void sendAnswer(question.id)}
+            >
+              {t("agents.orchestration.questions.send")}
+            </button>
+            <span class="muted small">{t("agents.orchestration.questions.hint")}</span>
+          </div>
+        </section>
+      {/each}
+
       {#if ended}
         {@const report = orchestration.report}
         <section class="result" style="--outcome:{outcomeColor(outcome)}" aria-label={t("agents.orchestration.result.title")}>
@@ -1056,7 +1161,10 @@
           {#if editable}
             <button class="button small add-agent" onclick={newAgent}>+ {t("agents.orchestration.edit.addAgent")}</button>
           {/if}
-          <div class="diagram" style="--live:{themeStore.current.colors.blue};--done:{themeStore.current.colors.green}">
+          <div
+            class="diagram"
+            style="--live:{themeStore.current.colors.blue};--done:{themeStore.current.colors.green};--ask:{themeStore.current.colors.yellow}"
+          >
             <div class="org">
               <button
                 class="box root"
@@ -1079,19 +1187,23 @@
                     {@const current = selected?.kind === "agent" && selected.key === branch.agent.key}
                     {@const live = working.has(branch.agent.key)}
                     {@const done = !live && finished.has(branch.agent.key)}
+                    {@const waitingOn = askingAgents.has(branch.agent.key)}
                     <div class="org-branch">
                       <button
                         class="box agent"
                         class:current
                         class:live
                         class:done
+                        class:asking={waitingOn}
                         onclick={() => (selected = { kind: "agent", key: branch.agent.key })}
                       >
                         <span class="box-icon">{branch.agent.icon || "🤖"}</span>
                         {#if done}<span class="check" title={t(TASK_STATUS_KEYS.done)}>✓</span>{/if}
                         <span class="box-main">
                           <span class="box-title">{branch.agent.name}</span>
-                          {#if live}
+                          {#if waitingOn}
+                            <span class="box-sub activity">❓ {t("agents.orchestration.questions.waitingShort")}</span>
+                          {:else if live}
                             <span class="box-sub activity">
                               {agentsStore.lastRun[branch.agent.agentId]?.activity || t("agents.run.working")}
                             </span>
@@ -1111,6 +1223,7 @@
                             class:dropped={task.status === "dropped"}
                             class:live={task.status === "running"}
                             class:done={task.status === "done"}
+                            class:asking={asking.has(task.key)}
                             title={after.length > 0 ? t("agents.orchestration.view.after", { tasks: after.join(", ") }) : undefined}
                             onclick={() => (selected = { kind: "task", key: task.key })}
                           >
@@ -1554,6 +1667,87 @@
     animation: live-glow 1.8s ease-in-out infinite;
   }
 
+  /* Waiting on the user's answer: yellow, so it's the first thing seen. */
+  .box.asking {
+    --live: var(--ask, #d7ba7d);
+    border-color: var(--ask, #d7ba7d);
+    border-style: solid;
+    background: color-mix(in srgb, var(--ask, #d7ba7d) 16%, var(--tabbar-active-bg-solid, #1e1e1e));
+  }
+
+  .question {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--question, #d7ba7d);
+    border-left: 4px solid var(--question, #d7ba7d);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--question, #d7ba7d) 9%, transparent);
+  }
+
+  .question-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .question-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--question, #d7ba7d);
+    color: #1e1e1e;
+    font-weight: 700;
+  }
+
+  .question-kicker {
+    font-weight: 600;
+  }
+
+  .question-text {
+    margin: 8px 0;
+    line-height: 1.5;
+  }
+
+  .question-text :global(p) {
+    margin: 0 0 6px;
+  }
+
+  .question-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .chip.picked {
+    border-color: var(--pane-active-border, #3a6df0);
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.2));
+  }
+
+  .question .field {
+    margin-bottom: 8px;
+    resize: vertical;
+  }
+
+  .qa {
+    margin: 4px 0 8px;
+  }
+
+  .qa-question,
+  .qa-answer {
+    margin: 0;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .qa-answer {
+    padding-left: 14px;
+  }
+
   /* Did all it had to: green, with a tick. */
   .box.done {
     border-color: var(--done, #4ec27a);
@@ -1930,6 +2124,10 @@
     padding: 10px 12px;
     border: 1px solid var(--pane-active-border, #3a6df0);
     border-radius: 8px;
+  }
+
+  .revise-progress {
+    margin: 10px 0;
   }
 
   .revise .field {

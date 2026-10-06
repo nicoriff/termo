@@ -1,5 +1,21 @@
 [
   {
+    "version": "0.11.0",
+    "date": "2026-10-05",
+    "es": [
+      "**El orquestador pregunta antes de planificar**: si el pedido deja algo abierto (el alcance, un enfoque u otro, qué hacer con lo que ya existe), te hace unas pocas preguntas con respuestas sugeridas y arma el plan con lo que contestes. Si el pedido es claro, va directo al plan.",
+      "**Ves al orquestador pensar**: mientras lee el pedido, arma el plan o lo revisa con tus cambios, la ventana muestra en qué etapa está, su último pensamiento, los archivos que va leyendo y las búsquedas que hace, con el tiempo transcurrido.",
+      "**Los agentes te pueden preguntar mientras trabajan**: cuando una decisión te corresponde, el agente te pregunta y espera. La pregunta aparece en el plan, en la consola y en la barra lateral, con una notificación; respondés ahí y el agente sigue desde donde estaba. Si no respondés en 25 minutos, decide solo y lo deja anotado.",
+      "**Errores de los agentes, explicados**: cuando una ejecución falla, la consola dice qué servicio respondió (la API de Anthropic, OpenAI, Google o GitHub, o la CLI en tu computadora), con qué código HTTP, qué significa (sin acceso al modelo, límite de uso, autenticación…) y qué hacer, con el modelo, el id del pedido y los detalles técnicos para copiar. Cada ejecución muestra también la versión de la CLI, el modelo real y cómo está logueada, y los avisos de límite de uso. Si el problema es de la cuenta y no de la tarea, la orquestación queda en pausa en vez de fallar."
+    ],
+    "en": [
+      "**The orchestrator asks before planning**: if the request leaves something open (the scope, one approach or another, what to do with what already exists), it asks you a few questions with suggested answers and plans with what you reply. If the request is clear, it goes straight to the plan.",
+      "**Watch the orchestrator think**: while it reads the request, builds the plan or revises it with your changes, the window shows which stage it's at, its latest thought, the files it reads and the searches it makes, with the time so far.",
+      "**Agents can ask you while they work**: when a decision is yours to make, the agent asks and waits. The question shows in the plan, the console and the side bar, with a notification; you answer there and the agent goes on from where it was. If you don't answer within 25 minutes, it decides on its own and notes it.",
+      "**Agent errors, explained**: when a run fails, the console says which service answered (the Anthropic, OpenAI, Google or GitHub API, or the CLI on your computer), with which HTTP status, what it means (no access to the model, usage limit, authentication…) and what to do, with the model, the request id and the technical details to copy. Each run also shows the CLI's version, the model really used and how it's logged in, and usage-limit warnings. If the problem is the account rather than the task, the orchestration pauses instead of failing."
+    ]
+  },
+  {
     "version": "0.10.0",
     "date": "2026-10-04",
     "es": [

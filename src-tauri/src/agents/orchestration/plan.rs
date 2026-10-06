@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use super::super::diagnose::Failure;
 use super::super::project_ai::MAX_AGENTS;
 use super::super::spec::{is_valid_model, Autonomy, Engine};
 use super::pricing::{self, Price};
@@ -77,6 +78,9 @@ pub struct PlannedTask {
     /// What its runs cost, when the CLI says (only Claude Code does).
     pub cost_usd: Option<f64>,
     pub attempts: u32,
+    /// Why its last run failed, said precisely (see diagnose.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Failure>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -165,6 +169,35 @@ pub struct Revision {
     pub estimate_usd: f64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum QuestionState {
+    #[default]
+    Pending,
+    Answered,
+    /// No answer will come: its run ended, or it waited too long.
+    Expired,
+}
+
+/// Something an agent asked the user mid-task (see questions.rs).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UserQuestion {
+    pub id: String,
+    /// The key of the task it was doing.
+    pub task: String,
+    /// The agent's name, as it was then.
+    pub agent: String,
+    pub question: String,
+    /// Answers it suggests; the user may write another.
+    pub options: Vec<String>,
+    pub state: QuestionState,
+    pub answer: String,
+    /// Unix milliseconds.
+    pub asked_at: i64,
+    pub answered_at: i64,
+}
+
 /// How it went, in the orchestrator's final report.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -225,6 +258,8 @@ pub struct Orchestration {
     /// The orchestrator's last word: what it's waiting for, why it stopped,
     /// or how the work went.
     pub note: String,
+    /// What its agents asked the user, answered or not.
+    pub questions: Vec<UserQuestion>,
     /// The final report, once it ended (or when the user asked for one).
     pub report: Option<Report>,
     /// The orchestrator is writing the report now.

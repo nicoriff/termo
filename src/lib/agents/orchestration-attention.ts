@@ -1,5 +1,5 @@
 import { sendNotification } from "@tauri-apps/plugin-notification";
-import type { Orchestration, OrchestrationStatus } from "$lib/core/orchestration-client";
+import type { Orchestration, OrchestrationStatus, UserQuestion } from "$lib/core/orchestration-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { isPrimaryWindow } from "$lib/core/window-client";
 import { t } from "$lib/i18n/i18n.svelte";
@@ -25,7 +25,25 @@ export function attentionTitle(before: OrchestrationStatus | undefined, after: O
   return before === "running" && after !== "running" ? (TITLES[after] ?? null) : null;
 }
 
+/** The questions an agent just asked: in `after`, waiting, and not in `before`. */
+export function newQuestions(before: Orchestration | undefined, after: Orchestration): UserQuestion[] {
+  if (!before) return [];
+  const known = new Set((before.questions ?? []).map((question) => question.id));
+  return (after.questions ?? []).filter((question) => question.state === "pending" && !known.has(question.id));
+}
+
 export async function announceOrchestration(before: Orchestration | undefined, after: Orchestration): Promise<void> {
+  const asked = newQuestions(before, after);
+  if (asked.length > 0) {
+    if (!(await isPrimaryWindow().catch(() => true))) return;
+    if (!appConfigStore.aiNotifyFinished || !(await canNotify())) return;
+    const question = asked[0].question.replace(/\s+/g, " ").trim();
+    sendNotification({
+      title: t("agents.orchestration.notify.question", { agent: asked[0].agent, name: `${after.icon} ${after.name}`.trim() }),
+      body: question.length > MAX_BODY ? `${question.slice(0, MAX_BODY)}…` : question,
+    });
+    return;
+  }
   const title = attentionTitle(before?.status, after.status);
   if (!title) return;
   // Every window hears every change; one of them speaks.

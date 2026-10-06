@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
+use super::diagnose::Failure;
 use super::events::RunEvent;
 use super::spec::{is_valid_id, AgentSpec};
 
@@ -101,6 +102,9 @@ pub struct RunRecord {
     /// A rehearsal: it could only look.
     #[serde(default)]
     pub rehearsal: bool,
+    /// Why it failed, said precisely (see diagnose.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<Failure>,
 }
 
 impl RunRecord {
@@ -284,6 +288,7 @@ mod tests {
             cost_usd: None,
             link: None,
             rehearsal: false,
+            failure: None,
         }
     }
 
@@ -370,6 +375,7 @@ mod tests {
                 tool: String::new(),
                 text: text.into(),
                 at: 0,
+                ..RunEvent::default()
             };
             append_log_in(&root, "a", "r1", &event).unwrap();
         }

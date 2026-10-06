@@ -343,6 +343,7 @@ mod tests {
             cost_usd: Some(cost),
             link: None,
             rehearsal: false,
+            failure: None,
         }
     }
 

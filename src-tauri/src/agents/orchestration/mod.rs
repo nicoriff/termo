@@ -13,6 +13,7 @@ pub mod executor;
 pub mod plan;
 pub mod planner;
 pub mod pricing;
+pub mod questions;
 pub mod report;
 pub mod store;
 pub mod supervisor;

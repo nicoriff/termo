@@ -15,6 +15,9 @@
   import { agentsStore } from "./agents-store.svelte";
   import { TRIGGER_KEYS, ago, conversationTree, formatDuration, withoutEchoes } from "./agent-spec";
   import { renderMarkdownLite } from "./markdown-lite";
+  import RunFailureCard from "./RunFailureCard.svelte";
+  import RunNotice from "./RunNotice.svelte";
+  import { ENGINE_NAMES } from "./orchestration-spec";
   import type { MessageKey } from "$lib/i18n/translate";
 
   let { agentId, runId }: { agentId: string; runId: string } = $props();
@@ -241,7 +244,13 @@
         {:else if event.kind === "stderr"}
           <div class="step stderr">{event.text}</div>
         {:else if event.kind === "started"}
-          <div class="step marker">{t("agents.run.started")} · {time(event.at)}</div>
+          <div class="step marker">
+            {t("agents.run.started")} · {time(event.at)}{#if event.session}{" · "}{ENGINE_NAMES[event.session.engine]} · {event.session.model || t("agents.diagnosis.defaultModel")}{/if}
+          </div>
+        {:else if event.kind === "session" || event.kind === "usage"}
+          <RunNotice {event} />
+        {:else if event.kind === "failure" && event.failure}
+          <RunFailureCard failure={event.failure} at={event.at} />
         {:else if event.kind === "ended"}
           <div class="step marker">{t("agents.run.ended")} · {time(event.at)}</div>
         {/if}
@@ -251,7 +260,7 @@
       {#if run?.status === "running"}
         <div class="step marker working">{run.activity || t("agents.run.working")}</div>
       {/if}
-      {#if run && run.status !== "running" && run.status !== "success" && run.summary}
+      {#if run && run.status !== "running" && run.status !== "success" && run.summary && !run.failure}
         <div class="step failure" style="border-color:{statusColor(run.status)}">{run.summary}</div>
       {/if}
     </div>

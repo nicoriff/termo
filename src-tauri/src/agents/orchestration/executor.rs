@@ -19,6 +19,7 @@ use tauri::Emitter;
 use crate::commands::agent_commands::save_agent;
 use crate::i18n::{tr, Msg};
 
+use super::super::diagnose::{provider_name, Failure};
 use super::super::project_ai::clip;
 use super::super::projects::{self, Project};
 use super::super::runner::Runner;
@@ -28,6 +29,7 @@ use super::plan::{
     self, agent_of, apply, hold_for, Hold, Orchestration, PlannedTask, Revision, RevisionState, Status, TaskStatus,
 };
 use super::planner::catalog;
+use super::questions;
 use super::report;
 use super::store;
 use super::supervisor::{self, Verdict};
@@ -93,6 +95,8 @@ pub fn ensure_team(root: &Path, orchestration: &mut Orchestration) -> Result<(),
         spec.instructions = agent.instructions.clone();
         spec.autonomy = agent.autonomy;
         spec.tools.web = agent.web;
+        // A decision only the user can make: asked mid-task (questions.rs).
+        spec.collaboration.ask_user = true;
         spec.limits.timeout_min = TASK_TIMEOUT_MIN;
         spec.project_id = orchestration.project_id.clone();
         agent.agent_id = spec.id.clone();
@@ -110,6 +114,7 @@ fn request_for(orchestration: &Orchestration, task: &PlannedTask) -> (String, Op
     if !task.done_when.is_empty() {
         request.push_str(&format!("\n\n{} {}", tr(Msg::OrchestrationDoneWhen), task.done_when));
     }
+    request.push_str(&format!("\n\n{}", tr(Msg::OrchestrationCanAsk)));
     let plan = &orchestration.plan;
     let mut context = String::new();
     let earlier: Vec<&PlannedTask> = task
@@ -140,6 +145,7 @@ pub fn recover(app: &tauri::AppHandle) {
     for orchestration in store::list_in(&root).into_iter().filter(|orchestration| orchestration.status == Status::Running) {
         store::update_in(&root, &orchestration.id, |orchestration| {
             release_running(orchestration);
+            questions::expire_pending(orchestration);
             orchestration.status = Status::Stopped;
             orchestration.note = tr(Msg::OrchestrationInterrupted);
         });
@@ -188,7 +194,7 @@ impl Orchestrator {
             self.active.lock().unwrap().remove(id);
             return;
         };
-        let run = Run { app: app.clone(), runner: runner.clone(), root, id: id.to_string(), stop };
+        let run = Run { app: app.clone(), runner: runner.clone(), root, id: id.to_string(), stop, blocked: Mutex::new(None) };
         let orchestrator = self.clone();
         std::thread::spawn(move || {
             run.drive();
@@ -210,6 +216,10 @@ struct Run {
     root: PathBuf,
     id: String,
     stop: Arc<AtomicBool>,
+    /// Set when a run failed for the account or the service, not the work —
+    /// no access to its model, logged out, a usage limit: nothing new starts,
+    /// and once what's running ends it pauses with this note.
+    blocked: Mutex<Option<String>>,
 }
 
 impl Run {
@@ -232,6 +242,7 @@ impl Run {
         }
         self.update(|orchestration| {
             release_running(orchestration);
+            questions::expire_pending(orchestration);
             orchestration.status = Status::Stopped;
             orchestration.note = tr(Msg::OrchestrationStopped);
         });
@@ -240,33 +251,50 @@ impl Run {
     /// Takes in the runs that ended since the last look. Returns whether
     /// any did.
     fn collect(&self, orchestration: &Orchestration) -> bool {
-        let mut ended: Vec<(String, TaskStatus, String, Option<f64>)> = Vec::new();
+        let mut ended: Vec<(String, TaskStatus, String, Option<f64>, Option<Failure>)> = Vec::new();
         for task in orchestration.plan.tasks.iter().filter(|task| task.status == TaskStatus::Running) {
             let Some(agent) = agent_of(&orchestration.plan, task) else { continue };
             if self.runner.is_running_run(&agent.agent_id, &task.run_id) {
                 continue;
             }
             let run = agent_store::get_run_in(&self.root, &agent.agent_id, &task.run_id);
-            let (status, summary, cost) = match run {
-                Some(run) if run.status == RunStatus::Success => (TaskStatus::Done, run.summary, run.cost_usd),
-                Some(run) => (TaskStatus::Failed, run.summary, run.cost_usd),
-                None => (TaskStatus::Failed, String::new(), None),
+            let (status, summary, cost, failure) = match run {
+                Some(run) if run.status == RunStatus::Success => (TaskStatus::Done, run.summary, run.cost_usd, None),
+                Some(run) => (TaskStatus::Failed, run.summary, run.cost_usd, run.failure),
+                None => (TaskStatus::Failed, String::new(), None, None),
             };
-            ended.push((task.key.clone(), status, summary, cost));
+            ended.push((task.key.clone(), status, summary, cost, failure));
         }
         if ended.is_empty() {
             return false;
         }
+        let mut blocked = None;
         self.update(|orchestration| {
-            for (key, status, summary, cost) in ended {
+            for (key, status, summary, cost, failure) in ended {
                 let Some(task) = orchestration.plan.tasks.iter_mut().find(|task| task.key == key) else { continue };
                 task.status = status;
                 task.summary = summary;
                 if let Some(cost) = cost {
                     task.cost_usd = Some(task.cost_usd.unwrap_or(0.0) + cost);
                 }
+                // The account or the service said no, not the work: the task
+                // waits to run again as it was, without spending an attempt.
+                if let Some(failure) = failure.as_ref().filter(|failure| failure.kind.blocks_account()) {
+                    task.status = TaskStatus::Pending;
+                    task.attempts = task.attempts.saturating_sub(1);
+                    let model = if failure.model.is_empty() { "—" } else { failure.model.as_str() };
+                    blocked = Some(tr(Msg::OrchestrationServiceBlocked(
+                        provider_name(failure.provider),
+                        model,
+                        &clip(&failure.message, 300),
+                    )));
+                }
+                task.failure = failure;
             }
         });
+        if let Some(note) = blocked {
+            *self.blocked.lock().unwrap() = Some(note);
+        }
         true
     }
 
@@ -290,6 +318,7 @@ impl Run {
                     Ok(run) => {
                         task.status = TaskStatus::Running;
                         task.run_id = run.id;
+                        task.failure = None;
                     }
                     Err(error) => {
                         task.status = TaskStatus::Failed;
@@ -429,6 +458,21 @@ impl Run {
             if self.collect(&orchestration) {
                 unreviewed = true;
                 continue;
+            }
+            // Blocked by the account or the service: what's running ends,
+            // nothing new starts, and it waits for the user (a model they
+            // can use, a limit that resets) — no review: it'd hit the same.
+            let blocked = self.blocked.lock().unwrap().clone();
+            if let Some(note) = blocked {
+                if orchestration.plan.tasks.iter().any(|task| task.status == TaskStatus::Running) {
+                    std::thread::sleep(TICK);
+                    continue;
+                }
+                self.update(|orchestration| {
+                    orchestration.status = Status::Paused;
+                    orchestration.note = note;
+                });
+                return;
             }
             let running = orchestration.plan.tasks.iter().any(|task| task.status == TaskStatus::Running);
             if plan::over_budget(&orchestration) {

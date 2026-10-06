@@ -114,6 +114,13 @@ pub enum Msg<'a> {
     OrchestrationPlanFailed(&'a str),
     /// the error
     OrchestrationReportFailed(&'a str),
+    /// Told to every orchestration task: it may ask the user.
+    OrchestrationCanAsk,
+    /// Heads the answers the user gave before planning.
+    OrchestrationClarifications,
+    OrchestrationQuestionClosed,
+    /// who answered, the model, what it said
+    OrchestrationServiceBlocked(&'a str, &'a str, &'a str),
     /// the folder
     OrchestrationNoFolder(&'a str),
     OrchestrationFolderRequired,
@@ -351,6 +358,18 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (OrchestrationPlanFailed(error), En) => format!("Couldn't build the plan: {error}"),
         (OrchestrationReportFailed(error), Es) => format!("No se pudo escribir el informe final: {error}"),
         (OrchestrationReportFailed(error), En) => format!("Couldn't write the final report: {error}"),
+        (OrchestrationCanAsk, Es) => "Si te encontrás con una decisión que le corresponde al usuario y cambia el resultado (un enfoque u otro, el alcance, qué hacer con lo que ya existe), preguntale con la herramienta ask_user de Termo en vez de suponer. Para lo demás, decidí vos y seguí.".into(),
+        (OrchestrationCanAsk, En) => "If you hit a decision that is the user's to make and changes the result (one approach or another, the scope, what to do with what already exists), ask them with Termo's ask_user tool instead of assuming. For everything else, decide yourself and go on.".into(),
+        (OrchestrationClarifications, Es) => "Aclaraciones del usuario:".into(),
+        (OrchestrationClarifications, En) => "The user's clarifications:".into(),
+        (OrchestrationServiceBlocked(service, model, message), Es) => format!(
+            "En pausa: {service} rechazó el pedido con el modelo {model}, por la cuenta o el servicio y no por la tarea. Cambiá el modelo del agente (Editar plan) o esperá a que se resuelva, y reanudá. Respuesta: {message}"
+        ),
+        (OrchestrationServiceBlocked(service, model, message), En) => format!(
+            "Paused: {service} turned the request down with model {model}, because of the account or the service rather than the task. Change the agent's model (Edit plan) or wait for it to clear, then resume. Response: {message}"
+        ),
+        (OrchestrationQuestionClosed, Es) => "Esa pregunta ya no espera respuesta: el agente terminó o siguió sin ella.".into(),
+        (OrchestrationQuestionClosed, En) => "That question isn't waiting any more: the agent finished or went on without it.".into(),
         (OrchestrationNoFolder(path), Es) => format!("La carpeta no existe: {path}"),
         (OrchestrationNoFolder(path), En) => format!("The folder doesn't exist: {path}"),
         (OrchestrationFolderRequired, Es) => "Elegí la carpeta del proyecto: los agentes trabajan ahí".into(),
@@ -463,6 +482,10 @@ mod tests {
             Msg::AiModeOff,
             Msg::OrchestrationPlanFailed("timeout"),
             Msg::OrchestrationReportFailed("timeout"),
+            Msg::OrchestrationCanAsk,
+            Msg::OrchestrationClarifications,
+            Msg::OrchestrationQuestionClosed,
+            Msg::OrchestrationServiceBlocked("Anthropic", "m", "403"),
             Msg::OrchestrationNoFolder("/x"),
             Msg::OrchestrationFolderRequired,
             Msg::OrchestrationNotFound,

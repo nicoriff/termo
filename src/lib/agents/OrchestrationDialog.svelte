@@ -7,15 +7,25 @@
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { collectTiles } from "$lib/layout/split-tree";
+  import type { Answered, ClarifyQuestion } from "$lib/core/orchestration-client";
   import { orchestrationStore } from "./orchestration-store.svelte";
   import { modelsOf } from "./orchestration-spec";
   import FolderField from "./FolderField.svelte";
+  import PlanningProgress from "./PlanningProgress.svelte";
 
   let prompt = $state("");
   let workDir = $state("");
   let model = $state("");
   let error = $state("");
   let dialogEl: HTMLDivElement | undefined = $state();
+  /** Before planning, the orchestrator may ask about the request: its
+   * questions, and what the user picked or wrote for each. */
+  let step = $state<"form" | "questions">("form");
+  let phase = $state<"clarifying" | "planning" | null>(null);
+  let questions = $state<ClarifyQuestion[]>([]);
+  let picked = $state<Record<number, string>>({});
+  let typed = $state<Record<number, string>>({});
+  let askCost = 0;
 
   const planning = $derived(orchestrationStore.planning);
   const claudeInstalled = $derived(newTabOptions.agentClis?.claude !== false);
@@ -43,16 +53,51 @@
     uiState.closeOrchestrationDialog();
   }
 
-  async function plan() {
-    if (!prompt.trim() || !workDir.trim() || planning || !claudeInstalled) return;
+  const canAnalyze = $derived(!!prompt.trim() && !!workDir.trim() && !planning && claudeInstalled);
+
+  /** First what the orchestrator would ask; with nothing to ask (or no
+   * answer from it), straight to planning. */
+  async function analyze() {
+    if (!canAnalyze) return;
     error = "";
+    phase = "clarifying";
+    const asked = await orchestrationStore.clarify(prompt.trim(), workDir.trim(), model).catch(() => null);
+    askCost = asked?.costUsd ?? 0;
+    // Closed meanwhile: nobody to ask, so it plans as it is.
+    if (asked && asked.questions.length > 0 && uiState.orchestrationDialog) {
+      questions = asked.questions;
+      picked = {};
+      typed = {};
+      step = "questions";
+      phase = null;
+      return;
+    }
+    await plan([]);
+  }
+
+  /** What the user answered: what they wrote, or else the option they picked. */
+  function answers(): Answered[] {
+    return questions
+      .map((question, index) => ({ question: question.question, answer: (typed[index] ?? "").trim() || (picked[index] ?? "") }))
+      .filter((item) => item.answer !== "");
+  }
+
+  async function plan(given: Answered[]) {
+    error = "";
+    phase = "planning";
     try {
-      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), model);
+      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), model, given, askCost);
       workspaceStore.openOrchestration(orchestration.id, orchestration.name);
       if (uiState.orchestrationDialog) close();
     } catch (reason) {
       error = String(reason);
+    } finally {
+      phase = null;
     }
+  }
+
+  function pick(index: number, option: string) {
+    picked = { ...picked, [index]: picked[index] === option ? "" : option };
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -62,7 +107,8 @@
       close();
     } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      void plan();
+      if (step === "questions") void plan(answers());
+      else void analyze();
     }
   }
 </script>
@@ -90,6 +136,42 @@
     </header>
 
     <div class="dialog-body">
+      {#if orchestrationStore.planningPhase}
+        <PlanningProgress
+          phase={orchestrationStore.planningPhase}
+          steps={orchestrationStore.planningSteps}
+          startedAt={orchestrationStore.planningStartedAt}
+        />
+      {:else if step === "questions"}
+        <p class="ask-intro">{t("agents.orchestration.clarify.intro")}</p>
+        {#each questions as question, index (index)}
+          <div class="ask">
+            <p class="ask-question"><span class="ask-number">{index + 1}</span>{question.question}</p>
+            {#if question.options.length > 0}
+              <div class="ask-options">
+                {#each question.options as option (option)}
+                  <button
+                    class="ask-option"
+                    class:selected={picked[index] === option && !(typed[index] ?? "").trim()}
+                    disabled={planning}
+                    onclick={() => pick(index, option)}
+                  >
+                    {option}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            <input
+              class="field"
+              placeholder={t("agents.orchestration.clarify.other")}
+              aria-label={t("agents.orchestration.clarify.other")}
+              disabled={planning}
+              value={typed[index] ?? ""}
+              oninput={(e) => (typed = { ...typed, [index]: e.currentTarget.value })}
+            />
+          </div>
+        {/each}
+      {:else}
       <label class="label first" for="orchestration-prompt">{t("agents.orchestration.dialog.promptLabel")}</label>
       <textarea
         id="orchestration-prompt"
@@ -119,6 +201,7 @@
         {/each}
       </select>
       <p class="hint">{t("agents.orchestration.dialog.modelHint")}</p>
+      {/if}
     </div>
 
     <footer class="dialog-footer">
@@ -126,19 +209,31 @@
         <span class="error">{error}</span>
       {:else}
         <span class="footer-hint" class:working={planning} aria-live="polite">
-          {planning
-            ? t("agents.orchestration.dialog.planning")
-            : claudeInstalled
-              ? t("agents.orchestration.dialog.note")
-              : t("agents.wizard.idea.aiNeedsClaude")}
+          {phase === "clarifying"
+            ? t("agents.orchestration.clarify.reading")
+            : planning
+              ? t("agents.orchestration.dialog.planning")
+              : step === "questions"
+                ? t("agents.orchestration.clarify.hint")
+                : claudeInstalled
+                  ? t("agents.orchestration.dialog.note")
+                  : t("agents.wizard.idea.aiNeedsClaude")}
         </span>
       {/if}
-      <button class="button" onclick={close}>
-        {planning ? t("agents.orchestration.dialog.close") : t("agents.orchestration.dialog.cancel")}
-      </button>
-      <button class="button primary" disabled={planning || !prompt.trim() || !workDir.trim() || !claudeInstalled} onclick={() => void plan()}>
-        {t("agents.orchestration.dialog.analyze")}
-      </button>
+      {#if step === "questions"}
+        <button class="button" disabled={planning} onclick={() => (step = "form")}>{t("agents.orchestration.clarify.back")}</button>
+        <button class="button" disabled={planning} onclick={() => void plan([])}>{t("agents.orchestration.clarify.skip")}</button>
+        <button class="button primary" disabled={planning} onclick={() => void plan(answers())}>
+          {t("agents.orchestration.clarify.plan")}
+        </button>
+      {:else}
+        <button class="button" onclick={close}>
+          {planning ? t("agents.orchestration.dialog.close") : t("agents.orchestration.dialog.cancel")}
+        </button>
+        <button class="button primary" disabled={!canAnalyze} onclick={() => void analyze()}>
+          {t("agents.orchestration.dialog.analyze")}
+        </button>
+      {/if}
     </footer>
   </div>
 </div>
@@ -266,6 +361,66 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .ask-intro {
+    margin: 0 0 12px;
+    line-height: 1.5;
+  }
+
+  .ask {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 8px;
+  }
+
+  .ask-question {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 8px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .ask-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+    font-size: 10.5px;
+  }
+
+  .ask-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .ask-option {
+    padding: 4px 10px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .ask-option:hover:not(:disabled) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .ask-option.selected {
+    border-color: var(--pane-active-border, #3a6df0);
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.2));
   }
 
   .dialog-footer {

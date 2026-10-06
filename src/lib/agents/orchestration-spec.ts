@@ -11,6 +11,7 @@ import type {
   Price,
   RevisionHold,
   TaskStatus,
+  UserQuestion,
 } from "$lib/core/orchestration-client";
 import type { MessageKey } from "$lib/i18n/translate";
 import { withoutEchoes, type AgentTone } from "./agent-spec";
@@ -186,6 +187,16 @@ export function withTaskRequest(plan: Plan, taskKey: string, description: string
     ...plan,
     tasks: plan.tasks.map((task) => (task.key === taskKey ? { ...task, description, doneWhen } : task)),
   };
+}
+
+/** What its agents asked that still waits for the user. */
+export function pendingQuestions(orchestration: Orchestration): UserQuestion[] {
+  return (orchestration.questions ?? []).filter((question) => question.state === "pending");
+}
+
+/** The task keys with a question waiting on the user. */
+export function askingTasks(orchestration: Orchestration): Set<string> {
+  return new Set(pendingQuestions(orchestration).map((question) => question.task));
 }
 
 /** How the tasks ended up: for the final summary. */

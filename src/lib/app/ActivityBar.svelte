@@ -10,6 +10,8 @@
    * panel closed: the agents' runs, and the orchestrations running. */
   const running = $derived(Object.values(agentsStore.lastRun).filter((run) => run.status === "running").length);
   const orchestrating = $derived(orchestrationStore.all.filter((item) => item.status === "running").length);
+  /** Questions from agents waiting on the user: they win the badge. */
+  const asked = $derived(orchestrationStore.waitingQuestions);
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
   const localHint = $derived(`${t("agents.sections.local")} (${shortcut})`);
   const orchestrationHint = $derived(t("agents.sections.orchestration"));
@@ -54,7 +56,9 @@
         <rect x="15.2" y="15.8" width="6.2" height="5.4" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
         <path d="M12 8.2v3.8M5.7 15.8v-3.8h12.6v3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
       </svg>
-      {#if orchestrating > 0}
+      {#if asked > 0}
+        <span class="activity-badge asking" title={t("agents.orchestration.questions.badge", { n: String(asked) })}>?</span>
+      {:else if orchestrating > 0}
         <span class="activity-badge">{orchestrating}</span>
       {/if}
     </button>
@@ -115,6 +119,11 @@
   .activity-item:focus-visible {
     outline: 1px solid var(--pane-active-border, #3a6df0);
     outline-offset: -3px;
+  }
+
+  .activity-badge.asking {
+    background: #d7a72a;
+    color: #1e1e1e;
   }
 
   .activity-badge {

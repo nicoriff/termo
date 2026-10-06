@@ -445,6 +445,7 @@ mod tests {
             cost_usd: None,
             link,
             rehearsal: false,
+            failure: None,
         }
     }
 
