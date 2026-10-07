@@ -15,12 +15,15 @@ fn parse_id(id: &str) -> Result<Uuid, String> {
     Uuid::parse_str(id).map_err(|_| format!("invalid session id: {id}"))
 }
 
+/// Async and off the main thread: starting a console takes around a tenth of
+/// a second, and as a sync command (which runs on the main thread) a layout's
+/// worth of them started one after another with the window frozen meanwhile.
 #[tauri::command]
-pub fn pty_spawn(
+#[allow(clippy::too_many_arguments)]
+pub async fn pty_spawn(
     app: tauri::AppHandle,
     // The console belongs to the window that opened it (see terminal_windows.rs).
     window: tauri::WebviewWindow,
-    state: tauri::State<'_, AppState>,
     shell_path: Option<String>,
     shell_args: Option<Vec<String>>,
     cwd: Option<String>,
@@ -31,23 +34,65 @@ pub fn pty_spawn(
     agent: Option<AgentLaunch>,
     on_event: Channel<PtyEvent>,
 ) -> Result<String, String> {
+    let owner = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        spawn_console(&app, &owner, shell_path, shell_args, cwd, cols, rows, agent, on_event)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Getting a console ready writes files several consoles share (a shell's
+/// init script, Oh My Posh's): one at a time, now that they start side by
+/// side. Starting the process itself — the slow part — stays outside it.
+static PREPARING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The shell an agent's command line goes through to get its PATH (see
+/// agent_launch.rs). Windows needs none, and finding it there lists every
+/// shell — which runs `wsl.exe` — for nothing.
+fn agent_login_shell() -> String {
+    #[cfg(windows)]
+    {
+        String::new()
+    }
+    #[cfg(not(windows))]
+    {
+        default_shell().path
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_console(
+    app: &tauri::AppHandle,
+    owner: &str,
+    shell_path: Option<String>,
+    shell_args: Option<Vec<String>>,
+    cwd: Option<String>,
+    cols: u16,
+    rows: u16,
+    agent: Option<AgentLaunch>,
+    on_event: Channel<PtyEvent>,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
     if let Some(agent) = agent {
+        let preparing = PREPARING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         // The user's agents, reachable from this console (see
         // agents/console_bridge.rs) — unless the CLI has them in its own
         // settings already.
-        let extras = crate::agents::store::root(&app)
+        let extras = crate::agents::store::root(app)
             .map(|root| {
-                let global = store::load(&app).agents_from_any_console;
+                let global = store::load(app).agents_from_any_console;
                 crate::agents::console_bridge::launch_extras(&agent.tool, &root, global)
             })
             .unwrap_or_default();
-        let (path, args) = agent_launch::command_with(&agent, &default_shell().path, &extras.args)?;
+        let (path, args) = agent_launch::command_with(&agent, &agent_login_shell(), &extras.args)?;
         // None of the shell integrations below: there's no shell prompt.
         let mut env = extras.env;
-        if let Ok(dir) = agent_hooks::events_dir(&app) {
+        if let Ok(dir) = agent_hooks::events_dir(app) {
             env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
         }
-        let spawned = state.pty.spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event);
+        drop(preparing);
+        let spawned = state.pty.spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event);
         return match spawned {
             Ok(id) => {
                 if let Some(token) = &extras.token {
@@ -65,6 +110,7 @@ pub fn pty_spawn(
             }
         };
     }
+    let preparing = PREPARING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (path, args) = match shell_path {
         Some(path) => (path, shell_args.unwrap_or_default()),
         None => {
@@ -75,10 +121,10 @@ pub fn pty_spawn(
     // Read from the saved config here rather than passed in by the frontend,
     // so every spawn path (startup, new tab, split) picks it up without each
     // one having to carry it along.
-    let config = store::load(&app);
+    let config = store::load(app);
     let mut args = args;
     let mut env = bash_color_env(&path, config.bash_prompt_colors);
-    if let Ok(dir) = agent_hooks::events_dir(&app) {
+    if let Ok(dir) = agent_hooks::events_dir(app) {
         env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
     }
     let mut zsh_lines: Vec<String> = Vec::new();
@@ -89,9 +135,9 @@ pub fn pty_spawn(
     // opening — on failure the session just starts without it.
     let mut prompt_redraw = None;
     if config.oh_my_posh_enabled {
-        if let Some((binary, managed)) = oh_my_posh::find(&app) {
+        if let Some((binary, managed)) = oh_my_posh::find(app) {
             prompt_redraw = oh_my_posh::apply(
-                &app,
+                app,
                 &binary,
                 managed,
                 &config.oh_my_posh_theme,
@@ -108,17 +154,18 @@ pub fn pty_spawn(
         // Always written for zsh, even with every zsh option off: this is
         // what makes the console report its directory (see CWD_REPORT_LINES).
         zsh_lines.extend(zsh_init::CWD_REPORT_LINES.iter().map(|line| line.to_string()));
-        let _ = zsh_init::apply(&app, &zsh_lines, &mut env);
+        let _ = zsh_init::apply(app, &zsh_lines, &mut env);
     }
     utf8_console::apply(config.console_utf8, &path, &mut args);
     powershell_keys::apply(&path, &mut args);
     // Last: its prompt wrapper has to call whatever prompt the steps above
     // installed (see cwd_report).
     cwd_report::apply(&path, &mut args, &mut env);
+    drop(preparing);
 
     state
         .pty
-        .spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
+        .spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
         .map(|id| id.to_string())
         .map_err(|err| err.to_string())
 }

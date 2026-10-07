@@ -15,7 +15,12 @@ export const STEP_LABEL_KEYS: Record<WizardStep, MessageKey> = {
   deploy: "agents.wizard.steps.deploy",
 };
 
-export const AGENT_ICONS = ["🤖", "🔍", "📝", "🧹", "📊", "🛠️", "📬", "🧪", "📚", "⚡"];
+export const AGENT_ICONS = [
+  "🤖", "🔍", "📝", "🧹", "📊", "🛠️", "📬", "🧪", "📚", "⚡",
+  "🧠", "💡", "🎯", "🚀", "🐛", "🔒", "🛡️", "🧭", "🗂️", "📦",
+  "📅", "⏰", "🔔", "💬", "🌐", "☁️", "🗄️", "🧩", "🔧", "⚙️",
+  "📈", "💰", "🎨", "✍️", "🧾", "🔬", "👀", "🌱", "🦉", "🐙",
+];
 
 /** What set a run off, in words. */
 export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {

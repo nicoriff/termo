@@ -186,6 +186,7 @@ export const en: Messages = {
     claudeCliFailed: "The Claude Code CLI didn't answer; showing what's on disk.",
   },
   agentLaunch: {
+    starting: "Starting {tool}…",
     pickTitle: "Choose folder",
     pickSelected: "Choose selected",
     pickHere: "Choose {folder}",
@@ -335,6 +336,7 @@ export const en: Messages = {
       ended: "Ended",
       waiting: "Starting…",
       emptyLog: "This run left no log.",
+      loading: "Loading…",
       working: "Working…",
     },
     github: {
@@ -1088,7 +1090,9 @@ export const en: Messages = {
       engine: {
         title: "Engine and permissions",
         explain:
-          "The engine is the program that does the work: Claude Code, Codex, Gemini CLI or Copilot CLI, the ones you already use in the console, with your same account. Here you also choose where it works and how far it can go on its own.",
+          "Three decisions: which program does the work, how far it can go on its own and which folder it works in.",
+        engine: "Engine",
+        engineHint: "The program that does the work: the same ones you already use in the console, with your same account.",
         claudeHint: "Anthropic's agent. Recommended for most tasks.",
         codexHint: "OpenAI's agent. Runs its commands inside a sandbox.",
         geminiHint: "Google's agent. To only look it uses its plan mode, which only reads.",
@@ -1122,10 +1126,7 @@ export const en: Messages = {
         title: "Tools",
         explain:
           "Tools are what the agent can use to do its job. The basic ones come from the permission level you picked; add any others here.",
-        read: "Read and search files, and look things up in git",
-        edit: "Create and modify files",
-        run: "Run commands",
-        fromAutonomy: "Changed from \"How much it can do on its own\", in the Engine step.",
+        internet: "Internet",
         web: "Search and read the web",
         webHint: "For agents that need current information: documentation, news, prices.",
         integrations: "Integrations",
@@ -1150,13 +1151,15 @@ export const en: Messages = {
       triggers: {
         title: "When does it run?",
         explain:
-          "You can always run it by hand from the agents panel. It can also run on its own on a schedule, or when something changes in a folder.",
-        manual: "Only by hand",
-        manualText: "Runs when you ask.",
+          "You can always run it by hand, from the agents panel. Here you also choose what makes it start on its own: turn on whatever you want, or nothing.",
+        timeGroup: "On a schedule",
+        timeGroupHint: "Starts on its own when the time comes.",
+        schedule: "Run on a schedule",
+        scheduleHint: "Every so many minutes, or at a set time on the days you pick.",
+        eventsGroup: "When something happens",
+        eventsGroupHint: "Starts on its own in reaction to an event. You can turn on more than one.",
         interval: "Every so often",
-        intervalText: "For example, every 30 minutes.",
         daily: "At a time",
-        dailyText: "Every day, or on the days you pick.",
         every: "Every",
         at: "At",
         days: { sun: "Sun", mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat" },

@@ -185,6 +185,7 @@ export const es = {
     claudeCliFailed: "El CLI de Claude Code no respondió; se muestra lo que hay en disco.",
   },
   agentLaunch: {
+    starting: "Iniciando {tool}…",
     pickTitle: "Elegir carpeta",
     pickSelected: "Elegir la seleccionada",
     pickHere: "Elegir {folder}",
@@ -334,6 +335,7 @@ export const es = {
       ended: "Terminó",
       waiting: "Arrancando…",
       emptyLog: "Esta corrida no dejó registro.",
+      loading: "Cargando…",
       working: "Trabajando…",
     },
     github: {
@@ -1087,7 +1089,9 @@ export const es = {
       engine: {
         title: "Motor y permisos",
         explain:
-          "El motor es el programa que hace el trabajo: Claude Code, Codex, Gemini CLI o Copilot CLI, los que ya usás en la consola, con tu misma cuenta. Acá también decidís dónde trabaja y hasta dónde puede actuar solo.",
+          "Tres decisiones: qué programa hace el trabajo, hasta dónde puede actuar solo y en qué carpeta trabaja.",
+        engine: "Motor",
+        engineHint: "El programa que hace el trabajo: los mismos que ya usás en la consola, con tu misma cuenta.",
         claudeHint: "El agente de Anthropic. Recomendado para la mayoría de las tareas.",
         codexHint: "El agente de OpenAI. Corre sus comandos dentro de un sandbox.",
         geminiHint: "El agente de Google. Para mirar usa su modo plan, que solo lee.",
@@ -1122,10 +1126,7 @@ export const es = {
         title: "Herramientas",
         explain:
           "Las herramientas son lo que el agente puede usar para hacer su trabajo. Las básicas vienen del nivel de permisos que elegiste; acá sumás las que quieras.",
-        read: "Leer y buscar archivos, y consultar git",
-        edit: "Crear y modificar archivos",
-        run: "Ejecutar comandos",
-        fromAutonomy: "Se cambian desde \"Cuánto puede hacer solo\", en el paso Motor.",
+        internet: "Internet",
         web: "Buscar y leer en internet",
         webHint: "Para agentes que necesitan información actual: documentación, noticias, precios.",
         integrations: "Integraciones",
@@ -1150,13 +1151,15 @@ export const es = {
       triggers: {
         title: "¿Cuándo corre?",
         explain:
-          "Siempre lo podés correr a mano desde el panel de agentes. Además, puede correr solo según un horario o cuando cambia algo en una carpeta.",
-        manual: "Solo a mano",
-        manualText: "Corre cuando vos lo pedís.",
+          "A mano lo podés correr siempre, desde el panel de agentes. Acá elegís además qué lo hace arrancar solo: activá lo que quieras, o nada.",
+        timeGroup: "Por horario",
+        timeGroupHint: "Arranca solo cuando llega el momento.",
+        schedule: "Correr según un horario",
+        scheduleHint: "Cada tantos minutos, o a una hora fija los días que elijas.",
+        eventsGroup: "Cuando pasa algo",
+        eventsGroupHint: "Arranca solo como reacción a un evento. Podés activar más de uno.",
         interval: "Cada cierto tiempo",
-        intervalText: "Por ejemplo, cada 30 minutos.",
         daily: "A una hora",
-        dailyText: "Todos los días, o los días que elijas.",
         every: "Cada",
         at: "A las",
         days: { sun: "Dom", mon: "Lun", tue: "Mar", wed: "Mié", thu: "Jue", fri: "Vie", sat: "Sáb" },

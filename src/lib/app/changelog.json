@@ -1,14 +1,20 @@
 [
   {
-    "version": "0.13.0",
+    "version": "0.14.0",
     "date": "2026-10-07",
     "es": [
+      "**Asistente de agentes más claro**: cada paso separa sus conceptos en bloques con título propio. Las plantillas quedan en una sección que se abre a pedido, hay 40 íconos para elegir, y el motor y los permisos se eligen en combos que muestran el detalle de cada opción. Herramientas se agrupa en Internet, Integraciones, Desde tus consolas y Otros agentes; y en «¿Cuándo corre?» todo lo que lo hace arrancar solo es una fila que se activa o no, con su configuración debajo, en dos grupos: Por horario y Cuando pasa algo.",
+      "**Las consolas de agente abren más rápido**: Termo tarda menos de la mitad en arrancar Claude Code, Codex, Gemini CLI o Copilot CLI, y al restaurar varias consolas arrancan a la vez sin trabar la ventana. Mientras el agente carga, el tab muestra «Iniciando…» con su ícono en lugar de quedar en negro.",
+      "La vista de corridas de un agente ya no traba la ventana mientras lee su historial, y dice «Cargando…» hasta que lo tiene.",
       "**Smithery en el marketplace**: elegí dónde buscar servidores MCP — el Official MCP Registry o Smithery — desde un selector junto al buscador. Los resultados de Smithery muestran ícono, cantidad de usos y si están verificados, y el detalle lista las herramientas que trae cada servidor. Funciona sin configurar nada; si querés usar tu propia API key, se carga en Preferencias → Marketplace y queda en el llavero del sistema.",
       "**La instalación de servidores MCP ahora funciona en los cuatro agentes**: Claude Code rechazaba casi todos los servidores por su nombre, y Codex no aceptaba los que necesitan una API key. Ahora cada servidor se instala con un nombre válido, igual en Claude Code, Codex, Gemini CLI y Copilot CLI.",
       "El marketplace muestra en qué agentes está instalado cada servidor, permite quitarlo de cada uno, y avisa cómo iniciar sesión cuando el servidor lo pide. Instalar ya no pisa un servidor tuyo que tenga el mismo nombre.",
       "El selector de fuente también está al sumar integraciones a un agente."
     ],
     "en": [
+      "**A clearer agent wizard**: each step keeps its concepts apart in blocks with their own title. Templates sit in a section that opens on demand, there are 40 icons to pick from, and the engine and the permissions are chosen in combos that show what each option means. Tools is grouped into Internet, Integrations, From your consoles and Other agents; and in “When does it run?” everything that starts it on its own is a row you turn on or off, with its settings underneath, in two groups: On a schedule and When something happens.",
+      "**Agent consoles open faster**: Termo takes less than half as long to start Claude Code, Codex, Gemini CLI or Copilot CLI, and several consoles restored together start at once without freezing the window. While the agent loads, the tab shows “Starting…” with its icon instead of staying black.",
+      "An agent's runs view no longer holds the window up while it reads its history, and says “Loading…” until it has it.",
       "**Smithery in the marketplace**: pick where to search for MCP servers — the Official MCP Registry or Smithery — from a selector next to the search box. Smithery's results show an icon, how much each is used and whether it's verified, and the details list the tools each server brings. It works with nothing to set up; if you want to use your own API key, it goes in Preferences → Marketplace and is kept in the system keychain.",
       "**Installing MCP servers now works in all four agents**: Claude Code turned almost every server down over its name, and Codex didn't take the ones that need an API key. Each server now installs under a valid name, the same in Claude Code, Codex, Gemini CLI and Copilot CLI.",
       "The marketplace shows which agents have each server, lets you remove it from each, and says how to sign in when the server asks. Installing no longer lands on a server of yours with the same name.",
