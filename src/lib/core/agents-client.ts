@@ -47,6 +47,10 @@ export interface AgentSpec {
     allowEscalation: boolean;
     /** Asking the user mid-task (an orchestration's agents only). */
     askUser?: boolean;
+    /** Reachable from the user's consoles (Claude Code, Codex…). */
+    fromConsoles?: boolean;
+    /** One that runs commands is reachable only with this too. */
+    consolesMayRun?: boolean;
   };
   secrets: string[];
   enabled: boolean;
@@ -60,7 +64,18 @@ export interface AgentSpec {
 export type AfterOutcome = "success" | "failure" | "any";
 
 export type RunStatus = "running" | "success" | "error" | "stopped" | "timedOut";
-export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook" | "chain" | "agent" | "message" | "orchestrator";
+export type RunTrigger =
+  | "manual"
+  | "test"
+  | "schedule"
+  | "watch"
+  | "git"
+  | "webhook"
+  | "chain"
+  | "agent"
+  | "message"
+  | "orchestrator"
+  | "console";
 
 /** Where a run sits in a conversation between agents. */
 export interface RunLink {
@@ -260,6 +275,26 @@ export function projectVersions(id: string): Promise<ProjectVersion[]> {
 
 export function restoreProject(id: string, at: number): Promise<[Project[], AgentSpec[]]> {
   return invoke("project_restore", { id, at });
+}
+
+/** What turning "agents in every console" on or off did for one CLI. */
+export interface ConsoleRegistration {
+  engine: AgentEngine;
+  /** Not installed: nothing to do. */
+  skipped: boolean;
+  ok: boolean;
+  message: string;
+}
+
+/** Adds the agents to (or takes them out of) every installed CLI's own
+ * settings, so consoles opened anywhere reach them. */
+export function setAgentsInEveryConsole(enable: boolean): Promise<ConsoleRegistration[]> {
+  return invoke("agents_console_global", { enable });
+}
+
+/** A new token for consoles outside Termo; the old one stops working. */
+export function rotateConsoleToken(): Promise<ConsoleRegistration[]> {
+  return invoke("agents_console_rotate");
 }
 
 export type RunEventKind =

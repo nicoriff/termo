@@ -668,6 +668,32 @@
                 <span class="hint">{t("agents.wizard.tools.boardHint")}</span>
               </span>
             </label>
+
+            <div class="label">{t("agents.wizard.tools.consoles")}</div>
+            <label class="toggle">
+              <input
+                type="checkbox"
+                checked={spec.collaboration.fromConsoles ?? false}
+                onchange={(e) => (spec.collaboration.fromConsoles = e.currentTarget.checked)}
+              />
+              <span>
+                <span class="toggle-title">{t("agents.wizard.tools.fromConsoles")}</span>
+                <span class="hint">{t("agents.wizard.tools.fromConsolesHint")}</span>
+              </span>
+            </label>
+            {#if spec.collaboration.fromConsoles && spec.autonomy === "run"}
+              <label class="toggle warn">
+                <input
+                  type="checkbox"
+                  checked={spec.collaboration.consolesMayRun ?? false}
+                  onchange={(e) => (spec.collaboration.consolesMayRun = e.currentTarget.checked)}
+                />
+                <span>
+                  <span class="toggle-title">{t("agents.wizard.tools.consolesMayRun")}</span>
+                  <span class="hint">{t("agents.wizard.tools.consolesMayRunHint")}</span>
+                </span>
+              </label>
+            {/if}
           {:else if step === "triggers"}
             {@const schedule = spec.triggers.schedule}
             <h2>{t("agents.wizard.triggers.title")}</h2>
@@ -1517,5 +1543,9 @@
     50% {
       opacity: 0.35;
     }
+  }
+
+  .toggle.warn .toggle-title {
+    color: var(--error-fg, #f48771);
   }
 </style>

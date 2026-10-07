@@ -140,6 +140,9 @@ pub struct AppConfig {
     pub ai_dock_badge: bool,
     /// The Agents button in the window's vertical bar.
     pub agents_in_activity_bar: bool,
+    /// The user's agents also in consoles opened outside Termo: Termo's MCP
+    /// server in each CLI's own settings (see agents/console_bridge.rs).
+    pub agents_from_any_console: bool,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
@@ -196,6 +199,7 @@ impl Default for AppConfig {
             ai_sound_volume: 70,
             ai_dock_badge: true,
             agents_in_activity_bar: true,
+            agents_from_any_console: false,
             keep_awake_button: true,
             tabs_fill_width: false,
             status_line_wrapped: None,

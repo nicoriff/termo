@@ -12,6 +12,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Response};
 
+use super::console_bridge;
 use super::orchestration::questions;
 use super::projects;
 use super::runner::Runner;
@@ -53,9 +54,11 @@ pub fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &
         return respond(request, 405, None);
     }
     let token = bearer(&request);
-    let Some(session) = (!token.is_empty()).then(|| team::session(&token)).flatten() else {
+    let console = !token.is_empty() && console_bridge::is_console_token(root, &token);
+    let session = (!token.is_empty() && !console).then(|| team::session(&token)).flatten();
+    if !console && session.is_none() {
         return respond(request, 401, Some(json!({ "error": "unauthorized" })));
-    };
+    }
     let mut body = String::new();
     if request.as_reader().take(MAX_BODY).read_to_string(&mut body).is_err() {
         return respond(request, 400, None);
@@ -63,22 +66,51 @@ pub fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &
     let Ok(message) = serde_json::from_str::<Value>(&body) else {
         return respond(request, 400, Some(error_reply(Value::Null, -32700, "Parse error")));
     };
-    let context = Context { app, runner, root, token: &token, session: &session };
+    let answer = |message: &Value| match &session {
+        Some(session) => Context { app, runner, root, token: &token, session }.answer(message),
+        None => console_answer(app, runner, root, message),
+    };
     match message {
         Value::Array(batch) => {
-            let replies: Vec<Value> = batch.iter().filter_map(|message| context.answer(message)).collect();
+            let replies: Vec<Value> = batch.iter().filter_map(|message| answer(message)).collect();
             if replies.is_empty() {
                 respond(request, 202, None)
             } else {
                 respond(request, 200, Some(Value::Array(replies)))
             }
         }
-        message => match context.answer(&message) {
+        message => match answer(&message) {
             Some(reply) => respond(request, 200, Some(reply)),
             // A notification (no id) gets no answer.
             None => respond(request, 202, None),
         },
     }
+}
+
+/// A message from one of the user's consoles (see console_bridge.rs).
+fn console_answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, message: &Value) -> Option<Value> {
+    let id = message.get("id")?.clone();
+    let params = message.get("params").cloned().unwrap_or(Value::Null);
+    let reply = match message.get("method").and_then(Value::as_str).unwrap_or_default() {
+        "initialize" => {
+            let mut result = initialize(&params);
+            result["instructions"] = json!(console_bridge::instructions());
+            result_reply(id, result)
+        }
+        "ping" => result_reply(id, json!({})),
+        "tools/list" => result_reply(id, json!({ "tools": console_bridge::tools() })),
+        "tools/call" => {
+            let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
+            let args = params.get("arguments").cloned().unwrap_or(Value::Null);
+            let (text, is_error) = match console_bridge::call(app, runner, root, name, &args) {
+                Ok(text) => (text, false),
+                Err(text) => (text, true),
+            };
+            result_reply(id, json!({ "content": [{ "type": "text", "text": text }], "isError": is_error }))
+        }
+        _ => error_reply(id, -32601, "Method not found"),
+    };
+    Some(reply)
 }
 
 fn error_reply(id: Value, code: i64, message: &str) -> Value {

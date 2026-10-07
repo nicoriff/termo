@@ -115,10 +115,24 @@ fn provider_of(engine: Engine) -> Provider {
     }
 }
 
+/// `text[start..end]`, both ends moved in to the nearest character
+/// boundary: the window around a status can't split a character.
+fn window(text: &str, mut start: usize, mut end: usize) -> &str {
+    end = end.min(text.len());
+    while start < end && !text.is_char_boundary(start) {
+        start += 1;
+    }
+    while end > start && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[start..end]
+}
+
 /// The first HTTP error status the text names: "API Error: 403", "status
 /// 429", "401 Unauthorized", `"code": 503`…
 pub fn status_in(text: &str) -> Option<u16> {
-    let lower = text.to_lowercase();
+    // ASCII-only lowercasing keeps every byte where it was.
+    let lower = text.to_ascii_lowercase();
     let bytes = lower.as_bytes();
     let mut best: Option<(usize, u16)> = None;
     let mut index = 0;
@@ -128,8 +142,8 @@ pub fn status_in(text: &str) -> Option<u16> {
             && (index + 3 == bytes.len() || !bytes[index + 3].is_ascii_alphanumeric());
         if bounded && digits.iter().all(u8::is_ascii_digit) && matches!(digits[0], b'4' | b'5') {
             let code: u16 = std::str::from_utf8(digits).ok()?.parse().ok()?;
-            let before = &lower[index.saturating_sub(24)..index];
-            let after = &lower[index + 3..(index + 24).min(lower.len())];
+            let before = window(&lower, index.saturating_sub(24), index);
+            let after = window(&lower, index + 3, index + 24);
             let named = ["error", "status", "http", "code", "api"].iter().any(|word| before.contains(word))
                 || [
                     "unauthorized",
@@ -170,7 +184,8 @@ pub fn request_id_in(text: &str) -> String {
             return id;
         }
     }
-    let lower = text.to_lowercase();
+    // Positions found in it are positions in `text` (see status_in).
+    let lower = text.to_ascii_lowercase();
     for key in ["x-request-id", "request_id", "request-id", "requestid", "request id"] {
         if let Some(at) = lower.find(key) {
             let id = token(&text[at + key.len()..]);
@@ -361,6 +376,20 @@ mod tests {
         assert_eq!(diagnose(&facts(Engine::Codex, &errors, &[])).provider, Provider::Openai);
         assert_eq!(diagnose(&facts(Engine::Gemini, &errors, &[])).provider, Provider::Google);
         assert_eq!(diagnose(&facts(Engine::Copilot, &errors, &[])).provider, Provider::Github);
+    }
+
+    /// Error text is whatever a service or a CLI printed, in any language:
+    /// reading it never panics, whatever characters sit around the status.
+    #[test]
+    fn non_ascii_text_around_a_status_is_read_safely() {
+        let spanish = format!("{} error 403: acceso denegado al modelo — reintentá", "é".repeat(20));
+        assert_eq!(status_in(&spanish), Some(403));
+        let after = format!("API error 429{}", "ñ".repeat(30));
+        assert_eq!(status_in(&after), Some(429));
+        // Lowercasing changes byte lengths before the key: still no panic.
+        assert_eq!(request_id_in("İİİİ request_id: abcdef123456"), "abcdef123456");
+        let failure = diagnose(&facts(Engine::Claude, &[spanish], &[]));
+        assert_eq!(failure.status, Some(403));
     }
 
     #[test]

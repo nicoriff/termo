@@ -86,6 +86,8 @@ impl PtyManager {
             .remove(&id)
             .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
         self.owners.remove(&id);
+        // Its token for the user's agents dies with it (console_bridge.rs).
+        crate::agents::console_bridge::release(&id.to_string());
         session.kill()
     }
 
@@ -103,6 +105,7 @@ impl PtyManager {
             .collect();
         for id in ids {
             self.owners.remove(&id);
+            crate::agents::console_bridge::release(&id.to_string());
             if let Some((_, session)) = self.sessions.remove(&id) {
                 let _ = session.kill();
             }

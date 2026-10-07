@@ -295,6 +295,7 @@ export const en: Messages = {
         agent: "Asked by another agent",
         message: "Message from another agent",
         orchestrator: "A task of an orchestration",
+        console: "Asked from a console",
       },
       rehearsal: "Rehearsal",
       requestedBy: "Asked by {agent}",
@@ -545,6 +546,7 @@ export const en: Messages = {
         expired: "No answer: the agent decided on its own.",
         badge: "{n} question(s) from agents wait for your answer",
         answerInPlan: "Answer in the plan",
+        noSecrets: "Never answer with keys, passwords or tokens: the answer reaches the agent and is saved.",
       },
       thinking: {
         clarify: "Reading the request and the project",
@@ -1110,6 +1112,11 @@ export const en: Messages = {
         paused: "paused",
         board: "Shared board",
         boardHint: "Notes agents read and write between runs, like \"last commit reviewed\".",
+        consoles: "From your consoles",
+        fromConsoles: "Available from consoles",
+        fromConsolesHint: "The Claude Code, Codex, Gemini or Copilot consoles you open from Termo can ask it things and wait for its answer. It handles each request within its role, with its own permissions and in its own folder. The console asks you to confirm each request first, since each one is a paid run.",
+        consolesMayRun: "Allow it even though it runs commands",
+        consolesMayRunHint: "This agent can run commands in its folder. What a console asks it is written by that console's model, which can be swayed by the project it works in. Turn this on only if you trust that.",
         escalation: "Allow asking agents with more permissions",
         escalationHint:
           "{names} can do more than this agent. Without this permission its requests are refused: that way an agent that only looks can't use another to change things.",
@@ -1422,6 +1429,15 @@ export const en: Messages = {
       inActivityBar: "Show the Agents button in the vertical bar",
       inActivityBarHint:
         "The vertical bar is on the window's left edge. Even with the button hidden, the panel still opens with {shortcut}, from the ≡ menu or from the command palette.",
+      consoles: "Agents from consoles",
+      consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex, Gemini and Copilot consoles you open from Termo, with nothing else to set up.",
+      everyConsole: "Also in consoles opened outside Termo",
+      everyConsoleHint: "Adds Termo as an MCP server in each installed CLI's own settings, so consoles you open anywhere (VS Code, another terminal) see it. The access token is written in those files, and with Termo closed those CLIs warn that they couldn't connect.",
+      registering: "Updating each CLI's settings…",
+      noClis: "No agent CLI is installed.",
+      rotate: "Regenerate token",
+      rotateHint: "If the token leaked (in a dotfiles repository, say), make a new one: the old one stops working.",
+      rotated: "Done: the old token no longer works.",
     },
     aiMode: {
       title: "AI Mode",

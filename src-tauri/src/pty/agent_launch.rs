@@ -48,6 +48,13 @@ fn sh_quote(text: &str) -> String {
 /// The program and arguments that start the agent. `login_shell` is what
 /// sets PATH up outside Windows.
 pub fn command(launch: &AgentLaunch, login_shell: &str) -> Result<(String, Vec<String>), String> {
+    command_with(launch, login_shell, &[])
+}
+
+/// The same with `extra` arguments first: Termo's own (see
+/// agents/console_bridge.rs), built here rather than typed by anyone, so
+/// they skip the plain-word check the frontend's arguments get.
+pub fn command_with(launch: &AgentLaunch, login_shell: &str, extra: &[String]) -> Result<(String, Vec<String>), String> {
     let target = target(&launch.tool).ok_or_else(|| tr(Msg::InvalidComponentName(&launch.tool)))?;
     if let Some(bad) = launch.args.iter().find(|arg| !is_plain_word(arg)) {
         return Err(tr(Msg::InvalidComponentName(bad)));
@@ -57,7 +64,8 @@ pub fn command(launch: &AgentLaunch, login_shell: &str) -> Result<(String, Vec<S
     if is_script(&path) && path.to_string_lossy().contains(CMD_SYNTAX) {
         return Err(tr(Msg::AgentLaunchUnsafePath(&path.to_string_lossy())));
     }
-    Ok(build(&path, &launch.args, login_shell))
+    let args: Vec<String> = extra.iter().chain(&launch.args).cloned().collect();
+    Ok(build(&path, &args, login_shell))
 }
 
 /// Characters cmd.exe reads as its own syntax even in a path; an install

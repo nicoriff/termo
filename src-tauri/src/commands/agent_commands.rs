@@ -260,3 +260,31 @@ pub fn agent_set_secret(agent_id: String, name: String, value: String) -> Result
 pub fn agent_run_log(app: tauri::AppHandle, agent_id: String, run_id: String) -> Result<Vec<RunEvent>, String> {
     Ok(store::read_log_in(&root(&app)?, &agent_id, &run_id))
 }
+
+/// Adds the user's agents to every installed CLI's own settings (`enable`),
+/// so consoles opened anywhere reach them, or takes them out again. Says
+/// how it went for each CLI.
+#[tauri::command]
+pub async fn agents_console_global(
+    app: tauri::AppHandle,
+    enable: bool,
+) -> Result<Vec<crate::agents::console_bridge::Registration>, String> {
+    let root = root(&app)?;
+    tauri::async_runtime::spawn_blocking(move || crate::agents::console_bridge::register_global(&root, enable))
+        .await
+        .map_err(|err| err.to_string())
+}
+
+/// A new long-lived token for consoles outside Termo: the old one stops
+/// working, and — when that's on — every CLI's settings get the new one.
+#[tauri::command]
+pub async fn agents_console_rotate(app: tauri::AppHandle) -> Result<Vec<crate::agents::console_bridge::Registration>, String> {
+    let root = root(&app)?;
+    let global = crate::config::store::load(&app).agents_from_any_console;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::agents::console_bridge::rotate(&root)?;
+        Ok(if global { crate::agents::console_bridge::register_global(&root, true) } else { Vec::new() })
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}

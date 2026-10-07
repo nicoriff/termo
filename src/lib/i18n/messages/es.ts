@@ -294,6 +294,7 @@ export const es = {
         agent: "Pedida por otro agente",
         message: "Mensaje de otro agente",
         orchestrator: "Tarea de una orquestación",
+        console: "Pedido desde una consola",
       },
       rehearsal: "Ensayo",
       requestedBy: "Pedida por {agent}",
@@ -544,6 +545,7 @@ export const es = {
         expired: "Sin respuesta: el agente decidió solo.",
         badge: "{n} pregunta(s) de agentes esperan tu respuesta",
         answerInPlan: "Responder en el plan",
+        noSecrets: "Nunca respondas con claves, contraseñas ni tokens: la respuesta le llega al agente y queda guardada.",
       },
       thinking: {
         clarify: "Leyendo el pedido y el proyecto",
@@ -1110,6 +1112,11 @@ export const es = {
         paused: "pausado",
         board: "Pizarra compartida",
         boardHint: "Notas que los agentes leen y escriben entre corridas, como \"último commit revisado\".",
+        consoles: "Desde tus consolas",
+        fromConsoles: "Disponible desde las consolas",
+        fromConsolesHint: "Las consolas de Claude Code, Codex, Gemini o Copilot que abras desde Termo pueden pedirle cosas y esperar su respuesta. Atiende cada pedido dentro de su rol, con sus propios permisos y en su carpeta. La consola te pide confirmación antes de cada pedido, porque cada uno es una ejecución paga.",
+        consolesMayRun: "Permitirlo aunque ejecute comandos",
+        consolesMayRunHint: "Este agente puede ejecutar comandos en su carpeta. Lo que le pidan desde una consola lo escribe el modelo de esa consola, que puede estar influido por el contenido del proyecto en el que trabaja. Activalo solo si confiás en eso.",
         escalation: "Permitir pedirles a agentes con más permisos",
         escalationHint:
           "{names} puede hacer más que este agente. Sin este permiso, sus pedidos se rechazan: así un agente que solo mira no puede usar a otro para cambiar cosas.",
@@ -1423,6 +1430,15 @@ export const es = {
       inActivityBar: "Mostrar el botón de Agentes en la barra vertical",
       inActivityBarHint:
         "La barra vertical está en el borde izquierdo de la ventana. Aunque lo ocultes, el panel se sigue abriendo con {shortcut}, desde el menú ≡ o la paleta de comandos.",
+      consoles: "Agentes desde las consolas",
+      consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex, Gemini y Copilot que abras desde Termo, sin configurar nada más.",
+      everyConsole: "También en consolas abiertas fuera de Termo",
+      everyConsoleHint: "Agrega Termo como servidor MCP en la configuración de cada CLI instalada, así lo ven las consolas que abras en cualquier lado (VS Code, otra terminal). El token de acceso queda escrito en esos archivos, y con Termo cerrado esas CLIs avisan que no pudieron conectarse.",
+      registering: "Actualizando la configuración de cada CLI…",
+      noClis: "No hay ninguna CLI de agente instalada.",
+      rotate: "Regenerar token",
+      rotateHint: "Si el token se filtró (por ejemplo, en un repositorio de dotfiles), generá uno nuevo: el anterior deja de funcionar.",
+      rotated: "Listo: el token anterior ya no funciona.",
     },
     aiMode: {
       title: "Modo IA",

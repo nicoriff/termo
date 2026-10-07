@@ -959,6 +959,7 @@
             </button>
             <span class="muted small">{t("agents.orchestration.questions.hint")}</span>
           </div>
+          <p class="muted small secret-warning">⚠ {t("agents.orchestration.questions.noSecrets")}</p>
         </section>
       {/each}
 
@@ -1731,6 +1732,10 @@
   .question .field {
     margin-bottom: 8px;
     resize: vertical;
+  }
+
+  .secret-warning {
+    margin: 8px 0 0;
   }
 
   .qa {

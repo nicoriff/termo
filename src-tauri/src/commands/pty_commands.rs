@@ -32,17 +32,38 @@ pub fn pty_spawn(
     on_event: Channel<PtyEvent>,
 ) -> Result<String, String> {
     if let Some(agent) = agent {
-        let (path, args) = agent_launch::command(&agent, &default_shell().path)?;
+        // The user's agents, reachable from this console (see
+        // agents/console_bridge.rs) — unless the CLI has them in its own
+        // settings already.
+        let extras = crate::agents::store::root(&app)
+            .map(|root| {
+                let global = store::load(&app).agents_from_any_console;
+                crate::agents::console_bridge::launch_extras(&agent.tool, &root, global)
+            })
+            .unwrap_or_default();
+        let (path, args) = agent_launch::command_with(&agent, &default_shell().path, &extras.args)?;
         // None of the shell integrations below: there's no shell prompt.
-        let mut env = Vec::new();
+        let mut env = extras.env;
         if let Ok(dir) = agent_hooks::events_dir(&app) {
             env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
         }
-        return state
-            .pty
-            .spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event)
-            .map(|id| id.to_string())
-            .map_err(|err| err.to_string());
+        let spawned = state.pty.spawn(window.label(), &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event);
+        return match spawned {
+            Ok(id) => {
+                if let Some(token) = &extras.token {
+                    crate::agents::console_bridge::bind(token, &id.to_string());
+                }
+                Ok(id.to_string())
+            }
+            Err(err) => {
+                // Never ran: its token goes now.
+                if let Some(token) = &extras.token {
+                    crate::agents::console_bridge::bind(token, "never-started");
+                    crate::agents::console_bridge::release("never-started");
+                }
+                Err(err.to_string())
+            }
+        };
     }
     let (path, args) = match shell_path {
         Some(path) => (path, shell_args.unwrap_or_default()),

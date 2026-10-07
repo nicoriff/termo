@@ -62,6 +62,8 @@ pub enum RunTrigger {
     Message,
     /// A task of an orchestration's plan (see orchestration/).
     Orchestrator,
+    /// Asked from one of the user's consoles (see console_bridge.rs).
+    Console,
 }
 
 /// Where a run sits in a conversation between agents: the run that set it

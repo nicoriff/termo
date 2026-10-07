@@ -1,5 +1,21 @@
 [
   {
+    "version": "0.12.0",
+    "date": "2026-10-07",
+    "es": [
+      "**Tus agentes, desde tus consolas**: marcá un agente como «Disponible desde las consolas» y las consolas de Claude Code, Codex, Gemini o Copilot que abras desde Termo pueden pedirle algo y esperar su respuesta, o ponerlo a trabajar sin esperar. Cada agente atiende el pedido dentro de su rol, con sus permisos y en su carpeta; si está ocupado lo dice al instante, y la consola te pide confirmación antes de cada pedido. Hay un tope de 20 pedidos por hora.",
+      "Opcional, en Preferencias → Agentes: ofrecer los agentes también en consolas abiertas fuera de Termo (VS Code, otra terminal), registrando Termo en la configuración de cada CLI.",
+      "**Más seguridad para los agentes desde las consolas**: cada consola recibe un acceso propio que se revoca al cerrarla, los agentes que ejecutan comandos necesitan un segundo permiso explícito, lo que pide una consola no se pasa a otros agentes, y en Preferencias podés regenerar el token de las consolas externas. Los archivos con tokens quedan legibles solo por tu usuario.",
+      "Arreglos: un error de un servicio escrito con acentos o «—» ya no deja a un agente trabado como «corriendo»; la configuración de Gemini que usa Termo se suma a la del sistema en lugar de reemplazarla; los agentes importados llegan sin acceso desde las consolas; y las preguntas de los agentes recuerdan no responder con claves ni contraseñas."
+    ],
+    "en": [
+      "**Your agents, from your consoles**: mark an agent as “Available from consoles” and the Claude Code, Codex, Gemini or Copilot consoles you open from Termo can ask it something and wait for its answer, or set it to work without waiting. Each agent handles the request within its role, with its permissions and in its folder; a busy one says so at once, and the console asks you to confirm each request. There's a cap of 20 requests an hour.",
+      "Optional, in Preferences → Agents: offer the agents in consoles opened outside Termo too (VS Code, another terminal), by registering Termo in each CLI's own settings.",
+      "**Safer agents from consoles**: each console gets an access of its own, revoked when it closes; agents that run commands need a second, explicit permission; what a console asks isn't passed on to other agents; and Preferences can regenerate the token for outside consoles. Files holding tokens are readable by your user only.",
+      "Fixes: a service error written with accents or “—” no longer leaves an agent stuck as “running”; Termo's Gemini settings are added on top of the system's instead of replacing them; imported agents arrive without access from consoles; and agents' questions remind you never to answer with keys or passwords."
+    ]
+  },
+  {
     "version": "0.11.0",
     "date": "2026-10-05",
     "es": [

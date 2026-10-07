@@ -264,8 +264,12 @@ impl Runner {
             .as_ref()
             .map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.{engine_name}-settings.json")));
         if let (Some(path), Some(text)) = (&run_settings, &invocation.settings) {
+            // Gemini CLI's take the system file's place: written on top of it.
+            let text =
+                if spec.engine == Engine::Gemini { super::gemini_system::with_system(text) } else { text.clone() };
+            // They can hold the agent's secrets and its team token.
             let written = std::fs::create_dir_all(path.parent().expect("has a folder"))
-                .and_then(|_| std::fs::write(path, text));
+                .and_then(|_| super::console_bridge::write_private(path, &text));
             written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
         }
         let mut args = invocation.args.clone();
