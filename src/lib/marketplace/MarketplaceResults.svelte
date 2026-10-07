@@ -7,12 +7,22 @@
 
   interface Props {
     groups: ItemGroup[];
+    /** Where the MCP servers listed come from, by name. */
+    mcpSource: string;
     highlighted: number;
+    /** More MCP servers are being fetched, or can be. */
+    mcpLoading: boolean;
+    mcpHasMore: boolean;
+    /** Plugins that match but aren't listed yet. */
+    hiddenPlugins: number;
+    onmoremcp: () => void;
+    onmoreplugins: () => void;
     onpick: (item: CatalogItem) => void;
     onhighlight: (index: number) => void;
   }
 
-  const { groups, highlighted, onpick, onhighlight }: Props = $props();
+  const { groups, mcpSource, highlighted, mcpLoading, mcpHasMore, hiddenPlugins, onmoremcp, onmoreplugins, onpick, onhighlight }: Props =
+    $props();
 
   const CLASS_LABEL_KEYS: Record<ComponentClass, MessageKey> = {
     plugin: "marketplace.classes.plugin",
@@ -23,13 +33,26 @@
   /** Flattened alongside the groups so a single index can walk the whole
    * list with the arrow keys, headers included but unselectable. */
   const rows = $derived(groups.flatMap((group) => group.items));
+  /** Each row's place in that walk, looked up rather than searched for. */
+  const indexOf = $derived(new Map(rows.map((item, index) => [item.id, index])));
 </script>
 
 <div class="results" role="listbox" aria-label={t("marketplace.title")}>
   {#each groups as group (group.class)}
-    <div class="group">{t(CLASS_LABEL_KEYS[group.class])}</div>
+    <!-- Each group says where it comes from and who takes it: a plugin is
+         Claude Code's alone, an MCP server goes into every agent. -->
+    <div class="group">
+      {t(CLASS_LABEL_KEYS[group.class])}
+      <span class="group-note">
+        {group.class === "mcp"
+          ? t("marketplace.groupMcp", { source: mcpSource })
+          : group.class === "plugin"
+            ? t("marketplace.groupPlugin")
+            : ""}
+      </span>
+    </div>
     {#each group.items as item (item.id)}
-      {@const index = rows.indexOf(item)}
+      {@const index = indexOf.get(item.id) ?? -1}
       <button
         class="item"
         class:highlighted={index === highlighted}
@@ -42,7 +65,9 @@
         <span class="body">
           <span class="name">
             {item.displayName}
+            {#if item.extra?.verified}<span class="verified" title={t("marketplace.verified")}>✓</span>{/if}
             {#if item.installedIn.length > 0}<span class="badge">{t("marketplace.installedShort")}</span>{/if}
+            {#if item.extra?.remote === false}<span class="badge">{t("marketplace.localShort")}</span>{/if}
             {#if item.declaresSkills.length > 0}<span class="badge">{t("marketplace.skillsShort")}</span>{/if}
           </span>
           {#if item.author}<span class="author">{t("marketplace.byAuthor", { author: item.author })}</span>{/if}
@@ -51,6 +76,18 @@
         </span>
       </button>
     {/each}
+    <!-- More of this group: right under it, not at the end of the list. -->
+    {#if group.class === "mcp"}
+      {#if mcpLoading}
+        <p class="more-note"><span class="spinner" aria-hidden="true"></span>{t("marketplace.loadingMcp")}</p>
+      {:else if mcpHasMore}
+        <button class="load-more" onclick={onmoremcp}>{t("marketplace.loadMoreMcp")}</button>
+      {/if}
+    {:else if group.class === "plugin" && hiddenPlugins > 0}
+      <button class="load-more" onclick={onmoreplugins}>
+        {t("marketplace.morePlugins", { n: String(hiddenPlugins) })}
+      </button>
+    {/if}
   {/each}
 </div>
 
@@ -139,5 +176,70 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .verified {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .group-note {
+    margin-left: 6px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.75;
+  }
+
+  .load-more {
+    flex-shrink: 0;
+    margin: 4px 8px 8px;
+    padding: 6px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--titlebar-fg, #d4d4d4);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .load-more:hover {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .more-note {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 8px;
+    font-size: 11px;
+    opacity: 0.75;
+    color: var(--titlebar-fg, #d4d4d4);
+  }
+
+  .spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid color-mix(in srgb, var(--pane-active-border, #3a6df0) 25%, transparent);
+    border-top-color: var(--pane-active-border, #3a6df0);
+    border-radius: 50%;
+    animation: results-spin 0.8s linear infinite;
+  }
+
+  @keyframes results-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

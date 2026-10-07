@@ -46,6 +46,18 @@ pub enum Msg<'a> {
     CodexHasNoPlugins,
     McpRegistryUnreachable(&'a str),
     McpCodexHeadersUnsupported,
+    /// the name, the agent
+    McpNameTaken(&'a str, &'a str),
+    SourceKeyMissing,
+    SourceKeyInvalid,
+    SourceNeedsNoKey,
+    /// the error
+    SourceKeyNotSaved(&'a str),
+    SmitheryKeyRejected,
+    SmitheryNotFound,
+    SmitheryRateLimited,
+    /// the error
+    SmitheryUnreachable(&'a str),
     UnsafeMcpLaunchValue(&'a str),
     UnsafeMcpRemoteUrl(&'a str),
     /// (folder, OS error)
@@ -202,6 +214,28 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (McpRegistryUnreachable(detail), Es) => format!("No se pudo consultar el registro de MCP: {detail}"),
         (McpRegistryUnreachable(detail), En) => format!("Couldn't reach the MCP registry: {detail}"),
 
+        (McpNameTaken(name, agent), Es) => format!(
+            "Ya hay otro servidor llamado \"{name}\" en {agent}. Quitalo o renombralo ahí antes de instalar este."
+        ),
+        (McpNameTaken(name, agent), En) => format!(
+            "There's already another server called \"{name}\" in {agent}. Remove or rename it there before installing this one."
+        ),
+        (SourceKeyMissing, Es) => "Esta fuente ahora pide una API key. Cargala en Preferencias → Marketplace.".into(),
+        (SourceKeyMissing, En) => "This source now asks for an API key. Add it in Preferences → Marketplace.".into(),
+        (SourceKeyInvalid, Es) => "Eso no parece una API key: tiene que ser un solo texto, sin espacios.".into(),
+        (SourceKeyInvalid, En) => "That doesn't look like an API key: it has to be one piece of text, with no spaces.".into(),
+        (SourceNeedsNoKey, Es) => "Esta fuente no usa API key.".into(),
+        (SourceNeedsNoKey, En) => "This source takes no API key.".into(),
+        (SourceKeyNotSaved(error), Es) => format!("No se pudo guardar la key en el llavero del sistema: {error}"),
+        (SourceKeyNotSaved(error), En) => format!("Couldn't save the key in the system keychain: {error}"),
+        (SmitheryKeyRejected, Es) => "Smithery rechazó la API key. Revisala en Preferencias → Marketplace.".into(),
+        (SmitheryKeyRejected, En) => "Smithery turned the API key down. Check it in Preferences → Marketplace.".into(),
+        (SmitheryNotFound, Es) => "Smithery no tiene ese servidor.".into(),
+        (SmitheryNotFound, En) => "Smithery doesn't have that server.".into(),
+        (SmitheryRateLimited, Es) => "Smithery está limitando los pedidos de tu key. Probá de nuevo en un rato.".into(),
+        (SmitheryRateLimited, En) => "Smithery is limiting your key's requests. Try again in a while.".into(),
+        (SmitheryUnreachable(error), Es) => format!("No se pudo consultar Smithery: {error}"),
+        (SmitheryUnreachable(error), En) => format!("Couldn't reach Smithery: {error}"),
         (McpCodexHeadersUnsupported, Es) =>
             "Este servidor necesita encabezados personalizados, y el CLI de Codex todavía no tiene forma de recibirlos (solo admite un token de portador leído de una variable de entorno)".into(),
         (McpCodexHeadersUnsupported, En) =>
@@ -434,6 +468,15 @@ mod tests {
             Msg::CodexHasNoPlugins,
             Msg::McpRegistryUnreachable("timeout"),
             Msg::McpCodexHeadersUnsupported,
+            Msg::McpNameTaken("github", "claude"),
+            Msg::SourceKeyMissing,
+            Msg::SourceKeyInvalid,
+            Msg::SourceNeedsNoKey,
+            Msg::SourceKeyNotSaved("locked"),
+            Msg::SmitheryKeyRejected,
+            Msg::SmitheryNotFound,
+            Msg::SmitheryRateLimited,
+            Msg::SmitheryUnreachable("timeout"),
             Msg::UnsafeMcpLaunchValue("-c"),
             Msg::UnsafeMcpRemoteUrl("file:///etc/passwd"),
             Msg::FolderUnreadable("C:\\x", "access denied"),

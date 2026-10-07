@@ -3,16 +3,22 @@ import {
   installMcpItem,
   invalidateCatalog,
   listCatalog,
+  marketplaceSources,
   marketplaceStatus,
-  searchMcpRegistry,
+  mcpDetail,
+  searchMcp,
   uninstallItem,
+  uninstallMcpItem,
   type AgentTarget,
   type CatalogItem,
   type CatalogSnapshot,
   type DeclaredCommand,
   type MarketplaceStatus,
+  type SourceId,
   type SourceInfo,
+  type SourceStatus,
 } from "$lib/core/marketplace-client";
+import { appConfigStore } from "$lib/core/app-config.svelte";
 
 /**
  * The marketplace catalog, loaded once per session and kept here so
@@ -126,6 +132,61 @@ class CatalogStore {
   mcpError = $state<string | null>(null);
   private mcpNextCursor = $state<string | null>(null);
   private mcpQuery = "";
+  /** Where MCP servers are searched now (see marketplace/sources.rs), and
+   * what's known about each source. Starts on the user's default. */
+  mcpSource = $state<SourceId>(appConfigStore.marketplaceSource);
+  mcpSources = $state<SourceStatus[]>([]);
+  /** The server whose details are being fetched, and what went wrong. */
+  detailLoadingId = $state<string | null>(null);
+  detailError = $state<string | null>(null);
+  /** The last MCP install: under which name, into which agent, and whether
+   * the user still has to sign in from there. */
+  lastInstall = $state<{ itemId: string; target: AgentTarget; installName: string; signIn: boolean } | null>(null);
+
+  /** Until the user picks a source here, it's the one set in Preferences —
+   * read as the panel opens, since the settings load after this store. */
+  private sourcePicked = false;
+
+  useDefaultSource(): void {
+    if (!this.sourcePicked) this.mcpSource = appConfigStore.marketplaceSource;
+  }
+
+  async loadSources(): Promise<void> {
+    this.mcpSources = await marketplaceSources().catch(() => this.mcpSources);
+  }
+
+  /** Searches somewhere else: the same query, from the first page. */
+  setSource(source: SourceId): void {
+    this.sourcePicked = true;
+    if (source === this.mcpSource) return;
+    this.mcpSource = source;
+    appConfigStore.setMarketplaceSource(source);
+    void this.searchMcp(this.mcpQuery);
+  }
+
+  /** Fetches how to connect to a server whose result didn't say (and what
+   * it brings), and puts it in the list in the result's place. */
+  async loadDetail(item: CatalogItem): Promise<void> {
+    if (!item.extra?.needsDetail || item.extra.source === "" || this.detailLoadingId === item.id) return;
+    this.detailLoadingId = item.id;
+    this.detailError = null;
+    try {
+      const full = await mcpDetail(item.extra.source, item.name);
+      this.mcpItems = this.mcpItems.map((other) => (other.id === item.id ? full : other));
+    } catch (err) {
+      this.detailError = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (this.detailLoadingId === item.id) this.detailLoadingId = null;
+    }
+  }
+
+  private setInstalled(item: CatalogItem, target: AgentTarget, installed: boolean): void {
+    this.mcpItems = this.mcpItems.map((other) => {
+      if (other.id !== item.id) return other;
+      const rest = other.installedIn.filter((agent) => agent !== target);
+      return { ...other, installedIn: installed ? [...rest, target] : rest };
+    });
+  }
   /** Bumped on every new search so a slow response that lost the race to a
    * newer one gets discarded instead of overwriting fresher results. */
   private mcpToken = 0;
@@ -141,7 +202,7 @@ class CatalogStore {
     this.mcpLoading = true;
     this.mcpError = null;
     try {
-      const page = await searchMcpRegistry(query, null);
+      const page = await searchMcp(this.mcpSource, query, null);
       if (token !== this.mcpToken) return;
       this.mcpItems = page.items;
       this.mcpNextCursor = page.nextCursor;
@@ -161,7 +222,7 @@ class CatalogStore {
     const token = this.mcpToken;
     this.mcpLoading = true;
     try {
-      const page = await searchMcpRegistry(this.mcpQuery, this.mcpNextCursor);
+      const page = await searchMcp(this.mcpSource, this.mcpQuery, this.mcpNextCursor);
       if (token !== this.mcpToken) return;
       this.mcpItems = [...this.mcpItems, ...page.items];
       this.mcpNextCursor = page.nextCursor;
@@ -193,6 +254,32 @@ class CatalogStore {
         this.pendingApproval = { item, commands: outcome.commands };
         return false;
       }
+      this.setInstalled(item, target, true);
+      this.lastInstall = { itemId: item.id, target, installName: outcome.installName, signIn: outcome.signIn };
+      return true;
+    } catch (err) {
+      this.installError = err instanceof Error ? err.message : String(err);
+      return false;
+    } finally {
+      this.busyId = null;
+    }
+  }
+
+  /** Takes an MCP server out of one agent. */
+  async uninstallMcp(item: CatalogItem, target: AgentTarget): Promise<boolean> {
+    if (item.detail.kind !== "mcp") return false;
+    this.busyId = item.id;
+    this.installError = null;
+    try {
+      await uninstallMcpItem({
+        serverName: item.detail.server_name,
+        target,
+        remotes: item.detail.remotes,
+        packages: item.detail.packages,
+        params: {},
+      });
+      this.setInstalled(item, target, false);
+      if (this.lastInstall?.itemId === item.id && this.lastInstall.target === target) this.lastInstall = null;
       return true;
     } catch (err) {
       this.installError = err instanceof Error ? err.message : String(err);

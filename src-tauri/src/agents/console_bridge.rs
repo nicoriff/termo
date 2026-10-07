@@ -78,7 +78,7 @@ pub fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
 
 /// Replaces a file in one step: written next to it, then renamed over it,
 /// so a CLI reading it meanwhile sees the old one or the new one, whole.
-fn replace_file(path: &Path, text: &str) -> Result<(), String> {
+pub(crate) fn replace_file(path: &Path, text: &str) -> Result<(), String> {
     let dir = path.parent().ok_or("no folder")?;
     std::fs::create_dir_all(dir).map_err(|err| err.to_string())?;
     let temp = dir.join(format!(".{}.termo-tmp", path.file_name().and_then(|name| name.to_str()).unwrap_or("file")));

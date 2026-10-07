@@ -14,8 +14,9 @@ export function closeWindow(): Promise<void> {
   return invoke("close_window");
 }
 
-export function openPreferencesWindow(): Promise<void> {
-  return invoke("open_preferences_window");
+/** `section`: the page to show, when one in particular is wanted. */
+export function openPreferencesWindow(section?: string): Promise<void> {
+  return invoke("open_preferences_window", { section: section ?? null });
 }
 
 /** Ends the app. Not the same as closing this window: the hidden, preloaded

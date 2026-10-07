@@ -143,6 +143,9 @@ pub struct AppConfig {
     /// The user's agents also in consoles opened outside Termo: Termo's MCP
     /// server in each CLI's own settings (see agents/console_bridge.rs).
     pub agents_from_any_console: bool,
+    /// Where the marketplace searches MCP servers first: "official" or
+    /// "smithery" (see marketplace/sources.rs).
+    pub marketplace_source: String,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
@@ -200,6 +203,7 @@ impl Default for AppConfig {
             ai_dock_badge: true,
             agents_in_activity_bar: true,
             agents_from_any_console: false,
+            marketplace_source: "official".into(),
             keep_awake_button: true,
             tabs_fill_width: false,
             status_line_wrapped: None,

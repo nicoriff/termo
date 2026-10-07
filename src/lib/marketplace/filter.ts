@@ -20,9 +20,11 @@ export interface Facets {
   withSkillsOnly?: boolean;
 }
 
-/** Display order of the groups: what the user is most likely browsing for
- * comes first, and it's stable so the list doesn't reshuffle while typing. */
-export const CLASS_ORDER: ComponentClass[] = ["plugin", "mcp", "skill"];
+/** Display order of the groups, stable so the list doesn't reshuffle while
+ * typing. MCP servers first: they're what the source picker and the search
+ * go out for, and what every agent takes — under 300 plugins that only
+ * Claude Code has, they were never found. */
+export const CLASS_ORDER: ComponentClass[] = ["mcp", "plugin", "skill"];
 
 /** A name match is worth much more than a description match: the description
  * is a paragraph of marketing copy and would otherwise drown the name out. */

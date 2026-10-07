@@ -9,10 +9,20 @@
     supported: AgentTarget[];
     available: AgentTarget[];
     value: AgentTarget;
+    /** Why an agent that isn't `supported` can't take it, when there's a
+     * better reason to give than "not supported". */
+    unsupported?: MessageKey;
     onpick: (target: AgentTarget) => void;
   }
 
-  const { all = ["claude", "codex", "gemini", "copilot"], supported, available, value, onpick }: Props = $props();
+  const {
+    all = ["claude", "codex", "gemini", "copilot"],
+    supported,
+    available,
+    value,
+    unsupported = "marketplace.targetUnsupported",
+    onpick,
+  }: Props = $props();
 
   const LABEL_KEYS: Record<AgentTarget, MessageKey> = {
     claude: "marketplace.targets.claude",
@@ -22,7 +32,7 @@
   };
 
   function reasonFor(target: AgentTarget): MessageKey | null {
-    if (!supported.includes(target)) return "marketplace.targetUnsupported";
+    if (!supported.includes(target)) return unsupported;
     if (!available.includes(target)) return "marketplace.targetCliMissing";
     return null;
   }

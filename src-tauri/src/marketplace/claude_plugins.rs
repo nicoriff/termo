@@ -291,6 +291,7 @@ pub fn merge_catalog(cli: &Value, manifests: &HashMap<String, Value>) -> Vec<Cat
                         .unwrap_or(Value::Null),
                     strict: manifest.and_then(|m| m.get("strict")).and_then(Value::as_bool),
                 },
+                extra: Default::default(),
             })
         })
         .collect()

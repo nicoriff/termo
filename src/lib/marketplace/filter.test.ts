@@ -22,6 +22,18 @@ function item(overrides: Partial<CatalogItem> & { name: string }): CatalogItem {
     targets: ["claude"],
     installedIn: [],
     detail: { kind: "plugin", plugin_id: `${overrides.name}@official`, marketplace: "official", source: null, strict: null },
+    extra: {
+      installName: "",
+      source: "",
+      listingUrl: null,
+      verified: null,
+      remote: null,
+      securityScan: null,
+      tools: [],
+      needsDetail: false,
+      localOnly: false,
+      signIn: false,
+    },
     ...overrides,
   };
 }
@@ -101,7 +113,8 @@ describe("sorting", () => {
 describe("groupItems", () => {
   it("keeps class order and drops empty groups", () => {
     const groups = groupItems([item({ name: "a", class: "mcp" }), item({ name: "b" })]);
-    expect(groups.map((group) => group.class)).toEqual(["plugin", "mcp"]);
-    expect(groups[0].items.map((i) => i.name)).toEqual(["b"]);
+    expect(groups.map((group) => group.class)).toEqual(["mcp", "plugin"]);
+    // MCP servers first: every agent takes them.
+    expect(groups[0].items.map((i) => i.name)).toEqual(["a"]);
   });
 });

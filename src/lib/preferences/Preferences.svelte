@@ -13,6 +13,8 @@
   import AiModeSection from "./sections/AiModeSection.svelte";
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import AiAgentsSection from "./sections/AiAgentsSection.svelte";
+  import MarketplaceSection from "./sections/MarketplaceSection.svelte";
+  import { listen } from "@tauri-apps/api/event";
   import AiToolSection from "./sections/AiToolSection.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
@@ -31,6 +33,7 @@
     | "ai-mode"
     | "ai-notifications"
     | "ai-agents"
+    | "marketplace"
     | `ai-tool-${ToolId}`
     | "mac"
     | "windows"
@@ -79,7 +82,10 @@
     {
       id: "integrations",
       label: "preferences.sidebar.integrations",
-      children: [{ id: "oh-my-posh", label: "preferences.sidebar.ohMyPosh" }],
+      children: [
+        { id: "oh-my-posh", label: "preferences.sidebar.ohMyPosh" },
+        { id: "marketplace", label: "preferences.sidebar.marketplace" },
+      ],
     },
     { id: "shortcuts", label: "preferences.sidebar.shortcuts" },
   ];
@@ -113,6 +119,19 @@
     // group without a page keeps it and highlights its own row instead.
     if (!open && hasPage(node) && containsSelected(node)) selected = node.id;
   }
+
+  // Another window asks for a page of this one: the marketplace panel,
+  // for where a source's key goes.
+  onMount(() => {
+    let unlisten: (() => void) | null = null;
+    void listen<string>("preferences-section", (event) => {
+      if (event.payload === "marketplace") {
+        selected = "marketplace";
+        expanded = { ...expanded, integrations: true };
+      }
+    }).then((stop) => (unlisten = stop));
+    return () => unlisten?.();
+  });
 
   onMount(() => {
     // The window is preloaded hidden; the backend shows it only once the real
@@ -207,6 +226,8 @@
         <AiNotificationsSection />
       {:else if selected === "ai-agents"}
         <AiAgentsSection />
+      {:else if selected === "marketplace"}
+        <MarketplaceSection />
       {:else if selected.startsWith("ai-tool-")}
         {#key selected}
           <AiToolSection tool={selected.slice("ai-tool-".length) as ToolId} />

@@ -93,3 +93,36 @@ describe("previewLines", () => {
     expect(previewLines(detail, { GCS_BUCKET: "my-bucket" })[1]).toContain("my-bucket");
   });
 });
+
+describe("a remote's query parameters", () => {
+  const detail = {
+    kind: "mcp" as const,
+    server_name: "acme/files",
+    remotes: [
+      {
+        type: "streamable-http",
+        url: "https://files.run.tools",
+        headers: [{ name: "ACME_KEY", isRequired: true, isSecret: true }],
+        queryParams: [{ name: "projectId", isRequired: true, default: "main" }],
+      },
+    ],
+    packages: [],
+    repository: null,
+  };
+
+  it("are asked for along with the headers, with their real defaults", () => {
+    const specs = paramsFor(detail);
+    expect(specs.map((spec) => spec.name)).toEqual(["ACME_KEY", "projectId"]);
+    expect(initialParamValues(specs)).toEqual({ projectId: "main" });
+    expect(paramsSatisfied(specs, { projectId: "main" })).toBe(false);
+    expect(paramsSatisfied(specs, { projectId: "main", ACME_KEY: "k" })).toBe(true);
+  });
+
+  it("show in the preview, a secret never in the clear", () => {
+    expect(previewLines(detail, { ACME_KEY: "k-123", projectId: "main" })).toEqual([
+      "streamable-http https://files.run.tools",
+      "ACME_KEY: ••••••",
+      "?projectId=main",
+    ]);
+  });
+});

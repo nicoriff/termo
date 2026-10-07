@@ -99,8 +99,21 @@ const READY_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
 /// Must stay `async`: on Windows, building a webview window from a sync
 /// command deadlocks (WebView2), leaving a blank window and a hung app.
 #[tauri::command]
-pub async fn open_preferences_window(app: tauri::AppHandle, from: tauri::WebviewWindow) -> Result<(), String> {
+pub async fn open_preferences_window(
+    app: tauri::AppHandle,
+    from: tauri::WebviewWindow,
+    // The page to show, when the caller wants one in particular (the
+    // marketplace's, for where a source's key goes). One of the names the
+    // page knows: anything else is ignored there.
+    section: Option<String>,
+) -> Result<(), String> {
     use std::sync::atomic::Ordering::SeqCst;
+    use tauri::Emitter;
+
+    if let Some(section) = section.filter(|section| section.len() <= 40 && section.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
+        // The window is preloaded, so its page is already listening.
+        let _ = app.emit("preferences-section", section);
+    }
 
     // It opens over the console window it was asked from.
     *OPENED_FROM.lock().unwrap() = Some(from.label().to_string());
