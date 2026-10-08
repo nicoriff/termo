@@ -208,13 +208,14 @@ pub fn build(draft: ProjectDraft, work_dir: &str, new_id: impl Fn() -> String) -
         isolated: true,
         entry_agent_id: entry,
         limits: ProjectLimits { max_runs_per_day: DEFAULT_DAILY_RUNS },
+        orchestration_id: String::new(),
         created_at: 0,
         updated_at: 0,
     };
     GeneratedProject { project, agents, integrations, explanation: draft.explanation.trim().to_string() }
 }
 
-fn language(lang: Lang) -> &'static str {
+pub(super) fn language(lang: Lang) -> &'static str {
     match lang {
         Lang::Es => "Spanish (Rioplatense, using \"vos\")",
         Lang::En => "English",
@@ -391,7 +392,7 @@ fn improve_schema() -> serde_json::Value {
     })
 }
 
-fn clip(text: &str, max: usize) -> String {
+pub(super) fn clip(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
     }
@@ -632,6 +633,7 @@ mod tests {
             cost_usd: None,
             link: None,
             rehearsal: false,
+            failure: None,
         };
         let project = Project { name: "P".into(), ..Project::default() };
         let text = improve_prompt(&project, &[spec], &[run], Lang::Es);

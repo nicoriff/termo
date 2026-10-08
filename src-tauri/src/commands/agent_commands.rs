@@ -24,6 +24,13 @@ pub(crate) fn root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String>
     store::root(app).map_err(|err| tr(Msg::AgentSaveFailed(&err.to_string())))
 }
 
+/// Runs a read of the agents' files off the main thread. A command that
+/// isn't `async` runs on it: the read would wait behind whatever the window
+/// is doing, and hold the window up in turn.
+async fn off_main<T: Send + 'static>(read: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(read).await.map_err(|err| err.to_string())
+}
+
 /// Saves an agent the way every save has to go: checked (see spec::check),
 /// its git hook first (if it
 /// can't go in, nothing is saved half-done), then the definition, then a
@@ -97,8 +104,9 @@ pub fn agent_models(engine: Engine) -> Vec<models::ModelOption> {
 
 /// Every run of a conversation between agents, oldest first.
 #[tauri::command]
-pub fn agent_conversation(app: tauri::AppHandle, conversation_id: String) -> Result<Vec<RunRecord>, String> {
-    Ok(store::conversation_in(&root(&app)?, &conversation_id))
+pub async fn agent_conversation(app: tauri::AppHandle, conversation_id: String) -> Result<Vec<RunRecord>, String> {
+    let root = root(&app)?;
+    off_main(move || store::conversation_in(&root, &conversation_id)).await
 }
 
 /// A board: a team project's own, or (no project) the one every agent
@@ -150,8 +158,9 @@ pub fn agents_next_runs(app: tauri::AppHandle) -> Result<std::collections::HashM
 
 /// Newest first.
 #[tauri::command]
-pub fn agent_runs(app: tauri::AppHandle, agent_id: String) -> Result<Vec<RunRecord>, String> {
-    Ok(store::list_runs_in(&root(&app)?, &agent_id))
+pub async fn agent_runs(app: tauri::AppHandle, agent_id: String) -> Result<Vec<RunRecord>, String> {
+    let root = root(&app)?;
+    off_main(move || store::list_runs_in(&root, &agent_id)).await
 }
 
 /// "Build it with AI": a draft of the whole agent from a description.
@@ -257,6 +266,35 @@ pub fn agent_set_secret(agent_id: String, name: String, value: String) -> Result
 }
 
 #[tauri::command]
-pub fn agent_run_log(app: tauri::AppHandle, agent_id: String, run_id: String) -> Result<Vec<RunEvent>, String> {
-    Ok(store::read_log_in(&root(&app)?, &agent_id, &run_id))
+pub async fn agent_run_log(app: tauri::AppHandle, agent_id: String, run_id: String) -> Result<Vec<RunEvent>, String> {
+    let root = root(&app)?;
+    off_main(move || store::read_log_in(&root, &agent_id, &run_id)).await
+}
+
+/// Adds the user's agents to every installed CLI's own settings (`enable`),
+/// so consoles opened anywhere reach them, or takes them out again. Says
+/// how it went for each CLI.
+#[tauri::command]
+pub async fn agents_console_global(
+    app: tauri::AppHandle,
+    enable: bool,
+) -> Result<Vec<crate::agents::console_bridge::Registration>, String> {
+    let root = root(&app)?;
+    tauri::async_runtime::spawn_blocking(move || crate::agents::console_bridge::register_global(&root, enable))
+        .await
+        .map_err(|err| err.to_string())
+}
+
+/// A new long-lived token for consoles outside Termo: the old one stops
+/// working, and — when that's on — every CLI's settings get the new one.
+#[tauri::command]
+pub async fn agents_console_rotate(app: tauri::AppHandle) -> Result<Vec<crate::agents::console_bridge::Registration>, String> {
+    let root = root(&app)?;
+    let global = crate::config::store::load(&app).agents_from_any_console;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::agents::console_bridge::rotate(&root)?;
+        Ok(if global { crate::agents::console_bridge::register_global(&root, true) } else { Vec::new() })
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }

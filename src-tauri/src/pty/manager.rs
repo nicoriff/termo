@@ -86,7 +86,10 @@ impl PtyManager {
             .remove(&id)
             .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
         self.owners.remove(&id);
-        session.kill()
+        // Its token for the user's agents dies with it (console_bridge.rs).
+        crate::agents::console_bridge::release(&id.to_string());
+        dispose(vec![session]);
+        Ok(())
     }
 
     /// Kills one window's sessions — for when it reloads or closes: the JS
@@ -101,13 +104,34 @@ impl PtyManager {
             .filter(|entry| entry.value() == owner)
             .map(|entry| *entry.key())
             .collect();
+        let mut gone = Vec::new();
         for id in ids {
             self.owners.remove(&id);
+            crate::agents::console_bridge::release(&id.to_string());
             if let Some((_, session)) = self.sessions.remove(&id) {
-                let _ = session.kill();
+                gone.push(session);
             }
         }
+        dispose(gone);
     }
+}
+
+/// Ends consoles already taken out of the manager, on a thread of its own.
+/// Both callers run on the window's main thread (a tab closing, a page
+/// reloading), and on Windows closing a console waits until its output has
+/// been read out — one that takes its time, among a whole window's worth
+/// closed at once, froze the app. Forgotten at once, ended in the background.
+fn dispose(sessions: Vec<PtySession>) {
+    if sessions.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        for session in sessions {
+            let _ = session.kill();
+            // Dropping it closes the console: here, not on the caller's thread.
+            drop(session);
+        }
+    });
 }
 
 #[cfg(all(test, unix))]

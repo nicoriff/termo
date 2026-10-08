@@ -89,10 +89,26 @@ pub fn run() {
             pty::status_line::start_watcher(app.handle().clone());
             // Before any run can start: files a run killed with Termo left.
             agents::runner::remove_leftovers(app.handle());
+            // Consoles' token files from before: their tokens died with it.
+            if let Ok(root) = agents::store::root(app.handle()) {
+                agents::console_bridge::remove_leftovers(&root);
+            }
+            agents::orchestration::executor::recover(app.handle());
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
-            let ai_mode_on = config::store::load(app.handle()).ai_mode_enabled;
+            let loaded = config::store::load(app.handle());
+            let ai_mode_on = loaded.ai_mode_enabled;
             ai_mode::init(app.handle(), &app.state::<AppState>().agents, ai_mode_on);
+            // Every console's CLI settings point at this Termo (its port and
+            // token), like the hooks do.
+            agents::console_bridge::set_global(ai_mode_on && loaded.agents_from_any_console);
+            if ai_mode_on && loaded.agents_from_any_console {
+                if let Ok(root) = agents::store::root(app.handle()) {
+                    std::thread::spawn(move || {
+                        agents::console_bridge::register_global(&root, true);
+                    });
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -175,6 +191,21 @@ pub fn run() {
             commands::project_commands::project_runs,
             commands::project_commands::project_export,
             commands::project_commands::project_import,
+            commands::orchestration_commands::orchestration_catalog,
+            commands::orchestration_commands::orchestration_list,
+            commands::orchestration_commands::orchestration_plan,
+            commands::orchestration_commands::orchestration_approve,
+            commands::orchestration_commands::orchestration_stop,
+            commands::orchestration_commands::orchestration_edit_plan,
+            commands::orchestration_commands::orchestration_revise,
+            commands::orchestration_commands::orchestration_report,
+            commands::orchestration_commands::orchestration_clarify,
+            commands::orchestration_commands::orchestration_answer,
+            commands::agent_commands::agents_console_global,
+            commands::agent_commands::agents_console_rotate,
+            commands::orchestration_commands::orchestration_resume,
+            commands::orchestration_commands::orchestration_resolve_revision,
+            commands::orchestration_commands::orchestration_delete,
             commands::project_commands::project_draft,
             commands::project_commands::project_create,
             commands::project_commands::project_improve,
@@ -186,6 +217,12 @@ pub fn run() {
             commands::marketplace_commands::uninstall_item,
             commands::marketplace_commands::invalidate_catalog,
             commands::marketplace_commands::search_mcp_registry,
+            commands::marketplace_commands::search_mcp,
+            commands::marketplace_commands::mcp_detail,
+            commands::marketplace_commands::marketplace_sources,
+            commands::marketplace_commands::marketplace_set_key,
+            commands::marketplace_commands::marketplace_clear_key,
+            commands::marketplace_commands::marketplace_test_key,
             commands::marketplace_commands::install_mcp_item,
             commands::marketplace_commands::uninstall_mcp_item,
             commands::agent_hook_commands::status_line_installed,

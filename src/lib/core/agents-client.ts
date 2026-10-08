@@ -45,6 +45,12 @@ export interface AgentSpec {
     board: boolean;
     /** Whether it may ask agents allowed to do more than itself. */
     allowEscalation: boolean;
+    /** Asking the user mid-task (an orchestration's agents only). */
+    askUser?: boolean;
+    /** Reachable from the user's consoles (Claude Code, Codex…). */
+    fromConsoles?: boolean;
+    /** One that runs commands is reachable only with this too. */
+    consolesMayRun?: boolean;
   };
   secrets: string[];
   enabled: boolean;
@@ -58,7 +64,18 @@ export interface AgentSpec {
 export type AfterOutcome = "success" | "failure" | "any";
 
 export type RunStatus = "running" | "success" | "error" | "stopped" | "timedOut";
-export type RunTrigger = "manual" | "test" | "schedule" | "watch" | "git" | "webhook" | "chain" | "agent" | "message";
+export type RunTrigger =
+  | "manual"
+  | "test"
+  | "schedule"
+  | "watch"
+  | "git"
+  | "webhook"
+  | "chain"
+  | "agent"
+  | "message"
+  | "orchestrator"
+  | "console";
 
 /** Where a run sits in a conversation between agents. */
 export interface RunLink {
@@ -85,6 +102,8 @@ export interface RunRecord {
   link: RunLink | null;
   /** A rehearsal: it could only look. */
   rehearsal: boolean;
+  /** Why it failed, said precisely. */
+  failure?: RunFailure;
 }
 
 /** The conversation a run belongs to: its parent's, or its own. */
@@ -145,6 +164,8 @@ export interface Project {
   /** The agent "Run project" starts. */
   entryAgentId: string;
   limits: { maxRunsPerDay: number };
+  /** Set on the team an orchestration runs; empty for the user's own. */
+  orchestrationId: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -256,13 +277,98 @@ export function restoreProject(id: string, at: number): Promise<[Project[], Agen
   return invoke("project_restore", { id, at });
 }
 
-export type RunEventKind = "started" | "tool" | "text" | "result" | "stderr" | "ended";
+/** What turning "agents in every console" on or off did for one CLI. */
+export interface ConsoleRegistration {
+  engine: AgentEngine;
+  /** Not installed: nothing to do. */
+  skipped: boolean;
+  ok: boolean;
+  message: string;
+}
+
+/** Adds the agents to (or takes them out of) every installed CLI's own
+ * settings, so consoles opened anywhere reach them. */
+export function setAgentsInEveryConsole(enable: boolean): Promise<ConsoleRegistration[]> {
+  return invoke("agents_console_global", { enable });
+}
+
+/** A new token for consoles outside Termo; the old one stops working. */
+export function rotateConsoleToken(): Promise<ConsoleRegistration[]> {
+  return invoke("agents_console_rotate");
+}
+
+export type RunEventKind =
+  | "started"
+  | "session"
+  | "usage"
+  | "failure"
+  | "tool"
+  | "text"
+  | "result"
+  | "stderr"
+  | "ended";
+
+/** Who answered with an error (see src-tauri/src/agents/diagnose.rs). */
+export type Provider = "anthropic" | "openai" | "google" | "github" | "local";
+
+export type FailureKind =
+  | "auth"
+  | "modelAccess"
+  | "rateLimit"
+  | "quota"
+  | "overloaded"
+  | "server"
+  | "badRequest"
+  | "network"
+  | "timeout"
+  | "unknown";
+
+/** Why a run failed, said precisely. */
+export interface RunFailure {
+  provider: Provider;
+  engine: AgentEngine;
+  kind: FailureKind;
+  /** The HTTP status the service answered with, when it said. */
+  status: number | null;
+  message: string;
+  requestId: string;
+  model: string;
+  exitCode: number | null;
+  /** The last lines the CLI printed on stderr. */
+  stderr: string[];
+}
+
+/** What ran a run: Termo's side at the start, the CLI's report after. */
+export interface SessionInfo {
+  engine: AgentEngine;
+  version: string;
+  model: string;
+  /** "subscription", "apiKey" or "". */
+  auth: string;
+  authSource: string;
+  cwd: string;
+  command: string;
+  mcp: { name: string; status: string }[];
+}
+
+/** A usage-limit warning from the CLI. */
+export interface UsageInfo {
+  window: string;
+  status: string;
+  /** 0 to 1. */
+  utilization: number;
+  /** Unix ms; 0: not said. */
+  resetsAt: number;
+}
 
 export interface RunEvent {
   kind: RunEventKind;
   tool?: string;
   text: string;
   at: number;
+  session?: SessionInfo;
+  usage?: UsageInfo;
+  failure?: RunFailure;
 }
 
 export function listAgents(): Promise<AgentSpec[]> {

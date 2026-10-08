@@ -163,11 +163,20 @@ pub struct Collaboration {
     /// Whether it may ask agents allowed to do more than itself (a "only
     /// look" agent asking one that runs commands). Off, they're refused.
     pub allow_escalation: bool,
+    /// Asking the user something mid-task and waiting for the answer (see
+    /// orchestration/questions.rs). Only an orchestration's agents.
+    pub ask_user: bool,
+    /// Reachable from the user's consoles (Claude Code, Codex…): they can ask
+    /// it something and wait for its answer (see console_bridge.rs).
+    pub from_consoles: bool,
+    /// An agent that runs commands is reachable from consoles only with this
+    /// as well: a second, explicit yes.
+    pub consoles_may_run: bool,
 }
 
 impl Collaboration {
     pub fn is_on(&self) -> bool {
-        !self.contacts.is_empty() || self.board
+        !self.contacts.is_empty() || self.board || self.ask_user
     }
 }
 

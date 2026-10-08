@@ -26,13 +26,24 @@ export interface ParamSpec {
 export function paramsFor(detail: McpDetail): ParamSpec[] {
   const remote = detail.remotes[0];
   if (remote) {
-    return (remote.headers ?? []).map((header) => ({
+    const headers = (remote.headers ?? []).map((header) => ({
       name: header.name,
       description: header.description,
       required: Boolean(header.isRequired),
       secret: Boolean(header.isSecret),
-      default: header.isSecret ? undefined : header.value,
+      // A registry's `value` for a header is a template; a source that gives
+      // a real default says so as `default`.
+      default: header.isSecret ? undefined : ((header as { default?: string }).default ?? header.value),
     }));
+    // What goes in the address rather than in a header.
+    const query = (remote.queryParams ?? []).map((param) => ({
+      name: param.name,
+      description: param.description,
+      required: Boolean(param.isRequired),
+      secret: Boolean(param.isSecret),
+      default: param.isSecret ? undefined : param.default,
+    }));
+    return [...headers, ...query];
   }
   const pkg = detail.packages[0];
   if (pkg) {
@@ -69,6 +80,10 @@ export function previewLines(detail: McpDetail, values: Record<string, string>):
     for (const header of remote.headers ?? []) {
       const value = values[header.name]?.trim();
       lines.push(`${header.name}: ${header.isSecret ? (value ? "••••••" : "—") : (value ?? "—")}`);
+    }
+    for (const param of remote.queryParams ?? []) {
+      const value = values[param.name]?.trim();
+      lines.push(`?${param.name}=${param.isSecret ? (value ? "••••••" : "—") : (value ?? "—")}`);
     }
     return lines;
   }

@@ -18,6 +18,22 @@
 
   const { item, canInstall, onback }: Props = $props();
 
+  // A search result may not say how to connect (Smithery's don't): that
+  // comes with the server's details, fetched as it's opened.
+  $effect(() => {
+    if (item.extra?.needsDetail) void catalogStore.loadDetail(item);
+  });
+  const loadingDetail = $derived(Boolean(item.extra?.needsDetail) && !catalogStore.detailError);
+  const isMcp = $derived(item.detail.kind === "mcp");
+  /** How each agent's CLI signs in to a server that asks for it. */
+  const SIGN_IN_KEYS: Record<AgentTarget, MessageKey> = {
+    claude: "marketplace.signIn.claude",
+    codex: "marketplace.signIn.codex",
+    gemini: "marketplace.signIn.gemini",
+    copilot: "marketplace.signIn.copilot",
+  };
+  let showTools = $state(false);
+
   /** Installing is a two-step: the first click shows the exact command
    * Termo is about to run, and only the second one runs it. Installing
    * means running someone else's code on this machine, so it never happens
@@ -34,6 +50,12 @@
   let chosenTarget = $state<AgentTarget | null>(null);
   const target = $derived(
     chosenTarget && installableTargets.includes(chosenTarget) ? chosenTarget : (installableTargets[0] ?? "claude"),
+  );
+
+  /** An MCP server is installed agent by agent: what this agent has. */
+  const installedHere = $derived(item.installedIn.includes(target));
+  const justInstalled = $derived(
+    catalogStore.lastInstall?.itemId === item.id && catalogStore.lastInstall.target === target ? catalogStore.lastInstall : null,
   );
 
   const busy = $derived(catalogStore.busyId === item.id);
@@ -61,6 +83,14 @@
   const paramSpecs = $derived(item.detail.kind === "mcp" ? paramsFor(item.detail) : []);
   // svelte-ignore state_referenced_locally
   let paramValues = $state<Record<string, string>>(item.detail.kind === "mcp" ? initialParamValues(paramsFor(item.detail)) : {});
+  // The details arrive after the form exists: what they bring a real
+  // default for is filled in, what the user already typed is kept.
+  $effect(() => {
+    const defaults = initialParamValues(paramSpecs);
+    for (const [name, value] of Object.entries(defaults)) {
+      if (paramValues[name] === undefined) paramValues[name] = value;
+    }
+  });
   const paramsOk = $derived(paramsSatisfied(paramSpecs, paramValues));
   const mcpPreview = $derived(item.detail.kind === "mcp" ? previewLines(item.detail, paramValues) : []);
 
@@ -110,6 +140,11 @@
   </div>
   <p class="meta">
     <span class="pill">{t(CLASS_LABEL_KEYS[item.class])}</span>
+    {#if item.extra?.verified}<span class="pill good">✓ {t("marketplace.verified")}</span>{/if}
+    {#if item.extra?.remote === true}<span class="pill">{t("marketplace.remote")}</span>{/if}
+    {#if item.extra?.remote === false}<span class="pill">{t("marketplace.localShort")}</span>{/if}
+    {#if item.extra?.securityScan === true}<span class="pill good">{t("marketplace.scanPassed")}</span>{/if}
+    {#if item.extra?.securityScan === false}<span class="pill bad">{t("marketplace.scanFailed")}</span>{/if}
     {#if item.category}<span class="pill">{item.category}</span>{/if}
     {#if item.declaresSkills.length > 0}<span class="pill">{t("marketplace.hasSkills")}</span>{/if}
   </p>
@@ -131,13 +166,43 @@
       <dt>{t("marketplace.origin")}</dt>
       <dd><button class="link" onclick={() => void openUrl(origin)}>{origin}</button></dd>
     {/if}
+    {#if item.extra?.installName && isMcp}
+      <dt>{t("marketplace.installName")}</dt>
+      <dd><code>{item.extra.installName}</code></dd>
+    {/if}
   </dl>
+  {#if item.extra?.listingUrl}
+    {@const listing = item.extra.listingUrl}
+    <button class="link listing" onclick={() => void openUrl(listing)}>
+      {t("marketplace.viewOn", { source: item.sourceLabel })} ↗
+    </button>
+  {/if}
+
+  {#if item.extra?.tools?.length}
+    <button class="tools-toggle" aria-expanded={showTools} onclick={() => (showTools = !showTools)}>
+      {showTools ? "▾" : "▸"} {t("marketplace.tools", { n: String(item.extra.tools.length) })}
+    </button>
+    {#if showTools}
+      <ul class="tools">
+        {#each item.extra.tools as tool (tool.name)}
+          <li><code>{tool.name}</code>{#if tool.description}<span> — {tool.description}</span>{/if}</li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
+
+  {#if loadingDetail}
+    <p class="hint">{t("marketplace.loadingDetail")}</p>
+  {:else if catalogStore.detailError && item.extra?.needsDetail}
+    <p class="error">{catalogStore.detailError}</p>
+  {/if}
 
   <p class="label">{t("marketplace.installsInto")}</p>
   <InstallTargetPicker
     supported={installableTargets}
     available={availableTargets}
     value={target}
+    unsupported={item.class === "plugin" ? "marketplace.targetPluginOnly" : undefined}
     onpick={(picked) => (chosenTarget = picked)}
   />
   {#if item.class === "plugin"}
@@ -184,7 +249,19 @@
         </button>
       </div>
     </div>
-  {:else if item.installedIn.length > 0}
+  {:else if isMcp && item.extra?.localOnly}
+    <!-- It only runs here through its source's own runner: said, with the
+         way to it, rather than offering an install that can't happen. -->
+    <p class="hint">{t("marketplace.localOnly", { source: item.sourceLabel })}</p>
+  {:else if isMcp && installedHere}
+    <p class="installed">{t("marketplace.installedIn", { agent: t(TARGET_LABEL_KEYS[target]) })}</p>
+    {#if justInstalled?.signIn}
+      <p class="hint notice">{t(SIGN_IN_KEYS[target], { name: justInstalled.installName })}</p>
+    {/if}
+    <button class="ghost" disabled={busy} onclick={() => void catalogStore.uninstallMcp(item, target)}>
+      {busy ? t("marketplace.uninstalling") : t("marketplace.uninstall")}
+    </button>
+  {:else if !isMcp && item.installedIn.length > 0}
     <p class="installed">{t("marketplace.installed")}</p>
     <button class="ghost" disabled={busy || !canInstall} onclick={() => void catalogStore.uninstall(item, target)}>
       {busy ? t("marketplace.uninstalling") : t("marketplace.uninstall")}
@@ -210,15 +287,17 @@
       <button class="ghost" disabled={busy} onclick={() => (confirming = false)}>{t("marketplace.cancel")}</button>
     </div>
   {:else}
-    <button
-      class="install"
-      disabled={!canInstall || (item.class === "mcp" && !paramsOk)}
-      onclick={() => (confirming = true)}
-    >
+    {@const ready = isMcp ? availableTargets.includes(target) && !loadingDetail && !item.extra?.needsDetail : canInstall}
+    <button class="install" disabled={!ready || (isMcp && !paramsOk)} onclick={() => (confirming = true)}>
       {t("marketplace.install")}
     </button>
-    {#if !canInstall}
+    {#if isMcp && !availableTargets.includes(target)}
+      <p class="hint">{t("marketplace.cliMissing", { agent: t(TARGET_LABEL_KEYS[target]) })}</p>
+    {:else if !isMcp && !canInstall}
       <p class="hint">{t("marketplace.claudeCliMissing")}</p>
+    {/if}
+    {#if isMcp && item.extra?.signIn}
+      <p class="hint">{t("marketplace.signInNote")}</p>
     {/if}
   {/if}
 
@@ -280,6 +359,58 @@
     letter-spacing: 0.04em;
     opacity: 0.8;
     color: var(--titlebar-fg, #d4d4d4);
+  }
+
+  .pill.good {
+    border-color: #2ea043;
+    color: #3fb950;
+  }
+
+  .pill.bad {
+    border-color: #f14c4c;
+    color: #f14c4c;
+  }
+
+  .listing {
+    align-self: flex-start;
+    font-size: 11px;
+  }
+
+  .tools-toggle {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--titlebar-fg, #d4d4d4);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .tools {
+    margin: 0;
+    padding-left: 16px;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--titlebar-fg, #d4d4d4);
+  }
+
+  .tools span {
+    opacity: 0.7;
+  }
+
+  code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.95em;
+  }
+
+  .notice {
+    padding: 6px 8px;
+    border-left: 3px solid var(--pane-active-border, #3a6df0);
+    opacity: 0.9;
+    line-height: 1.45;
   }
 
   .description {

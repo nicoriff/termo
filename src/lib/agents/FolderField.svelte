@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { open } from "@tauri-apps/plugin-dialog";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { uiState } from "$lib/core/ui-state.svelte";
 
-  /** A folder path: typed, or chosen with the system's folder picker. */
+  /** A folder path: typed, or chosen with the folder browser new consoles
+   * use (AgentLaunchDialog). */
   let {
     value = $bindable(""),
     id,
@@ -10,20 +11,14 @@
     disabled = false,
   }: { value?: string; id?: string; placeholder?: string; disabled?: boolean } = $props();
 
-  async function choose() {
-    const picked = await open({
-      directory: true,
-      multiple: false,
-      defaultPath: value.trim() || undefined,
-      title: t("agents.folder.title"),
-    }).catch(() => null);
-    if (typeof picked === "string") value = picked;
+  function choose() {
+    uiState.pickFolder(value.trim() || null, (picked) => (value = picked));
   }
 </script>
 
 <div class="folder-field">
   <input {id} class="field" {placeholder} {disabled} bind:value spellcheck="false" />
-  <button type="button" class="choose" {disabled} title={t("agents.folder.title")} onclick={() => void choose()}>
+  <button type="button" class="choose" {disabled} title={t("agents.folder.title")} onclick={choose}>
     <svg viewBox="0 0 14 14" aria-hidden="true">
       <path d="M1.5 3.5h4l1.5 1.5h5.5v6.5h-11z" fill="none" stroke="currentColor" stroke-width="1.1" />
     </svg>

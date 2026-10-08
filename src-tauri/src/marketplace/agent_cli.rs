@@ -169,6 +169,36 @@ mod tests {
         assert!(!err.trim().is_empty());
     }
 
+    /// On Windows the npm-installed CLIs (codex, gemini, copilot) are `.cmd`
+    /// shims that hand their arguments on with `%*`, so every argument is
+    /// read by cmd.exe — twice. A catalog's text (a URL with `&`, a value
+    /// with `%`, a quote) must reach the CLI as text or be refused, never
+    /// run as a command of its own.
+    #[cfg(windows)]
+    #[test]
+    fn catalog_text_never_becomes_a_command_through_a_cmd_shim() {
+        let dir = std::env::temp_dir().join(format!("termo-shim-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("fakecli.cmd");
+        let marker = dir.join("INJECTED.txt");
+        // What an npm shim does with its arguments.
+        std::fs::write(&shim, "@echo off\r\necho GOT %*\r\n").unwrap();
+        let inject = format!("echo x> \"{}\"", marker.display());
+        for hostile in [
+            format!("https://x.example/mcp?a=1&{inject}"),
+            format!("a\" & {inject} & \""),
+            format!("a|{inject}"),
+            format!("%COMSPEC% /c {inject}"),
+            format!("a^&{inject}"),
+            format!("a\n{inject}"),
+        ] {
+            // Either it arrives as one piece of text, or it's refused.
+            let _ = run(&shim, &["mcp", "add", "name", "--url", &hostile]);
+            assert!(!marker.exists(), "ran a command out of {hostile:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn an_override_that_does_not_exist_is_not_used() {
         assert!(locate(AgentTarget::Claude, Some("/nonexistent/claude")).is_none());

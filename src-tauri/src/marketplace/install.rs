@@ -17,7 +17,9 @@ use serde_json::Value;
 use crate::i18n::{tr, Msg};
 
 use super::agent_cli;
+use super::installed::{self, Owners};
 use super::model::AgentTarget;
+use super::names::install_name;
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +41,14 @@ pub struct DeclaredCommand {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "status", rename_all = "kebab-case")]
 pub enum InstallOutcome {
-    Installed { message: String },
+    #[serde(rename_all = "camelCase")]
+    Installed {
+        message: String,
+        /// The name an MCP server went in under (see names.rs).
+        install_name: String,
+        /// It signs the user in itself, from the agent: there's a step left.
+        sign_in: bool,
+    },
     /// The marketplace declares a command that has to be approved by a
     /// person before it runs. Never auto-approved.
     NeedsCommandApproval { commands: Vec<DeclaredCommand> },
@@ -165,6 +174,8 @@ pub fn install_plugin(request: &InstallRequest) -> Result<InstallOutcome, String
     }
     Ok(InstallOutcome::Installed {
         message: success_message(&output.stdout),
+        install_name: String::new(),
+        sign_in: false,
     })
 }
 
@@ -318,8 +329,88 @@ fn filled_env_map(spec: &[Value], params: &std::collections::HashMap<String, Str
 /// legitimate scheme for one. Checked before the URL goes anywhere, so a
 /// registry entry can't point the agent at a `file://` path or a bespoke
 /// URI scheme some other installed program has registered a handler for.
+///
+/// And over TLS: what's installed carries the user's keys in its headers,
+/// and a catalog entry doesn't get to send them in the clear. Plain http
+/// is left for a server on this same computer.
 fn is_safe_remote_url(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
+    if url.len() > 2048 || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+    if let Some(rest) = url.strip_prefix("https://") {
+        return !rest.is_empty() && !rest.starts_with('/');
+    }
+    let Some(rest) = url.strip_prefix("http://") else { return false };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    // No `user@` to make another host look like this one.
+    let host = authority.rsplit_once(':').map_or(authority, |(host, port)| if port.chars().all(|c| c.is_ascii_digit()) { host } else { authority });
+    !authority.contains('@') && matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+}
+
+/// A header's name as HTTP takes one, and nothing that changes who the
+/// request is for.
+fn is_safe_header_name(name: &str) -> bool {
+    const TAKEN: &[&str] = &["host", "content-length", "transfer-encoding", "connection", "cookie"];
+    !name.is_empty()
+        && name.len() <= 100
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        && !TAKEN.iter().any(|taken| taken.eq_ignore_ascii_case(name))
+}
+
+/// A value that stays inside the header or the parameter it's for: no line
+/// break to start another header with.
+fn is_safe_value(value: &str) -> bool {
+    value.len() <= 4096 && !value.chars().any(|c| c.is_control())
+}
+
+fn is_safe_param_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 100 && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// The headers a remote gets: the ones it declares, with what the user
+/// supplied — each checked by name and by value.
+fn remote_headers(remote: &Value, params: &std::collections::HashMap<String, String>) -> Result<serde_json::Map<String, Value>, String> {
+    let spec = remote.get("headers").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut filled = filled_map(&spec, params);
+    filled.retain(|name, _| is_safe_header_name(name));
+    for (name, value) in &filled {
+        if !is_safe_value(value.as_str().unwrap_or_default()) {
+            return Err(tr(Msg::UnsafeMcpLaunchValue(name)));
+        }
+    }
+    Ok(filled)
+}
+
+/// The remote's address with the query parameters it declares, as the user
+/// filled them in.
+fn remote_url(remote: &Value, params: &std::collections::HashMap<String, String>) -> Result<String, String> {
+    let url = remote
+        .get("url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| tr(Msg::MarketplaceCommandFailed("remote has no url")))?;
+    if !is_safe_remote_url(url) {
+        return Err(tr(Msg::UnsafeMcpRemoteUrl(url)));
+    }
+    let spec = remote.get("queryParams").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut url = url.to_string();
+    for (name, value) in filled_map(&spec, params) {
+        let value = value.as_str().unwrap_or_default().to_string();
+        if !is_safe_param_name(&name) || value.is_empty() {
+            continue;
+        }
+        if !is_safe_value(&value) {
+            return Err(tr(Msg::UnsafeMcpLaunchValue(&name)));
+        }
+        url.push(if url.contains('?') { '&' } else { '?' });
+        url.push_str(&format!("{}={}", super::smithery::urlencode(&name), super::smithery::urlencode(&value)));
+    }
+    Ok(url)
+}
+
+/// Whether the server is left for the user to sign in to from the agent: a
+/// remote that got no credential of its own here.
+fn signs_in(request: &McpInstallRequest) -> bool {
+    request.remotes.first().is_some_and(|remote| remote_headers(remote, &request.params).is_ok_and(|headers| headers.is_empty()))
 }
 
 /// Builds the `.mcp.json`-shaped server config `claude mcp add-json` takes,
@@ -327,18 +418,11 @@ fn is_safe_remote_url(url: &str) -> bool {
 pub(crate) fn server_config(request: &McpInstallRequest) -> Result<Value, String> {
     if let Some(remote) = request.remotes.first() {
         let transport = remote.get("type").and_then(Value::as_str).unwrap_or("http");
-        let url = remote
-            .get("url")
-            .and_then(Value::as_str)
-            .ok_or_else(|| tr(Msg::MarketplaceCommandFailed("remote has no url")))?;
-        if !is_safe_remote_url(url) {
-            return Err(tr(Msg::UnsafeMcpRemoteUrl(url)));
-        }
-        let headers = remote.get("headers").and_then(Value::as_array).cloned().unwrap_or_default();
+        let url = remote_url(remote, &request.params)?;
         let mut config = serde_json::Map::new();
         config.insert("type".to_string(), Value::String(if transport == "sse" { "sse".into() } else { "http".into() }));
-        config.insert("url".to_string(), Value::String(url.to_string()));
-        let filled = filled_map(&headers, &request.params);
+        config.insert("url".to_string(), Value::String(url));
+        let filled = remote_headers(remote, &request.params)?;
         if !filled.is_empty() {
             config.insert("headers".to_string(), Value::Object(filled));
         }
@@ -364,37 +448,42 @@ pub(crate) fn server_config(request: &McpInstallRequest) -> Result<Value, String
     Err(tr(Msg::MarketplaceCommandFailed("no remote or package to install")))
 }
 
-pub fn install_mcp(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+/// Installs the server into the agent, under the name every CLI takes
+/// (see names.rs). `owners`: Termo's note of which entry each name it
+/// installed belongs to — a name already there that isn't this entry's is
+/// someone else's server, and is left alone.
+pub fn install_mcp(request: &McpInstallRequest, owners: &std::path::Path) -> Result<InstallOutcome, String> {
     if !agent_cli::is_valid_component_name(&request.server_name) {
         return Err(tr(Msg::InvalidComponentName(&request.server_name)));
     }
-    match request.target {
-        AgentTarget::Claude => install_mcp_claude(request),
-        AgentTarget::Codex => install_mcp_codex(request),
-        AgentTarget::Gemini => install_mcp_gemini(request),
-        AgentTarget::Copilot => install_mcp_copilot(request),
+    let name = install_name(&request.server_name);
+    let mut owned = Owners::load(owners);
+    let present = installed::names(request.target).contains(&name);
+    if present && owned.get(request.target, &name) != Some(request.server_name.as_str()) {
+        return Err(tr(Msg::McpNameTaken(&name, request.target.binary_stem())));
     }
-}
-
-/// The file where each of these CLIs keeps its user-level MCP servers:
-/// Gemini CLI in its whole settings, Copilot CLI in a file of their own.
-fn mcp_servers_file(target: AgentTarget) -> Result<std::path::PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| tr(Msg::HomeDirNotFound))?;
-    Ok(match target {
-        AgentTarget::Copilot => crate::agents::spec::copilot_home(&home).join("mcp-config.json"),
-        _ => home.join(".gemini").join("settings.json"),
-    })
+    let message = match request.target {
+        AgentTarget::Claude => install_mcp_claude(request, &name, present),
+        AgentTarget::Codex => install_mcp_codex(request, &name, present),
+        AgentTarget::Gemini => install_mcp_gemini(request, &name),
+        AgentTarget::Copilot => install_mcp_copilot(request, &name),
+    }?;
+    owned.set(request.target, &name, &request.server_name);
+    // The note is a convenience: the server is in either way.
+    let _ = owned.save(owners);
+    Ok(InstallOutcome::Installed { message, install_name: name, sign_in: signs_in(request) })
 }
 
 /// Edits `mcpServers` in a CLI's config file: the rest of the file is kept
 /// as it is, and it's replaced whole (written aside, then renamed) so a
-/// failure never leaves it half-written.
+/// failure never leaves it half-written. Readable by this user only: a
+/// server's headers can carry its key.
 fn edit_mcp_servers(
     target: AgentTarget,
     edit: impl FnOnce(&mut serde_json::Map<String, Value>),
 ) -> Result<(), String> {
     let fail = |err: String| tr(Msg::MarketplaceCommandFailed(&err));
-    let file = mcp_servers_file(target)?;
+    let file = installed::config_file(target).ok_or_else(|| tr(Msg::HomeDirNotFound))?;
     let text = std::fs::read_to_string(&file).unwrap_or_default();
     let mut root = if text.trim().is_empty() {
         serde_json::Map::new()
@@ -410,86 +499,145 @@ fn edit_mcp_servers(
         .as_object_mut()
         .ok_or_else(|| tr(Msg::NotAJsonObject("mcpServers")))?;
     edit(servers);
-    if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir).map_err(|err| fail(err.to_string()))?;
-    }
     let body = serde_json::to_string_pretty(&root).map_err(|err| fail(err.to_string()))? + "\n";
-    let tmp = file.with_extension("termo-tmp");
-    std::fs::write(&tmp, body)
-        .and_then(|_| std::fs::rename(&tmp, &file))
-        .map_err(|err| fail(err.to_string()))
+    crate::agents::console_bridge::replace_file(&file, &body).map_err(fail)
 }
 
 /// Into Gemini CLI's settings directly, not through `gemini mcp add`: a
 /// package's own arguments (`npx -y …`) start with dashes its argument
 /// parser would take for its own options. The same checked config Claude
 /// gets, in Gemini's shape (see spec::gemini_server).
-fn install_mcp_gemini(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+fn install_mcp_gemini(request: &McpInstallRequest, name: &str) -> Result<String, String> {
     agent_cli::require(AgentTarget::Gemini, None)?;
     let config = crate::agents::spec::gemini_server(&server_config(request)?);
     edit_mcp_servers(AgentTarget::Gemini, |servers| {
-        servers.insert(request.server_name.clone(), config);
+        servers.insert(name.to_string(), config);
     })?;
-    Ok(InstallOutcome::Installed { message: String::new() })
+    Ok(String::new())
 }
 
 /// Into Copilot CLI's `mcp-config.json` directly, for the same reason as
 /// Gemini's: the same checked config, in Copilot's shape (see
 /// spec::copilot_server).
-fn install_mcp_copilot(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+fn install_mcp_copilot(request: &McpInstallRequest, name: &str) -> Result<String, String> {
     agent_cli::require(AgentTarget::Copilot, None)?;
     let config = crate::agents::spec::copilot_server(&server_config(request)?);
     edit_mcp_servers(AgentTarget::Copilot, |servers| {
-        servers.insert(request.server_name.clone(), config);
+        servers.insert(name.to_string(), config);
     })?;
-    Ok(InstallOutcome::Installed { message: String::new() })
+    Ok(String::new())
 }
 
-fn install_mcp_claude(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+fn install_mcp_claude(request: &McpInstallRequest, name: &str, present: bool) -> Result<String, String> {
     let claude = agent_cli::require(AgentTarget::Claude, None)?;
     let config = server_config(request)?;
     let config_text = serde_json::to_string(&config).map_err(|err| tr(Msg::MarketplaceCommandFailed(&err.to_string())))?;
-
-    agent_cli::run(
-        &claude,
-        &["mcp", "add-json", request.server_name.as_str(), config_text.as_str(), "-s", "user"],
-    )
-    .map(|output| InstallOutcome::Installed { message: output.trim().to_string() })
+    if present {
+        // Installing again replaces it: `add-json` refuses a name it has.
+        let _ = agent_cli::run(&claude, &["mcp", "remove", name, "-s", "user"]);
+    }
+    agent_cli::run(&claude, &["mcp", "add-json", name, config_text.as_str(), "-s", "user"]).map(|output| output.trim().to_string())
 }
 
-fn install_mcp_codex(request: &McpInstallRequest) -> Result<InstallOutcome, String> {
+/// The lines around a server Termo wrote into Codex's `config.toml` itself.
+fn codex_markers(name: &str) -> (String, String) {
+    (format!("# >>> termo mcp: {name}"), format!("# <<< termo mcp: {name}"))
+}
+
+/// Codex's `config.toml` without the server Termo wrote under `name`, and
+/// with `block` in its place when there is one. Everything else stays as
+/// it is.
+pub(crate) fn codex_config(current: &str, name: &str, block: Option<&str>) -> String {
+    let (begin, end) = codex_markers(name);
+    let mut out = String::new();
+    let mut inside = false;
+    for line in current.lines() {
+        if line.trim() == begin {
+            inside = true;
+            continue;
+        }
+        if inside {
+            if line.trim() == end {
+                inside = false;
+            }
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    let mut out = out.trim_end().to_string();
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    if let Some(block) = block {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("{begin}\n{block}\n{end}\n"));
+    }
+    out
+}
+
+/// A remote with headers, as a table in Codex's `config.toml`: its own
+/// `mcp add` has no way to say a header.
+fn codex_remote_table(name: &str, url: &str, headers: &serde_json::Map<String, Value>) -> String {
+    // A JSON string is a TOML basic string: the same quotes and escapes.
+    let quoted = |text: &str| serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into());
+    let pairs: Vec<String> = headers
+        .iter()
+        .map(|(header, value)| format!("{} = {}", quoted(header), quoted(value.as_str().unwrap_or_default())))
+        .collect();
+    format!("[mcp_servers.{name}]\nurl = {}\nhttp_headers = {{ {} }}", quoted(url), pairs.join(", "))
+}
+
+fn codex_config_file() -> Result<std::path::PathBuf, String> {
+    installed::config_file(AgentTarget::Codex).ok_or_else(|| tr(Msg::HomeDirNotFound))
+}
+
+fn install_mcp_codex(request: &McpInstallRequest, name: &str, present: bool) -> Result<String, String> {
     let codex = agent_cli::require(AgentTarget::Codex, None)?;
+    let fail = |err: String| tr(Msg::MarketplaceCommandFailed(&err));
+    let file = codex_config_file()?;
+    if present {
+        // Installing again replaces it, whichever way it went in before.
+        let _ = agent_cli::run(&codex, &["mcp", "remove", name]);
+        let current = std::fs::read_to_string(&file).unwrap_or_default();
+        let without = codex_config(&current, name, None);
+        if without != current {
+            crate::agents::console_bridge::replace_file(&file, &without).map_err(fail)?;
+        }
+    }
+    let headers = match request.remotes.first() {
+        Some(remote) => remote_headers(remote, &request.params)?,
+        None => serde_json::Map::new(),
+    };
+    if let (Some(remote), false) = (request.remotes.first(), headers.is_empty()) {
+        let table = codex_remote_table(name, &remote_url(remote, &request.params)?, &headers);
+        let current = std::fs::read_to_string(&file).unwrap_or_default();
+        crate::agents::console_bridge::replace_file(&file, &codex_config(&current, name, Some(&table))).map_err(fail)?;
+        return Ok(String::new());
+    }
     let args = codex_add_args(request)?;
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    agent_cli::run(&codex, &arg_refs).map(|output| InstallOutcome::Installed { message: output.trim().to_string() })
+    agent_cli::run(&codex, &arg_refs).map(|output| output.trim().to_string())
 }
 
 /// Builds the argv for `codex mcp add <name> ...` — Codex's own real
-/// subcommand, not the config.toml this code used to assume was the only
-/// way in. Its flag surface is narrower than `.mcp.json`, though: a stdio
-/// package translates one-to-one (command, args, one `--env` per variable),
-/// but a remote only ever takes a bearer token read from an *environment
-/// variable* at launch time, never a literal header value — so a remote
-/// whose registry entry needs a real header (an API key, a fixed
-/// `Authorization` value) can't be wired up this way without hand-editing
-/// config.toml, which this module deliberately never does.
+/// subcommand. Its flag surface is narrower than `.mcp.json`, though: a
+/// stdio package translates one-to-one (command, args, one `--env` per
+/// variable), but a remote only ever takes a bearer token read from an
+/// *environment variable* at launch time, never a literal header value —
+/// so a remote that needs a real header goes into config.toml as a table
+/// of its own instead (see install_mcp_codex), and is refused here.
 fn codex_add_args(request: &McpInstallRequest) -> Result<Vec<String>, String> {
-    let mut args = vec!["mcp".to_string(), "add".to_string(), request.server_name.clone()];
+    let mut args = vec!["mcp".to_string(), "add".to_string(), install_name(&request.server_name)];
 
     if let Some(remote) = request.remotes.first() {
-        let url = remote
-            .get("url")
-            .and_then(Value::as_str)
-            .ok_or_else(|| tr(Msg::MarketplaceCommandFailed("remote has no url")))?;
-        if !is_safe_remote_url(url) {
-            return Err(tr(Msg::UnsafeMcpRemoteUrl(url)));
-        }
-        let headers = remote.get("headers").and_then(Value::as_array).cloned().unwrap_or_default();
-        if !filled_map(&headers, &request.params).is_empty() {
+        if !remote_headers(remote, &request.params)?.is_empty() {
             return Err(tr(Msg::McpCodexHeadersUnsupported));
         }
         args.push("--url".to_string());
-        args.push(url.to_string());
+        args.push(remote_url(remote, &request.params)?);
         return Ok(args);
     }
 
@@ -513,18 +661,60 @@ fn codex_add_args(request: &McpInstallRequest) -> Result<Vec<String>, String> {
     Err(tr(Msg::MarketplaceCommandFailed("no remote or package to install")))
 }
 
-pub fn uninstall_mcp(request: &McpInstallRequest) -> Result<(), String> {
+/// Takes the server out of the agent: under the name Termo gives it — when
+/// that name is this entry's — and under its full id, as older versions
+/// installed it.
+pub fn uninstall_mcp(request: &McpInstallRequest, owners: &std::path::Path) -> Result<(), String> {
     if !agent_cli::is_valid_component_name(&request.server_name) {
         return Err(tr(Msg::InvalidComponentName(&request.server_name)));
     }
+    let name = install_name(&request.server_name);
+    let mut owned = Owners::load(owners);
+    let present = installed::names(request.target);
+    // A name Termo knows as another entry's isn't this one to remove.
+    let ours = present.contains(&name) && owned.get(request.target, &name).is_none_or(|owner| owner == request.server_name);
+    let legacy = name != request.server_name && present.contains(&request.server_name);
+    let mut names: Vec<&str> = Vec::new();
+    if ours {
+        names.push(&name);
+    }
+    if legacy {
+        names.push(&request.server_name);
+    }
+    if names.is_empty() {
+        return Ok(());
+    }
     let bin = agent_cli::require(request.target, None)?;
     match request.target {
-        AgentTarget::Claude => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str(), "-s", "user"]).map(|_| ()),
-        AgentTarget::Codex => agent_cli::run(&bin, &["mcp", "remove", request.server_name.as_str()]).map(|_| ()),
+        AgentTarget::Claude => {
+            for name in &names {
+                agent_cli::run(&bin, &["mcp", "remove", name, "-s", "user"])?;
+            }
+        }
+        AgentTarget::Codex => {
+            let file = codex_config_file()?;
+            for name in &names {
+                let current = std::fs::read_to_string(&file).unwrap_or_default();
+                let without = codex_config(&current, name, None);
+                if without != current {
+                    crate::agents::console_bridge::replace_file(&file, &without)
+                        .map_err(|err| tr(Msg::MarketplaceCommandFailed(&err)))?;
+                } else {
+                    agent_cli::run(&bin, &["mcp", "remove", name])?;
+                }
+            }
+        }
         AgentTarget::Gemini | AgentTarget::Copilot => edit_mcp_servers(request.target, |servers| {
-            servers.remove(&request.server_name);
-        }),
+            for name in &names {
+                servers.remove(*name);
+            }
+        })?,
     }
+    if ours {
+        owned.remove(request.target, &name);
+        let _ = owned.save(owners);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -702,6 +892,30 @@ mod tests {
         assert_eq!(config["env"]["GCS_BUCKET"], "fine");
     }
 
+    /// A remote's address: https, or plain http to this computer only —
+    /// and nothing that only looks like one.
+    #[test]
+    fn a_remote_goes_over_tls_unless_it_is_this_computer() {
+        for good in ["https://x.run.tools", "https://x.example/mcp?a=1", "http://localhost:8080/mcp", "http://127.0.0.1/mcp", "http://[::1]:3000"] {
+            assert!(is_safe_remote_url(good), "{good}");
+        }
+        for bad in [
+            "http://x.example/mcp",
+            "http://localhost@evil.example/mcp",
+            "http://localhost.evil.example/mcp",
+            "http://127.0.0.1.evil.example",
+            "https://",
+            "https:///x",
+            "https://x.example/a b",
+            "https://x.example/\n--flag",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "",
+        ] {
+            assert!(!is_safe_remote_url(bad), "{bad}");
+        }
+    }
+
     #[test]
     fn refuses_a_remote_url_that_is_not_http() {
         let remote = serde_json::json!({ "type": "streamable-http", "url": "file:///etc/passwd" });
@@ -743,7 +957,7 @@ mod tests {
         let remote = serde_json::json!({ "type": "streamable-http", "url": "https://server.example/mcp" });
         let request = mcp_request(vec![remote], vec![], &[]);
         let args = codex_add_args(&request).unwrap();
-        assert_eq!(args, vec!["mcp", "add", "ai.smithery/example", "--url", "https://server.example/mcp"]);
+        assert_eq!(args, vec!["mcp", "add", "example", "--url", "https://server.example/mcp"]);
     }
 
     #[test]
@@ -783,7 +997,7 @@ mod tests {
             vec![
                 "mcp",
                 "add",
-                "ai.smithery/example",
+                "example",
                 "--env",
                 "GCS_BUCKET=my-bucket",
                 "--",
@@ -798,7 +1012,124 @@ mod tests {
     fn an_mcp_name_that_could_become_a_flag_is_refused_before_running_anything() {
         let mut request = mcp_request(vec![serde_json::json!({"type":"http","url":"https://x"})], vec![], &[]);
         request.server_name = "--help".into();
-        let err = install_mcp(&request).unwrap_err();
+        let err = install_mcp(&request, std::path::Path::new("unused.json")).unwrap_err();
         assert!(err.contains("--help"), "err: {err}");
+    }
+
+    /// What a hosted server needs besides signing in goes where its schema
+    /// says: headers by name, parameters in the address — and nothing that
+    /// could start another header or change who the request is for.
+    #[test]
+    fn a_remotes_settings_go_into_headers_and_the_address() {
+        let remote = serde_json::json!({
+            "type": "streamable-http",
+            "url": "https://x.run.tools",
+            "headers": [{ "name": "X_API_KEY", "isRequired": true, "isSecret": true }, { "name": "Host" }, { "name": "bad name" }],
+            "queryParams": [{ "name": "projectId" }, { "name": "region", "default": "eu west" }, { "name": "bad&name" }]
+        });
+        let request = mcp_request(
+            vec![remote.clone()],
+            vec![],
+            &[("X_API_KEY", "k-123"), ("Host", "evil.example"), ("bad name", "x"), ("projectId", "a/b"), ("bad&name", "x")],
+        );
+        let config = server_config(&request).unwrap();
+        assert_eq!(config["url"], "https://x.run.tools?projectId=a%2Fb&region=eu%20west");
+        assert_eq!(config["headers"], serde_json::json!({ "X_API_KEY": "k-123" }));
+        assert!(!signs_in(&request));
+
+        let injected = mcp_request(vec![remote.clone()], vec![], &[("X_API_KEY", "k\r\nX-Other: 1")]);
+        assert!(server_config(&injected).is_err());
+        let plain = mcp_request(vec![serde_json::json!({ "url": "https://x.run.tools" })], vec![], &[]);
+        assert!(signs_in(&plain));
+    }
+
+    #[test]
+    fn codex_keeps_a_remote_with_headers_as_a_table_of_its_own() {
+        let mut headers = serde_json::Map::new();
+        headers.insert("X_API_KEY".into(), Value::String("k\"1".into()));
+        let table = codex_remote_table("acme-files", "https://x.run.tools?a=1", &headers);
+        assert_eq!(
+            table,
+            "[mcp_servers.acme-files]\nurl = \"https://x.run.tools?a=1\"\nhttp_headers = { \"X_API_KEY\" = \"k\\\"1\" }"
+        );
+        let user = "model = \"o3\"\n\n[mcp_servers.docs]\ncommand = \"npx\"\n";
+        let added = codex_config(user, "acme-files", Some(&table));
+        assert!(added.starts_with(user));
+        assert!(installed::toml_names(&added).contains("acme-files"));
+        // Again: one copy. Another server's block is left alone.
+        let other = codex_config(&added, "other", Some("[mcp_servers.other]\nurl = \"y\""));
+        let again = codex_config(&other, "acme-files", Some(&table));
+        assert_eq!(again.matches("[mcp_servers.acme-files]").count(), 1);
+        assert!(again.contains("[mcp_servers.other]"));
+        let removed = codex_config(&codex_config(&again, "acme-files", None), "other", None);
+        assert_eq!(removed, user);
+    }
+
+    /// Against the real CLIs on this computer, in their real settings: a
+    /// test server goes into each one that's installed, is seen there, is
+    /// refused to another entry of the same name, and comes out again.
+    /// `cargo test --lib live_install -- --ignored`
+    #[test]
+    #[ignore = "installs into and removes from the real CLIs' settings"]
+    fn live_install_into_every_agent_and_out_again() {
+        let dir = std::env::temp_dir().join(format!("termo-live-install-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let owners = dir.join("owners.json");
+        let remote = serde_json::json!({
+            "type": "streamable-http",
+            "url": "https://example.invalid/mcp",
+            "headers": [{ "name": "X_TERMO_TEST", "isRequired": true, "isSecret": true }]
+        });
+        let name = "selftest-roundtrip";
+        let mut report = Vec::new();
+        for target in [AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot] {
+            if agent_cli::locate(target, None).is_none() {
+                report.push(format!("{target:?}: not installed, skipped"));
+                continue;
+            }
+            for with_header in [true, false] {
+                let params: &[(&str, &str)] = if with_header { &[("X_TERMO_TEST", "v\"alue")] } else { &[] };
+                let mut request = mcp_request(vec![remote.clone()], vec![], params);
+                request.server_name = "termo.selftest/roundtrip".into();
+                request.target = target;
+                assert!(!installed::names(target).contains(name), "{target:?}: a leftover from an earlier run");
+                let outcome = install_mcp(&request, &owners).unwrap_or_else(|err| panic!("{target:?} install: {err}"));
+                match outcome {
+                    InstallOutcome::Installed { install_name, sign_in, .. } => {
+                        assert_eq!(install_name, name);
+                        assert_eq!(sign_in, !with_header);
+                    }
+                    other => panic!("{target:?}: {other:?}"),
+                }
+                assert!(installed::names(target).contains(name), "{target:?}: not there after installing");
+                // Again: replaces it. Another entry of the same name: refused.
+                install_mcp(&request, &owners).unwrap_or_else(|err| panic!("{target:?} reinstall: {err}"));
+                let mut other = mcp_request(vec![remote.clone()], vec![], params);
+                other.server_name = "selftest/roundtrip".into();
+                other.target = target;
+                assert!(install_mcp(&other, &owners).is_err(), "{target:?}: landed on another entry's server");
+                uninstall_mcp(&request, &owners).unwrap_or_else(|err| panic!("{target:?} uninstall: {err}"));
+                assert!(!installed::names(target).contains(name), "{target:?}: still there after removing");
+                report.push(format!("{target:?} ({}): ok", if with_header { "with a header" } else { "signing in" }));
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        println!("{}", report.join("\n"));
+    }
+
+    /// Installing never lands on a server of the same name that isn't this
+    /// entry's: Termo's note says whose each name is.
+    #[test]
+    fn a_name_already_someone_elses_is_refused() {
+        let dir = std::env::temp_dir().join(format!("termo-owners-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("owners.json");
+        let mut owners = Owners::default();
+        owners.set(AgentTarget::Claude, "example", "io.github.other/example");
+        owners.save(&path).unwrap();
+        let loaded = Owners::load(&path);
+        assert_eq!(loaded.get(AgentTarget::Claude, "example"), Some("io.github.other/example"));
+        assert_ne!(loaded.get(AgentTarget::Claude, "example"), Some("ai.smithery/example"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

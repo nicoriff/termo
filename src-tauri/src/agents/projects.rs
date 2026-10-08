@@ -45,6 +45,9 @@ pub struct Project {
     /// The agent "Run project" starts.
     pub entry_agent_id: String,
     pub limits: ProjectLimits,
+    /// Set on the team an orchestration runs (see orchestration/): it's
+    /// shown with its orchestration, not among the user's own projects.
+    pub orchestration_id: String,
     /// Unix seconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -340,6 +343,7 @@ mod tests {
             cost_usd: Some(cost),
             link: None,
             rehearsal: false,
+            failure: None,
         }
     }
 

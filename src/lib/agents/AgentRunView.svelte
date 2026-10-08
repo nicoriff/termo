@@ -15,13 +15,21 @@
   import { agentsStore } from "./agents-store.svelte";
   import { TRIGGER_KEYS, ago, conversationTree, formatDuration, withoutEchoes } from "./agent-spec";
   import { renderMarkdownLite } from "./markdown-lite";
+  import RunFailureCard from "./RunFailureCard.svelte";
+  import RunNotice from "./RunNotice.svelte";
+  import { ENGINE_NAMES } from "./orchestration-spec";
   import type { MessageKey } from "$lib/i18n/translate";
 
   let { agentId, runId }: { agentId: string; runId: string } = $props();
 
   const agent = $derived(agentsStore.agents.find((candidate) => candidate.id === agentId));
   let runs = $state<RunRecord[]>([]);
+  /** Whether the history has come from disk yet: until then, the last run
+   * the store already holds stands in for it. */
+  let runsLoaded = $state(false);
   let events = $state<RunEvent[]>([]);
+  /** The log of the run on screen is still being read. */
+  let logLoading = $state(true);
   let logEl: HTMLDivElement | undefined = $state();
   let stickToBottom = true;
   let error = $state("");
@@ -85,19 +93,33 @@
 
   async function loadRuns() {
     runs = await agentRuns(agentId).catch(() => []);
+    runsLoaded = true;
   }
+
+  /** What the history shows: before it's read, the run the store has. */
+  const history = $derived.by(() => {
+    if (runsLoaded) return runs;
+    const live = agentsStore.lastRun[agentId];
+    return live ? [live] : [];
+  });
 
   // A different run on screen: its log from disk, then live steps on top.
   $effect(() => {
     const id = runId;
     let cancelled = false;
     events = [];
+    logLoading = true;
     stickToBottom = true;
-    void agentRunLog(agentId, id).then((log) => {
-      if (cancelled) return;
-      events = log;
-      void scrollDown();
-    });
+    void agentRunLog(agentId, id)
+      .then((log) => {
+        if (cancelled) return;
+        events = log;
+        void scrollDown();
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) logLoading = false;
+      });
     return () => {
       cancelled = true;
     };
@@ -155,7 +177,7 @@
 <div class="run-view">
   <aside class="run-history">
     <div class="history-title">{t("agents.run.history")}</div>
-    {#each runs as item (item.id)}
+    {#each history as item (item.id)}
       {@const age = ago(item.startedAt, agentsStore.now)}
       <button class="history-row" class:selected={item.id === runId} onclick={() => show(item.id)}>
         <span class="dot" style="background:{statusColor(item.status)}"></span>
@@ -165,7 +187,7 @@
         </span>
       </button>
     {:else}
-      <p class="muted">{t("agents.run.noRuns")}</p>
+      <p class="muted">{runsLoaded ? t("agents.run.noRuns") : t("agents.run.loading")}</p>
     {/each}
     {#if conversation.length > 1}
       <div class="history-title conversation-title">{t("agents.run.conversation")}</div>
@@ -241,17 +263,25 @@
         {:else if event.kind === "stderr"}
           <div class="step stderr">{event.text}</div>
         {:else if event.kind === "started"}
-          <div class="step marker">{t("agents.run.started")} · {time(event.at)}</div>
+          <div class="step marker">
+            {t("agents.run.started")} · {time(event.at)}{#if event.session}{" · "}{ENGINE_NAMES[event.session.engine]} · {event.session.model || t("agents.diagnosis.defaultModel")}{/if}
+          </div>
+        {:else if event.kind === "session" || event.kind === "usage"}
+          <RunNotice {event} />
+        {:else if event.kind === "failure" && event.failure}
+          <RunFailureCard failure={event.failure} at={event.at} />
         {:else if event.kind === "ended"}
           <div class="step marker">{t("agents.run.ended")} · {time(event.at)}</div>
         {/if}
       {:else}
-        <p class="muted">{run?.status === "running" ? t("agents.run.waiting") : t("agents.run.emptyLog")}</p>
+        <p class="muted">
+          {logLoading ? t("agents.run.loading") : run?.status === "running" ? t("agents.run.waiting") : t("agents.run.emptyLog")}
+        </p>
       {/each}
       {#if run?.status === "running"}
         <div class="step marker working">{run.activity || t("agents.run.working")}</div>
       {/if}
-      {#if run && run.status !== "running" && run.status !== "success" && run.summary}
+      {#if run && run.status !== "running" && run.status !== "success" && run.summary && !run.failure}
         <div class="step failure" style="border-color:{statusColor(run.status)}">{run.summary}</div>
       {/if}
     </div>

@@ -12,6 +12,7 @@ export function newProject(id: string): Project {
     isolated: false,
     entryAgentId: "",
     limits: { maxRunsPerDay: 0 },
+    orchestrationId: "",
     createdAt: 0,
     updatedAt: 0,
   };

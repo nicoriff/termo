@@ -9,10 +9,14 @@ use serde_json::Value;
 use crate::i18n::{tr, Msg};
 
 use super::claude_plugins::github_owner;
-use super::model::{targets_for, CatalogItem, ComponentClass, ItemDetail};
+use super::model::{targets_for, CatalogItem, ComponentClass, ItemDetail, McpExtra};
+use super::names::install_name;
 
 const REGISTRY_BASE: &str = "https://registry.modelcontextprotocol.io/v0/servers";
 const PAGE_SIZE: u32 = 30;
+const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+/// What one page can weigh; nothing honest comes near it.
+const MAX_BODY: u64 = 4 * 1024 * 1024;
 
 #[derive(serde::Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +48,17 @@ fn map_server(entry: &Value) -> Option<CatalogItem> {
         .and_then(Value::as_str)
         .and_then(github_owner);
     let icon_url = repo_owner.as_deref().map(|owner| format!("https://github.com/{owner}.png?size=80"));
+    // A remote that asks for no header of its own may sign the user in.
+    let sign_in = remotes
+        .first()
+        .is_some_and(|remote| remote.get("headers").and_then(Value::as_array).is_none_or(|headers| headers.is_empty()));
+    let extra = McpExtra {
+        install_name: install_name(&name),
+        source: "official".to_string(),
+        remote: Some(!remotes.is_empty()),
+        sign_in,
+        ..McpExtra::default()
+    };
 
     Some(CatalogItem {
         id: format!("mcp:{name}"),
@@ -83,6 +98,7 @@ fn map_server(entry: &Value) -> Option<CatalogItem> {
             packages,
             repository,
         },
+        extra,
     })
 }
 
@@ -92,7 +108,7 @@ pub fn map_page(payload: &Value) -> McpPage {
     let items = payload
         .get("servers")
         .and_then(Value::as_array)
-        .map(|servers| servers.iter().filter_map(map_server).collect())
+        .map(|servers| servers.iter().filter_map(map_server).take(PAGE_SIZE as usize * 2).collect())
         .unwrap_or_default();
     let next_cursor = payload
         .get("metadata")
@@ -127,10 +143,18 @@ pub fn search(query: &str, cursor: Option<&str>) -> Result<McpPage, String> {
         url.push_str(&urlencode(cursor));
     }
 
-    let body = ureq::get(&url)
+    // Bounded in time and in size: a slow or endless answer can't hold the
+    // panel, or the memory, hostage.
+    use std::io::Read;
+    let agent = ureq::AgentBuilder::new().timeout(TIMEOUT).build();
+    let mut body = String::new();
+    agent
+        .get(&url)
         .call()
         .map_err(|err| tr(Msg::McpRegistryUnreachable(&err.to_string())))?
-        .into_string()
+        .into_reader()
+        .take(MAX_BODY)
+        .read_to_string(&mut body)
         .map_err(|err| tr(Msg::McpRegistryUnreachable(&err.to_string())))?;
     let payload: Value = serde_json::from_str(&body).map_err(|err| tr(Msg::McpRegistryUnreachable(&err.to_string())))?;
     Ok(map_page(&payload))
@@ -176,6 +200,11 @@ mod tests {
         assert_eq!(item.id, "mcp:ai.smithery/Hint-Services-obsidian-github-mcp");
         assert_eq!(item.class, ComponentClass::Mcp);
         assert_eq!(item.display_name, "Obsidian GitHub");
+        // The registry's id isn't a name Claude Code takes: it gets one.
+        assert_eq!(item.extra.install_name, "Hint-Services-obsidian-github-mcp");
+        assert_eq!(item.extra.source, "official");
+        // It asks for a header: it doesn't sign in by itself.
+        assert!(!item.extra.sign_in);
         assert_eq!(item.icon_url.as_deref(), Some("https://github.com/Hint-Services.png?size=80"));
         // Not a field the registry publishes, but who owns the repository
         // is real information — the same signal the icon derives from.

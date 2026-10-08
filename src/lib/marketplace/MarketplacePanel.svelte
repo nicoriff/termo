@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
-  import type { CatalogItem, ComponentClass } from "$lib/core/marketplace-client";
+  import type { CatalogItem, ComponentClass, SourceId } from "$lib/core/marketplace-client";
+  import { openPreferencesWindow } from "$lib/core/window-client";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import { catalogStore } from "./catalog-store.svelte";
   import { groupItems, matchesFacets, matchItems, type Facets, type SortMode } from "./filter";
   import MarketplaceResults from "./MarketplaceResults.svelte";
@@ -58,10 +61,48 @@
   // its own idea of a match doesn't have to agree with scoreItem's.
   const localMatches = $derived(matchItems(catalogStore.items, submittedQuery, facets, sort));
   const mcpVisible = $derived(showsMcp ? catalogStore.mcpItems.filter((item) => matchesFacets(item, facets)) : []);
-  const matches = $derived([...localMatches, ...mcpVisible]);
-  const groups = $derived(groupItems(matches));
+  /** The panel shows at once, empty: the list goes in after its first
+   * paint, so opening never waits on drawing hundreds of rows. */
+  let ready = $state(false);
+  onMount(() => {
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => (ready = true)));
+    return () => cancelAnimationFrame(frame);
+  });
+
+  /** The plugins are a few hundred: listed a screenful at a time. */
+  const PLUGIN_PAGE = 40;
+  let pluginLimit = $state(PLUGIN_PAGE);
+  const allGroups = $derived(ready ? groupItems([...mcpVisible, ...localMatches]) : []);
+  const hiddenPlugins = $derived(
+    Math.max(0, (allGroups.find((group) => group.class === "plugin")?.items.length ?? 0) - pluginLimit),
+  );
+  const groups = $derived(
+    allGroups.map((group) => (group.class === "plugin" ? { ...group, items: group.items.slice(0, pluginLimit) } : group)),
+  );
+  // In the order they're listed, so the arrow keys and Enter walk the rows
+  // as they show.
+  const matches = $derived(groups.flatMap((group) => group.items));
+  /** Something is still on its way: the catalog, a search, the first paint. */
+  const fetching = $derived(!ready || catalogStore.loading || (showsMcp && catalogStore.mcpLoading));
 
   void catalogStore.load();
+  catalogStore.useDefaultSource();
+  void catalogStore.loadSources();
+
+  /** Product names: shown as they are in every language. */
+  const SOURCE_NAMES: Record<SourceId, string> = { official: "Official MCP Registry", smithery: "Smithery" };
+  const sourceOptions = (Object.keys(SOURCE_NAMES) as SourceId[]).map((id) => ({ value: id, label: SOURCE_NAMES[id] }));
+
+  /** The dropdown's own keys (arrows, Enter, Escape) are its own: they
+   * don't also move the list behind it or close the panel. */
+  function keepKeys(event: KeyboardEvent) {
+    if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(event.key)) event.stopPropagation();
+  }
+
+  /** Opens Preferences on the marketplace's page, where a source's key goes. */
+  function openSourceSettings() {
+    void openPreferencesWindow("marketplace");
+  }
 
   // Both the local filter and the registry search run on what was submitted
   // with Enter, not on every keystroke. Starts empty, so opening the panel
@@ -86,6 +127,7 @@
     void submittedQuery;
     void classFilter;
     highlighted = 0;
+    pluginLimit = PLUGIN_PAGE;
   });
 
   function close() {
@@ -136,7 +178,10 @@
   transition:fly={{ x: 420, duration: 180, easing: cubicOut }}
 >
   <header class="mp-header">
-    <h1>{t("marketplace.title")}</h1>
+    <h1>
+      {t("marketplace.title")}
+      {#if fetching}<span class="spinner" role="status" aria-label={t("marketplace.loading")}></span>{/if}
+    </h1>
     <div class="mp-actions">
       <button onclick={() => void catalogStore.load(true)} disabled={catalogStore.loading}>
         {catalogStore.loading ? t("marketplace.loading") : t("marketplace.refresh")}
@@ -163,6 +208,25 @@
       placeholder={t("marketplace.searchPlaceholder")}
       aria-label={t("marketplace.searchPlaceholder")}
     />
+
+    {#if showsMcp}
+      <!-- Where MCP servers are searched. The source of what's listed is
+           credited by name and mark, with the way to its own site. -->
+      <div class="mp-source">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="mp-source-pick" onkeydown={keepKeys}>
+          <span class="mp-source-label">{t("marketplace.sourcePick")}</span>
+          <SettingDropdown
+            options={sourceOptions}
+            value={catalogStore.mcpSource}
+            onpick={(value) => catalogStore.setSource(value as SourceId)}
+          />
+        </div>
+        <button class="mp-source-link" title={t("marketplace.sourceSettings")} onclick={() => void openSourceSettings()}>
+          {t("marketplace.sourceSettingsShort")}
+        </button>
+      </div>
+    {/if}
 
     <div class="mp-filters">
       {#each CLASS_FILTERS as filter (filter.value)}
@@ -203,29 +267,32 @@
       <p class="mp-warning">{catalogStore.error}</p>
     {/if}
 
-    {#if catalogStore.loading && catalogStore.items.length === 0}
-      <p class="mp-empty">{t("marketplace.loading")}</p>
-    {:else if groups.length === 0}
-      <p class="mp-empty">{catalogStore.items.length === 0 ? t("marketplace.noCatalog") : t("marketplace.noResults")}</p>
+    {#if showsMcp && catalogStore.mcpError}
+      <p class="mp-warning">{catalogStore.mcpError}</p>
+    {/if}
+
+    {#if groups.length === 0}
+      {#if fetching}
+        <div class="mp-fetching">
+          <span class="spinner big" aria-hidden="true"></span>
+          <p>{showsMcp && catalogStore.mcpLoading ? t("marketplace.loadingMcp") : t("marketplace.loading")}</p>
+        </div>
+      {:else}
+        <p class="mp-empty">{catalogStore.items.length === 0 ? t("marketplace.noCatalog") : t("marketplace.noResults")}</p>
+      {/if}
     {:else}
       <MarketplaceResults
         {groups}
+        mcpSource={SOURCE_NAMES[catalogStore.mcpSource]}
         {highlighted}
+        mcpLoading={showsMcp && catalogStore.mcpLoading}
+        mcpHasMore={showsMcp && catalogStore.mcpHasMore}
+        {hiddenPlugins}
+        onmoremcp={() => void catalogStore.loadMoreMcp()}
+        onmoreplugins={() => (pluginLimit += PLUGIN_PAGE * 2)}
         onpick={(item) => (selectedId = item.id)}
         onhighlight={(index) => (highlighted = index)}
       />
-    {/if}
-
-    {#if showsMcp}
-      {#if catalogStore.mcpError}
-        <p class="mp-warning">{catalogStore.mcpError}</p>
-      {:else if catalogStore.mcpLoading}
-        <p class="mp-empty">{t("marketplace.loadingMcp")}</p>
-      {:else if catalogStore.mcpHasMore}
-        <button class="load-more" onclick={() => void catalogStore.loadMoreMcp()}>
-          {t("marketplace.loadMoreMcp")}
-        </button>
-      {/if}
     {/if}
   {/if}
 </div>
@@ -308,6 +375,40 @@
     outline: none;
   }
 
+  .mp-source {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+    font-size: 11px;
+    color: var(--titlebar-fg, #d4d4d4);
+  }
+
+  .mp-source-pick {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mp-source-label {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .mp-source-link {
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--pane-active-border, #3a6df0);
+    font: inherit;
+    cursor: pointer;
+  }
+
   .mp-filters {
     flex-shrink: 0;
     display: flex;
@@ -336,6 +437,48 @@
     color: var(--pane-active-border, #3a6df0);
   }
 
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid color-mix(in srgb, var(--pane-active-border, #3a6df0) 25%, transparent);
+    border-top-color: var(--pane-active-border, #3a6df0);
+    border-radius: 50%;
+    animation: mp-spin 0.8s linear infinite;
+  }
+
+  .spinner.big {
+    width: 22px;
+    height: 22px;
+    border-width: 2.5px;
+  }
+
+  .mp-fetching {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 12px;
+    font-size: 11px;
+    color: var(--titlebar-fg, #d4d4d4);
+  }
+
+  .mp-fetching p {
+    margin: 0;
+    opacity: 0.7;
+  }
+
+  @keyframes mp-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   .mp-warning,
   .mp-empty {
     margin: 0;
@@ -343,21 +486,5 @@
     font-size: 11px;
     opacity: 0.7;
     color: var(--titlebar-fg, #d4d4d4);
-  }
-
-  .load-more {
-    flex-shrink: 0;
-    margin: 4px 12px 10px;
-    padding: 6px;
-    border: 1px solid var(--tabbar-border, #2a2a2a);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--titlebar-fg, #d4d4d4);
-    font-size: 11px;
-    cursor: pointer;
-  }
-
-  .load-more:hover {
-    border-color: var(--pane-active-border, #3a6df0);
   }
 </style>

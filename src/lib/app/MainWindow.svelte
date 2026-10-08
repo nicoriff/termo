@@ -24,6 +24,8 @@
   import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
   import ProjectDialog from "$lib/agents/ProjectDialog.svelte";
+  import OrchestrationDialog from "$lib/agents/OrchestrationDialog.svelte";
+  import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { startAgentRunAttention } from "$lib/agents/agent-attention";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
@@ -56,6 +58,7 @@
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
+    void orchestrationStore.init();
 
     (async () => {
       await appConfigStore.init();
@@ -283,7 +286,7 @@
     {#if uiState.whatsNew}
       <WhatsNewDialog />
     {/if}
-    {#if uiState.agentLaunch}
+    {#if uiState.agentLaunch && uiState.agentLaunch.target.kind !== "folder"}
       <AgentLaunchDialog />
     {/if}
     {#if uiState.closeFileTarget}
@@ -294,6 +297,13 @@
     {/if}
     {#if uiState.projectDialog}
       <ProjectDialog />
+    {/if}
+    {#if uiState.orchestrationDialog}
+      <OrchestrationDialog />
+    {/if}
+    <!-- Picking a folder for one of the forms above: on top of it. -->
+    {#if uiState.agentLaunch?.target.kind === "folder"}
+      <AgentLaunchDialog />
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />

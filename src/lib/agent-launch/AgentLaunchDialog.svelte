@@ -29,7 +29,7 @@
   const TYPE_AHEAD_RESET_MS = 700;
   const RECENT_LIMIT = 5;
 
-  type Tag = "home" | "drive" | "recent";
+  type Tag = "home" | "drive" | "recent" | "current";
   interface Item {
     name: string;
     path: string;
@@ -47,12 +47,17 @@
 
   const launch = $derived(uiState.agentLaunch!);
   const target = $derived(launch.target);
-  const toolName = $derived(target.kind === "agent" ? TOOL_DISPLAY_NAMES[target.tool] : target.name);
-  const iconKind = $derived(target.kind === "agent" ? target.tool : target.iconId);
+  const toolName = $derived(
+    target.kind === "agent" ? TOOL_DISPLAY_NAMES[target.tool] : target.kind === "shell" ? target.name : "",
+  );
+  const iconKind = $derived(target.kind === "agent" ? target.tool : target.kind === "shell" ? target.iconId : "");
+  /** Only picking a folder for a form: nothing opens, the folder goes back. */
+  const picking = uiState.agentLaunch?.target.kind === "folder";
+  const title = $derived(picking ? t("agentLaunch.pickTitle") : t("agentLaunch.title", { tool: toolName }));
   /** A shell arrives here from its folder icon in the "+" menu: another
    * folder is the point, since a plain click on it already opens right here.
    * So it goes straight to the browser, and backing out of it closes. */
-  const browseOnly = uiState.agentLaunch?.target.kind === "shell";
+  const browseOnly = uiState.agentLaunch?.target.kind === "shell" || picking;
 
   let step = $state<"choose" | "browse">("choose");
   let choice = $state(0);
@@ -95,13 +100,16 @@
   function close() {
     clearTimeout(previewTimer);
     uiState.closeAgentLaunch();
-    uiState.refocusTerminals();
+    // The form it was picking for keeps the keyboard.
+    if (!picking) uiState.refocusTerminals();
   }
 
   function start(cwd: string | undefined) {
     const { target, tileId } = launch;
     close();
-    if (target.kind === "agent") void launchAgent(target.tool, tileId, cwd);
+    if (target.kind === "folder") {
+      if (cwd) target.onPick(cwd);
+    } else if (target.kind === "agent") void launchAgent(target.tool, tileId, cwd);
     else workspaceStore.addTab(tileId, target.path, target.args, target.name, cwd);
   }
 
@@ -116,8 +124,15 @@
   async function rootItems(): Promise<Item[]> {
     const roots = await listFolderRoots();
     const items: Item[] = [];
-    if (roots.home) items.push({ ...roots.home, tag: "home" });
-    for (const drive of roots.drives) items.push({ ...drive, tag: "drive" });
+    // What the form's field holds: likely where the user wants to be.
+    const current = target.kind === "folder" ? target.current : null;
+    if (current) items.push({ name: current.split(/[\\/]/).filter(Boolean).pop() ?? current, path: current, tag: "current" });
+    // Each folder once: the field may hold home or a drive itself.
+    const place = (item: Item) => {
+      if (!items.some((other) => samePath(other.path, item.path))) items.push(item);
+    };
+    if (roots.home) place({ ...roots.home, tag: "home" });
+    for (const drive of roots.drives) place({ ...drive, tag: "drive" });
     let recent = 0;
     for (const session of agentSessionsStore.sessions) {
       const path = session.cwd ?? session.projectDir;
@@ -393,15 +408,21 @@
     class="launch-dialog"
     role="dialog"
     tabindex="-1"
-    aria-label={t("agentLaunch.title", { tool: toolName })}
+    aria-label={title}
     bind:this={dialogEl}
     onpointerdown={(e) => e.stopPropagation()}
     onkeydown={onKeydown}
     transition:fly={{ y: -16, duration: 140 }}
   >
     <header class="launch-header">
-      <ConsoleIcon kind={iconKind} size={16} />
-      <h2>{t("agentLaunch.title", { tool: toolName })}</h2>
+      {#if picking}
+        <svg class="row-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" stroke-width="1.1" />
+        </svg>
+      {:else}
+        <ConsoleIcon kind={iconKind} size={16} />
+      {/if}
+      <h2>{title}</h2>
     </header>
 
     {#if step === "choose"}
@@ -538,7 +559,7 @@
                       </svg>
                     {/if}
                     <span class="folder-name">{item.name}</span>
-                    {#if item.tag === "recent"}
+                    {#if item.tag === "recent" || item.tag === "current"}
                       <span class="folder-path">{item.path}</span>
                     {:else if item.tag}
                       <span class="folder-tag">{t(`agentLaunch.${item.tag}`)}</span>
@@ -566,15 +587,33 @@
           <span><kbd>↑</kbd><kbd>↓</kbd> {t("agentLaunch.keyMove")}</span>
           <span><kbd>→</kbd> {t("agentLaunch.keyEnter")}</span>
           <span><kbd>←</kbd> {t("agentLaunch.keyBack")}</span>
-          <span><kbd>Enter</kbd> {t("agentLaunch.keyOpen")}</span>
+          <span><kbd>Enter</kbd> {picking ? t("agentLaunch.keyPick") : t("agentLaunch.keyOpen")}</span>
           {#if current?.path}
-            <span><kbd>Ctrl+Enter</kbd> {t("agentLaunch.keyOpenHere")}</span>
+            <span><kbd>Ctrl+Enter</kbd> {picking ? t("agentLaunch.keyPickHere") : t("agentLaunch.keyOpenHere")}</span>
           {/if}
           <span><kbd>a–z</kbd> {t("agentLaunch.keyType")}</span>
           {#if canCreate}
             <span><kbd>{NEW_FOLDER_KEY}</kbd> {t("agentLaunch.keyNewFolder")}</span>
           {/if}
         </footer>
+        {#if picking}
+          <!-- With the mouse too: the selected folder, or the one open. -->
+          <div class="pick-actions">
+            <button class="pick-button" onclick={close}>{t("agentLaunch.pickCancel")}</button>
+            {#if current?.path}
+              <button class="pick-button" onclick={() => start(current.path!)}>
+                {t("agentLaunch.pickHere", { folder: columnLabel(current.path) })}
+              </button>
+            {/if}
+            <button
+              class="pick-button primary"
+              disabled={!current?.items[current.selected]}
+              onclick={() => start(current?.items[current.selected]?.path)}
+            >
+              {t("agentLaunch.pickSelected")}
+            </button>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -940,6 +979,39 @@
     border-top: 1px solid var(--tabbar-border, #2a2a2a);
     font-size: 11px;
     opacity: 0.7;
+  }
+
+  .pick-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 14px 12px;
+  }
+
+  .pick-button {
+    padding: 5px 12px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .pick-button:hover:not(:disabled) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .pick-button.primary {
+    border-color: var(--pane-active-border, #3a6df0);
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+  }
+
+  .pick-button:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   kbd {

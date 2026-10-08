@@ -28,6 +28,9 @@ export interface McpRemote {
   type?: string;
   url: string;
   headers?: McpHeaderSpec[];
+  /** What goes in the address rather than in a header (Smithery's servers
+   * say which is which). Same shape as a header's spec. */
+  queryParams?: McpEnvVarSpec[];
 }
 
 export interface McpEnvVarSpec {
@@ -55,6 +58,34 @@ export interface McpDetail {
 
 export type ItemDetail = PluginDetail | McpDetail;
 
+/** Where MCP servers are searched (see marketplace/sources.rs). */
+export type SourceId = "official" | "smithery";
+
+export interface ToolInfo {
+  name: string;
+  description: string;
+}
+
+/** What only an MCP server has, and only some sources say. */
+export interface McpExtra {
+  /** The name it's installed under in every agent. */
+  installName: string;
+  source: SourceId | "";
+  /** Its page on the source's site. */
+  listingUrl: string | null;
+  verified: boolean | null;
+  remote: boolean | null;
+  /** Whether the source's own security scan passed, when it ran one. */
+  securityScan: boolean | null;
+  tools: ToolInfo[];
+  /** How to connect isn't in a search result: ask for the details first. */
+  needsDetail: boolean;
+  /** It only runs here through its source's own runner. */
+  localOnly: boolean;
+  /** It signs the user in itself, from the agent. */
+  signIn: boolean;
+}
+
 export interface CatalogItem {
   id: string;
   class: ComponentClass;
@@ -81,6 +112,7 @@ export interface CatalogItem {
   targets: AgentTarget[];
   installedIn: AgentTarget[];
   detail: ItemDetail;
+  extra: McpExtra;
 }
 
 export interface SourceInfo {
@@ -126,7 +158,7 @@ export interface DeclaredCommand {
 }
 
 export type InstallOutcome =
-  | { status: "installed"; message: string }
+  | { status: "installed"; message: string; installName: string; signIn: boolean }
   /** The marketplace declares a command that runs on this machine; it has to
    * be shown and approved before the install is retried. */
   | { status: "needs-command-approval"; commands: DeclaredCommand[] };
@@ -152,6 +184,42 @@ export interface McpPage {
  * `cursor` continues a previous page (from that page's `nextCursor`). */
 export function searchMcpRegistry(query: string, cursor?: string | null): Promise<McpPage> {
   return invoke("search_mcp_registry", { query, cursor: cursor ?? null });
+}
+
+/** One page of MCP servers from `source`; `cursor` continues a previous
+ * page. Each result says which agents already have it. */
+export function searchMcp(source: SourceId, query: string, cursor?: string | null): Promise<McpPage> {
+  return invoke("search_mcp", { source, query, cursor: cursor ?? null });
+}
+
+/** A server's details, from a source whose results don't carry them. */
+export function mcpDetail(source: SourceId, name: string): Promise<CatalogItem> {
+  return invoke("mcp_detail", { source, name });
+}
+
+export interface SourceStatus {
+  id: SourceId;
+  /** It can be given an API key (optional: it searches without one). */
+  takesKey: boolean;
+  hasKey: boolean;
+}
+
+export function marketplaceSources(): Promise<SourceStatus[]> {
+  return invoke("marketplace_sources");
+}
+
+/** Saves the key in the system keychain, once it's seen to work. */
+export function setSourceKey(source: SourceId, key: string): Promise<SourceStatus> {
+  return invoke("marketplace_set_key", { source, key });
+}
+
+export function clearSourceKey(source: SourceId): Promise<SourceStatus> {
+  return invoke("marketplace_clear_key", { source });
+}
+
+/** Whether the saved key still works. */
+export function testSourceKey(source: SourceId): Promise<void> {
+  return invoke("marketplace_test_key", { source });
 }
 
 export interface McpInstallRequest {

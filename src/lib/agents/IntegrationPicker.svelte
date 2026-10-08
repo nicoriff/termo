@@ -1,7 +1,9 @@
 <script lang="ts">
   import { t } from "$lib/i18n/i18n.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { searchMcpRegistry, type CatalogItem, type McpDetail } from "$lib/core/marketplace-client";
+  import { mcpDetail, searchMcp, type CatalogItem, type McpDetail, type SourceId } from "$lib/core/marketplace-client";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import { agentMcpServer, mcpDownloads, type McpServer } from "$lib/core/agents-client";
   import { formatCount, installSource, publisherOf } from "./integration-info";
   import { initialParamValues, paramsFor, paramsSatisfied, type ParamSpec } from "$lib/marketplace/mcp-params";
@@ -18,6 +20,13 @@
     onadd: (server: McpServer, secrets: string[]) => void;
     oncancel: () => void;
   } = $props();
+
+  /** Where it searches (see marketplace/sources.rs): the user's default,
+   * changed here for this search only. Product names, as they are. */
+  const SOURCE_NAMES: Record<SourceId, string> = { official: "Official MCP Registry", smithery: "Smithery" };
+  const sourceOptions = (Object.keys(SOURCE_NAMES) as SourceId[]).map((id) => ({ value: id, label: SOURCE_NAMES[id] }));
+  let source = $state<SourceId>(appConfigStore.marketplaceSource);
+  let loadingDetail = $state(false);
 
   let query = $state("");
   let results = $state<CatalogItem[]>([]);
@@ -81,7 +90,7 @@
     searching = true;
     error = "";
     try {
-      const page = await searchMcpRegistry(text.trim());
+      const page = await searchMcp(source, text.trim());
       if (mine !== seq) return;
       results = page.items.slice(0, 8);
       searched = true;
@@ -92,11 +101,33 @@
     }
   }
 
-  function choose(item: CatalogItem) {
-    chosen = item;
-    specs = paramsFor(item.detail as McpDetail);
-    values = initialParamValues(specs);
+  function setSource(next: SourceId) {
+    source = next;
+    void run(query);
+  }
+
+  /** A result that doesn't say how to connect gets its details first. */
+  async function choose(item: CatalogItem) {
     error = "";
+    let full = item;
+    if (item.extra?.needsDetail && item.extra.source !== "") {
+      loadingDetail = true;
+      try {
+        full = await mcpDetail(item.extra.source, item.name);
+      } catch (reason) {
+        error = String(reason);
+        return;
+      } finally {
+        loadingDetail = false;
+      }
+    }
+    if (full.extra?.localOnly) {
+      error = t("marketplace.localOnly", { source: full.sourceLabel });
+      return;
+    }
+    chosen = full;
+    specs = paramsFor(full.detail as McpDetail);
+    values = initialParamValues(specs);
   }
 
   async function add() {
@@ -131,6 +162,10 @@
       autofocus
       oninput={(e) => search(e.currentTarget.value)}
     />
+    <div class="source-pick">
+      <span class="hint">{t("marketplace.sourcePick")}</span>
+      <SettingDropdown options={sourceOptions} value={source} onpick={(value) => setSource(value as SourceId)} />
+    </div>
     {#if suggestions.length > 0 && !query}
       <div class="suggestions">
         <span class="hint">{t("agents.integrations.suggested")}</span>
@@ -140,8 +175,8 @@
       </div>
     {/if}
     <div class="results">
-      {#if searching}
-        <p class="hint">{t("agents.integrations.searching")}</p>
+      {#if searching || loadingDetail}
+        <p class="hint">{loadingDetail ? t("marketplace.loadingDetail") : t("agents.integrations.searching")}</p>
       {:else}
         {#each results as item (item.id)}
           <button class="result" onclick={() => choose(item)}>
@@ -216,6 +251,12 @@
 
   .field:focus {
     border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .source-pick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .suggestions {

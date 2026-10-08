@@ -49,6 +49,19 @@ function loadWidth(): number {
   }
 }
 
+/** The panel's two sections: the agents the user builds and keeps, and
+ * teams designed for one job. */
+export type AgentsSection = "local" | "orchestration";
+const SECTION_KEY = "termo.agents.section";
+
+function loadSection(): AgentsSection {
+  try {
+    return localStorage.getItem(SECTION_KEY) === "orchestration" ? "orchestration" : "local";
+  } catch {
+    return "local";
+  }
+}
+
 function loadCollapsed(): string[] {
   try {
     const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
@@ -75,6 +88,8 @@ class AgentsStore {
   open = $state(false);
   /** Its width in px, as the user last dragged it. */
   width = $state(loadWidth());
+  /** Which section it shows (remembered per computer). */
+  section = $state<AgentsSection>(loadSection());
   /** Ticks every 30 s while the sidebar is open, for "hace 5 min" labels. */
   now = $state(Date.now());
   private started = false;
@@ -105,6 +120,25 @@ class AgentsStore {
     await this.refreshNextRuns();
   }
 
+  /** The lists again, after the backend saved agents on its own (an
+   * orchestration's team: see orchestration-store). */
+  async reload(): Promise<void> {
+    this.agents = await listAgents().catch(() => this.agents);
+    this.projects = await listProjects().catch(() => this.projects);
+  }
+
+  /** The user's own projects: an orchestration's team shows with its
+   * orchestration instead. */
+  get localProjects(): Project[] {
+    return this.projects.filter((project) => !project.orchestrationId);
+  }
+
+  /** The user's own agents: not the ones an orchestration made. */
+  get localAgents(): AgentSpec[] {
+    const teams = new Set(this.projects.filter((project) => project.orchestrationId).map((project) => project.id));
+    return teams.size === 0 ? this.agents : this.agents.filter((agent) => !teams.has(agent.projectId));
+  }
+
   async refreshNextRuns(): Promise<void> {
     this.nextRun = await agentsNextRuns().catch(() => this.nextRun);
   }
@@ -125,6 +159,26 @@ class AgentsStore {
 
   toggle(): void {
     this.setOpen(!this.open);
+  }
+
+  setSection(section: AgentsSection): void {
+    this.section = section;
+    try {
+      localStorage.setItem(SECTION_KEY, section);
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  /** A section's button: shows that section, or closes the panel when it's
+   * the one already showing. */
+  toggleSection(section: AgentsSection): void {
+    if (this.open && this.section === section) {
+      this.setOpen(false);
+      return;
+    }
+    this.setSection(section);
+    this.setOpen(true);
   }
 
   setOpen(open: boolean): void {

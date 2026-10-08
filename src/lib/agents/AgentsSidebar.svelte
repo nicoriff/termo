@@ -21,8 +21,10 @@
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { SIDEBAR_WIDTH, agentsStore } from "./agents-store.svelte";
+  import { SIDEBAR_WIDTH, agentsStore, type AgentsSection } from "./agents-store.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
+  import type { MessageKey } from "$lib/i18n/translate";
+  import OrchestrationList from "./OrchestrationList.svelte";
 
   const timeOf = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const weekdayOf = (ms: number) => new Date(ms).toLocaleDateString([], { weekday: "short" });
@@ -30,7 +32,7 @@
   /** The board the agents share, while it's open. */
   let boardOpen = $state(false);
   let board = $state<Record<string, BoardEntry>>({});
-  const usesBoard = $derived(agentsStore.agents.some((agent) => agent.collaboration.board));
+  const usesBoard = $derived(agentsStore.localAgents.some((agent) => agent.collaboration.board));
   // Any run ending may have written on it.
   const runsSignature = $derived(
     Object.values(agentsStore.lastRun)
@@ -49,10 +51,10 @@
     board = await removeBoardEntry(key).catch(() => board);
   }
 
-  const nameOf = (id: string) => agentsStore.agents.find((agent) => agent.id === id)?.name ?? "";
+  const nameOf = (id: string) => agentsStore.localAgents.find((agent) => agent.id === id)?.name ?? "";
 
   // Projects: each a group of agents; agents in none go last.
-  const groups = $derived(groupByProject(agentsStore.agents, agentsStore.projects));
+  const groups = $derived(groupByProject(agentsStore.localAgents, agentsStore.localProjects));
   const loose = $derived(groups.get("") ?? []);
   let projectMenuFor = $state<string | null>(null);
   let deletingProject = $state<string | null>(null);
@@ -80,7 +82,7 @@
     projectErrors = rest;
     try {
       const started = await agentsStore.runProject(id, rehearsal);
-      const agent = agentsStore.agents.find((candidate) => candidate.id === started.agentId);
+      const agent = agentsStore.localAgents.find((candidate) => candidate.id === started.agentId);
       workspaceStore.openAgentRun(started.agentId, started.id, agent?.name ?? "");
     } catch (reason) {
       projectErrors = { ...projectErrors, [id]: String(reason) };
@@ -360,6 +362,15 @@
     menuFor = menuFor === id ? null : id;
   }
 
+  /** The panel's two sections; the activity bar has a button for each, and
+   * without it, they're tabs here. */
+  const SECTIONS: { id: AgentsSection; label: MessageKey }[] = [
+    { id: "local", label: "agents.sections.local" },
+    { id: "orchestration", label: "agents.sections.orchestration" },
+  ];
+  const section = $derived(agentsStore.section);
+  const sectionTabs = $derived(!(appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar));
+
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
 </script>
 
@@ -396,10 +407,20 @@
   ></div>
   <div class="agents-inner">
     <header class="agents-header">
-      <span class="agents-title">{t("agents.title")}</span>
-      {#if agentsStore.agents.length > 0}
-        <span class="agents-count">{agentsStore.agents.length}</span>
+      <span class="agents-title">{sectionTabs ? t("agents.title") : t(SECTIONS.find((item) => item.id === section)!.label)}</span>
+      {#if section === "local" && agentsStore.localAgents.length > 0}
+        <span class="agents-count">{agentsStore.localAgents.length}</span>
       {/if}
+      {#if section === "orchestration"}
+        <button
+          class="icon-button"
+          title={t("agents.orchestration.new")}
+          aria-label={t("agents.orchestration.new")}
+          onclick={() => uiState.openOrchestrationDialog()}
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
+        </button>
+      {:else}
       {#if usesBoard || boardOpen}
         <button
           class="icon-button"
@@ -443,6 +464,7 @@
       >
         <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
       </button>
+      {/if}
       <button
         class="icon-button"
         title={`${t("agents.close")} (${shortcut})`}
@@ -453,6 +475,25 @@
       </button>
     </header>
 
+    {#if sectionTabs}
+    <div class="sections" role="tablist" aria-label={t("agents.sections.label")}>
+      {#each SECTIONS as item (item.id)}
+        <button
+          class="section-tab"
+          class:current={section === item.id}
+          role="tab"
+          aria-selected={section === item.id}
+          onclick={() => agentsStore.setSection(item.id)}
+        >
+          {t(item.label)}
+        </button>
+      {/each}
+    </div>
+    {/if}
+
+    {#if section === "orchestration"}
+      <OrchestrationList />
+    {:else}
     {#if notice}
       <div class="notice" class:error={notice.error}>
         <div class="notice-text">
@@ -616,7 +657,7 @@
                 {t("agents.projects.moveTo")} ›
               </button>
               {#if movingFor === agent.id}
-                {#each agentsStore.projects.filter((project) => project.id !== agent.projectId) as project (project.id)}
+                {#each agentsStore.localProjects.filter((project) => project.id !== agent.projectId) as project (project.id)}
                   <button role="menuitem" class="submenu-item" onclick={() => void move(agent.id, project.id)}>
                     {project.icon} {project.name}
                   </button>
@@ -644,7 +685,7 @@
     {/snippet}
 
     <div class="agents-list">
-      {#each agentsStore.projects as project (project.id)}
+      {#each agentsStore.localProjects as project (project.id)}
         {@const members = groups.get(project.id) ?? []}
         {@const collapsed = agentsStore.collapsed.includes(project.id)}
         {@const tone = projectTone(members, agentsStore.lastRun)}
@@ -768,7 +809,7 @@
         </div>
       {/each}
 
-      {#if agentsStore.projects.length > 0 && (loose.length > 0 || dragging)}
+      {#if agentsStore.localProjects.length > 0 && (loose.length > 0 || dragging)}
         <div class="loose-group" class:drop-target={dropOn === ""} data-drop-project="">
           <div class="loose-title">{t("agents.projects.loose")}</div>
           {#each loose as agent (agent.id)}
@@ -780,7 +821,7 @@
           {@render agentRow(agent)}
         {/each}
       {/if}
-      {#if agentsStore.agents.length === 0 && agentsStore.projects.length === 0}
+      {#if agentsStore.localAgents.length === 0 && agentsStore.localProjects.length === 0}
         <div class="agents-empty">
           <div class="empty-icon">🤖</div>
           <p class="empty-title">{t("agents.empty.title")}</p>
@@ -791,6 +832,7 @@
         </div>
       {/if}
     </div>
+    {/if}
   </div>
 </aside>
 
@@ -954,6 +996,39 @@
   .icon-button:hover {
     opacity: 1;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .sections {
+    flex-shrink: 0;
+    display: flex;
+    gap: 2px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .section-tab {
+    flex: 1;
+    padding: 6px 4px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    opacity: 0.6;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .section-tab:hover {
+    opacity: 0.9;
+  }
+
+  .section-tab.current {
+    border-bottom-color: var(--pane-active-border, #3a6df0);
+    opacity: 1;
   }
 
   .agents-list {

@@ -98,6 +98,8 @@ export interface AppConfig {
   ai_sound_volume: number;
   ai_dock_badge: boolean;
   agents_in_activity_bar: boolean;
+  agents_from_any_console?: boolean;
+  marketplace_source?: string;
   keep_awake_button: boolean;
   tabs_fill_width: boolean;
   /** The user's own Claude Code statusLine command, saved when Termo chained

@@ -46,6 +46,18 @@ pub enum Msg<'a> {
     CodexHasNoPlugins,
     McpRegistryUnreachable(&'a str),
     McpCodexHeadersUnsupported,
+    /// the name, the agent
+    McpNameTaken(&'a str, &'a str),
+    SourceKeyMissing,
+    SourceKeyInvalid,
+    SourceNeedsNoKey,
+    /// the error
+    SourceKeyNotSaved(&'a str),
+    SmitheryKeyRejected,
+    SmitheryNotFound,
+    SmitheryRateLimited,
+    /// the error
+    SmitheryUnreachable(&'a str),
     UnsafeMcpLaunchValue(&'a str),
     UnsafeMcpRemoteUrl(&'a str),
     /// (folder, OS error)
@@ -110,6 +122,41 @@ pub enum Msg<'a> {
     KeepAwakeReason,
     /// An agent run asked for while Modo IA is off (see ai_mode.rs).
     AiModeOff,
+    /// the planner's error
+    OrchestrationPlanFailed(&'a str),
+    /// the error
+    OrchestrationReportFailed(&'a str),
+    /// Told to every orchestration task: it may ask the user.
+    OrchestrationCanAsk,
+    /// Heads the answers the user gave before planning.
+    OrchestrationClarifications,
+    OrchestrationQuestionClosed,
+    /// who answered, the model, what it said
+    OrchestrationServiceBlocked(&'a str, &'a str, &'a str),
+    /// the folder
+    OrchestrationNoFolder(&'a str),
+    OrchestrationFolderRequired,
+    OrchestrationNotFound,
+    /// Approving, resuming or resolving something its state doesn't allow.
+    OrchestrationWrongState,
+    OrchestrationEmptyPlan,
+    OrchestrationSaveFailed(&'a str),
+    /// Notes an orchestration is left with (see orchestration/executor.rs).
+    OrchestrationStopped,
+    OrchestrationInterrupted,
+    /// what it spent, the budget
+    OrchestrationOverBudget(&'a str, &'a str),
+    OrchestrationBlocked,
+    /// the supervisor's error
+    OrchestrationNoReview(&'a str),
+    /// The task an orchestration's agent stands for between tasks.
+    OrchestrationAgentTask,
+    /// Labels around what an agent of an orchestration is given: the line
+    /// before "done when", the heading of the results it builds on, and the
+    /// one over its own failed attempt.
+    OrchestrationDoneWhen,
+    OrchestrationBuildsOn,
+    OrchestrationLastAttempt,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -167,6 +214,28 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (McpRegistryUnreachable(detail), Es) => format!("No se pudo consultar el registro de MCP: {detail}"),
         (McpRegistryUnreachable(detail), En) => format!("Couldn't reach the MCP registry: {detail}"),
 
+        (McpNameTaken(name, agent), Es) => format!(
+            "Ya hay otro servidor llamado \"{name}\" en {agent}. Quitalo o renombralo ahí antes de instalar este."
+        ),
+        (McpNameTaken(name, agent), En) => format!(
+            "There's already another server called \"{name}\" in {agent}. Remove or rename it there before installing this one."
+        ),
+        (SourceKeyMissing, Es) => "Esta fuente ahora pide una API key. Cargala en Preferencias → Marketplace.".into(),
+        (SourceKeyMissing, En) => "This source now asks for an API key. Add it in Preferences → Marketplace.".into(),
+        (SourceKeyInvalid, Es) => "Eso no parece una API key: tiene que ser un solo texto, sin espacios.".into(),
+        (SourceKeyInvalid, En) => "That doesn't look like an API key: it has to be one piece of text, with no spaces.".into(),
+        (SourceNeedsNoKey, Es) => "Esta fuente no usa API key.".into(),
+        (SourceNeedsNoKey, En) => "This source takes no API key.".into(),
+        (SourceKeyNotSaved(error), Es) => format!("No se pudo guardar la key en el llavero del sistema: {error}"),
+        (SourceKeyNotSaved(error), En) => format!("Couldn't save the key in the system keychain: {error}"),
+        (SmitheryKeyRejected, Es) => "Smithery rechazó la API key. Revisala en Preferencias → Marketplace.".into(),
+        (SmitheryKeyRejected, En) => "Smithery turned the API key down. Check it in Preferences → Marketplace.".into(),
+        (SmitheryNotFound, Es) => "Smithery no tiene ese servidor.".into(),
+        (SmitheryNotFound, En) => "Smithery doesn't have that server.".into(),
+        (SmitheryRateLimited, Es) => "Smithery está limitando los pedidos de tu key. Probá de nuevo en un rato.".into(),
+        (SmitheryRateLimited, En) => "Smithery is limiting your key's requests. Try again in a while.".into(),
+        (SmitheryUnreachable(error), Es) => format!("No se pudo consultar Smithery: {error}"),
+        (SmitheryUnreachable(error), En) => format!("Couldn't reach Smithery: {error}"),
         (McpCodexHeadersUnsupported, Es) =>
             "Este servidor necesita encabezados personalizados, y el CLI de Codex todavía no tiene forma de recibirlos (solo admite un token de portador leído de una variable de entorno)".into(),
         (McpCodexHeadersUnsupported, En) =>
@@ -319,6 +388,56 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KeepAwakeReason, Es) => "Termo mantiene la computadora despierta".into(),
         (KeepAwakeReason, En) => "Termo is keeping the computer awake".into(),
 
+        (OrchestrationPlanFailed(error), Es) => format!("No se pudo armar el plan: {error}"),
+        (OrchestrationPlanFailed(error), En) => format!("Couldn't build the plan: {error}"),
+        (OrchestrationReportFailed(error), Es) => format!("No se pudo escribir el informe final: {error}"),
+        (OrchestrationReportFailed(error), En) => format!("Couldn't write the final report: {error}"),
+        (OrchestrationCanAsk, Es) => "Si te encontrás con una decisión que le corresponde al usuario y cambia el resultado (un enfoque u otro, el alcance, qué hacer con lo que ya existe), preguntale con la herramienta ask_user de Termo en vez de suponer. Para lo demás, decidí vos y seguí.".into(),
+        (OrchestrationCanAsk, En) => "If you hit a decision that is the user's to make and changes the result (one approach or another, the scope, what to do with what already exists), ask them with Termo's ask_user tool instead of assuming. For everything else, decide yourself and go on.".into(),
+        (OrchestrationClarifications, Es) => "Aclaraciones del usuario:".into(),
+        (OrchestrationClarifications, En) => "The user's clarifications:".into(),
+        (OrchestrationServiceBlocked(service, model, message), Es) => format!(
+            "En pausa: {service} rechazó el pedido con el modelo {model}, por la cuenta o el servicio y no por la tarea. Cambiá el modelo del agente (Editar plan) o esperá a que se resuelva, y reanudá. Respuesta: {message}"
+        ),
+        (OrchestrationServiceBlocked(service, model, message), En) => format!(
+            "Paused: {service} turned the request down with model {model}, because of the account or the service rather than the task. Change the agent's model (Edit plan) or wait for it to clear, then resume. Response: {message}"
+        ),
+        (OrchestrationQuestionClosed, Es) => "Esa pregunta ya no espera respuesta: el agente terminó o siguió sin ella.".into(),
+        (OrchestrationQuestionClosed, En) => "That question isn't waiting any more: the agent finished or went on without it.".into(),
+        (OrchestrationNoFolder(path), Es) => format!("La carpeta no existe: {path}"),
+        (OrchestrationNoFolder(path), En) => format!("The folder doesn't exist: {path}"),
+        (OrchestrationFolderRequired, Es) => "Elegí la carpeta del proyecto: los agentes trabajan ahí".into(),
+        (OrchestrationFolderRequired, En) => "Choose the project's folder: the agents work there".into(),
+        (OrchestrationNotFound, Es) => "La orquestación ya no existe".into(),
+        (OrchestrationNotFound, En) => "The orchestration no longer exists".into(),
+        (OrchestrationWrongState, Es) => "La orquestación ya no está en ese estado".into(),
+        (OrchestrationWrongState, En) => "The orchestration is no longer in that state".into(),
+        (OrchestrationEmptyPlan, Es) => "El plan no tiene tareas para ejecutar".into(),
+        (OrchestrationEmptyPlan, En) => "The plan has no tasks to run".into(),
+        (OrchestrationSaveFailed(error), Es) => format!("No se pudo guardar la orquestación: {error}"),
+        (OrchestrationSaveFailed(error), En) => format!("Couldn't save the orchestration: {error}"),
+        (OrchestrationStopped, Es) => "Detenida. Podés reanudarla cuando quieras.".into(),
+        (OrchestrationStopped, En) => "Stopped. You can resume it whenever you like.".into(),
+        (OrchestrationInterrupted, Es) => "Termo se cerró mientras corría. Podés reanudarla.".into(),
+        (OrchestrationInterrupted, En) => "Termo was closed while it ran. You can resume it.".into(),
+        (OrchestrationOverBudget(spent, budget), Es) => {
+            format!("En pausa: lleva gastados {spent} y el presupuesto es {budget}. Subí el presupuesto para seguir.")
+        }
+        (OrchestrationOverBudget(spent, budget), En) => {
+            format!("Paused: it has spent {spent} and the budget is {budget}. Raise the budget to go on.")
+        }
+        (OrchestrationBlocked, Es) => "Hay tareas que fallaron y nada más para ejecutar.".into(),
+        (OrchestrationBlocked, En) => "Some tasks failed and there's nothing else to run.".into(),
+        (OrchestrationNoReview(error), Es) => format!("El orquestador no pudo revisar el plan: {error}"),
+        (OrchestrationNoReview(error), En) => format!("The orchestrator couldn't review the plan: {error}"),
+        (OrchestrationAgentTask, Es) => "Hacé la tarea que te asigne el orquestador.".into(),
+        (OrchestrationAgentTask, En) => "Do the task the orchestrator assigns you.".into(),
+        (OrchestrationDoneWhen, Es) => "Está listo cuando:".into(),
+        (OrchestrationDoneWhen, En) => "Done when:".into(),
+        (OrchestrationBuildsOn, Es) => "Resultados de las tareas anteriores de las que depende esta:".into(),
+        (OrchestrationBuildsOn, En) => "Results of the earlier tasks this one builds on:".into(),
+        (OrchestrationLastAttempt, Es) => "Tu intento anterior de esta tarea falló así:".into(),
+        (OrchestrationLastAttempt, En) => "Your previous attempt at this task failed like this:".into(),
         (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
         (AiModeOff, En) => "AI Mode is off: turn it on in Preferences to use agents".into(),
 
@@ -349,6 +468,15 @@ mod tests {
             Msg::CodexHasNoPlugins,
             Msg::McpRegistryUnreachable("timeout"),
             Msg::McpCodexHeadersUnsupported,
+            Msg::McpNameTaken("github", "claude"),
+            Msg::SourceKeyMissing,
+            Msg::SourceKeyInvalid,
+            Msg::SourceNeedsNoKey,
+            Msg::SourceKeyNotSaved("locked"),
+            Msg::SmitheryKeyRejected,
+            Msg::SmitheryNotFound,
+            Msg::SmitheryRateLimited,
+            Msg::SmitheryUnreachable("timeout"),
             Msg::UnsafeMcpLaunchValue("-c"),
             Msg::UnsafeMcpRemoteUrl("file:///etc/passwd"),
             Msg::FolderUnreadable("C:\\x", "access denied"),
@@ -395,6 +523,27 @@ mod tests {
             Msg::KeepAwakeFailed("access denied"),
             Msg::KeepAwakeReason,
             Msg::AiModeOff,
+            Msg::OrchestrationPlanFailed("timeout"),
+            Msg::OrchestrationReportFailed("timeout"),
+            Msg::OrchestrationCanAsk,
+            Msg::OrchestrationClarifications,
+            Msg::OrchestrationQuestionClosed,
+            Msg::OrchestrationServiceBlocked("Anthropic", "m", "403"),
+            Msg::OrchestrationNoFolder("/x"),
+            Msg::OrchestrationFolderRequired,
+            Msg::OrchestrationNotFound,
+            Msg::OrchestrationWrongState,
+            Msg::OrchestrationEmptyPlan,
+            Msg::OrchestrationSaveFailed("x"),
+            Msg::OrchestrationStopped,
+            Msg::OrchestrationInterrupted,
+            Msg::OrchestrationOverBudget("$2.00", "$1.00"),
+            Msg::OrchestrationBlocked,
+            Msg::OrchestrationNoReview("timeout"),
+            Msg::OrchestrationAgentTask,
+            Msg::OrchestrationDoneWhen,
+            Msg::OrchestrationBuildsOn,
+            Msg::OrchestrationLastAttempt,
         ]
     }
 

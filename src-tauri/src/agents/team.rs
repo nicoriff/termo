@@ -174,7 +174,9 @@ fn outcome_matches(on: AfterOutcome, status: RunStatus) -> bool {
 /// The agents that come after `finished`. A test from the wizard sets
 /// nothing off, and a team's agents only follow each other.
 pub fn followers<'a>(agents: &'a [AgentSpec], finished: &RunRecord, isolated: &HashSet<String>) -> Vec<&'a AgentSpec> {
-    if finished.trigger == RunTrigger::Test {
+    // A wizard's test sets nothing off; nor does a console's request, which
+    // reaches only the agent it was made to (see console_bridge.rs).
+    if matches!(finished.trigger, RunTrigger::Test | RunTrigger::Console) {
         return Vec::new();
     }
     let path = path_of(finished);
@@ -445,6 +447,7 @@ mod tests {
             cost_usd: None,
             link,
             rehearsal: false,
+            failure: None,
         }
     }
 
@@ -531,8 +534,9 @@ mod tests {
         assert_eq!(ids(RunStatus::Success), ["b", "d"]);
         assert_eq!(ids(RunStatus::TimedOut), ["c", "d"]);
         assert!(ids(RunStatus::Stopped).is_empty());
-        // A wizard test sets nothing off.
+        // A wizard test sets nothing off, nor does a console's request.
         assert!(followers(&agents, &run("a", RunStatus::Success, RunTrigger::Test, None), &none()).is_empty());
+        assert!(followers(&agents, &run("a", RunStatus::Success, RunTrigger::Console, None), &none()).is_empty());
     }
 
     #[test]

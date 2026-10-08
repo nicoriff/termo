@@ -1,5 +1,93 @@
 [
   {
+    "version": "0.14.0",
+    "date": "2026-10-07",
+    "es": [
+      "**Asistente de agentes más claro**: cada paso separa sus conceptos en bloques con título propio. Las plantillas quedan en una sección que se abre a pedido, hay 40 íconos para elegir, y el motor y los permisos se eligen en combos que muestran el detalle de cada opción. Herramientas se agrupa en Internet, Integraciones, Desde tus consolas y Otros agentes; y en «¿Cuándo corre?» todo lo que lo hace arrancar solo es una fila que se activa o no, con su configuración debajo, en dos grupos: Por horario y Cuando pasa algo.",
+      "**Las consolas de agente abren más rápido**: Termo tarda menos de la mitad en arrancar Claude Code, Codex, Gemini CLI o Copilot CLI, y al restaurar varias consolas arrancan a la vez sin trabar la ventana. Mientras el agente carga, el tab muestra «Iniciando…» con su ícono en lugar de quedar en negro.",
+      "La vista de corridas de un agente ya no traba la ventana mientras lee su historial, y dice «Cargando…» hasta que lo tiene.",
+      "**Smithery en el marketplace**: elegí dónde buscar servidores MCP — el Official MCP Registry o Smithery — desde un selector junto al buscador. Los resultados de Smithery muestran ícono, cantidad de usos y si están verificados, y el detalle lista las herramientas que trae cada servidor. Funciona sin configurar nada; si querés usar tu propia API key, se carga en Preferencias → Marketplace y queda en el llavero del sistema.",
+      "**La instalación de servidores MCP ahora funciona en los cuatro agentes**: Claude Code rechazaba casi todos los servidores por su nombre, y Codex no aceptaba los que necesitan una API key. Ahora cada servidor se instala con un nombre válido, igual en Claude Code, Codex, Gemini CLI y Copilot CLI.",
+      "El marketplace muestra en qué agentes está instalado cada servidor, permite quitarlo de cada uno, y avisa cómo iniciar sesión cuando el servidor lo pide. Instalar ya no pisa un servidor tuyo que tenga el mismo nombre.",
+      "El selector de fuente también está al sumar integraciones a un agente."
+    ],
+    "en": [
+      "**A clearer agent wizard**: each step keeps its concepts apart in blocks with their own title. Templates sit in a section that opens on demand, there are 40 icons to pick from, and the engine and the permissions are chosen in combos that show what each option means. Tools is grouped into Internet, Integrations, From your consoles and Other agents; and in “When does it run?” everything that starts it on its own is a row you turn on or off, with its settings underneath, in two groups: On a schedule and When something happens.",
+      "**Agent consoles open faster**: Termo takes less than half as long to start Claude Code, Codex, Gemini CLI or Copilot CLI, and several consoles restored together start at once without freezing the window. While the agent loads, the tab shows “Starting…” with its icon instead of staying black.",
+      "An agent's runs view no longer holds the window up while it reads its history, and says “Loading…” until it has it.",
+      "**Smithery in the marketplace**: pick where to search for MCP servers — the Official MCP Registry or Smithery — from a selector next to the search box. Smithery's results show an icon, how much each is used and whether it's verified, and the details list the tools each server brings. It works with nothing to set up; if you want to use your own API key, it goes in Preferences → Marketplace and is kept in the system keychain.",
+      "**Installing MCP servers now works in all four agents**: Claude Code turned almost every server down over its name, and Codex didn't take the ones that need an API key. Each server now installs under a valid name, the same in Claude Code, Codex, Gemini CLI and Copilot CLI.",
+      "The marketplace shows which agents have each server, lets you remove it from each, and says how to sign in when the server asks. Installing no longer lands on a server of yours with the same name.",
+      "The source selector is also there when adding integrations to an agent."
+    ]
+  },
+  {
+    "version": "0.12.0",
+    "date": "2026-10-07",
+    "es": [
+      "**Tus agentes, desde tus consolas**: marcá un agente como «Disponible desde las consolas» y las consolas de Claude Code, Codex, Gemini o Copilot que abras desde Termo pueden pedirle algo y esperar su respuesta, o ponerlo a trabajar sin esperar. Cada agente atiende el pedido dentro de su rol, con sus permisos y en su carpeta; si está ocupado lo dice al instante, y la consola te pide confirmación antes de cada pedido. Hay un tope de 20 pedidos por hora.",
+      "Opcional, en Preferencias → Agentes: ofrecer los agentes también en consolas abiertas fuera de Termo (VS Code, otra terminal), registrando Termo en la configuración de cada CLI.",
+      "**Más seguridad para los agentes desde las consolas**: cada consola recibe un acceso propio que se revoca al cerrarla, los agentes que ejecutan comandos necesitan un segundo permiso explícito, lo que pide una consola no se pasa a otros agentes, y en Preferencias podés regenerar el token de las consolas externas. Los archivos con tokens quedan legibles solo por tu usuario.",
+      "Arreglos: un error de un servicio escrito con acentos o «—» ya no deja a un agente trabado como «corriendo»; la configuración de Gemini que usa Termo se suma a la del sistema en lugar de reemplazarla; los agentes importados llegan sin acceso desde las consolas; y las preguntas de los agentes recuerdan no responder con claves ni contraseñas."
+    ],
+    "en": [
+      "**Your agents, from your consoles**: mark an agent as “Available from consoles” and the Claude Code, Codex, Gemini or Copilot consoles you open from Termo can ask it something and wait for its answer, or set it to work without waiting. Each agent handles the request within its role, with its permissions and in its folder; a busy one says so at once, and the console asks you to confirm each request. There's a cap of 20 requests an hour.",
+      "Optional, in Preferences → Agents: offer the agents in consoles opened outside Termo too (VS Code, another terminal), by registering Termo in each CLI's own settings.",
+      "**Safer agents from consoles**: each console gets an access of its own, revoked when it closes; agents that run commands need a second, explicit permission; what a console asks isn't passed on to other agents; and Preferences can regenerate the token for outside consoles. Files holding tokens are readable by your user only.",
+      "Fixes: a service error written with accents or “—” no longer leaves an agent stuck as “running”; Termo's Gemini settings are added on top of the system's instead of replacing them; imported agents arrive without access from consoles; and agents' questions remind you never to answer with keys or passwords."
+    ]
+  },
+  {
+    "version": "0.11.0",
+    "date": "2026-10-05",
+    "es": [
+      "**El orquestador pregunta antes de planificar**: si el pedido deja algo abierto (el alcance, un enfoque u otro, qué hacer con lo que ya existe), te hace unas pocas preguntas con respuestas sugeridas y arma el plan con lo que contestes. Si el pedido es claro, va directo al plan.",
+      "**Ves al orquestador pensar**: mientras lee el pedido, arma el plan o lo revisa con tus cambios, la ventana muestra en qué etapa está, su último pensamiento, los archivos que va leyendo y las búsquedas que hace, con el tiempo transcurrido.",
+      "**Los agentes te pueden preguntar mientras trabajan**: cuando una decisión te corresponde, el agente te pregunta y espera. La pregunta aparece en el plan, en la consola y en la barra lateral, con una notificación; respondés ahí y el agente sigue desde donde estaba. Si no respondés en 25 minutos, decide solo y lo deja anotado.",
+      "**Errores de los agentes, explicados**: cuando una ejecución falla, la consola dice qué servicio respondió (la API de Anthropic, OpenAI, Google o GitHub, o la CLI en tu computadora), con qué código HTTP, qué significa (sin acceso al modelo, límite de uso, autenticación…) y qué hacer, con el modelo, el id del pedido y los detalles técnicos para copiar. Cada ejecución muestra también la versión de la CLI, el modelo real y cómo está logueada, y los avisos de límite de uso. Si el problema es de la cuenta y no de la tarea, la orquestación queda en pausa en vez de fallar."
+    ],
+    "en": [
+      "**The orchestrator asks before planning**: if the request leaves something open (the scope, one approach or another, what to do with what already exists), it asks you a few questions with suggested answers and plans with what you reply. If the request is clear, it goes straight to the plan.",
+      "**Watch the orchestrator think**: while it reads the request, builds the plan or revises it with your changes, the window shows which stage it's at, its latest thought, the files it reads and the searches it makes, with the time so far.",
+      "**Agents can ask you while they work**: when a decision is yours to make, the agent asks and waits. The question shows in the plan, the console and the side bar, with a notification; you answer there and the agent goes on from where it was. If you don't answer within 25 minutes, it decides on its own and notes it.",
+      "**Agent errors, explained**: when a run fails, the console says which service answered (the Anthropic, OpenAI, Google or GitHub API, or the CLI on your computer), with which HTTP status, what it means (no access to the model, usage limit, authentication…) and what to do, with the model, the request id and the technical details to copy. Each run also shows the CLI's version, the model really used and how it's logged in, and usage-limit warnings. If the problem is the account rather than the task, the orchestration pauses instead of failing."
+    ]
+  },
+  {
+    "version": "0.10.0",
+    "date": "2026-10-04",
+    "es": [
+      "**Orquestación de agentes**: describís una funcionalidad y Termo analiza el proyecto, diseña un equipo a medida — cuántos agentes, qué especialidad tiene cada uno y con qué modelo de Claude, GPT, Gemini o Copilot corre — y te muestra el plan como un árbol, con dos o tres estrategias para comparar y el costo estimado de cada agente y de cada tarea. Antes de aprobar podés cambiar el modelo de cualquier agente y fijar un presupuesto; nada se ejecuta hasta entonces.",
+      "Durante la ejecución, un **orquestador supervisa** cada tanda de tareas: reintenta lo que falla, reasigna, cambia de modelo o suma tareas. Lo que entra en el presupuesto y en los permisos aprobados lo hace solo; lo que no, espera tu aprobación.",
+      "La barra lateral tiene dos botones: **Agentes locales**, con los agentes y proyectos de siempre, y **Agentes de orquestación**. En la lista de orquestaciones podés **ocultar las finalizadas**.",
+      "El plan se ve como un **organigrama**: el orquestador arriba, sus agentes y las tareas de cada uno debajo. Mientras corre, el agente y la tarea en curso **se iluminan**, y lo terminado queda **en verde con un tilde**.",
+      "**Editá el plan** antes de aprobarlo o después de que corrió: las instrucciones de cada agente, el pedido de cada tarea, y el equipo mismo (sumar o quitar agentes y tareas, reasignar, dependencias). Lo que ya corrió se conserva. O pedile los cambios al orquestador con **Modificar con IA**.",
+      "Nueva pestaña **Consola**: todo lo que hicieron los agentes de una orquestación, en el orden en que pasó y en vivo, con filtro por agente.",
+      "Al terminar, el orquestador escribe un **informe final**: si se cumplió el objetivo, qué cambió, los problemas y los próximos pasos, con el costo, la duración y el resultado de cada tarea. Se puede plegar y copiar en Markdown.",
+      "Los campos de carpeta de agentes, proyectos y orquestaciones usan el **mismo navegador de carpetas** que las consolas nuevas."
+    ],
+    "en": [
+      "**Agent orchestration**: describe a feature and Termo reads the project, designs a team for it — how many agents, what each one specializes in and which Claude, GPT, Gemini or Copilot model it runs on — and shows the plan as a tree, with two or three strategies to compare and the estimated cost of every agent and task. Before approving you can change any agent's model and set a budget; nothing runs until then.",
+      "While it runs, an **orchestrator supervises** each round of tasks: it retries what fails, reassigns, switches models or adds tasks. What fits the budget and the permissions you approved goes ahead on its own; anything else waits for your approval.",
+      "The side bar has two buttons: **Local agents**, with the agents and projects you already had, and **Orchestration agents**. The orchestration list can **hide finished ones**.",
+      "The plan shows as an **org chart**: the orchestrator on top, its agents and each one's tasks below. While it runs, the agent and task at work **light up**, and what's done turns **green with a tick**.",
+      "**Edit the plan** before approving it or after it ran: each agent's instructions, each task's request, and the team itself (add or remove agents and tasks, reassign, dependencies). What already ran is kept. Or ask the orchestrator for the changes with **Modify with AI**.",
+      "New **Console** tab: everything an orchestration's agents did, in the order it happened and live, filterable by agent.",
+      "When it ends, the orchestrator writes a **final report**: whether the goal was met, what changed, the issues and next steps, with the cost, the duration and each task's result. It can be collapsed and copied as Markdown.",
+      "The folder fields of agents, projects and orchestrations use the **same folder browser** as new consoles."
+    ]
+  },
+  {
+    "version": "0.9.4",
+    "date": "2026-10-03",
+    "es": [
+      "**«Buscar actualizaciones» ya no se queda en «Buscando actualizaciones…»**: cuando encontraba una versión nueva y no había nada en curso en las consolas, mostraba la versión pero nunca la descargaba. Ahora la descarga y la instala."
+    ],
+    "en": [
+      "**“Check for updates” no longer gets stuck on “Checking for updates…”**: when it found a new version and nothing was running in the consoles, it showed the version but never downloaded it. It now downloads and installs it."
+    ]
+  },
+  {
     "version": "0.9.3",
     "date": "2026-10-02",
     "es": [

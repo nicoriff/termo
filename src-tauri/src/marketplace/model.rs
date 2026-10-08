@@ -92,6 +92,41 @@ pub struct CatalogItem {
     pub targets: Vec<AgentTarget>,
     pub installed_in: Vec<AgentTarget>,
     pub detail: ItemDetail,
+    /// What only an MCP server has, and only some sources say.
+    #[serde(default)]
+    pub extra: McpExtra,
+}
+
+/// A tool an MCP server brings, as its source lists it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct McpExtra {
+    /// The name it's installed under in every agent (see names.rs).
+    pub install_name: String,
+    /// "official" or "smithery" (see sources.rs).
+    pub source: String,
+    /// Its page on the source's site, to link back to.
+    pub listing_url: Option<String>,
+    pub verified: Option<bool>,
+    /// Reached at a URL (true) or run on this computer (false).
+    pub remote: Option<bool>,
+    /// Whether the source's own security scan passed, when it ran one.
+    pub security_scan: Option<bool>,
+    pub tools: Vec<ToolInfo>,
+    /// How to connect isn't in a search result: ask for the details first.
+    pub needs_detail: bool,
+    /// It only runs here through its source's own runner: not installed
+    /// from Termo.
+    pub local_only: bool,
+    /// It signs the user in itself (OAuth), from the agent.
+    pub sign_in: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

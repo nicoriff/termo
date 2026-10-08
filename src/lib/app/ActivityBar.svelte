@@ -4,26 +4,30 @@
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
+  import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
 
-  /** Agents working right now, shown on the button so they're noticed with
-   * the panel closed. */
+  /** What's working right now, shown on each button so it's noticed with the
+   * panel closed: the agents' runs, and the orchestrations running. */
   const running = $derived(Object.values(agentsStore.lastRun).filter((run) => run.status === "running").length);
-  const agentsHint = $derived(
-    `${t("agents.title")} (${formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac)})`,
-  );
+  const orchestrating = $derived(orchestrationStore.all.filter((item) => item.status === "running").length);
+  /** Questions from agents waiting on the user: they win the badge. */
+  const asked = $derived(orchestrationStore.waitingQuestions);
+  const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
+  const localHint = $derived(`${t("agents.sections.local")} (${shortcut})`);
+  const orchestrationHint = $derived(t("agents.sections.orchestration"));
 </script>
 
 <!-- The window's vertical tab strip: one button per side panel, each opening
-     and closing its own. Only Agents lives here for now. -->
+     and closing its own. The agents panel has one per section. -->
 <nav class="activity-bar" aria-label={t("activityBar.label")}>
   {#if appConfigStore.agentsInActivityBar}
     <button
       class="activity-item"
-      class:active={agentsStore.open}
-      title={agentsHint}
-      aria-label={agentsHint}
-      aria-pressed={agentsStore.open}
-      onclick={() => agentsStore.toggle()}
+      class:active={agentsStore.open && agentsStore.section === "local"}
+      title={localHint}
+      aria-label={localHint}
+      aria-pressed={agentsStore.open && agentsStore.section === "local"}
+      onclick={() => agentsStore.toggleSection("local")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="4" y="7.5" width="16" height="12" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -35,6 +39,27 @@
       </svg>
       {#if running > 0}
         <span class="activity-badge">{running}</span>
+      {/if}
+    </button>
+    <button
+      class="activity-item"
+      class:active={agentsStore.open && agentsStore.section === "orchestration"}
+      title={orchestrationHint}
+      aria-label={orchestrationHint}
+      aria-pressed={agentsStore.open && agentsStore.section === "orchestration"}
+      onclick={() => agentsStore.toggleSection("orchestration")}
+    >
+      <!-- An org chart: the orchestrator over its team. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="8.5" y="2.8" width="7" height="5.4" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <rect x="2.6" y="15.8" width="6.2" height="5.4" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <rect x="15.2" y="15.8" width="6.2" height="5.4" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <path d="M12 8.2v3.8M5.7 15.8v-3.8h12.6v3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+      </svg>
+      {#if asked > 0}
+        <span class="activity-badge asking" title={t("agents.orchestration.questions.badge", { n: String(asked) })}>?</span>
+      {:else if orchestrating > 0}
+        <span class="activity-badge">{orchestrating}</span>
       {/if}
     </button>
   {/if}
@@ -94,6 +119,11 @@
   .activity-item:focus-visible {
     outline: 1px solid var(--pane-active-border, #3a6df0);
     outline-offset: -3px;
+  }
+
+  .activity-badge.asking {
+    background: #d7a72a;
+    color: #1e1e1e;
   }
 
   .activity-badge {

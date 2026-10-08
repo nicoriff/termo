@@ -47,6 +47,12 @@ const OLD_CONPTY_BEFORE_BUILD = 21376;
 // resize many times in a row, would otherwise scramble the output.
 const PTY_RESIZE_SETTLE_MS = 100;
 
+// An agent console stays covered until its CLI draws (see setStarting):
+// how long after its first text, so the screen is whole, and the longest it
+// stays covered if the CLI never writes any.
+const STARTING_SETTLE_MS = 120;
+const STARTING_LIMIT_MS = 20_000;
+
 export interface ThemeApplyOptions {
   fontSizeOverride: number | null;
   fontFamilyOverride: string | null;
@@ -123,6 +129,10 @@ export class TerminalInstance {
       if (this.sessionId) void writePty(this.sessionId, data);
       else this.pendingInput.push(data);
     });
+
+    // Typing at a console that's still covered uncovers it: whatever the
+    // CLI is waiting for is then in sight.
+    this.term.onKey(() => this.setStarting(false));
 
     this.term.onTitleChange((title) => tabTitleStore.setProgramTitle(this.tabId, title));
 
@@ -284,6 +294,43 @@ export class TerminalInstance {
     });
   }
 
+  /** Told when an agent console starts, and again once its CLI has drawn
+   * something: Terminal.svelte covers the console in between. */
+  onStarting: ((starting: boolean) => void) | null = null;
+  private starting = false;
+  private startingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private setStarting(starting: boolean): void {
+    if (this.startingTimer) clearTimeout(this.startingTimer);
+    this.startingTimer = null;
+    if (this.disposed || this.starting === starting) return;
+    this.starting = starting;
+    if (starting) {
+      // A CLI that never draws anything still gets its console back.
+      this.startingTimer = setTimeout(() => this.setStarting(false), STARTING_LIMIT_MS);
+    }
+    this.onStarting?.(starting);
+  }
+
+  /** Whether the CLI has put anything on screen yet. The first bytes of a
+   * console are ConPTY's own (clearing, the cursor's position), not text. */
+  private hasText(): boolean {
+    const buffer = this.term.buffer.active;
+    for (let y = 0; y < this.term.rows; y++) {
+      if (buffer.getLine(buffer.baseY + y)?.translateToString(true).trim()) return true;
+    }
+    return false;
+  }
+
+  /** Uncovers the console once there's text on it — a moment later, so
+   * what shows is its first screen and not that screen half drawn. */
+  private uncoverWhenDrawn(): void {
+    if (!this.starting || this.startingTimer === null || !this.hasText()) return;
+    clearTimeout(this.startingTimer);
+    this.startingTimer = null;
+    setTimeout(() => this.setStarting(false), STARTING_SETTLE_MS);
+  }
+
   async mount(
     container: HTMLElement,
     shellPath?: string,
@@ -304,6 +351,7 @@ export class TerminalInstance {
       // Known from the start, rather than waiting for its banner or its first
       // hook: the status bar and the tab show the agent right away.
       this.classifyState.detectedTool = agent.tool;
+      this.setStarting(true);
       // The agent as the console's own process; once it exits, the shell in
       // its place, so leaving it drops you at a prompt in that folder.
       const started = await this.start({ shellPath, shellArgs, cwd, agent }, () =>
@@ -337,6 +385,7 @@ export class TerminalInstance {
    * tab and the same xterm, so what the agent left on screen stays above. */
   private async fallBackToShell(shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
     if (this.disposed) return;
+    this.setStarting(false);
     unregisterPty(this.tabId);
     this.sessionId = null;
     workspaceStore.dropAgent(this.tabId);
@@ -376,7 +425,10 @@ export class TerminalInstance {
           if (this.disposed) return;
           const decoded = this.decoder.decode(bytes, { stream: true });
           const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
-          this.term.write(themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text);
+          this.term.write(
+            themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
+            this.starting ? () => this.uncoverWhenDrawn() : undefined,
+          );
         },
         onExit: (code) => {
           if (this.disposed) return;
@@ -385,6 +437,7 @@ export class TerminalInstance {
         },
       });
     } catch (err) {
+      this.setStarting(false);
       if (!opts.agent || this.disposed) throw err;
       this.term.write(`\x1b[31m${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
       return false;
@@ -516,6 +569,7 @@ export class TerminalInstance {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.startingTimer) clearTimeout(this.startingTimer);
     if (this.ptyResizeTimer) clearTimeout(this.ptyResizeTimer);
     this.renderSub?.dispose();
     this.renderSub = null;

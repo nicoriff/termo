@@ -15,7 +15,12 @@ export const STEP_LABEL_KEYS: Record<WizardStep, MessageKey> = {
   deploy: "agents.wizard.steps.deploy",
 };
 
-export const AGENT_ICONS = ["🤖", "🔍", "📝", "🧹", "📊", "🛠️", "📬", "🧪", "📚", "⚡"];
+export const AGENT_ICONS = [
+  "🤖", "🔍", "📝", "🧹", "📊", "🛠️", "📬", "🧪", "📚", "⚡",
+  "🧠", "💡", "🎯", "🚀", "🐛", "🔒", "🛡️", "🧭", "🗂️", "📦",
+  "📅", "⏰", "🔔", "💬", "🌐", "☁️", "🗄️", "🧩", "🔧", "⚙️",
+  "📈", "💰", "🎨", "✍️", "🧾", "🔬", "👀", "🌱", "🦉", "🐙",
+];
 
 /** What set a run off, in words. */
 export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {
@@ -28,6 +33,8 @@ export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {
   chain: "agents.run.trigger.chain",
   agent: "agents.run.trigger.agent",
   message: "agents.run.trigger.message",
+  orchestrator: "agents.run.trigger.orchestrator",
+  console: "agents.run.trigger.console",
 };
 
 export const AUTONOMY_TITLE_KEYS: Record<AgentAutonomy, MessageKey> = {
@@ -51,7 +58,7 @@ export function newAgentSpec(id: string): AgentSpec {
     tools: { web: false, mcp: [] },
     limits: { timeoutMin: 15 },
     triggers: { schedule: null, watch: null, git: null, webhook: null, after: null },
-    collaboration: { contacts: [], board: false, allowEscalation: false },
+    collaboration: { contacts: [], board: false, allowEscalation: false, fromConsoles: false, consolesMayRun: false },
     secrets: [],
     enabled: true,
     deploy: { github: null },

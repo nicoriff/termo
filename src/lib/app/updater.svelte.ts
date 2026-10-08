@@ -55,7 +55,7 @@ class UpdaterStore {
         this.status = { kind: "waiting", consoles, agents: agents + background };
         return;
       }
-      await this.install();
+      await this.downloadAndInstall(update);
     } catch (error) {
       this.status = { kind: "error", message: String(error) };
     }
@@ -65,6 +65,11 @@ class UpdaterStore {
   async install(): Promise<void> {
     const update = this.update;
     if (!update || this.working) return;
+    await this.downloadAndInstall(update);
+  }
+
+  /** Not behind `working`: checkAndInstall gets here while still "checking". */
+  private async downloadAndInstall(update: Update): Promise<void> {
     let received = 0;
     let total: number | null = null;
     this.status = { kind: "downloading", received, total };

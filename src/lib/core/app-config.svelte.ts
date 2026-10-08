@@ -115,6 +115,10 @@ class AppConfigStore {
   aiDockBadge = $state(true);
   /** The Agents button in the window's vertical bar. */
   agentsInActivityBar = $state(true);
+  /** The user's agents also in consoles opened outside Termo. */
+  agentsFromAnyConsole = $state(false);
+  /** Where the marketplace searches MCP servers first. */
+  marketplaceSource = $state<"official" | "smithery">("official");
   /** The keep-awake button in the title bar. */
   keepAwakeButton = $state(true);
   tabsFillWidth = $state(false);
@@ -217,6 +221,8 @@ class AppConfigStore {
     this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
     this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
+    this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
+    this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
     this.keepAwakeButton = config.keep_awake_button ?? true;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
@@ -337,6 +343,16 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setMarketplaceSource(source: "official" | "smithery"): void {
+    this.marketplaceSource = source;
+    void this.persist();
+  }
+
+  setAgentsFromAnyConsole(enabled: boolean): void {
+    this.agentsFromAnyConsole = enabled;
+    void this.persist();
+  }
+
   setKeepAwakeButton(visible: boolean): void {
     this.keepAwakeButton = visible;
     void this.persist();
@@ -436,6 +452,8 @@ class AppConfigStore {
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,
+      agents_from_any_console: this.agentsFromAnyConsole,
+      marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
       tabs_fill_width: this.tabsFillWidth,
       default_layout: this.defaultLayout,

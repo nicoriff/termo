@@ -21,6 +21,7 @@
     type RunEvent,
   } from "$lib/core/agents-client";
   import FolderField from "./FolderField.svelte";
+  import RichSelect from "./RichSelect.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import IntegrationPicker from "./IntegrationPicker.svelte";
   import CustomConnectorForm from "./CustomConnectorForm.svelte";
@@ -105,7 +106,19 @@
     "agents.wizard.triggers.days.sat",
   ];
 
+  const AUTONOMY_ICONS: Record<AgentAutonomy, string> = { read: "👀", edit: "✏️", run: "⚡" };
+
   const installed = (engine: AgentEngine) => newTabOptions.agentClis?.[engine] !== false;
+
+  const engineOptions = $derived(
+    ENGINES.map((engine) => ({
+      value: engine.id,
+      title: engine.label,
+      text: installed(engine.id) ? t(engine.hint) : t("agents.wizard.engine.notInstalled"),
+      disabled: !installed(engine.id),
+    })),
+  );
+  const autonomyOptions = $derived(AUTONOMY.map((level) => ({ value: level.id, title: t(level.title), text: t(level.text) })));
 
   /** The models each engine's CLI offers (loaded once; missing until then). */
   let models = $state<Partial<Record<AgentEngine, ModelOption[]>>>({});
@@ -340,6 +353,7 @@
   }
 
   function setSchedule(kind: "none" | "interval" | "daily") {
+    if (kind === (spec.triggers.schedule?.kind ?? "none")) return;
     if (kind === "none") spec.triggers.schedule = null;
     else if (kind === "interval") spec.triggers.schedule = { kind: "interval", minutes: 60 };
     else spec.triggers.schedule = { kind: "daily", at: "09:00", weekdays: [] };
@@ -370,6 +384,12 @@
      pointer (Try it → Stop) drops focus to <body>, and the keys still have
      to work then. -->
 <svelte:window onkeydown={onKeydown} />
+
+{#snippet chevron()}
+  <svg class="fold-chevron" viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+    <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.2" />
+  </svg>
+{/snippet}
 
 <div class="wizard-backdrop" transition:fade={{ duration: 140 }}></div>
 <div class="wizard-anchor">
@@ -441,24 +461,33 @@
             </div>
             {#if draftError}<p class="error">{draftError}</p>{/if}
 
-            <div class="label">{t("agents.wizard.idea.templates")}</div>
-            <div class="templates">
-              {#each AGENT_TEMPLATES as template (template.id)}
-                <button class="template" disabled={drafting} onclick={() => useTemplate(template)}>
-                  <span class="template-icon">{template.icon}</span>
-                  <span class="template-text">
-                    <span class="card-title">{t(template.name)}</span>
-                    <span class="card-text">{t(template.description)}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
-            <div class="label">{t("agents.wizard.idea.icon")}</div>
-            <div class="icons">
-              {#each AGENT_ICONS as icon (icon)}
-                <button class="icon-choice" class:selected={spec.icon === icon} onclick={() => (spec.icon = icon)}>{icon}</button>
-              {/each}
-            </div>
+            <details class="group fold">
+              <summary>
+                {@render chevron()}
+                <span class="group-title">{t("agents.wizard.idea.templates")}</span>
+                <span class="fold-count">{AGENT_TEMPLATES.length}</span>
+              </summary>
+              <div class="templates">
+                {#each AGENT_TEMPLATES as template (template.id)}
+                  <button class="template" disabled={drafting} onclick={() => useTemplate(template)}>
+                    <span class="template-icon">{template.icon}</span>
+                    <span class="template-text">
+                      <span class="card-title">{t(template.name)}</span>
+                      <span class="card-text">{t(template.description)}</span>
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            </details>
+
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.idea.icon")}</div>
+              <div class="icons">
+                {#each AGENT_ICONS as icon (icon)}
+                  <button class="icon-choice" class:selected={spec.icon === icon} onclick={() => (spec.icon = icon)}>{icon}</button>
+                {/each}
+              </div>
+            </section>
           {:else if step === "logic"}
             {#if draftNote}
               <div class="ai-note">
@@ -468,83 +497,89 @@
             {/if}
             <h2>{t("agents.wizard.logic.title")}</h2>
             <p class="explain">{t("agents.wizard.logic.explain")}</p>
-            <label class="label" for="agent-name">{t("agents.wizard.logic.name")}</label>
-            <input id="agent-name" class="field" placeholder={t("agents.wizard.logic.namePlaceholder")} bind:value={spec.name} />
-            <label class="label" for="agent-task">{t("agents.wizard.logic.task")}</label>
-            <p class="hint">{t("agents.wizard.logic.taskHint")}</p>
-            <textarea id="agent-task" class="field" rows="3" placeholder={t("agents.wizard.logic.taskPlaceholder")} bind:value={spec.task}
-            ></textarea>
-            <label class="label" for="agent-logic">{t("agents.wizard.logic.instructions")}</label>
-            <p class="hint">{t("agents.wizard.logic.instructionsHint")}</p>
-            <textarea
-              id="agent-logic"
-              class="field mono"
-              rows="7"
-              placeholder={t("agents.wizard.logic.instructionsPlaceholder")}
-              bind:value={spec.instructions}
-            ></textarea>
+            <section class="group">
+              <label class="group-title" for="agent-name">{t("agents.wizard.logic.name")}</label>
+              <input id="agent-name" class="field" placeholder={t("agents.wizard.logic.namePlaceholder")} bind:value={spec.name} />
+            </section>
+            <section class="group">
+              <label class="group-title" for="agent-task">{t("agents.wizard.logic.task")}</label>
+              <p class="group-hint">{t("agents.wizard.logic.taskHint")}</p>
+              <textarea id="agent-task" class="field" rows="3" placeholder={t("agents.wizard.logic.taskPlaceholder")} bind:value={spec.task}
+              ></textarea>
+            </section>
+            <section class="group">
+              <label class="group-title" for="agent-logic">{t("agents.wizard.logic.instructions")}</label>
+              <p class="group-hint">{t("agents.wizard.logic.instructionsHint")}</p>
+              <textarea
+                id="agent-logic"
+                class="field mono"
+                rows="7"
+                placeholder={t("agents.wizard.logic.instructionsPlaceholder")}
+                bind:value={spec.instructions}
+              ></textarea>
+            </section>
           {:else if step === "engine"}
             <h2>{t("agents.wizard.engine.title")}</h2>
             <p class="explain">{t("agents.wizard.engine.explain")}</p>
-            <div class="cards two">
-              {#each ENGINES as engine (engine.id)}
-                <button
-                  class="card"
-                  class:selected={spec.engine === engine.id}
-                  disabled={!installed(engine.id)}
-                  onclick={() => chooseEngine(engine.id)}
-                >
-                  <span class="card-title"><ConsoleIcon kind={engine.id} size={14} /> {engine.label}</span>
-                  <span class="card-text">
-                    {installed(engine.id) ? t(engine.hint) : t("agents.wizard.engine.notInstalled")}
-                  </span>
-                </button>
-              {/each}
-            </div>
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.engine.engine")}</div>
+              <p class="group-hint">{t("agents.wizard.engine.engineHint")}</p>
+              <RichSelect label={t("agents.wizard.engine.engine")} options={engineOptions} value={spec.engine} onpick={chooseEngine}>
+                {#snippet icon(engine)}<ConsoleIcon kind={engine} size={16} />{/snippet}
+              </RichSelect>
+            </section>
 
-            <div class="label">{t("agents.wizard.engine.workDir")}</div>
-            <p class="hint">{t("agents.wizard.engine.workDirHint")}</p>
-            <FolderField placeholder={t("agents.wizard.engine.workDirOwn")} bind:value={spec.workDir} />
-            <div class="chips">
-              <button class="chip" class:selected={!spec.workDir.trim()} onclick={() => (spec.workDir = "")}>
-                {t("agents.wizard.engine.useOwn")}
-              </button>
-              {#if hereFolder}
-                <button class="chip" class:selected={spec.workDir === hereFolder} title={hereFolder} onclick={() => (spec.workDir = hereFolder!)}>
-                  {t("agents.wizard.engine.useHere")}
-                </button>
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.engine.autonomy")}</div>
+              <p class="group-hint">{t("agents.wizard.engine.autonomyHint")}</p>
+              <RichSelect
+                label={t("agents.wizard.engine.autonomy")}
+                options={autonomyOptions}
+                value={spec.autonomy}
+                onpick={(level) => (spec.autonomy = level)}
+              >
+                {#snippet icon(level)}{AUTONOMY_ICONS[level]}{/snippet}
+              </RichSelect>
+              {#if risk}
+                <p class="warning">
+                  ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
+                </p>
               {/if}
-            </div>
+            </section>
+
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.engine.workDir")}</div>
+              <p class="group-hint">{t("agents.wizard.engine.workDirHint")}</p>
+              <FolderField placeholder={t("agents.wizard.engine.workDirOwn")} bind:value={spec.workDir} />
+              <div class="chips">
+                <button class="chip" class:selected={!spec.workDir.trim()} onclick={() => (spec.workDir = "")}>
+                  {t("agents.wizard.engine.useOwn")}
+                </button>
+                {#if hereFolder}
+                  <button class="chip" class:selected={spec.workDir === hereFolder} title={hereFolder} onclick={() => (spec.workDir = hereFolder!)}>
+                    {t("agents.wizard.engine.useHere")}
+                  </button>
+                {/if}
+              </div>
+            </section>
 
             {#if agentsStore.projects.length > 0}
-              <label class="label" for="agent-project">{t("agents.wizard.engine.project")}</label>
-              <select id="agent-project" class="field" bind:value={spec.projectId}>
-                <option value="">{t("agents.projects.loose")}</option>
-                {#each agentsStore.projects as project (project.id)}
-                  <option value={project.id}>{project.icon} {project.name}</option>
-                {/each}
-              </select>
+              <section class="group">
+                <label class="group-title" for="agent-project">{t("agents.wizard.engine.project")}</label>
+                <select id="agent-project" class="field" bind:value={spec.projectId}>
+                  <option value="">{t("agents.projects.loose")}</option>
+                  {#each agentsStore.projects as project (project.id)}
+                    <option value={project.id}>{project.icon} {project.name}</option>
+                  {/each}
+                </select>
+              </section>
             {/if}
 
-            <div class="label">{t("agents.wizard.engine.autonomy")}</div>
-            <p class="hint">{t("agents.wizard.engine.autonomyHint")}</p>
-            <div class="cards three">
-              {#each AUTONOMY as level (level.id)}
-                <button class="card" class:selected={spec.autonomy === level.id} onclick={() => (spec.autonomy = level.id)}>
-                  <span class="card-title">{t(level.title)}</span>
-                  <span class="card-text">{t(level.text)}</span>
-                </button>
-              {/each}
-            </div>
-
-            {#if risk}
-              <p class="warning">
-                ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
-              </p>
-            {/if}
-
-            <details class="advanced">
-              <summary>{t("agents.wizard.advanced")}</summary>
+            <details class="group fold">
+              <summary>
+                {@render chevron()}
+                <span class="group-title">{t("agents.wizard.advanced")}</span>
+              </summary>
               <div class="row">
                 <label class="label inline" for="agent-model">{t("agents.wizard.engine.model")}</label>
                 <select id="agent-model" class="field" bind:value={spec.model}>
@@ -576,27 +611,22 @@
           {:else if step === "tools"}
             <h2>{t("agents.wizard.tools.title")}</h2>
             <p class="explain">{t("agents.wizard.tools.explain")}</p>
-            <div class="capabilities">
-              <div class="capability on">✓ {t("agents.wizard.tools.read")}</div>
-              <div class="capability" class:on={spec.autonomy !== "read"}>
-                {spec.autonomy !== "read" ? "✓" : "✗"}
-                {t("agents.wizard.tools.edit")}
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.tools.internet")}</div>
+              <div class="option" class:on={spec.tools.web}>
+                <label class="toggle">
+                  <input type="checkbox" bind:checked={spec.tools.web} />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.tools.web")}</span>
+                    <span class="hint">{t("agents.wizard.tools.webHint")}</span>
+                  </span>
+                </label>
               </div>
-              <div class="capability" class:on={spec.autonomy === "run"}>
-                {spec.autonomy === "run" ? "✓" : "✗"}
-                {t("agents.wizard.tools.run")}
-              </div>
-              <p class="hint">{t("agents.wizard.tools.fromAutonomy")}</p>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" bind:checked={spec.tools.web} />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.tools.web")}</span>
-                <span class="hint">{t("agents.wizard.tools.webHint")}</span>
-              </span>
-            </label>
-            <div class="label">{t("agents.wizard.tools.integrations")}</div>
-            <p class="hint">{t("agents.wizard.tools.integrationsHint")}</p>
+            </section>
+
+            <section class="group">
+            <div class="group-title">{t("agents.wizard.tools.integrations")}</div>
+            <p class="group-hint">{t("agents.wizard.tools.integrationsHint")}</p>
             {#each spec.tools.mcp as server (server.name)}
               <div class="integration">
                 <span>🔌 {server.name}</span>
@@ -629,9 +659,43 @@
                 <p class="hint note">✨ {t("agents.integrations.aiSuggests", { list: suggestions.map((s) => s.query).join(", ") })}</p>
               {/if}
             {/if}
+            </section>
 
-            <div class="label">{t("agents.wizard.tools.team")}</div>
-            <p class="hint">{t("agents.wizard.tools.teamHint")}</p>
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.tools.consoles")}</div>
+              <div class="option" class:on={spec.collaboration.fromConsoles ?? false}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.collaboration.fromConsoles ?? false}
+                    onchange={(e) => (spec.collaboration.fromConsoles = e.currentTarget.checked)}
+                  />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.tools.fromConsoles")}</span>
+                    <span class="hint">{t("agents.wizard.tools.fromConsolesHint")}</span>
+                  </span>
+                </label>
+                {#if spec.collaboration.fromConsoles && spec.autonomy === "run"}
+                  <div class="option-body">
+                    <label class="toggle warn">
+                      <input
+                        type="checkbox"
+                        checked={spec.collaboration.consolesMayRun ?? false}
+                        onchange={(e) => (spec.collaboration.consolesMayRun = e.currentTarget.checked)}
+                      />
+                      <span>
+                        <span class="toggle-title">{t("agents.wizard.tools.consolesMayRun")}</span>
+                        <span class="hint">{t("agents.wizard.tools.consolesMayRunHint")}</span>
+                      </span>
+                    </label>
+                  </div>
+                {/if}
+              </div>
+            </section>
+
+            <section class="group">
+            <div class="group-title">{t("agents.wizard.tools.team")}</div>
+            <p class="group-hint">{t("agents.wizard.tools.teamHint")}</p>
             {#if inTeam}
               <p class="hint">{t("agents.wizard.tools.teamOnly")}</p>
             {/if}
@@ -651,161 +715,215 @@
               <p class="hint">{t("agents.wizard.tools.noOthers")}</p>
             {/each}
             {#if stronger.length > 0}
-              <label class="toggle">
-                <input type="checkbox" bind:checked={spec.collaboration.allowEscalation} />
-                <span>
-                  <span class="toggle-title">{t("agents.wizard.tools.escalation")}</span>
-                  <span class="hint">
-                    {t("agents.wizard.tools.escalationHint", { names: stronger.map((agent) => agent.name).join(", ") })}
+              <div class="option" class:on={spec.collaboration.allowEscalation}>
+                <label class="toggle">
+                  <input type="checkbox" bind:checked={spec.collaboration.allowEscalation} />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.tools.escalation")}</span>
+                    <span class="hint">
+                      {t("agents.wizard.tools.escalationHint", { names: stronger.map((agent) => agent.name).join(", ") })}
+                    </span>
                   </span>
+                </label>
+              </div>
+            {/if}
+            <div class="option" class:on={spec.collaboration.board}>
+              <label class="toggle">
+                <input type="checkbox" bind:checked={spec.collaboration.board} />
+                <span>
+                  <span class="toggle-title">{t("agents.wizard.tools.board")}</span>
+                  <span class="hint">{t("agents.wizard.tools.boardHint")}</span>
                 </span>
               </label>
-            {/if}
-            <label class="toggle">
-              <input type="checkbox" bind:checked={spec.collaboration.board} />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.tools.board")}</span>
-                <span class="hint">{t("agents.wizard.tools.boardHint")}</span>
-              </span>
-            </label>
+            </div>
+            </section>
           {:else if step === "triggers"}
             {@const schedule = spec.triggers.schedule}
             <h2>{t("agents.wizard.triggers.title")}</h2>
             <p class="explain">{t("agents.wizard.triggers.explain")}</p>
-            <div class="cards three">
-              <button class="card" class:selected={!schedule} onclick={() => setSchedule("none")}>
-                <span class="card-title">{t("agents.wizard.triggers.manual")}</span>
-                <span class="card-text">{t("agents.wizard.triggers.manualText")}</span>
-              </button>
-              <button class="card" class:selected={schedule?.kind === "interval"} onclick={() => setSchedule("interval")}>
-                <span class="card-title">{t("agents.wizard.triggers.interval")}</span>
-                <span class="card-text">{t("agents.wizard.triggers.intervalText")}</span>
-              </button>
-              <button class="card" class:selected={schedule?.kind === "daily"} onclick={() => setSchedule("daily")}>
-                <span class="card-title">{t("agents.wizard.triggers.daily")}</span>
-                <span class="card-text">{t("agents.wizard.triggers.dailyText")}</span>
-              </button>
-            </div>
-            {#if schedule?.kind === "interval"}
-              <div class="row">
-                <span class="label inline">{t("agents.wizard.triggers.every")}</span>
-                <input class="field narrow" type="number" min="1" bind:value={schedule.minutes} />
-                <span class="hint">{t("agents.wizard.engine.minutes")}</span>
-              </div>
-            {:else if schedule?.kind === "daily"}
-              <div class="row">
-                <span class="label inline">{t("agents.wizard.triggers.at")}</span>
-                <input class="field narrow" type="time" bind:value={schedule.at} />
-              </div>
-              <div class="chips">
-                {#each WEEKDAY_KEYS as key, day (key)}
-                  <button class="chip" class:selected={schedule.weekdays.includes(day)} onclick={() => toggleDay(day)}>{t(key)}</button>
-                {/each}
-              </div>
-              <p class="hint">{t("agents.wizard.triggers.daysHint")}</p>
-            {/if}
-
-            <label class="toggle">
-              <input
-                type="checkbox"
-                checked={spec.triggers.watch !== null}
-                onchange={(e) => (spec.triggers.watch = e.currentTarget.checked ? { path: spec.workDir || hereFolder || "" } : null)}
-              />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.triggers.watch")}</span>
-                <span class="hint">{t("agents.wizard.triggers.watchHint")}</span>
-              </span>
-            </label>
-            {#if spec.triggers.watch}
-              <FolderField placeholder={t("agents.wizard.triggers.watchPlaceholder")} bind:value={spec.triggers.watch.path} />
-            {/if}
-
-            <label class="toggle">
-              <input
-                type="checkbox"
-                checked={spec.triggers.git !== null}
-                onchange={(e) =>
-                  (spec.triggers.git = e.currentTarget.checked
-                    ? { repoPath: spec.workDir || hereFolder || "", event: "commit" }
-                    : null)}
-              />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.triggers.git")}</span>
-                <span class="hint">{t("agents.wizard.triggers.gitHint")}</span>
-              </span>
-            </label>
-            {#if spec.triggers.git}
-              <div class="row">
-                <FolderField placeholder={t("agents.wizard.triggers.gitPlaceholder")} bind:value={spec.triggers.git.repoPath} />
-                <select class="field narrow wide" bind:value={spec.triggers.git.event} aria-label={t("agents.wizard.triggers.gitEvent")}>
-                  <option value="commit">{t("agents.wizard.triggers.gitCommit")}</option>
-                  <option value="push">{t("agents.wizard.triggers.gitPush")}</option>
-                </select>
-              </div>
-            {/if}
-
-            <label class="toggle">
-              <input
-                type="checkbox"
-                checked={spec.triggers.webhook !== null}
-                onchange={(e) => (spec.triggers.webhook = e.currentTarget.checked ? { token: newToken() } : null)}
-              />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.triggers.webhook")}</span>
-                <span class="hint">{t("agents.wizard.triggers.webhookHint")}</span>
-              </span>
-            </label>
-            {#if spec.triggers.webhook}
-              <div class="webhook">
-                {#if webhookInfo && !webhookInfo.listening}
-                  <p class="error">{t("agents.wizard.triggers.webhookDown", { port: String(webhookInfo.port) })}</p>
+            <!-- Every way of starting on its own is the same thing here: a row
+                 that's on or off, with its settings underneath when it's on. -->
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.triggers.timeGroup")}</div>
+              <p class="group-hint">{t("agents.wizard.triggers.timeGroupHint")}</p>
+              <div class="option" class:on={schedule !== null}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={schedule !== null}
+                    onchange={(e) => setSchedule(e.currentTarget.checked ? "interval" : "none")}
+                  />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.triggers.schedule")}</span>
+                    <span class="hint">{t("agents.wizard.triggers.scheduleHint")}</span>
+                  </span>
+                </label>
+                {#if schedule}
+                  <div class="option-body">
+                    <div class="segments" role="radiogroup" aria-label={t("agents.wizard.triggers.schedule")}>
+                      <button
+                        class="segment"
+                        class:selected={schedule.kind === "interval"}
+                        role="radio"
+                        aria-checked={schedule.kind === "interval"}
+                        onclick={() => setSchedule("interval")}
+                      >
+                        {t("agents.wizard.triggers.interval")}
+                      </button>
+                      <button
+                        class="segment"
+                        class:selected={schedule.kind === "daily"}
+                        role="radio"
+                        aria-checked={schedule.kind === "daily"}
+                        onclick={() => setSchedule("daily")}
+                      >
+                        {t("agents.wizard.triggers.daily")}
+                      </button>
+                    </div>
+                    {#if schedule.kind === "interval"}
+                      <div class="row">
+                        <span class="label inline">{t("agents.wizard.triggers.every")}</span>
+                        <input class="field narrow" type="number" min="1" bind:value={schedule.minutes} />
+                        <span class="hint">{t("agents.wizard.engine.minutes")}</span>
+                      </div>
+                    {:else if schedule.kind === "daily"}
+                      <div class="row">
+                        <span class="label inline">{t("agents.wizard.triggers.at")}</span>
+                        <input class="field narrow" type="time" bind:value={schedule.at} />
+                      </div>
+                      <div class="chips">
+                        {#each WEEKDAY_KEYS as key, day (key)}
+                          <button class="chip" class:selected={schedule.weekdays.includes(day)} onclick={() => toggleDay(day)}>{t(key)}</button>
+                        {/each}
+                      </div>
+                      <p class="hint">{t("agents.wizard.triggers.daysHint")}</p>
+                    {/if}
+                  </div>
                 {/if}
-                <div class="command">
-                  <code>{curlExample}</code>
-                  <button class="button small" onclick={() => void copyCurl()}>
-                    {copiedCurl ? t("agents.github.copied") : t("agents.github.copy")}
-                  </button>
-                </div>
-                <p class="hint">
-                  {t("agents.wizard.triggers.webhookBody")}
-                  <button class="link" onclick={() => spec.triggers.webhook && (spec.triggers.webhook.token = newToken())}>
-                    {t("agents.wizard.triggers.webhookNewToken")}
-                  </button>
-                </p>
               </div>
-            {/if}
-            <label class="toggle">
-              <input
-                type="checkbox"
-                checked={spec.triggers.after !== null}
-                disabled={others.length === 0 && !spec.triggers.after}
-                onchange={(e) =>
-                  (spec.triggers.after = e.currentTarget.checked
-                    ? { agentId: others.length === 1 ? others[0].id : "", on: "success" }
-                    : null)}
-              />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.triggers.after")}</span>
-                <span class="hint">
-                  {others.length === 0 ? t("agents.wizard.triggers.afterNone") : t("agents.wizard.triggers.afterHint")}
-                </span>
-              </span>
-            </label>
-            {#if spec.triggers.after}
-              <div class="row">
-                <select class="field" bind:value={spec.triggers.after.agentId} aria-label={t("agents.wizard.triggers.afterAgent")}>
-                  <option value="" disabled>{t("agents.wizard.triggers.afterPick")}</option>
-                  {#each others as other (other.id)}
-                    <option value={other.id}>{other.icon || "🤖"} {other.name}</option>
-                  {/each}
-                </select>
-                <select class="field narrow wide" bind:value={spec.triggers.after.on} aria-label={t("agents.wizard.triggers.afterOn")}>
-                  <option value="success">{t("agents.wizard.triggers.afterSuccess")}</option>
-                  <option value="failure">{t("agents.wizard.triggers.afterFailure")}</option>
-                  <option value="any">{t("agents.wizard.triggers.afterAny")}</option>
-                </select>
+            </section>
+
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.triggers.eventsGroup")}</div>
+              <p class="group-hint">{t("agents.wizard.triggers.eventsGroupHint")}</p>
+
+              <div class="option" class:on={spec.triggers.watch !== null}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.triggers.watch !== null}
+                    onchange={(e) => (spec.triggers.watch = e.currentTarget.checked ? { path: spec.workDir || hereFolder || "" } : null)}
+                  />
+                  <span>
+                    <span class="toggle-title">📁 {t("agents.wizard.triggers.watch")}</span>
+                    <span class="hint">{t("agents.wizard.triggers.watchHint")}</span>
+                  </span>
+                </label>
+                {#if spec.triggers.watch}
+                  <div class="option-body">
+                    <FolderField placeholder={t("agents.wizard.triggers.watchPlaceholder")} bind:value={spec.triggers.watch.path} />
+                  </div>
+                {/if}
               </div>
-            {/if}
+
+              <div class="option" class:on={spec.triggers.git !== null}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.triggers.git !== null}
+                    onchange={(e) =>
+                      (spec.triggers.git = e.currentTarget.checked
+                        ? { repoPath: spec.workDir || hereFolder || "", event: "commit" }
+                        : null)}
+                  />
+                  <span>
+                    <span class="toggle-title">🌿 {t("agents.wizard.triggers.git")}</span>
+                    <span class="hint">{t("agents.wizard.triggers.gitHint")}</span>
+                  </span>
+                </label>
+                {#if spec.triggers.git}
+                  <div class="option-body">
+                    <div class="row">
+                      <FolderField placeholder={t("agents.wizard.triggers.gitPlaceholder")} bind:value={spec.triggers.git.repoPath} />
+                      <select class="field narrow wide" bind:value={spec.triggers.git.event} aria-label={t("agents.wizard.triggers.gitEvent")}>
+                        <option value="commit">{t("agents.wizard.triggers.gitCommit")}</option>
+                        <option value="push">{t("agents.wizard.triggers.gitPush")}</option>
+                      </select>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+
+              <div class="option" class:on={spec.triggers.webhook !== null}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.triggers.webhook !== null}
+                    onchange={(e) => (spec.triggers.webhook = e.currentTarget.checked ? { token: newToken() } : null)}
+                  />
+                  <span>
+                    <span class="toggle-title">🔗 {t("agents.wizard.triggers.webhook")}</span>
+                    <span class="hint">{t("agents.wizard.triggers.webhookHint")}</span>
+                  </span>
+                </label>
+                {#if spec.triggers.webhook}
+                  <div class="option-body webhook">
+                    {#if webhookInfo && !webhookInfo.listening}
+                      <p class="error">{t("agents.wizard.triggers.webhookDown", { port: String(webhookInfo.port) })}</p>
+                    {/if}
+                    <div class="command">
+                      <code>{curlExample}</code>
+                      <button class="button small" onclick={() => void copyCurl()}>
+                        {copiedCurl ? t("agents.github.copied") : t("agents.github.copy")}
+                      </button>
+                    </div>
+                    <p class="hint">
+                      {t("agents.wizard.triggers.webhookBody")}
+                      <button class="link" onclick={() => spec.triggers.webhook && (spec.triggers.webhook.token = newToken())}>
+                        {t("agents.wizard.triggers.webhookNewToken")}
+                      </button>
+                    </p>
+                  </div>
+                {/if}
+              </div>
+
+              <div class="option" class:on={spec.triggers.after !== null}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.triggers.after !== null}
+                    disabled={others.length === 0 && !spec.triggers.after}
+                    onchange={(e) =>
+                      (spec.triggers.after = e.currentTarget.checked
+                        ? { agentId: others.length === 1 ? others[0].id : "", on: "success" }
+                        : null)}
+                  />
+                  <span>
+                    <span class="toggle-title">🤖 {t("agents.wizard.triggers.after")}</span>
+                    <span class="hint">
+                      {others.length === 0 ? t("agents.wizard.triggers.afterNone") : t("agents.wizard.triggers.afterHint")}
+                    </span>
+                  </span>
+                </label>
+                {#if spec.triggers.after}
+                  <div class="option-body">
+                    <div class="row">
+                      <select class="field" bind:value={spec.triggers.after.agentId} aria-label={t("agents.wizard.triggers.afterAgent")}>
+                        <option value="" disabled>{t("agents.wizard.triggers.afterPick")}</option>
+                        {#each others as other (other.id)}
+                          <option value={other.id}>{other.icon || "🤖"} {other.name}</option>
+                        {/each}
+                      </select>
+                      <select class="field narrow wide" bind:value={spec.triggers.after.on} aria-label={t("agents.wizard.triggers.afterOn")}>
+                        <option value="success">{t("agents.wizard.triggers.afterSuccess")}</option>
+                        <option value="failure">{t("agents.wizard.triggers.afterFailure")}</option>
+                        <option value="any">{t("agents.wizard.triggers.afterAny")}</option>
+                      </select>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            </section>
             {#if risk}
               <p class="warning">
                 ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
@@ -869,13 +987,17 @@
             {#if showGithub && spec.engine === "claude"}
               <GithubDeployPanel {spec} />
             {/if}
-            <label class="toggle">
-              <input type="checkbox" bind:checked={spec.enabled} />
-              <span>
-                <span class="toggle-title">{t("agents.wizard.deploy.enabled")}</span>
-                <span class="hint">{t("agents.wizard.deploy.enabledHint")}</span>
-              </span>
-            </label>
+            <section class="group">
+              <div class="option" class:on={spec.enabled}>
+                <label class="toggle">
+                  <input type="checkbox" bind:checked={spec.enabled} />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.deploy.enabled")}</span>
+                    <span class="hint">{t("agents.wizard.deploy.enabledHint")}</span>
+                  </span>
+                </label>
+              </div>
+            </section>
           {/if}
 
           {#if showProblems && problems.length > 0}
@@ -1075,6 +1197,124 @@
     opacity: 0.75;
   }
 
+  /* One concept of a step: its own block, ruled off from the one above. */
+  .group {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .group-title {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .group-hint {
+    margin: 0 0 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    opacity: 0.6;
+  }
+
+  .group > .group-title:not(:has(+ .group-hint)) {
+    margin-bottom: 10px;
+  }
+
+  /* A group that opens on demand. */
+  .fold summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .fold summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .fold summary .group-title {
+    margin: 0;
+  }
+
+  .fold summary:hover .group-title {
+    color: var(--pane-active-border, #3a6df0);
+  }
+
+  .fold-chevron {
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: transform 120ms ease;
+  }
+
+  .fold[open] .fold-chevron {
+    transform: rotate(90deg);
+  }
+
+  .fold-count {
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.1));
+    font-size: 10.5px;
+    line-height: 16px;
+  }
+
+  .fold[open] summary {
+    margin-bottom: 12px;
+  }
+
+  /* Something that's on or off, with its settings underneath when on. */
+  .option {
+    padding: 10px 12px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 8px;
+  }
+
+  .option + .option,
+  .integration + .option {
+    margin-top: 8px;
+  }
+
+  .option.on {
+    border-color: var(--pane-active-border, #3a6df0);
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.08));
+  }
+
+  .option-body {
+    margin: 10px 0 0 22px;
+    padding-top: 10px;
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .option-body > .row:first-child {
+    margin-top: 0;
+  }
+
+  .segments {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 7px;
+  }
+
+  .segment {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .segment.selected {
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+  }
+
   .label {
     display: block;
     margin: 14px 0 5px;
@@ -1152,9 +1392,14 @@
     margin-top: 6px;
   }
 
+  .icons {
+    margin-top: 0;
+  }
+
   .icon-choice {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
     border: 1px solid var(--tabbar-border, #3a3a3a);
     border-radius: 8px;
     background: transparent;
@@ -1183,10 +1428,6 @@
   .cards {
     display: grid;
     gap: 8px;
-  }
-
-  .cards.two {
-    grid-template-columns: 1fr 1fr;
   }
 
   .cards.three {
@@ -1244,36 +1485,15 @@
     font-size: 10.5px;
   }
 
-  .advanced {
-    margin-top: 16px;
-  }
-
-  .advanced summary {
-    cursor: pointer;
-    opacity: 0.7;
-  }
-
-  .capabilities {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
-  }
-
-  .capability {
-    opacity: 0.5;
-  }
-
-  .capability.on {
-    opacity: 1;
-  }
-
   .toggle {
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    margin-top: 14px;
     cursor: pointer;
+  }
+
+  .toggle .hint {
+    margin: 0;
   }
 
   .toggle input {
@@ -1348,7 +1568,10 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-top: 6px;
+  }
+
+  .webhook p {
+    margin: 0;
   }
 
   .command {
@@ -1517,5 +1740,9 @@
     50% {
       opacity: 0.35;
     }
+  }
+
+  .toggle.warn .toggle-title {
+    color: var(--error-fg, #f48771);
   }
 </style>

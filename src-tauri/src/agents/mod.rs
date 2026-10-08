@@ -2,13 +2,17 @@
 //! tools, when) that Termo runs in the background through Claude Code or
 //! Codex (see spec.rs), with its history kept on disk (store.rs).
 
+pub mod console_bridge;
+pub mod diagnose;
 pub mod draft;
+pub mod gemini_system;
 pub mod events;
 pub mod git_hooks;
 pub mod github;
 pub mod integrations;
 pub mod mcp_server;
 pub mod models;
+pub mod orchestration;
 pub mod portable;
 pub mod project_ai;
 pub mod projects;
