@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getConfig, saveConfig } from "./config-client";
 import { getWindowSize, setWindowSize } from "./window-client";
 import { themeStore } from "../theme/theme-store.svelte";
+import { observeSystemAppearance } from "../theme/system-appearance";
 import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
 import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
@@ -136,8 +137,13 @@ class AppConfigStore {
   private windowHeight = 640;
   private installedFontPath: string | null = null;
 
+  private systemAppearance: ReturnType<typeof observeSystemAppearance> | null = null;
+
+  /** Loads preferences and starts this window's appearance observer. The mounting
+   * component calls stopSystemAppearanceSync() when it unmounts. */
   async init(options?: InitOptions): Promise<void> {
-    const config = await getConfig();
+    this.systemAppearance = observeSystemAppearance((appearance) => themeStore.setSystemAppearance(appearance));
+    const [config] = await Promise.all([getConfig(), this.systemAppearance.ready]);
     this.applyFields(config);
 
     if (options?.restoreWindowSize !== false) {
@@ -160,6 +166,11 @@ class AppConfigStore {
     void listen<{ source: string; config: AppConfig }>("config-updated", (event) => {
       if (event.payload.source !== ownLabel) this.applyFields(event.payload.config);
     });
+  }
+
+  stopSystemAppearanceSync(): void {
+    this.systemAppearance?.stop();
+    this.systemAppearance = null;
   }
 
   /** Applies a config snapshot to local state + the theme store, without
@@ -226,7 +237,12 @@ class AppConfigStore {
     // saves don't write back a stale main-window size.
     this.windowWidth = config.window.width;
     this.windowHeight = config.window.height;
-    themeStore.setTheme(config.theme);
+    themeStore.applyPreferences({
+      manualTheme: config.theme,
+      syncWithOs: config.sync_with_os,
+      lightTheme: config.light_theme,
+      darkTheme: config.dark_theme,
+    });
     themeStore.setFontSize(config.font_size_override);
     if (config.font_family_override && config.installed_font_path) {
       // A previously-downloaded Google Font — re-apply from the local file,
@@ -407,7 +423,10 @@ class AppConfigStore {
     if (!this.loaded) return;
     await saveConfig({
       language: this.language,
-      theme: themeStore.current.name,
+      theme: themeStore.manualTheme,
+      sync_with_os: themeStore.syncWithOs,
+      light_theme: themeStore.lightTheme,
+      dark_theme: themeStore.darkTheme,
       default_shell_id: this.defaultShellId,
       psreadline_menu_complete: this.psreadlineMenuComplete,
       console_utf8: this.consoleUtf8,

@@ -62,7 +62,11 @@ export interface ShortcutsConfig {
 
 export interface AppConfig {
   language: "system" | "es" | "en";
+  /** User-selected theme, restored when OS synchronization is disabled. */
   theme: string;
+  sync_with_os: boolean;
+  light_theme: string | null;
+  dark_theme: string | null;
   default_shell_id: string | null;
   font_size_override: number | null;
   font_family_override: string | null;

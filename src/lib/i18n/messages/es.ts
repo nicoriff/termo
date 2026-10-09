@@ -1412,6 +1412,11 @@ export const es = {
     },
     appearance: {
       theme: "Tema",
+      syncWithOs: "Sincronizar con el sistema",
+      syncWithOsHint: "Cambia automáticamente entre tus temas claro y oscuro según la apariencia del sistema.",
+      lightThemes: "Temas claros",
+      darkThemes: "Temas oscuros",
+      activeTheme: "Tema activo: {theme}",
       transparency: "Transparencia",
       tabs: "Pestañas",
       tabsFillWidth: "Pestañas a todo el ancho",

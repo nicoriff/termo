@@ -90,6 +90,7 @@
     })();
 
     return () => {
+      appConfigStore.stopSystemAppearanceSync();
       clearTimeout(resizeDebounce);
       unlisten?.();
       stopAgentAttention();

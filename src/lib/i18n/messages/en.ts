@@ -1411,6 +1411,11 @@ export const en: Messages = {
     },
     appearance: {
       theme: "Theme",
+      syncWithOs: "Sync with OS",
+      syncWithOsHint: "Automatically switch between your light and dark themes to match the system appearance.",
+      lightThemes: "Light themes",
+      darkThemes: "Dark themes",
+      activeTheme: "Active theme: {theme}",
       transparency: "Transparency",
       tabs: "Tabs",
       tabsFillWidth: "Tabs fill the whole width",

@@ -199,7 +199,7 @@ export function buildCommands(): Command[] {
       group: "appearance",
       label: t("commands.setTheme", { theme: theme.name }),
       run: () => {
-        themeStore.setTheme(theme.name);
+        themeStore.selectTheme(theme.name);
         persist();
       },
     });

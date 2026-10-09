@@ -150,6 +150,7 @@
       requestAnimationFrame(() => requestAnimationFrame(report));
       setTimeout(report, 200);
     });
+    return () => appConfigStore.stopSystemAppearanceSync();
   });
 
   $effect(() => {

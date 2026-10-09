@@ -4,6 +4,7 @@ const monoFont = { family: "Cascadia Code, Consolas, monospace", size: 14, lineH
 
 export const DARK_THEME: Theme = {
   name: "Dark",
+  appearance: "dark",
   colors: {
     background: "#1e1e1e",
     foreground: "#d4d4d4",
@@ -42,6 +43,7 @@ export const DARK_THEME: Theme = {
 
 export const LIGHT_THEME: Theme = {
   name: "Light",
+  appearance: "light",
   colors: {
     background: "#fbfbfb",
     foreground: "#1e1e1e",
@@ -80,6 +82,7 @@ export const LIGHT_THEME: Theme = {
 
 export const DRACULA_THEME: Theme = {
   name: "Dracula",
+  appearance: "dark",
   colors: {
     background: "#282a36",
     foreground: "#f8f8f2",
@@ -124,6 +127,7 @@ export const DRACULA_THEME: Theme = {
 
 export const NORD_THEME: Theme = {
   name: "Nord",
+  appearance: "dark",
   colors: {
     background: "#2e3440",
     foreground: "#d8dee9",
@@ -162,6 +166,7 @@ export const NORD_THEME: Theme = {
 
 export const GRUVBOX_DARK_THEME: Theme = {
   name: "Gruvbox Dark",
+  appearance: "dark",
   colors: {
     background: "#282828",
     foreground: "#ebdbb2",
@@ -200,6 +205,7 @@ export const GRUVBOX_DARK_THEME: Theme = {
 
 export const ONE_DARK_THEME: Theme = {
   name: "One Dark",
+  appearance: "dark",
   colors: {
     background: "#282c34",
     foreground: "#abb2bf",
@@ -238,6 +244,7 @@ export const ONE_DARK_THEME: Theme = {
 
 export const TOKYO_NIGHT_THEME: Theme = {
   name: "Tokyo Night",
+  appearance: "dark",
   colors: {
     background: "#1a1b26",
     foreground: "#c0caf5",
@@ -277,6 +284,7 @@ export const TOKYO_NIGHT_THEME: Theme = {
 /** Catppuccin's darkest flavor, with its official terminal mapping. */
 export const CATPPUCCIN_MOCHA_THEME: Theme = {
   name: "Catppuccin Mocha",
+  appearance: "dark",
   colors: {
     background: "#1e1e2e",
     foreground: "#cdd6f4",
@@ -319,6 +327,7 @@ export const CATPPUCCIN_MOCHA_THEME: Theme = {
  * out invisible. Bright black is base01 here instead, the usual fix. */
 export const SOLARIZED_DARK_THEME: Theme = {
   name: "Solarized Dark",
+  appearance: "dark",
   colors: {
     background: "#002b36",
     foreground: "#839496",
@@ -357,6 +366,7 @@ export const SOLARIZED_DARK_THEME: Theme = {
 
 export const SOLARIZED_LIGHT_THEME: Theme = {
   name: "Solarized Light",
+  appearance: "light",
   colors: {
     background: "#fdf6e3",
     foreground: "#657b83",

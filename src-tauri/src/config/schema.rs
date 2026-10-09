@@ -75,6 +75,11 @@ pub struct AppConfig {
     /// UI language: "system" (follow the OS), "es" or "en".
     pub language: String,
     pub theme: String,
+    /// Follow the OS appearance using one saved theme per category.
+    pub sync_with_os: bool,
+    /// None in older configs: the frontend seeds the matching category from `theme`.
+    pub light_theme: Option<String>,
+    pub dark_theme: Option<String>,
     pub default_shell_id: Option<String>,
     pub font_size_override: Option<u16>,
     pub font_family_override: Option<String>,
@@ -169,6 +174,9 @@ impl Default for AppConfig {
         Self {
             language: "system".into(),
             theme: "Dark".into(),
+            sync_with_os: false,
+            light_theme: None,
+            dark_theme: None,
             default_shell_id: None,
             font_size_override: None,
             font_family_override: None,
@@ -212,5 +220,40 @@ impl Default for AppConfig {
             window: WindowConfig::default(),
             shortcuts: ShortcutsConfig::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppConfig;
+
+    #[test]
+    fn old_configs_keep_their_manual_theme_and_leave_categories_unset() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{"theme":"Dracula","language":"es","background_opacity":78}"#)
+                .unwrap();
+        assert_eq!(config.theme, "Dracula");
+        assert_eq!(config.language, "es");
+        assert_eq!(config.background_opacity, 78);
+        assert!(!config.sync_with_os);
+        assert!(config.light_theme.is_none());
+        assert!(config.dark_theme.is_none());
+    }
+
+    #[test]
+    fn appearance_preferences_round_trip_without_replacing_the_manual_theme() {
+        let config = AppConfig {
+            theme: "Nord".into(),
+            sync_with_os: true,
+            light_theme: Some("Solarized Light".into()),
+            dark_theme: Some("Dracula".into()),
+            ..AppConfig::default()
+        };
+        let restored: AppConfig =
+            serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert_eq!(restored.theme, "Nord");
+        assert!(restored.sync_with_os);
+        assert_eq!(restored.light_theme.as_deref(), Some("Solarized Light"));
+        assert_eq!(restored.dark_theme.as_deref(), Some("Dracula"));
     }
 }
