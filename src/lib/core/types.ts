@@ -62,6 +62,7 @@ export interface ShortcutsConfig {
 
 export interface AppConfig {
   language: "system" | "es" | "en";
+  /** User-selected theme, restored when OS synchronization is disabled. */
   theme: string;
   sync_with_os: boolean;
   light_theme: string | null;

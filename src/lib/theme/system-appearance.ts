@@ -1,3 +1,4 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Appearance } from "./theme-types";
 
@@ -8,13 +9,13 @@ export function observeSystemAppearance(onChange: (appearance: Appearance) => vo
   stop: () => void;
 } {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
-  let disposed = false;
+  let stopped = false;
   let nativeActive = false;
   let nativeRevision = 0;
   let unlisten: (() => void) | undefined;
 
   const applyMedia = () => {
-    if (!disposed && !nativeActive) onChange(media.matches ? "dark" : "light");
+    if (!stopped && !nativeActive) onChange(media.matches ? "dark" : "light");
   };
   // Older WKWebView versions implement only the legacy MediaQueryList API.
   if (media.addEventListener) media.addEventListener("change", applyMedia);
@@ -22,42 +23,51 @@ export function observeSystemAppearance(onChange: (appearance: Appearance) => vo
   applyMedia();
 
   const ready = (async () => {
+    if (!isTauri()) return;
+    let currentWindow: ReturnType<typeof getCurrentWindow>;
     try {
-      const currentWindow = getCurrentWindow();
-      let listening = false;
-      try {
-        const remove = await currentWindow.onThemeChanged(({ payload }) => {
-          if (disposed) return;
-          nativeRevision++;
-          nativeActive = true;
-          onChange(payload);
-        });
-        if (disposed) {
-          remove();
-          return;
-        }
-        unlisten = remove;
-        listening = true;
-      } catch {
-        // The media query can still track changes if native events are unavailable.
-      }
-      if (disposed) return;
-      const revision = nativeRevision;
-      const appearance = await currentWindow.theme();
-      // A change received while reading takes precedence over the older snapshot.
-      if (!disposed && nativeRevision === revision && appearance !== null) {
-        nativeActive = listening;
-        onChange(appearance);
-      }
-    } catch {
-      // Also works in browser previews without the Tauri runtime.
+      currentWindow = getCurrentWindow();
+    } catch (error) {
+      console.warn("Could not access the native window for system appearance; using the media query.", error);
+      return;
+    }
+
+    let remove: (() => void) | undefined;
+    try {
+      remove = await currentWindow.onThemeChanged(({ payload }) => {
+        if (stopped) return;
+        nativeRevision++;
+        nativeActive = true;
+        onChange(payload);
+      });
+    } catch (error) {
+      console.warn("Could not subscribe to native appearance changes; using the media query.", error);
+    }
+    if (stopped) {
+      remove?.();
+      return;
+    }
+    unlisten = remove;
+    const revision = nativeRevision;
+    let appearance: Appearance | null;
+    try {
+      appearance = await currentWindow.theme();
+    } catch (error) {
+      console.warn("Could not read the native system appearance; keeping the appearance observer active.", error);
+      return;
+    }
+    // A change received while reading takes precedence over the older snapshot.
+    if (!stopped && nativeRevision === revision && appearance !== null) {
+      nativeActive = remove !== undefined;
+      onChange(appearance);
     }
   })();
 
   return {
     ready,
     stop: () => {
-      disposed = true;
+      if (stopped) return;
+      stopped = true;
       if (media.removeEventListener) media.removeEventListener("change", applyMedia);
       else media.removeListener(applyMedia);
       unlisten?.();

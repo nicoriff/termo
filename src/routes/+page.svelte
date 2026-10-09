@@ -3,17 +3,10 @@
   import MainWindow from "$lib/app/MainWindow.svelte";
   import Preferences from "$lib/preferences/Preferences.svelte";
   import { startI18nSync } from "$lib/i18n/i18n.svelte";
-  import { appConfigStore } from "$lib/core/app-config.svelte";
 
   const isPreferences = location.hash === "#preferences";
 
-  onMount(() => {
-    const stopI18n = startI18nSync();
-    return () => {
-      stopI18n();
-      appConfigStore.stopSystemAppearanceSync();
-    };
-  });
+  onMount(() => startI18nSync());
 </script>
 
 {#if isPreferences}

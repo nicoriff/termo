@@ -12,6 +12,7 @@ interface ThemePreferences {
 export class ThemeStore {
   themes = $state<Theme[]>(BUNDLED_THEMES);
   current = $state<Theme>(DARK_THEME);
+  /** User-selected theme; persisted as `theme` for compatibility with existing configs. */
   manualTheme = $state(DARK_THEME.name);
   syncWithOs = $state(false);
   lightTheme = $state(LIGHT_THEME.name);
@@ -24,10 +25,10 @@ export class ThemeStore {
   /** Colors terminal output (IPs, URLs, paths, errors, etc.) after the fact — see output-highlighter.ts. */
   outputHighlightingEnabled = $state<boolean>(true);
 
-  setTheme(name: string): void {
+  /** Select a fixed theme and disable OS synchronization. */
+  selectTheme(name: string): void {
     const theme = this.themes.find((t) => t.name === name);
     if (!theme) return;
-    // An explicit manual choice (also from the command palette) turns sync off.
     this.manualTheme = name;
     this.syncWithOs = false;
     if (theme.appearance === "light") this.lightTheme = name;

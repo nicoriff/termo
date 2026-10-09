@@ -37,7 +37,7 @@ describe("theme preferences", () => {
   });
 
   it("ignores OS changes in manual mode and restores the manual choice when sync stops", () => {
-    store.setTheme("Nord");
+    store.selectTheme("Nord");
     store.setSystemAppearance("light");
     expect(store.current.name).toBe("Nord");
     store.setSyncWithOs(true);
@@ -59,7 +59,7 @@ describe("theme preferences", () => {
 
   it("manual commands disable sync and remember the chosen category", () => {
     store.setSyncWithOs(true);
-    store.setTheme("Solarized Light");
+    store.selectTheme("Solarized Light");
     expect(store.syncWithOs).toBe(false);
     expect(store.manualTheme).toBe("Solarized Light");
     expect(store.lightTheme).toBe("Solarized Light");
@@ -69,7 +69,7 @@ describe("theme preferences", () => {
 
   it("rejects unknown themes and choices in the wrong category", () => {
     store.setSyncWithOs(true);
-    store.setTheme("missing");
+    store.selectTheme("missing");
     store.setAppearanceTheme("light", "Dracula");
     expect(store.syncWithOs).toBe(true);
     expect(store.lightTheme).toBe("Light");

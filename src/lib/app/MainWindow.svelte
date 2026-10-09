@@ -59,9 +59,12 @@
     newTabOptions.refresh();
     void agentsStore.init();
     void orchestrationStore.init();
+    const configSync = appConfigStore.init();
+    let mounted = true;
 
     (async () => {
-      await appConfigStore.init();
+      await configSync.ready;
+      if (!mounted) return;
 
       await layoutsStore.load();
       // Launching straight into the chosen layout, rather than opening a
@@ -90,6 +93,8 @@
     })();
 
     return () => {
+      mounted = false;
+      configSync.stop();
       clearTimeout(resizeDebounce);
       unlisten?.();
       stopAgentAttention();

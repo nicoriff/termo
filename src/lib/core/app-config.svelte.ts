@@ -136,39 +136,53 @@ class AppConfigStore {
   private windowWidth = 1000;
   private windowHeight = 640;
   private installedFontPath: string | null = null;
-  private systemAppearance: ReturnType<typeof observeSystemAppearance> | null = null;
 
-  async init(options?: InitOptions): Promise<void> {
-    this.stopSystemAppearanceSync();
-    this.systemAppearance = observeSystemAppearance((appearance) => themeStore.setSystemAppearance(appearance));
-    const [config] = await Promise.all([getConfig(), this.systemAppearance.ready]);
-    this.applyFields(config);
+  /** Starts this window's config and appearance subscriptions. The mounting
+   * component awaits `ready` and calls `stop` when it unmounts. */
+  init(options?: InitOptions): { ready: Promise<void>; stop: () => void } {
+    const systemAppearance = observeSystemAppearance((appearance) => themeStore.setSystemAppearance(appearance));
+    let stopped = false;
+    let unlisten: (() => void) | undefined;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      systemAppearance.stop();
+      unlisten?.();
+      unlisten = undefined;
+    };
 
-    if (options?.restoreWindowSize !== false) {
-      try {
-        await setWindowSize(config.window.width, config.window.height);
-      } catch {
-        // Non-critical — keep the default size from tauri.conf.json.
+    const ready = (async () => {
+      const [config] = await Promise.all([getConfig(), systemAppearance.ready]);
+      if (stopped) return;
+      this.applyFields(config);
+
+      if (options?.restoreWindowSize !== false) {
+        try {
+          await setWindowSize(config.window.width, config.window.height);
+        } catch {
+          // Non-critical — keep the default size from tauri.conf.json.
+        }
       }
-    }
+      if (stopped) return;
 
-    this.loaded = true;
-
-    // Cross-window sync: each Tauri window is a separate webview with its
-    // own JS module graph, so appConfigStore/themeStore here are NOT shared
-    // with the other window's copies — the backend re-broadcasts the full
-    // config after every save so both can stay in sync live. applyFields()
-    // never persists, so this can never turn into a save -> emit -> apply ->
-    // save loop.
-    const ownLabel = getCurrentWindow().label;
-    void listen<{ source: string; config: AppConfig }>("config-updated", (event) => {
-      if (event.payload.source !== ownLabel) this.applyFields(event.payload.config);
+      // Each webview has its own stores. The backend broadcasts config after
+      // saves; applyFields() never persists, so receiving a change cannot echo it.
+      const ownLabel = getCurrentWindow().label;
+      const remove = await listen<{ source: string; config: AppConfig }>("config-updated", (event) => {
+        if (!stopped && event.payload.source !== ownLabel) this.applyFields(event.payload.config);
+      });
+      if (stopped) {
+        remove();
+        return;
+      }
+      unlisten = remove;
+      this.loaded = true;
+    })().catch((error) => {
+      stop();
+      throw error;
     });
-  }
 
-  stopSystemAppearanceSync(): void {
-    this.systemAppearance?.stop();
-    this.systemAppearance = null;
+    return { ready, stop };
   }
 
   /** Applies a config snapshot to local state + the theme store, without

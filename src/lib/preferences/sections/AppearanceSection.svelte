@@ -15,7 +15,7 @@
   // Save only user edits. An OS change or a config broadcast must not save again.
   function chooseTheme(theme: Theme) {
     if (themeStore.syncWithOs) themeStore.setAppearanceTheme(theme.appearance, theme.name);
-    else themeStore.setTheme(theme.name);
+    else themeStore.selectTheme(theme.name);
     void appConfigStore.persist();
   }
 
