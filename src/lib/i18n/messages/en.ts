@@ -1412,7 +1412,7 @@ export const en: Messages = {
     appearance: {
       theme: "Theme",
       syncWithOs: "Sync with OS",
-      syncWithOsHint: "Automatically switch between your light and dark themes. Turning this off restores your manual theme.",
+      syncWithOsHint: "Automatically switch between your light and dark themes to match the system appearance.",
       lightThemes: "Light themes",
       darkThemes: "Dark themes",
       activeTheme: "Active theme: {theme}",
