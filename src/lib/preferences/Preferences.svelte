@@ -140,10 +140,7 @@
     // requestAnimationFrame callbacks never run there — without the timeout
     // the preloaded window would report ready only after being shown, which
     // is exactly what the report unblocks.
-    const configSync = appConfigStore.init({ restoreWindowSize: false });
-    let mounted = true;
-    void configSync.ready.finally(() => {
-      if (!mounted) return;
+    void appConfigStore.init({ restoreWindowSize: false }).finally(() => {
       let reported = false;
       const report = () => {
         if (reported) return;
@@ -153,10 +150,7 @@
       requestAnimationFrame(() => requestAnimationFrame(report));
       setTimeout(report, 200);
     });
-    return () => {
-      mounted = false;
-      configSync.stop();
-    };
+    return () => appConfigStore.stopSystemAppearanceSync();
   });
 
   $effect(() => {

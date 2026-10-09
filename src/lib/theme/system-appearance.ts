@@ -32,33 +32,27 @@ export function observeSystemAppearance(onChange: (appearance: Appearance) => vo
       return;
     }
 
-    let remove: (() => void) | undefined;
-    try {
-      remove = await currentWindow.onThemeChanged(({ payload }) => {
-        if (stopped) return;
-        nativeRevision++;
-        nativeActive = true;
-        onChange(payload);
-      });
-    } catch (error) {
+    unlisten = await currentWindow.onThemeChanged(({ payload }) => {
+      if (stopped) return;
+      nativeRevision++;
+      nativeActive = true;
+      onChange(payload);
+    }).catch((error) => {
       console.warn("Could not subscribe to native appearance changes; using the media query.", error);
-    }
+      return undefined;
+    });
     if (stopped) {
-      remove?.();
+      unlisten?.();
       return;
     }
-    unlisten = remove;
     const revision = nativeRevision;
-    let appearance: Appearance | null;
-    try {
-      appearance = await currentWindow.theme();
-    } catch (error) {
+    const appearance = await currentWindow.theme().catch((error) => {
       console.warn("Could not read the native system appearance; keeping the appearance observer active.", error);
-      return;
-    }
+      return null;
+    });
     // A change received while reading takes precedence over the older snapshot.
     if (!stopped && nativeRevision === revision && appearance !== null) {
-      nativeActive = remove !== undefined;
+      nativeActive = unlisten !== undefined;
       onChange(appearance);
     }
   })();

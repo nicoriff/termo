@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appConfigStore } from "./app-config.svelte";
 import { getConfig, saveConfig } from "./config-client";
 import { themeStore } from "../theme/theme-store.svelte";
@@ -27,26 +27,19 @@ const config = {
 
 describe("appearance config persistence and window sync", () => {
   let systemChanged: (appearance: Appearance) => void;
-  let configSync: ReturnType<typeof appConfigStore.init>;
-  let stopAppearance: Mock<() => void>;
-  let removeConfigListener: Mock<() => void>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    stopAppearance = vi.fn();
-    removeConfigListener = vi.fn();
-    vi.mocked(listen).mockResolvedValue(removeConfigListener);
     vi.mocked(getConfig).mockResolvedValue(config);
     vi.mocked(observeSystemAppearance).mockImplementation((callback) => {
       systemChanged = callback;
       callback("light");
-      return { ready: Promise.resolve(), stop: stopAppearance };
+      return { ready: Promise.resolve(), stop: vi.fn() };
     });
-    configSync = appConfigStore.init({ restoreWindowSize: false });
-    await configSync.ready;
+    await appConfigStore.init({ restoreWindowSize: false });
   });
 
-  afterEach(() => configSync.stop());
+  afterEach(() => appConfigStore.stopSystemAppearanceSync());
 
   it("restores the effective theme at startup without saving a new config", () => {
     expect(themeStore.current.name).toBe("Solarized Light");
@@ -83,58 +76,5 @@ describe("appearance config persistence and window sync", () => {
     expect(saveConfig).toHaveBeenLastCalledWith(expect.objectContaining({
       theme: "Tokyo Night", sync_with_os: false, dark_theme: "Tokyo Night",
     }));
-  });
-
-  it("stops both subscriptions and ignores queued config events after unmount", () => {
-    const receive = vi.mocked(listen).mock.calls[0][1];
-    configSync.stop();
-    configSync.stop();
-    expect(stopAppearance).toHaveBeenCalledOnce();
-    expect(removeConfigListener).toHaveBeenCalledOnce();
-    receive({ payload: { source: "preferences", config: { ...config, light_theme: "Light" } } } as Parameters<typeof receive>[0]);
-    expect(themeStore.lightTheme).toBe("Solarized Light");
-    expect(saveConfig).not.toHaveBeenCalled();
-  });
-
-  it("does not apply a config that arrives after unmount", async () => {
-    configSync.stop();
-    vi.mocked(listen).mockClear();
-    let finish!: (config: AppConfig) => void;
-    vi.mocked(getConfig).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-    configSync = appConfigStore.init({ restoreWindowSize: false });
-    configSync.stop();
-    finish({ ...config, theme: "Tokyo Night", light_theme: "Light" });
-    await configSync.ready;
-    expect(themeStore.manualTheme).toBe("Nord");
-    expect(themeStore.lightTheme).toBe("Solarized Light");
-    expect(listen).not.toHaveBeenCalled();
-  });
-
-  it("removes a config listener that finishes registering after unmount", async () => {
-    configSync.stop();
-    let finish!: (remove: () => void) => void;
-    let registered!: () => void;
-    const registrationStarted = new Promise<void>((resolve) => { registered = resolve; });
-    vi.mocked(listen).mockImplementationOnce(() => {
-      registered();
-      return new Promise((resolve) => { finish = resolve; });
-    });
-    configSync = appConfigStore.init({ restoreWindowSize: false });
-    await registrationStarted;
-    configSync.stop();
-    const remove = vi.fn();
-    finish(remove);
-    await configSync.ready;
-    expect(remove).toHaveBeenCalledOnce();
-  });
-
-  it("cleans up appearance observation if config initialization fails", async () => {
-    configSync.stop();
-    stopAppearance.mockClear();
-    const error = new Error("config read failed");
-    vi.mocked(getConfig).mockRejectedValue(error);
-    configSync = appConfigStore.init({ restoreWindowSize: false });
-    await expect(configSync.ready).rejects.toBe(error);
-    expect(stopAppearance).toHaveBeenCalledOnce();
   });
 });
