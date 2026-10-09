@@ -10,7 +10,7 @@
 /// cwd_report's prompt wrapper.
 const POWERSHELL_KEYS: &str = "Set-PSReadLineKeyHandler -Chord 'Ctrl+h' -Function BackwardKillWord";
 
-fn is_powershell(shell_path: &str) -> bool {
+pub(super) fn is_powershell(shell_path: &str) -> bool {
     std::path::Path::new(shell_path)
         .file_stem()
         .and_then(|stem| stem.to_str())

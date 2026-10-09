@@ -1487,7 +1487,7 @@ export const es = {
       inActivityBarHint:
         "La barra vertical está en el borde izquierdo de la ventana. Aunque lo ocultes, el panel se sigue abriendo con {shortcut}, desde el menú ≡ o la paleta de comandos.",
       consoles: "Agentes desde las consolas",
-      consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex, Gemini y Copilot que abras desde Termo, sin configurar nada más.",
+      consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex, Gemini y Copilot que abras desde Termo, sin configurar nada más. También si tipeás claude, codex o copilot en una pestaña de shell de Termo.",
       everyConsole: "También en consolas abiertas fuera de Termo",
       everyConsoleHint: "Agrega Termo como servidor MCP en la configuración de cada CLI instalada, así lo ven las consolas que abras en cualquier lado (VS Code, otra terminal). El token de acceso queda escrito en esos archivos, y con Termo cerrado esas CLIs avisan que no pudieron conectarse.",
       registering: "Actualizando la configuración de cada CLI…",

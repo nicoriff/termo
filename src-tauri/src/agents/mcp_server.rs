@@ -94,11 +94,13 @@ fn console_answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, mes
     let reply = match message.get("method").and_then(Value::as_str).unwrap_or_default() {
         "initialize" => {
             let mut result = initialize(&params);
-            result["instructions"] = json!(console_bridge::instructions());
+            // Nothing to tell a console that has no tools (see tools_for).
+            let idle = console_bridge::tools_for(&store::list_in(root)).is_empty();
+            result["instructions"] = json!(if idle { "" } else { console_bridge::instructions() });
             result_reply(id, result)
         }
         "ping" => result_reply(id, json!({})),
-        "tools/list" => result_reply(id, json!({ "tools": console_bridge::tools() })),
+        "tools/list" => result_reply(id, json!({ "tools": console_bridge::tools_for(&store::list_in(root)) })),
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);

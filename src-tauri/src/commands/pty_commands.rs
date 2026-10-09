@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::config::store;
 use crate::pty::agent_launch::{self, AgentLaunch};
 use crate::pty::{
-    agent_hooks, bash_color_env, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
+    agent_hooks, bash_color_env, console_shims, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
     utf8_console, zsh_init,
     PtyEvent, ShellInfo,
 };
@@ -103,8 +103,7 @@ fn spawn_console(
             Err(err) => {
                 // Never ran: its token goes now.
                 if let Some(token) = &extras.token {
-                    crate::agents::console_bridge::bind(token, "never-started");
-                    crate::agents::console_bridge::release("never-started");
+                    crate::agents::console_bridge::discard(token);
                 }
                 Err(err.to_string())
             }
@@ -150,6 +149,11 @@ fn spawn_console(
             .map(<[u8]>::to_vec);
         }
     }
+    // The user's agents, for the agent CLIs typed in this shell (see
+    // pty/console_shims.rs).
+    let console_token = crate::agents::store::root(app).ok().and_then(|root| {
+        console_shims::apply(&root, config.agents_from_any_console, &path, &mut args, &mut env, &mut zsh_lines)
+    });
     if zsh_init::is_zsh(&path) {
         // Always written for zsh, even with every zsh option off: this is
         // what makes the console report its directory (see CWD_REPORT_LINES).
@@ -163,11 +167,20 @@ fn spawn_console(
     cwd_report::apply(&path, &mut args, &mut env);
     drop(preparing);
 
-    state
-        .pty
-        .spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event)
-        .map(|id| id.to_string())
-        .map_err(|err| err.to_string())
+    match state.pty.spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event) {
+        Ok(id) => {
+            if let Some(token) = &console_token {
+                crate::agents::console_bridge::bind(token, &id.to_string());
+            }
+            Ok(id.to_string())
+        }
+        Err(err) => {
+            if let Some(token) = &console_token {
+                crate::agents::console_bridge::discard(token);
+            }
+            Err(err.to_string())
+        }
+    }
 }
 
 /// Asks the console's shell to redraw its prompt at the size it now has,
