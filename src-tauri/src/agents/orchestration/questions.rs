@@ -22,7 +22,7 @@ use super::store;
 /// How long a question waits for the user before the agent decides alone.
 /// Below the task's own time limit (executor::TASK_TIMEOUT_MIN) with room to
 /// finish the work after.
-const WAIT: Duration = Duration::from_secs(25 * 60);
+pub const WAIT: Duration = Duration::from_secs(25 * 60);
 const POLL: Duration = Duration::from_secs(1);
 const MAX_QUESTION: usize = 2000;
 const MAX_OPTIONS: usize = 6;
@@ -72,8 +72,20 @@ pub fn answer_text(answer: &str) -> String {
 pub const NO_ANSWER: &str = "The user didn't answer in time. Decide yourself with your best judgment, go on, and \
 say clearly in your final answer what you assumed.";
 
+/// A question and the answers it suggests, within what's kept of each.
+pub fn tidy(question: &str, options: &[String]) -> (String, Vec<String>) {
+    let options = options
+        .iter()
+        .map(|option| clip(option.trim(), MAX_OPTION))
+        .filter(|option| !option.is_empty())
+        .take(MAX_OPTIONS)
+        .collect();
+    (clip(question.trim(), MAX_QUESTION), options)
+}
+
 /// `ask_user`: saves the question on the orchestration and waits for the
-/// user's answer.
+/// user's answer. A run that isn't an orchestration's task asks on the run
+/// itself (see run_questions.rs).
 pub fn ask(
     app: &tauri::AppHandle,
     root: &Path,
@@ -89,19 +101,16 @@ pub fn ask(
     if session.rehearsal {
         return Ok("Rehearsal: nobody is asked. Say in your answer what you would have asked.".into());
     }
-    let (orchestration, task_key) =
-        task_of(root, session).ok_or("Only an orchestration's agents can ask the user, while doing one of its tasks.")?;
+    let Some((orchestration, task_key)) = task_of(root, session) else {
+        return super::super::run_questions::ask(app, root, token, session, question, options);
+    };
+    let (question, options) = tidy(question, options);
     let asked = UserQuestion {
         id: uuid::Uuid::new_v4().to_string(),
         task: task_key,
         agent: session.caller.name.clone(),
-        question: clip(question, MAX_QUESTION),
-        options: options
-            .iter()
-            .map(|option| clip(option.trim(), MAX_OPTION))
-            .filter(|option| !option.is_empty())
-            .take(MAX_OPTIONS)
-            .collect(),
+        question,
+        options,
         asked_at: now_millis(),
         ..UserQuestion::default()
     };

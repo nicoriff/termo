@@ -58,7 +58,14 @@ export function newAgentSpec(id: string): AgentSpec {
     tools: { web: false, mcp: [] },
     limits: { timeoutMin: 15 },
     triggers: { schedule: null, watch: null, git: null, webhook: null, after: null },
-    collaboration: { contacts: [], board: false, allowEscalation: false, fromConsoles: false, consolesMayRun: false },
+    collaboration: {
+      contacts: [],
+      board: false,
+      allowEscalation: false,
+      askUser: false,
+      fromConsoles: false,
+      consolesMayRun: false,
+    },
     secrets: [],
     enabled: true,
     deploy: { github: null },
@@ -170,8 +177,11 @@ export type AgentTone = "running" | "success" | "error" | "idle" | "paused";
 export function agentState(
   spec: AgentSpec,
   lastRun: RunRecord | null,
+  /** Its run asked the user something and is waiting on the answer. */
+  asking = false,
 ): { tone: AgentTone; key: MessageKey; params?: Record<string, string> } {
   if (lastRun?.status === "running") {
+    if (asking) return { tone: "paused", key: "agents.state.asking" };
     return lastRun.activity
       ? { tone: "running", key: "agents.state.runningDoing", params: { activity: lastRun.activity } }
       : { tone: "running", key: "agents.state.running" };

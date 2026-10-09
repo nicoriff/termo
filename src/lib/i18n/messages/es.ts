@@ -275,6 +275,7 @@ export const es = {
     state: {
       running: "Corriendo…",
       runningDoing: "Corriendo · {activity}",
+      asking: "Espera tu respuesta",
       paused: "Pausado",
       never: "Nunca corrió",
       lastOk: "Última corrida: bien",
@@ -294,6 +295,7 @@ export const es = {
     },
     notify: {
       success: "{name} terminó",
+      question: "{name} tiene una pregunta",
       failed: "{name} falló",
     },
     time: {
@@ -303,6 +305,12 @@ export const es = {
       days: "hace {n} d",
     },
     run: {
+      question: {
+        hint: "Ctrl+Enter para enviar. El agente sigue con tu respuesta; si no respondés antes de las {time}, decide solo.",
+        asked: "Te preguntó",
+        answered: "Respondiste",
+        gone: "La pregunta ya no esperaba respuesta: se respondió desde otro lado o el agente decidió solo.",
+      },
       status: {
         running: "Corriendo",
         success: "Terminó bien",
@@ -1139,6 +1147,9 @@ export const es = {
         paused: "pausado",
         board: "Pizarra compartida",
         boardHint: "Notas que los agentes leen y escriben entre corridas, como \"último commit revisado\".",
+        you: "Preguntas para vos",
+        askUser: "Puede preguntarte mientras trabaja",
+        askUserHint: "Cuando se encuentra con una decisión que te corresponde a vos, te pregunta y espera tu respuesta en vez de suponer. Solo en las corridas que arrancás vos, a mano o desde una consola (ahí la pregunta también le llega a esa consola); en las que arrancan solas —por horario, cambios, git, webhook u otro agente— decide por su cuenta. Si no respondés a tiempo, decide solo y dice qué asumió.",
         consoles: "Desde tus consolas",
         fromConsoles: "Disponible desde las consolas",
         fromConsolesHint: "Las consolas de Claude Code, Codex, Gemini o Copilot que abras desde Termo pueden pedirle cosas y esperar su respuesta. Atiende cada pedido dentro de su rol, con sus propios permisos y en su carpeta. La consola te pide confirmación antes de cada pedido, porque cada uno es una ejecución paga.",

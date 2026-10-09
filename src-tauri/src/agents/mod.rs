@@ -17,6 +17,7 @@ pub mod portable;
 pub mod project_ai;
 pub mod projects;
 pub mod queue;
+pub mod run_questions;
 pub mod runner;
 pub mod scheduler;
 pub mod secrets;

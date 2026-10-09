@@ -161,6 +161,8 @@ pub fn run() {
             commands::agent_commands::agents_running,
             commands::agent_commands::agent_runs,
             commands::agent_commands::agent_run_log,
+            commands::agent_commands::agent_questions,
+            commands::agent_commands::agent_answer_question,
             commands::agent_commands::agent_draft,
             commands::agent_commands::agent_mcp_server,
             commands::agent_commands::agent_forget_secrets,

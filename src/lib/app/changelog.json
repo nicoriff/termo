@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.16.0",
+    "date": "2026-10-09",
+    "es": [
+      "**Tus agentes pueden preguntarte**: activá «Puede preguntarte mientras trabaja» en un agente (paso Herramientas) y, cuando se encuentre con una decisión que te corresponde, te pregunta y espera tu respuesta en vez de suponer. La pregunta aparece en la vista de la corrida, con las respuestas que sugiere, y Termo te avisa. Vale para las corridas que arrancás vos; en las automáticas decide solo.",
+      "Si la corrida la pidió una consola (Claude Code, Codex o Copilot), la pregunta le llega también a esa consola: te la hace ahí y le pasa tu respuesta al agente. Podés contestar en la consola o en Termo; vale la primera."
+    ],
+    "en": [
+      "**Your agents can ask you**: turn on “It can ask you while it works” on an agent (Tools step) and, when it hits a decision that's yours to make, it asks you and waits for your answer instead of assuming. The question shows in the run's view, with the answers it suggests, and Termo lets you know. It applies to the runs you start; the automatic ones decide alone.",
+      "When a console asked for the run (Claude Code, Codex or Copilot), the question reaches that console too: it puts it to you there and passes your answer on to the agent. Answer in the console or in Termo; the first one counts."
+    ]
+  },
+  {
     "version": "0.15.0",
     "date": "2026-10-08",
     "es": [

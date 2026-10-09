@@ -30,6 +30,10 @@ pub enum EventKind {
     Result,
     /// A line the CLI printed on stderr.
     Stderr,
+    /// Something the agent asked the user mid-run (see run_questions.rs).
+    Question,
+    /// What the user answered; empty when nobody did in time.
+    Answer,
     Ended,
 }
 

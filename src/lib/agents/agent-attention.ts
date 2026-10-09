@@ -1,5 +1,5 @@
 import { sendNotification } from "@tauri-apps/plugin-notification";
-import { onAgentRun, type RunRecord } from "$lib/core/agents-client";
+import { onAgentQuestion, onAgentRun, type RunQuestion, type RunRecord } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { isPrimaryWindow } from "$lib/core/window-client";
 import { t } from "$lib/i18n/i18n.svelte";
@@ -44,19 +44,41 @@ async function announce(run: RunRecord) {
   });
 }
 
-/** Tells the user when an agent that ran on its own is done. Returns a
- * teardown function. */
+/** A run is waiting on the user: it stands still until it's answered. */
+async function announceQuestion(question: RunQuestion) {
+  if (!(await isPrimaryWindow().catch(() => true))) return;
+  const agent = agentsStore.agents.find((candidate) => candidate.id === question.agentId);
+  if (!agent) return;
+  // The switches and sounds of a console session that needs an answer.
+  if (appConfigStore.aiSoundsEnabled[agent.engine]) {
+    playSound(appConfigStore.aiSounds[agent.engine].awaiting, appConfigStore.aiSoundVolume);
+  }
+  if (!appConfigStore.aiNotifyAwaiting || watching(question.agentId)) return;
+  if (!(await canNotify())) return;
+  const text = question.question.replace(/\s+/g, " ").trim();
+  sendNotification({
+    title: t("agents.notify.question", { name: `${agent.icon} ${agent.name}` }),
+    body: text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}…` : text,
+  });
+}
+
+/** Tells the user when an agent that ran on its own is done, and when one
+ * is waiting on them. Returns a teardown function. */
 export function startAgentRunAttention(): () => void {
-  let unlisten: (() => void) | null = null;
+  const unlisten: (() => void)[] = [];
   let stopped = false;
+  const keep = (stop: () => void) => {
+    if (stopped) stop();
+    else unlisten.push(stop);
+  };
   void onAgentRun((run) => {
     if (run.status !== "running") void announce(run);
-  }).then((stop) => {
-    if (stopped) stop();
-    else unlisten = stop;
-  });
+  }).then(keep);
+  void onAgentQuestion((question) => {
+    if (question.state === "pending") void announceQuestion(question);
+  }).then(keep);
   return () => {
     stopped = true;
-    unlisten?.();
+    for (const stop of unlisten) stop();
   };
 }

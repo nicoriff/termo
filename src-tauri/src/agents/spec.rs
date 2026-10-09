@@ -163,8 +163,9 @@ pub struct Collaboration {
     /// Whether it may ask agents allowed to do more than itself (a "only
     /// look" agent asking one that runs commands). Off, they're refused.
     pub allow_escalation: bool,
-    /// Asking the user something mid-task and waiting for the answer (see
-    /// orchestration/questions.rs). Only an orchestration's agents.
+    /// Asking the user something mid-task and waiting for the answer: an
+    /// orchestration's agents on its plan (orchestration/questions.rs), any
+    /// other in a run someone is there for (run_questions.rs).
     pub ask_user: bool,
     /// Reachable from the user's consoles (Claude Code, Codex…): they can ask
     /// it something and wait for its answer (see console_bridge.rs).

@@ -11,6 +11,7 @@ use crate::agents::integrations::{self, AgentMcpRequest, AgentMcpServer, CustomM
 use crate::agents::scheduler;
 use crate::agents::portable::{self, ImportReport};
 use crate::agents::projects;
+use crate::agents::run_questions::{self, RunQuestion};
 use crate::agents::runner::Runner;
 use crate::agents::secrets;
 use crate::agents::models;
@@ -134,6 +135,19 @@ pub fn agent_run(
     trigger: RunTrigger,
 ) -> Result<RunRecord, String> {
     state.agents.start(&app, &spec, trigger, None)
+}
+
+/// The questions agents' runs are waiting on the user for (see
+/// agents/run_questions.rs).
+#[tauri::command]
+pub fn agent_questions() -> Vec<RunQuestion> {
+    run_questions::pending()
+}
+
+/// The user's answer to one of them. False when it wasn't waiting any more.
+#[tauri::command]
+pub fn agent_answer_question(app: tauri::AppHandle, question_id: String, answer: String) -> bool {
+    run_questions::answer(&app, &question_id, &answer)
 }
 
 #[tauri::command]

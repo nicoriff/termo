@@ -533,7 +533,7 @@
 
     {#snippet agentRow(agent: AgentSpec)}
         {@const last = agentsStore.lastRun[agent.id] ?? null}
-        {@const state = agentState(agent, last)}
+        {@const state = agentState(agent, last, !!agentsStore.questionOf(agent.id))}
         {@const running = last?.status === "running"}
         {@const age = last?.endedAt ? ago(last.endedAt, agentsStore.now) : null}
         {@const next = agentsStore.nextRun[agent.id]}

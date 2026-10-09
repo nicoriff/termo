@@ -662,6 +662,23 @@
             </section>
 
             <section class="group">
+              <div class="group-title">{t("agents.wizard.tools.you")}</div>
+              <div class="option" class:on={spec.collaboration.askUser ?? false}>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    checked={spec.collaboration.askUser ?? false}
+                    onchange={(e) => (spec.collaboration.askUser = e.currentTarget.checked)}
+                  />
+                  <span>
+                    <span class="toggle-title">{t("agents.wizard.tools.askUser")}</span>
+                    <span class="hint">{t("agents.wizard.tools.askUserHint")}</span>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section class="group">
               <div class="group-title">{t("agents.wizard.tools.consoles")}</div>
               <div class="option" class:on={spec.collaboration.fromConsoles ?? false}>
                 <label class="toggle">

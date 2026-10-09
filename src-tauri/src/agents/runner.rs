@@ -216,6 +216,17 @@ impl Runner {
         } else {
             spec
         };
+        // Nobody to ask in a run that started on its own (run_questions.rs).
+        let unattended;
+        let spec = if spec.collaboration.ask_user && !super::run_questions::attended(trigger) {
+            unattended = AgentSpec {
+                collaboration: super::spec::Collaboration { ask_user: false, ..spec.collaboration.clone() },
+                ..spec.clone()
+            };
+            &unattended
+        } else {
+            spec
+        };
         let dir = work_dir(&root, spec)?;
         let bin = agent_cli::require(target(spec.engine), None)?;
 
@@ -554,6 +565,13 @@ impl Runner {
 
         Ok(record)
     }
+}
+
+/// A step of a run that didn't come from its CLI's output (a question to
+/// the user: see run_questions.rs), into its log and to the UI like the rest.
+pub fn log_step(app: &tauri::AppHandle, root: &std::path::Path, agent_id: &str, run_id: &str, event: RunEvent) {
+    let log = Logger { app: app.clone(), root: root.to_path_buf(), agent_id: agent_id.to_string(), run_id: run_id.to_string() };
+    log.step(event);
 }
 
 /// Writes a run's steps to its log file and forwards them to the UI.

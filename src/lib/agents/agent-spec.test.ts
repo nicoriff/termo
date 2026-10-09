@@ -109,6 +109,9 @@ describe("agentState", () => {
     const paused = { ...spec, enabled: false };
     expect(agentState(paused, run("success")).tone).toBe("paused");
     expect(agentState(paused, run("running")).tone).toBe("running");
+    // Waiting on the user says so, while it runs and only then.
+    expect(agentState(spec, run("running", "Bash · ls"), true)).toEqual({ tone: "paused", key: "agents.state.asking" });
+    expect(agentState(spec, run("success"), true).key).toBe("agents.state.lastOk");
   });
 });
 

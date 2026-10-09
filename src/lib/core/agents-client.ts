@@ -45,7 +45,7 @@ export interface AgentSpec {
     board: boolean;
     /** Whether it may ask agents allowed to do more than itself. */
     allowEscalation: boolean;
-    /** Asking the user mid-task (an orchestration's agents only). */
+    /** Asking the user mid-task, in a run someone is there for. */
     askUser?: boolean;
     /** Reachable from the user's consoles (Claude Code, Codex…). */
     fromConsoles?: boolean;
@@ -306,6 +306,8 @@ export type RunEventKind =
   | "text"
   | "result"
   | "stderr"
+  | "question"
+  | "answer"
   | "ended";
 
 /** Who answered with an error (see src-tauri/src/agents/diagnose.rs). */
@@ -532,4 +534,35 @@ export function onAgentRunEvent(
   return listen<{ agentId: string; runId: string; event: RunEvent }>("agent-run-event", (event) =>
     handler(event.payload),
   );
+}
+
+/** Something a run asked the user and is waiting on (mirrors
+ * src-tauri/src/agents/run_questions.rs). */
+export interface RunQuestion {
+  id: string;
+  agentId: string;
+  runId: string;
+  question: string;
+  /** Answers it suggests; the user may write another. */
+  options: string[];
+  state: "pending" | "answered" | "expired";
+  answer: string;
+  askedAt: number;
+  /** When it stops waiting and the agent decides alone. */
+  expiresAt: number;
+}
+
+/** The questions waiting on the user now. */
+export function agentQuestions(): Promise<RunQuestion[]> {
+  return invoke("agent_questions");
+}
+
+/** False when the question wasn't waiting any more. */
+export function answerAgentQuestion(questionId: string, answer: string): Promise<boolean> {
+  return invoke("agent_answer_question", { questionId, answer });
+}
+
+/** A question was asked, answered or gave up waiting. */
+export function onAgentQuestion(handler: (question: RunQuestion) => void): Promise<UnlistenFn> {
+  return listen<RunQuestion>("agent-question", (event) => handler(event.payload));
 }

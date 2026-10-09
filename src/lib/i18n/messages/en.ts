@@ -276,6 +276,7 @@ export const en: Messages = {
     state: {
       running: "Running…",
       runningDoing: "Running · {activity}",
+      asking: "Waiting for your answer",
       paused: "Paused",
       never: "Never ran",
       lastOk: "Last run: fine",
@@ -295,6 +296,7 @@ export const en: Messages = {
     },
     notify: {
       success: "{name} finished",
+      question: "{name} has a question",
       failed: "{name} failed",
     },
     time: {
@@ -304,6 +306,12 @@ export const en: Messages = {
       days: "{n} d ago",
     },
     run: {
+      question: {
+        hint: "Ctrl+Enter to send. The agent goes on with your answer; if you don't answer before {time}, it decides alone.",
+        asked: "It asked you",
+        answered: "You answered",
+        gone: "The question wasn't waiting for an answer any more: it was answered elsewhere or the agent decided alone.",
+      },
       status: {
         running: "Running",
         success: "Finished fine",
@@ -1139,6 +1147,9 @@ export const en: Messages = {
         paused: "paused",
         board: "Shared board",
         boardHint: "Notes agents read and write between runs, like \"last commit reviewed\".",
+        you: "Questions for you",
+        askUser: "It can ask you while it works",
+        askUserHint: "When it hits a decision that's yours to make, it asks you and waits for your answer instead of assuming. Only in the runs you start, by hand or from a console (there the question reaches that console too); in the ones that start on their own — a schedule, changes, git, a webhook or another agent — it decides by itself. If you don't answer in time, it decides alone and says what it assumed.",
         consoles: "From your consoles",
         fromConsoles: "Available from consoles",
         fromConsolesHint: "The Claude Code, Codex, Gemini or Copilot consoles you open from Termo can ask it things and wait for its answer. It handles each request within its role, with its own permissions and in its own folder. The console asks you to confirm each request first, since each one is a paid run.",

@@ -172,9 +172,36 @@
   }
 
   const elapsed = $derived(run ? (run.endedAt ?? agentsStore.now) - run.startedAt : 0);
+
+  /** What this run is waiting on the user for. */
+  const question = $derived(agentsStore.questions.find((candidate) => candidate.runId === runId) ?? null);
+  const waitsUntil = $derived(
+    question ? new Date(question.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+  );
+  let reply = $state("");
+  let sending = $state(false);
+  // Another question: what was being written was for the one before.
+  $effect(() => {
+    void question?.id;
+    reply = "";
+  });
+
+  async function sendAnswer() {
+    const text = reply.trim();
+    if (!question || !text || sending) return;
+    sending = true;
+    error = "";
+    try {
+      if (!(await agentsStore.answerQuestion(question.id, text))) error = t("agents.run.question.gone");
+    } catch (reason) {
+      error = String(reason);
+    } finally {
+      sending = false;
+    }
+  }
 </script>
 
-<div class="run-view">
+<div class="run-view" style="--question:{themeStore.current.colors.yellow}">
   <aside class="run-history">
     <div class="history-title">{t("agents.run.history")}</div>
     {#each history as item (item.id)}
@@ -245,6 +272,41 @@
     {#if error}
       <p class="run-error">{error}</p>
     {/if}
+    {#if question}
+      <section class="question" aria-label={t("agents.orchestration.questions.title")}>
+        <header class="question-head">
+          <span class="question-icon">?</span>
+          <span class="question-kicker">
+            {t("agents.orchestration.questions.asks", { agent: agent?.name ?? t("agents.run.deleted") })}
+          </span>
+        </header>
+        <div class="question-text">{@html renderMarkdownLite(question.question)}</div>
+        {#if question.options.length > 0}
+          <div class="question-options">
+            {#each question.options as option (option)}
+              <button class="run-button" class:picked={reply === option} onclick={() => (reply = option)}>{option}</button>
+            {/each}
+          </div>
+        {/if}
+        <textarea
+          class="question-reply"
+          rows="2"
+          placeholder={t("agents.orchestration.questions.placeholder")}
+          aria-label={t("agents.orchestration.questions.placeholder")}
+          bind:value={reply}
+          onkeydown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void sendAnswer();
+          }}
+        ></textarea>
+        <div class="question-actions">
+          <button class="run-button primary" disabled={sending || !reply.trim()} onclick={() => void sendAnswer()}>
+            {t("agents.orchestration.questions.send")}
+          </button>
+          <span class="question-hint">{t("agents.run.question.hint", { time: waitsUntil })}</span>
+        </div>
+        <p class="question-hint">⚠ {t("agents.orchestration.questions.noSecrets")}</p>
+      </section>
+    {/if}
 
     <div class="run-log" bind:this={logEl} onscroll={onScroll}>
       {#each withoutEchoes(events) as event, index (index)}
@@ -262,6 +324,16 @@
           </div>
         {:else if event.kind === "stderr"}
           <div class="step stderr">{event.text}</div>
+        {:else if event.kind === "question"}
+          <div class="step asked">
+            <div class="step-label">❓ {t("agents.run.question.asked")}</div>
+            {@html renderMarkdownLite(event.text)}
+          </div>
+        {:else if event.kind === "answer"}
+          <div class="step asked" class:unanswered={!event.text}>
+            <div class="step-label">↳ {t(event.text ? "agents.run.question.answered" : "agents.orchestration.questions.expired")}</div>
+            {event.text}
+          </div>
         {:else if event.kind === "started"}
           <div class="step marker">
             {t("agents.run.started")} · {time(event.at)}{#if event.session}{" · "}{ENGINE_NAMES[event.session.engine]} · {event.session.model || t("agents.diagnosis.defaultModel")}{/if}
@@ -448,6 +520,95 @@
     margin: 0;
     padding: 6px 14px;
     color: var(--error-fg, #f48771);
+  }
+
+  .question {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 14px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--question, #d7ba7d);
+    border-left: 4px solid var(--question, #d7ba7d);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--question, #d7ba7d) 9%, transparent);
+  }
+
+  .question-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .question-icon {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--question, #d7ba7d);
+    color: #1e1e1e;
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .question-kicker {
+    font-weight: 600;
+  }
+
+  .question-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+  }
+
+  .question-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .question-options .picked {
+    border-color: var(--question, #d7ba7d);
+    background: color-mix(in srgb, var(--question, #d7ba7d) 22%, transparent);
+  }
+
+  .question-reply {
+    resize: vertical;
+    padding: 6px 8px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 4px;
+    background: var(--terminal-bg, #1e1e1e);
+    color: inherit;
+    font: inherit;
+  }
+
+  .question-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .question-hint {
+    margin: 0;
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  .run-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .step.asked {
+    padding: 8px 12px;
+    border-left: 3px solid var(--question, #d7ba7d);
+    border-radius: 4px;
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.05));
+  }
+
+  .step.unanswered {
+    opacity: 0.6;
   }
 
   .run-log {

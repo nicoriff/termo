@@ -1,6 +1,8 @@
 import {
+  agentQuestions,
   agentRuns,
   agentsNextRuns,
+  answerAgentQuestion,
   createProject,
   deleteAgent,
   deleteProject,
@@ -12,6 +14,7 @@ import {
   listAgents,
   listProjects,
   moveAgent,
+  onAgentQuestion,
   onAgentRun,
   restoreProject,
   runAgent,
@@ -24,6 +27,7 @@ import {
   stopProject,
   type AgentSpec,
   type Project,
+  type RunQuestion,
   type RunRecord,
   type RunTrigger,
 } from "$lib/core/agents-client";
@@ -82,6 +86,8 @@ class AgentsStore {
   collapsed = $state<string[]>(loadCollapsed());
   /** Each agent's current run, or its latest one. */
   lastRun = $state<Record<string, RunRecord>>({});
+  /** What runs are waiting on the user to answer. */
+  questions = $state<RunQuestion[]>([]);
   /** When each scheduled agent runs next on its own. */
   nextRun = $state<Record<string, number>>({});
   /** The left sidebar. */
@@ -103,6 +109,11 @@ class AgentsStore {
       // A run moves the next one.
       if (run.status !== "running") void this.refreshNextRuns();
     });
+    await onAgentQuestion((question) => {
+      const others = this.questions.filter((candidate) => candidate.id !== question.id);
+      this.questions = question.state === "pending" ? [...others, question] : others;
+    });
+    this.questions = await agentQuestions().catch(() => []);
     this.agents = await listAgents().catch(() => []);
     this.projects = await listProjects().catch(() => []);
     const latest: Record<string, RunRecord> = {};
@@ -145,6 +156,16 @@ class AgentsStore {
 
   isRunning(agentId: string): boolean {
     return this.lastRun[agentId]?.status === "running";
+  }
+
+  /** What the agent's run is waiting on the user for, if anything. */
+  questionOf(agentId: string): RunQuestion | undefined {
+    return this.questions.find((question) => question.agentId === agentId);
+  }
+
+  /** False when the question wasn't waiting any more. */
+  answerQuestion(questionId: string, answer: string): Promise<boolean> {
+    return answerAgentQuestion(questionId, answer);
   }
 
   setWidth(width: number, persist = false): void {
