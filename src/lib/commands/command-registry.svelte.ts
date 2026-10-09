@@ -55,6 +55,12 @@ export function buildCommands(): Command[] {
       label: t("commands.openTilePicker"),
       run: () => workspaceStore.openOverview(),
     },
+    {
+      id: "navigation.onboarding",
+      group: "navigation",
+      label: t("onboarding.command"),
+      run: () => uiState.openOnboarding(),
+    },
   ];
 
   // Extensions and agents are Modo IA's: only listed with it on.

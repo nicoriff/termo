@@ -76,6 +76,8 @@
       <dd>{system}</dd>
     </dl>
 
+    <button class="about-link about-setup" onclick={() => uiState.openOnboarding()}>{t("onboarding.repeat")}</button>
+
     <p class="about-copyright">
       © {YEAR}
       <button class="about-link" onclick={() => void openUrl("https://github.com/nicoriff")}>@nicoriff</button>
@@ -192,6 +194,11 @@
     cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
+  }
+
+  .about-setup {
+    margin-top: 14px;
+    font-size: 12px;
   }
 
   .about-link:hover,

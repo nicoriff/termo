@@ -17,6 +17,7 @@
   import UpdateDialog from "./UpdateDialog.svelte";
   import WhatsNewDialog from "./WhatsNewDialog.svelte";
   import { showWhatsNewOnce } from "./whats-new";
+  import OnboardingWizard from "$lib/onboarding/OnboardingWizard.svelte";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
@@ -85,8 +86,13 @@
       });
 
       // After the consoles are up, so the dialog lands on a ready window. Once,
-      // in the window Termo opens with.
-      if (isFirstWindow()) void showWhatsNewOnce();
+      // in the window Termo opens with. No version remembered means Termo
+      // never ran here: the setup opens instead, and remembers the version
+      // when it closes, so quitting halfway brings it back next time.
+      if (isFirstWindow()) {
+        if (appConfigStore.lastSeenVersion === null) uiState.openOnboarding();
+        else void showWhatsNewOnce();
+      }
     })();
 
     return () => {
@@ -286,6 +292,9 @@
     {/if}
     {#if uiState.whatsNew}
       <WhatsNewDialog />
+    {/if}
+    {#if uiState.onboardingOpen}
+      <OnboardingWizard />
     {/if}
     {#if uiState.agentLaunch && uiState.agentLaunch.target.kind !== "folder"}
       <AgentLaunchDialog />

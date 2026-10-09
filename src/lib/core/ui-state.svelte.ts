@@ -28,6 +28,9 @@ class UiState {
   aboutOpen = $state(false);
   /** "Check for updates" (see app/updater.svelte.ts). */
   updatesOpen = $state(false);
+  /** The first-run setup (see onboarding/OnboardingWizard.svelte), which
+   * "About" can open again. */
+  onboardingOpen = $state(false);
   /** What the last update brought, shown once on the first launch after it:
    * the changelog entries since the version that ran before. */
   whatsNew = $state<ChangelogEntry[] | null>(null);
@@ -73,6 +76,7 @@ class UiState {
       this.layoutManagerOpen ||
       this.aboutOpen ||
       this.updatesOpen ||
+      this.onboardingOpen ||
       this.whatsNew !== null ||
       this.agentLaunch !== null ||
       this.closeFileTarget !== null ||
@@ -174,6 +178,16 @@ class UiState {
 
   closeUpdates(): void {
     this.updatesOpen = false;
+  }
+
+  /** Opens the setup in place of whatever dialog asked for it. */
+  openOnboarding(): void {
+    this.aboutOpen = false;
+    this.onboardingOpen = true;
+  }
+
+  closeOnboarding(): void {
+    this.onboardingOpen = false;
   }
 
   showWhatsNew(entries: ChangelogEntry[]): void {
