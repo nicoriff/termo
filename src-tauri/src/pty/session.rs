@@ -66,8 +66,22 @@ impl PtySession {
         // for its child process for exactly this reason.
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        for key in super::console_shims::OWN_VARS {
+            cmd.env_remove(key);
+        }
         for (key, value) in env {
             cmd.env(key, value);
+        }
+        // The agent CLIs' stand-ins go ahead of the real ones (see
+        // console_shims.rs). On the PATH the console would get anyway,
+        // which on Windows isn't Termo's own.
+        if let Some(shims) = cmd.get_env(super::console_shims::DIR_VAR).map(std::ffi::OsString::from) {
+            let mut path = shims;
+            if let Some(rest) = cmd.get_env("PATH") {
+                path.push(if cfg!(windows) { ";" } else { ":" });
+                path.push(rest);
+            }
+            cmd.env("PATH", path);
         }
         // Lets agent hooks running inside this console report back to its
         // tab (see pty/agent_hooks.rs).

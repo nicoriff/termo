@@ -6,7 +6,8 @@
 //!
 //! How the consoles get it: each console Termo opens gets a token of its
 //! own, on its command line or in a private file, revoked when the console
-//! closes (`launch_extras`, `release`); and, when the user turns it on,
+//! closes (`launch_extras`, `release`) — a shell too, for the CLIs typed in
+//! it (`shell_extras`, and pty/console_shims.rs); and, when the user turns it on,
 //! every console on the computer gets it from each CLI's own settings with
 //! one long-lived token the user can regenerate (`register_global`).
 //!
@@ -41,6 +42,10 @@ pub const SERVER: &str = "termo";
 /// The console's token as a whole header value, for Codex, which only reads
 /// a header's secret from the environment (`env_http_headers`).
 pub const AUTH_VAR: &str = "TERMO_CONSOLE_AUTH";
+/// A shell's own files with the server, for the CLIs typed in it (see
+/// pty/console_shims.rs): Claude Code's and Copilot CLI's.
+pub const MCP_FILE_VAR: &str = "TERMO_CONSOLE_MCP";
+pub const COPILOT_FILE_VAR: &str = "TERMO_CONSOLE_COPILOT";
 /// Runs consoles can start in an hour, all agents together.
 pub const MAX_PER_HOUR: usize = 20;
 /// Requests from consoles waiting on an answer at once: the rest of the MCP
@@ -48,8 +53,8 @@ pub const MAX_PER_HOUR: usize = 20;
 const MAX_WAITING: usize = 4;
 /// What a console waits for one agent's answer, at most (in seconds), as
 /// told to each CLI: an agent's run can take this long.
-const TOOL_TIMEOUT_SEC: u64 = 60 * 60;
-/// How long a console's own token lasts, even if the console stays open.
+pub const TOOL_TIMEOUT_SEC: u64 = 60 * 60;
+/// How long an agent console's own token lasts, even if the console stays open.
 const GRANT_TTL: Duration = Duration::from_secs(24 * 3600);
 const POLL: Duration = Duration::from_millis(700);
 const MAX_REQUEST: usize = 32 * 1024;
@@ -138,6 +143,9 @@ pub fn set_global(on: bool) {
 
 struct Grant {
     created: Instant,
+    /// A shell's lasts as long as the shell: it can't be handed a new one,
+    /// and tabs stay open for days.
+    expires: bool,
     /// The files that carry it, removed with it.
     files: Vec<PathBuf>,
     /// The console it was given to, once it's running.
@@ -177,6 +185,13 @@ pub fn release(console: &str) {
     }
 }
 
+/// A token whose console never started: it stops working now.
+pub fn discard(token: &str) {
+    if let Some(grant) = grants().lock().unwrap().remove(token) {
+        forget(grant);
+    }
+}
+
 /// Files of consoles from an earlier run of Termo: their tokens died with it.
 pub fn remove_leftovers(root: &Path) {
     let _ = std::fs::remove_dir_all(root.join("console-mcp"));
@@ -192,7 +207,7 @@ pub fn is_console_token(root: &Path, given: &str) -> bool {
     {
         let mut grants = grants().lock().unwrap();
         let expired: Vec<String> =
-            grants.iter().filter(|(_, grant)| grant.created.elapsed() > GRANT_TTL).map(|(token, _)| token.clone()).collect();
+            grants.iter().filter(|(_, grant)| grant.expires && grant.created.elapsed() > GRANT_TTL).map(|(token, _)| token.clone()).collect();
         for token in expired {
             if let Some(grant) = grants.remove(&token) {
                 forget(grant);
@@ -412,6 +427,16 @@ fn not_found(agent: &str) -> String {
 
 // ---- The tools, as the MCP server lists them
 
+/// The tools a console sees: none while no agent is available to consoles,
+/// so a shell's CLIs carry nothing until the user offers one.
+pub fn tools_for(agents: &[AgentSpec]) -> Vec<Value> {
+    if available(agents).is_empty() {
+        Vec::new()
+    } else {
+        tools()
+    }
+}
+
 pub fn tools() -> Vec<Value> {
     let agent = json!({ "type": "string", "description": "The agent's name, as list_agents gives it." });
     let request = json!({ "type": "string", "description": "What you need from it, with the context it needs: it doesn't see this conversation." });
@@ -491,8 +516,7 @@ pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
     let mut env: Vec<(&'static str, String)> = Vec::new();
     let args: Option<Vec<String>> = match tool {
         "claude" => {
-            let config = json!({ "mcpServers": { SERVER: { "type": "http", "url": url, "headers": { "Authorization": bearer } } } });
-            write(format!("claude-{short}.json"), config.to_string()).map(|path| {
+            write(format!("claude-{short}.json"), claude_config(&url, &bearer)).map(|path| {
                 env.push(("MCP_TOOL_TIMEOUT", (TOOL_TIMEOUT_SEC * 1000).to_string()));
                 vec![
                     "--mcp-config".into(),
@@ -516,18 +540,11 @@ pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
             ])
         }
         "copilot" => {
-            let config = json!({ "mcpServers": { SERVER: {
-                "type": "http", "url": url, "headers": { "Authorization": bearer }, "tools": ["*"],
-            }}});
-            write(format!("copilot-{short}.json"), config.to_string())
+            write(format!("copilot-{short}.json"), copilot_config(&url, &bearer))
                 .map(|path| vec!["--additional-mcp-config".into(), format!("@{}", path.to_string_lossy())])
         }
         "gemini" => {
-            let ours = json!({ "mcpServers": { SERVER: {
-                "httpUrl": url, "headers": { "Authorization": bearer }, "timeout": TOOL_TIMEOUT_SEC * 1000,
-            }}});
-            // On top of the system settings, never instead of them.
-            write(format!("gemini-{short}.json"), gemini_system::with_system(&ours.to_string())).map(|path| {
+            write(format!("gemini-{short}.json"), gemini_config(&url, &bearer)).map(|path| {
                 env.push(("GEMINI_CLI_SYSTEM_SETTINGS_PATH", path.to_string_lossy().into_owned()));
                 Vec::new()
             })
@@ -540,8 +557,70 @@ pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
         }
         return Extras::default();
     };
-    grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), files, console: None });
+    grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), expires: true, files, console: None });
     Extras { args, env, token: Some(token) }
+}
+
+fn claude_config(url: &str, bearer: &str) -> String {
+    json!({ "mcpServers": { SERVER: { "type": "http", "url": url, "headers": { "Authorization": bearer } } } }).to_string()
+}
+
+fn copilot_config(url: &str, bearer: &str) -> String {
+    json!({ "mcpServers": { SERVER: {
+        "type": "http", "url": url, "headers": { "Authorization": bearer }, "tools": ["*"],
+    }}})
+    .to_string()
+}
+
+fn gemini_config(url: &str, bearer: &str) -> String {
+    let ours = json!({ "mcpServers": { SERVER: {
+        "httpUrl": url, "headers": { "Authorization": bearer }, "timeout": TOOL_TIMEOUT_SEC * 1000,
+    }}});
+    // On top of the system settings, never instead of them.
+    gemini_system::with_system(&ours.to_string())
+}
+
+/// The server for a shell Termo opens, with a token of its own, for the
+/// CLIs typed in it: all in its environment, where their stand-ins find it
+/// (see pty/console_shims.rs). Given whether or not an agent is available
+/// now — the shell outlives that — and none when the server isn't listening
+/// or the CLIs have it in their own settings already (`global`).
+///
+/// Not Gemini CLI: it takes a session's server only from the system
+/// settings file the environment names, and since it wants that file in a
+/// folder only an administrator can write, naming one of Termo's in every
+/// shell would only make each `gemini` typed there warn about it.
+pub fn shell_extras(root: &Path, global: bool) -> Extras {
+    if global || !webhook::listening() {
+        return Extras::default();
+    }
+    let dir = root.join("console-mcp");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return Extras::default();
+    }
+    let token = fresh_token();
+    let url = webhook::mcp_url();
+    let bearer = format!("Bearer {token}");
+    let short = &token[..12];
+    let wanted = [
+        (MCP_FILE_VAR, format!("claude-{short}.json"), claude_config(&url, &bearer)),
+        (COPILOT_FILE_VAR, format!("copilot-{short}.json"), copilot_config(&url, &bearer)),
+    ];
+    let mut files = Vec::new();
+    let mut env: Vec<(&'static str, String)> = vec![(AUTH_VAR, bearer.clone())];
+    for (var, name, text) in wanted {
+        let path = dir.join(name);
+        if write_private(&path, &text).is_err() {
+            for file in files {
+                let _ = std::fs::remove_file(file);
+            }
+            return Extras::default();
+        }
+        env.push((var, path.to_string_lossy().into_owned()));
+        files.push(path);
+    }
+    grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), expires: false, files, console: None });
+    Extras { args: Vec::new(), env, token: Some(token) }
 }
 
 // ---- Every console: each CLI's own settings
@@ -756,7 +835,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!("termo-console-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let token = fresh_token();
-        grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), files: Vec::new(), console: None });
+        grants().lock().unwrap().insert(
+            token.clone(),
+            Grant { created: Instant::now(), expires: true, files: Vec::new(), console: None },
+        );
         bind(&token, "pty-1");
         assert!(is_console_token(&root, &token));
         release("pty-1");
@@ -807,5 +889,32 @@ mod tests {
     fn the_tools_are_the_three_promised() {
         let names: Vec<String> = tools().iter().map(|tool| tool["name"].as_str().unwrap().to_string()).collect();
         assert_eq!(names, ["list_agents", "ask_agent", "start_agent"]);
+    }
+
+    /// A shell gets the server before any agent is offered: until one is,
+    /// its CLIs see no tools.
+    #[test]
+    fn a_console_sees_no_tools_until_an_agent_is_available() {
+        assert!(tools_for(&[agent("Privado", false, true)]).is_empty());
+        assert_eq!(tools_for(&[agent("Revisor", true, true)]).len(), 3);
+    }
+
+    /// A shell's token is good for as long as the shell, while an agent
+    /// console's ends with the day; one that never reached a console goes
+    /// at once.
+    #[test]
+    fn a_shells_token_outlives_the_day_and_a_discarded_one_is_gone() {
+        let root = std::env::temp_dir();
+        let Some(old) = Instant::now().checked_sub(GRANT_TTL + Duration::from_secs(60)) else { return };
+        let (shell, agent_console) = (fresh_token(), fresh_token());
+        {
+            let mut grants = grants().lock().unwrap();
+            grants.insert(shell.clone(), Grant { created: old, expires: false, files: Vec::new(), console: None });
+            grants.insert(agent_console.clone(), Grant { created: old, expires: true, files: Vec::new(), console: None });
+        }
+        assert!(!is_console_token(&root, &agent_console));
+        assert!(is_console_token(&root, &shell));
+        discard(&shell);
+        assert!(!is_console_token(&root, &shell));
     }
 }

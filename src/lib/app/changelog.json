@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.15.0",
+    "date": "2026-10-08",
+    "es": [
+      "**Tus agentes también al tipear el comando**: si escribís `claude`, `codex` o `copilot` en una pestaña de shell de Termo, esa sesión ya tiene tus agentes disponibles, igual que las consolas de agente que abre Termo. Cada pestaña recibe un acceso propio, que se revoca al cerrarla. Marcar un agente como «Disponible desde las consolas» alcanza con abrir una sesión nueva del CLI, sin reabrir la pestaña.",
+      "Una consola sin ningún agente disponible ya no carga herramientas de Termo que no puede usar."
+    ],
+    "en": [
+      "**Your agents when you type the command too**: type `claude`, `codex` or `copilot` in one of Termo's shell tabs and that session has your agents within reach, like the agent consoles Termo opens. Each tab gets an access of its own, revoked when it closes. After marking an agent as “Available from consoles”, a new CLI session is enough — no need to reopen the tab.",
+      "A console with no agent available no longer loads Termo tools it can't use."
+    ]
+  },
+  {
     "version": "0.14.0",
     "date": "2026-10-07",
     "es": [

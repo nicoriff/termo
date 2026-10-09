@@ -1481,7 +1481,7 @@ export const en: Messages = {
       inActivityBarHint:
         "The vertical bar is on the window's left edge. Even with the button hidden, the panel still opens with {shortcut}, from the ≡ menu or from the command palette.",
       consoles: "Agents from consoles",
-      consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex, Gemini and Copilot consoles you open from Termo, with nothing else to set up.",
+      consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex, Gemini and Copilot consoles you open from Termo, with nothing else to set up. Also when you type claude, codex or copilot in one of Termo's shell tabs.",
       everyConsole: "Also in consoles opened outside Termo",
       everyConsoleHint: "Adds Termo as an MCP server in each installed CLI's own settings, so consoles you open anywhere (VS Code, another terminal) see it. The access token is written in those files, and with Termo closed those CLIs warn that they couldn't connect.",
       registering: "Updating each CLI's settings…",
