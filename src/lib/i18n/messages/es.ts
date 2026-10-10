@@ -1663,7 +1663,7 @@ export const es = {
       statusBar: "Barra de estado",
       codexStatusBarHint: "Con los hooks instalados, Codex informa el uso del plan y el contexto de cada consola: no hace falta nada más.",
       geminiStatusBarHint: "Gemini CLI no informa el uso del plan ni el contexto, así que la barra de estado no los muestra para él.",
-      grokStatusBarHint: "Grok no informa el uso del plan ni el contexto, así que la barra de estado no los muestra para él.",
+      grokStatusBarHint: "Con los hooks instalados, Grok informa el contexto de cada consola: no hace falta nada más. El uso del plan no lo informa.",
       soundNames: {
         none: "Ninguno",
         chime: "Campanita",

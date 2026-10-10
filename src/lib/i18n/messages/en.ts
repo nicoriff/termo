@@ -1662,7 +1662,7 @@ export const en: Messages = {
       statusBar: "Status bar",
       codexStatusBarHint: "With the hooks installed, Codex reports each console's plan usage and context: nothing else is needed.",
       geminiStatusBarHint: "Gemini CLI reports neither plan usage nor context, so the status bar doesn't show them for it.",
-      grokStatusBarHint: "Grok reports neither plan usage nor context, so the status bar doesn't show them for it.",
+      grokStatusBarHint: "With the hooks installed, Grok reports each console's context: nothing else is needed. It doesn't report plan usage.",
       soundNames: {
         none: "None",
         chime: "Chime",

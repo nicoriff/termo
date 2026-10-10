@@ -489,6 +489,13 @@ pub fn run_hook_cli(tool: &str, event: &str) {
             super::codex_usage::record(dir, &session, &payload);
         }
     }
+    // Nor is Grok's status line needed: its hooks point at the session's
+    // own notes (see grok_usage).
+    if tool == AgentTool::Grok.name() {
+        if let Ok(payload) = serde_json::from_str::<Value>(&input) {
+            super::grok_usage::record(dir, &session, &payload);
+        }
+    }
     let _ = append_event(dir, &session, tool, event, &input);
 }
 

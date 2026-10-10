@@ -38,7 +38,7 @@ fn codex_home() -> Option<PathBuf> {
 /// own directory rather than trusting it as an arbitrary path to read.
 /// `canonicalize` also closes off a `..` component or a symlink pointing
 /// back out.
-fn is_within(path: &Path, home: &Path) -> bool {
+pub(super) fn is_within(path: &Path, home: &Path) -> bool {
     let (Ok(home), Ok(resolved)) = (fs::canonicalize(home), fs::canonicalize(path)) else {
         return false;
     };

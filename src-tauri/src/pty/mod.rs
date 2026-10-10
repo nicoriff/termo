@@ -6,6 +6,7 @@ pub mod agent_launch;
 mod bash_colors;
 pub mod bin_search;
 mod codex_usage;
+mod grok_usage;
 pub mod console_shims;
 pub mod copilot_status;
 pub mod cwd_report;
