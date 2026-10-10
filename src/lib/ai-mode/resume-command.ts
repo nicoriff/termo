@@ -12,7 +12,8 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
  * when the id isn't safe to pass on. Every form comes from the tools' own
  * docs: `claude --resume <id>` (searches the current project, its worktrees,
  * then other projects), `codex resume <id>` (UUID or session name), `gemini
- * --resume <id>` (UUID, an index, or "latest") and `copilot --resume <id>`.
+ * --resume <id>` (UUID, an index, or "latest"), `copilot --resume <id>` and
+ * `grok --resume <id>` (UUID, or a session title).
  */
 export function resumeArgs(tool: ToolId, agentSessionId: string): string[] | null {
   if (!SAFE_ID.test(agentSessionId)) return null;

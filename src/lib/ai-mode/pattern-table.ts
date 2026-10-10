@@ -4,10 +4,10 @@
  * below): add/adjust regexes, don't touch classifier.ts.
  */
 
-export type ToolId = "claude" | "codex" | "gemini" | "copilot";
+export type ToolId = "claude" | "codex" | "gemini" | "copilot" | "grok";
 
 /** Every agent CLI Termo knows, in the order they're listed everywhere. */
-export const TOOL_IDS: readonly ToolId[] = ["claude", "codex", "gemini", "copilot"];
+export const TOOL_IDS: readonly ToolId[] = ["claude", "codex", "gemini", "copilot", "grok"];
 
 export interface ToolPatternSet {
   tool: ToolId;
@@ -91,5 +91,21 @@ export const TOOL_PATTERNS: ToolPatternSet[] = [
     // A tool call waiting for approval.
     awaiting: [/Do you want to (run|allow|proceed)/i, /Allow this/i],
     error: [/\bError:/],
+  },
+  {
+    tool: "grok",
+    // From Grok's documented interface (xAI's "Grok Build"), not yet checked
+    // against real screen captures; its hooks (see agent_hooks.rs) are the
+    // precise source and this only fills in without them.
+    confidence: "low",
+    // npm installs it under node, but its own installer leaves a `grok`
+    // binary in ~/.grok/bin.
+    processPathHints: ["grok"],
+    // Its banner, and the footer that names the model it's using.
+    identity: [/Grok Build/i, /\bgrok-\d/i],
+    running: [/esc to (interrupt|cancel)/i],
+    // A tool call waiting for approval.
+    awaiting: [/Allow this (command|tool|edit)/i, /Do you want to (run|allow|proceed)/i],
+    error: [/\bAPI error/i],
   },
 ];

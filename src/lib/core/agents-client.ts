@@ -279,7 +279,8 @@ export function restoreProject(id: string, at: number): Promise<[Project[], Agen
 
 /** What turning "agents in every console" on or off did for one CLI. */
 export interface ConsoleRegistration {
-  engine: AgentEngine;
+  /** Every CLI Termo knows, not only the ones agents run on. */
+  engine: import("$lib/ai-mode/pattern-table").ToolId;
   /** Not installed: nothing to do. */
   skipped: boolean;
   ok: boolean;

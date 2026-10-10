@@ -9,6 +9,7 @@ pub struct AgentHooksStatus {
     codex: bool,
     gemini: bool,
     copilot: bool,
+    grok: bool,
 }
 
 #[tauri::command]
@@ -18,6 +19,7 @@ pub fn agent_hooks_status() -> AgentHooksStatus {
         codex: agent_hooks::is_installed(AgentTool::Codex),
         gemini: agent_hooks::is_installed(AgentTool::Gemini),
         copilot: agent_hooks::is_installed(AgentTool::Copilot),
+        grok: agent_hooks::is_installed(AgentTool::Grok),
     }
 }
 

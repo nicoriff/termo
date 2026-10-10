@@ -16,7 +16,7 @@
   }
 
   const {
-    all = ["claude", "codex", "gemini", "copilot"],
+    all = ["claude", "codex", "gemini", "copilot", "grok"],
     supported,
     available,
     value,
@@ -29,6 +29,7 @@
     codex: "marketplace.targets.codex",
     gemini: "marketplace.targets.gemini",
     copilot: "marketplace.targets.copilot",
+    grok: "marketplace.targets.grok",
   };
 
   function reasonFor(target: AgentTarget): MessageKey | null {

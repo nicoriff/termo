@@ -9,6 +9,7 @@ describe("resumeCommand", () => {
     expect(resumeCommand("codex", UUID)).toBe(`codex resume ${UUID}`);
     expect(resumeCommand("gemini", UUID)).toBe(`gemini --resume ${UUID}`);
     expect(resumeCommand("copilot", UUID)).toBe(`copilot --resume ${UUID}`);
+    expect(resumeCommand("grok", UUID)).toBe(`grok --resume ${UUID}`);
   });
 
   it("accepts Codex session names", () => {

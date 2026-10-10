@@ -27,6 +27,7 @@ pub enum AgentTarget {
     Codex,
     Gemini,
     Copilot,
+    Grok,
 }
 
 impl AgentTarget {
@@ -36,6 +37,7 @@ impl AgentTarget {
             AgentTarget::Codex => "codex",
             AgentTarget::Gemini => "gemini",
             AgentTarget::Copilot => "copilot",
+            AgentTarget::Grok => "grok",
         }
     }
 }
@@ -47,12 +49,13 @@ pub fn targets_for(class: ComponentClass) -> Vec<AgentTarget> {
     match class {
         ComponentClass::Plugin => vec![AgentTarget::Claude],
         ComponentClass::Skill => vec![AgentTarget::Claude, AgentTarget::Codex],
-        // An MCP server goes into Gemini CLI's and Copilot CLI's settings too.
+        // An MCP server goes into Gemini CLI's, Copilot CLI's and Grok's settings too.
         ComponentClass::Mcp => vec![
             AgentTarget::Claude,
             AgentTarget::Codex,
             AgentTarget::Gemini,
             AgentTarget::Copilot,
+            AgentTarget::Grok,
         ],
     }
 }
@@ -158,6 +161,7 @@ pub struct MarketplaceStatus {
     pub codex_cli: Option<String>,
     pub gemini_cli: Option<String>,
     pub copilot_cli: Option<String>,
+    pub grok_cli: Option<String>,
 }
 
 #[cfg(test)]

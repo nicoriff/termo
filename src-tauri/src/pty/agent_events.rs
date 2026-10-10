@@ -54,7 +54,7 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
     let optional = |value: Option<&str>| value.filter(|text| !text.is_empty()).map(str::to_owned);
     let agent_session_id = optional(parts.next());
     let agent_cwd = optional(parts.next());
-    if !matches!(tool, "claude" | "codex" | "gemini" | "copilot") {
+    if !matches!(tool, "claude" | "codex" | "gemini" | "copilot" | "grok") {
         return None;
     }
     let status = match event {
@@ -131,6 +131,18 @@ mod tests {
         assert_eq!(status("claude\tNotification\tpermission_prompt"), Some(Some(AgentStatus::Awaiting)));
         assert_eq!(status("claude\tNotification\tidle_prompt"), None);
         assert_eq!(status("claude\tNotification\t"), None);
+    }
+
+    /// Grok takes Claude Code's event names.
+    #[test]
+    fn maps_groks_turn_lifecycle() {
+        assert_eq!(status("grok\tSessionStart\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("grok\tUserPromptSubmit\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("grok\tPreToolUse\t"), Some(Some(AgentStatus::Running)));
+        assert_eq!(status("grok\tNotification\tpermission_prompt"), Some(Some(AgentStatus::Awaiting)));
+        assert_eq!(status("grok\tStop\t"), Some(Some(AgentStatus::Finished)));
+        assert_eq!(status("grok\tStopFailure\t"), Some(Some(AgentStatus::Error)));
+        assert_eq!(status("grok\tSessionEnd\t"), Some(None));
     }
 
     #[test]

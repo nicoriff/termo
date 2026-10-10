@@ -22,6 +22,8 @@ pub fn marketplace_status() -> MarketplaceStatus {
             .map(|path| path.to_string_lossy().into_owned()),
         gemini_cli: agent_cli::locate(AgentTarget::Gemini, None)
             .map(|path| path.to_string_lossy().into_owned()),
+        grok_cli: agent_cli::locate(AgentTarget::Grok, None)
+            .map(|path| path.to_string_lossy().into_owned()),
     }
 }
 

@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(item.author.as_deref(), Some("Hint-Services"));
         assert_eq!(
             item.targets,
-            vec![AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot]
+            vec![AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot, AgentTarget::Grok]
         );
         // No proxy for this one: the registry has no download counts at all.
         assert!(item.install_count.is_none());

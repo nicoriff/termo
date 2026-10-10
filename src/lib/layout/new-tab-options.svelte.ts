@@ -24,7 +24,7 @@ class NewTabOptions {
     marketplaceStatus()
       .then(
         (status) =>
-          (this.agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli, gemini: !!status.geminiCli, copilot: !!status.copilotCli }),
+          (this.agentClis = { claude: !!status.claudeCli, codex: !!status.codexCli, gemini: !!status.geminiCli, copilot: !!status.copilotCli, grok: !!status.grokCli }),
       )
       .catch(() => {});
   }

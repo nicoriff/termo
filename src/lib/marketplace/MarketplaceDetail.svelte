@@ -31,6 +31,7 @@
     codex: "marketplace.signIn.codex",
     gemini: "marketplace.signIn.gemini",
     copilot: "marketplace.signIn.copilot",
+    grok: "marketplace.signIn.grok",
   };
   let showTools = $state(false);
 
@@ -68,6 +69,7 @@
       catalogStore.status?.codexCli ? "codex" : null,
       catalogStore.status?.geminiCli ? "gemini" : null,
       catalogStore.status?.copilotCli ? "copilot" : null,
+      catalogStore.status?.grokCli ? "grok" : null,
     ].filter((value): value is AgentTarget => value !== null),
   );
   const commandPreview = $derived(
@@ -115,6 +117,7 @@
     codex: "marketplace.targets.codex",
     gemini: "marketplace.targets.gemini",
     copilot: "marketplace.targets.copilot",
+    grok: "marketplace.targets.grok",
   };
 
   /** Where the code actually comes from — the single most important thing to

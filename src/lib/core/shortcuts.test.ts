@@ -216,6 +216,11 @@ describe("findConflict", () => {
     expect(findConflict("meta+shift+o", "newTab", {}, true)).toBe("newCopilot");
   });
 
+  it("covers the Grok tab's default binding", () => {
+    expect(findConflict("ctrl+shift+k", "newTab", {}, false)).toBe("newGrok");
+    expect(findConflict("meta+shift+k", "newTab", {}, true)).toBe("newGrok");
+  });
+
   it("covers the favorite-tab shortcut's default binding", () => {
     expect(findConflict("ctrl+shift+f", "newTab", {}, false)).toBe("favoriteTab");
     expect(findConflict("meta+shift+f", "newTab", {}, true)).toBe("favoriteTab");

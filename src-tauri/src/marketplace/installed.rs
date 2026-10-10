@@ -30,6 +30,8 @@ pub fn config_file(target: AgentTarget) -> Option<PathBuf> {
         }
         AgentTarget::Gemini => home.join(".gemini").join("settings.json"),
         AgentTarget::Copilot => crate::agents::spec::copilot_home(&home).join("mcp-config.json"),
+        // Its `[mcp_servers.*]` tables, as in Codex's.
+        AgentTarget::Grok => home.join(".grok").join("config.toml"),
     })
 }
 
@@ -67,7 +69,7 @@ pub fn names(target: AgentTarget) -> HashSet<String> {
         return HashSet::new();
     };
     match target {
-        AgentTarget::Codex => toml_names(&text),
+        AgentTarget::Codex | AgentTarget::Grok => toml_names(&text),
         _ => json_names(&text),
     }
 }
@@ -80,7 +82,8 @@ pub struct Installed {
 
 impl Installed {
     pub fn read(owners: &Path) -> Self {
-        let targets = [AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot];
+        let targets =
+            [AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot, AgentTarget::Grok];
         Installed {
             by_target: targets.into_iter().map(|target| (target, names(target))).collect(),
             owners: Owners::load(owners),

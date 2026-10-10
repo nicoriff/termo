@@ -851,6 +851,21 @@ pub fn register_global(root: &Path, enable: bool) -> Vec<Registration> {
         let server = enable.then(|| json!({ "type": "http", "url": url, "headers": { "Authorization": bearer }, "tools": ["*"] }));
         edit_json(&copilot_home(&home).join("mcp-config.json"), server)
     });
+    record("grok", AgentTarget::Grok, &|| {
+        // A block of Termo's own in its `config.toml`, as in Codex's.
+        let path = home.join(".grok").join("config.toml");
+        let current = std::fs::read_to_string(&path).unwrap_or_default();
+        let block = enable.then(|| {
+            format!(
+                "[mcp_servers.{SERVER}]\nurl = \"{url}\"\nheaders = {{ Authorization = \"{bearer}\" }}\ntool_timeout_sec = {TOOL_TIMEOUT_SEC}"
+            )
+        });
+        let next = codex_config(&current, block.as_deref())?;
+        if next == current {
+            return Ok(());
+        }
+        replace_file(&path, &next)
+    });
     results
 }
 

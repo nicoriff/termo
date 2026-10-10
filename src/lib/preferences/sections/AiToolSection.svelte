@@ -71,6 +71,11 @@
         uninstall: uninstallCopilotStatusLine,
       },
     },
+    grok: {
+      shortcut: "newGrok",
+      hooksFile: "~/.grok/hooks/termo.json",
+      statusBarHint: "preferences.aiMode.grokStatusBarHint",
+    },
   };
 
   const EVENTS: { event: SoundEvent; label: MessageKey }[] = [

@@ -8,7 +8,7 @@
   let { kind, size = 14 }: { kind: string; size?: number } = $props();
 
   const family = $derived(
-    kind === "claude" || kind === "codex" || kind === "gemini" || kind === "copilot"
+    kind === "claude" || kind === "codex" || kind === "gemini" || kind === "copilot" || kind === "grok"
       ? kind
       : kind === "pwsh" || kind === "powershell"
         ? "powershell"
@@ -44,6 +44,13 @@
       <rect x="1.5" y="4.5" width="5.6" height="5" rx="2.2" />
       <rect x="8.9" y="4.5" width="5.6" height="5" rx="2.2" />
       <path d="M7.1 7h1.8M3 12.5c1.4 1 3.2 1.5 5 1.5s3.6-.5 5-1.5" stroke-linecap="round" />
+    </g>
+  {:else if family === "grok"}
+    <!-- A ring cut by a slash. xAI's mark is black and white, so it takes the
+         text color and shows on light and dark themes alike. -->
+    <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <circle cx="8" cy="8" r="4.6" />
+      <line x1="2.4" y1="13.6" x2="13.6" y2="2.4" />
     </g>
   {:else if family === "powershell"}
     <rect x="1" y="2" width="14" height="12" rx="2" fill="#2671be" />

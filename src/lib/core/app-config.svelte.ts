@@ -23,6 +23,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_gemini_other: null,
   new_copilot_mac: null,
   new_copilot_other: null,
+  new_grok_mac: null,
+  new_grok_other: null,
   favorite_tab_mac: null,
   favorite_tab_other: null,
   new_window_mac: null,
@@ -63,6 +65,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
   newGemini: { mac: "new_gemini_mac", other: "new_gemini_other" },
   newCopilot: { mac: "new_copilot_mac", other: "new_copilot_other" },
+  newGrok: { mac: "new_grok_mac", other: "new_grok_other" },
   favoriteTab: { mac: "favorite_tab_mac", other: "favorite_tab_other" },
   newWindow: { mac: "new_window_mac", other: "new_window_other" },
   toggleExplorer: { mac: "toggle_explorer_mac", other: "toggle_explorer_other" },
@@ -108,6 +111,7 @@ class AppConfigStore {
     codex: true,
     gemini: true,
     copilot: true,
+    grok: true,
   });
   /** Per agent, so each can be told apart by ear. */
   aiSounds = $state<Record<ToolId, Record<SoundEvent, SoundChoice>>>(structuredClone(DEFAULT_SOUNDS));
@@ -200,6 +204,7 @@ class AppConfigStore {
       // Absent in configs from before Gemini CLI was supported.
       gemini: config.ai_sound_gemini_enabled ?? true,
       copilot: config.ai_sound_copilot_enabled ?? true,
+      grok: config.ai_sound_grok_enabled ?? true,
     };
     const sound = (value: string, fallback: SoundChoice) => (isSoundChoice(value) ? value : fallback);
     this.aiSounds = {
@@ -218,6 +223,10 @@ class AppConfigStore {
       copilot: {
         awaiting: sound(config.ai_sound_copilot_awaiting ?? "", DEFAULT_SOUNDS.copilot.awaiting),
         finished: sound(config.ai_sound_copilot_finished ?? "", DEFAULT_SOUNDS.copilot.finished),
+      },
+      grok: {
+        awaiting: sound(config.ai_sound_grok_awaiting ?? "", DEFAULT_SOUNDS.grok.awaiting),
+        finished: sound(config.ai_sound_grok_finished ?? "", DEFAULT_SOUNDS.grok.finished),
       },
     };
     this.aiSoundVolume = config.ai_sound_volume;
@@ -443,6 +452,7 @@ class AppConfigStore {
       ai_sound_codex_enabled: this.aiSoundsEnabled.codex,
       ai_sound_gemini_enabled: this.aiSoundsEnabled.gemini,
       ai_sound_copilot_enabled: this.aiSoundsEnabled.copilot,
+      ai_sound_grok_enabled: this.aiSoundsEnabled.grok,
       ai_sound_claude_awaiting: this.aiSounds.claude.awaiting,
       ai_sound_claude_finished: this.aiSounds.claude.finished,
       ai_sound_codex_awaiting: this.aiSounds.codex.awaiting,
@@ -451,6 +461,8 @@ class AppConfigStore {
       ai_sound_gemini_finished: this.aiSounds.gemini.finished,
       ai_sound_copilot_awaiting: this.aiSounds.copilot.awaiting,
       ai_sound_copilot_finished: this.aiSounds.copilot.finished,
+      ai_sound_grok_awaiting: this.aiSounds.grok.awaiting,
+      ai_sound_grok_finished: this.aiSounds.grok.finished,
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,

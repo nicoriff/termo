@@ -467,6 +467,7 @@ pub fn install_mcp(request: &McpInstallRequest, owners: &std::path::Path) -> Res
         AgentTarget::Codex => install_mcp_codex(request, &name, present),
         AgentTarget::Gemini => install_mcp_gemini(request, &name),
         AgentTarget::Copilot => install_mcp_copilot(request, &name),
+        AgentTarget::Grok => install_mcp_grok(request, &name),
     }?;
     owned.set(request.target, &name, &request.server_name);
     // The note is a convenience: the server is in either way.
@@ -537,6 +538,81 @@ fn install_mcp_claude(request: &McpInstallRequest, name: &str, present: bool) ->
         let _ = agent_cli::run(&claude, &["mcp", "remove", name, "-s", "user"]);
     }
     agent_cli::run(&claude, &["mcp", "add-json", name, config_text.as_str(), "-s", "user"]).map(|output| output.trim().to_string())
+}
+
+/// A server's `.mcp.json` config as a table in Grok's `config.toml`: a remote
+/// one by `url` and `headers`, a local one by `command`, `args` and `env`.
+fn grok_table(name: &str, config: &Value) -> String {
+    // A JSON string is a TOML basic string: the same quotes and escapes.
+    let quoted = |text: &str| serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into());
+    let inline = |key: &str| {
+        let pairs: Vec<String> = config
+            .get(key)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(field, value)| value.as_str().map(|value| format!("{} = {}", quoted(field), quoted(value))))
+            .collect();
+        (!pairs.is_empty()).then(|| format!("{{ {} }}", pairs.join(", ")))
+    };
+    let mut lines = vec![format!("[mcp_servers.{name}]")];
+    if let Some(url) = config.get("url").and_then(Value::as_str) {
+        lines.push(format!("url = {}", quoted(url)));
+        if let Some(headers) = inline("headers") {
+            lines.push(format!("headers = {headers}"));
+        }
+    } else {
+        let command = config.get("command").and_then(Value::as_str).unwrap_or_default();
+        lines.push(format!("command = {}", quoted(command)));
+        let args: Vec<String> = config
+            .get("args")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(quoted)
+            .collect();
+        lines.push(format!("args = [{}]", args.join(", ")));
+        if let Some(env) = inline("env") {
+            lines.push(format!("env = {env}"));
+        }
+    }
+    lines.join("\n")
+}
+
+/// Into Grok's `config.toml` directly, as a block of Termo's own (the way a
+/// Codex remote with headers goes in): a key never rides a command line.
+/// Grok has no table key for an SSE remote, so that one goes through its
+/// own `mcp add`.
+fn install_mcp_grok(request: &McpInstallRequest, name: &str) -> Result<String, String> {
+    let grok = agent_cli::require(AgentTarget::Grok, None)?;
+    let fail = |err: String| tr(Msg::MarketplaceCommandFailed(&err));
+    let config = server_config(request)?;
+    let file = installed::config_file(AgentTarget::Grok).ok_or_else(|| tr(Msg::HomeDirNotFound))?;
+    let current = std::fs::read_to_string(&file).unwrap_or_default();
+    if config.get("type").and_then(Value::as_str) == Some("sse") {
+        let without = codex_config(&current, name, None);
+        if without != current {
+            crate::agents::console_bridge::replace_file(&file, &without).map_err(fail)?;
+        }
+        let url = config.get("url").and_then(Value::as_str).unwrap_or_default();
+        let headers: Vec<String> = config
+            .get("headers")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(header, value)| value.as_str().map(|value| format!("{header}: {value}")))
+            .collect();
+        let mut args = vec!["mcp", "add", "--transport", "sse"];
+        for header in &headers {
+            args.extend(["--header", header.as_str()]);
+        }
+        args.extend([name, url]);
+        return agent_cli::run(&grok, &args).map(|output| output.trim().to_string());
+    }
+    let next = codex_config(&current, name, Some(&grok_table(name, &config)));
+    crate::agents::console_bridge::replace_file(&file, &next).map_err(fail)?;
+    Ok(String::new())
 }
 
 /// The lines around a server Termo wrote into Codex's `config.toml` itself.
@@ -709,6 +785,21 @@ pub fn uninstall_mcp(request: &McpInstallRequest, owners: &std::path::Path) -> R
                 servers.remove(*name);
             }
         })?,
+        // Termo's own block when that's how it went in, Grok's `mcp remove`
+        // otherwise.
+        AgentTarget::Grok => {
+            let file = installed::config_file(AgentTarget::Grok).ok_or_else(|| tr(Msg::HomeDirNotFound))?;
+            for name in &names {
+                let current = std::fs::read_to_string(&file).unwrap_or_default();
+                let without = codex_config(&current, name, None);
+                if without != current {
+                    crate::agents::console_bridge::replace_file(&file, &without)
+                        .map_err(|err| tr(Msg::MarketplaceCommandFailed(&err)))?;
+                } else {
+                    agent_cli::run(&bin, &["mcp", "remove", name])?;
+                }
+            }
+        }
     }
     if ours {
         owned.remove(request.target, &name);
@@ -1044,6 +1135,27 @@ mod tests {
     }
 
     #[test]
+    fn grok_takes_a_server_as_a_table_in_its_config() {
+        let remote = serde_json::json!({ "type": "http", "url": "https://x.run.tools?a=1", "headers": { "X_API_KEY": "k\"1" } });
+        assert_eq!(
+            grok_table("acme-files", &remote),
+            "[mcp_servers.acme-files]\nurl = \"https://x.run.tools?a=1\"\nheaders = { \"X_API_KEY\" = \"k\\\"1\" }"
+        );
+        let local = serde_json::json!({ "type": "stdio", "command": "npx", "args": ["-y", "@acme/files"], "env": { "TOKEN": "t" } });
+        let table = grok_table("acme-files", &local);
+        assert_eq!(
+            table,
+            "[mcp_servers.acme-files]\ncommand = \"npx\"\nargs = [\"-y\", \"@acme/files\"]\nenv = { \"TOKEN\" = \"t\" }"
+        );
+        // Beside the user's own settings, and found again by name.
+        let user = "[cli]\ninstaller = \"npm\"\n";
+        let added = codex_config(user, "acme-files", Some(&table));
+        assert!(added.starts_with(user));
+        assert!(installed::toml_names(&added).contains("acme-files"));
+        assert_eq!(codex_config(&added, "acme-files", None), user);
+    }
+
+    #[test]
     fn codex_keeps_a_remote_with_headers_as_a_table_of_its_own() {
         let mut headers = serde_json::Map::new();
         headers.insert("X_API_KEY".into(), Value::String("k\"1".into()));
@@ -1082,7 +1194,9 @@ mod tests {
         });
         let name = "selftest-roundtrip";
         let mut report = Vec::new();
-        for target in [AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot] {
+        for target in
+            [AgentTarget::Claude, AgentTarget::Codex, AgentTarget::Gemini, AgentTarget::Copilot, AgentTarget::Grok]
+        {
             if agent_cli::locate(target, None).is_none() {
                 report.push(format!("{target:?}: not installed, skipped"));
                 continue;

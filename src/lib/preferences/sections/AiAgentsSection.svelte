@@ -4,7 +4,7 @@
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { rotateConsoleToken, setAgentsInEveryConsole, type ConsoleRegistration } from "$lib/core/agents-client";
-  import { ENGINE_NAMES } from "$lib/agents/orchestration-spec";
+  import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
 
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
 
@@ -80,7 +80,7 @@
     <ul class="results">
       {#each results as result (result.engine)}
         <li class:bad={!result.ok}>
-          {result.ok ? "✓" : "✕"} {ENGINE_NAMES[result.engine]}{#if result.message}: {result.message}{/if}
+          {result.ok ? "✓" : "✕"} {TOOL_DISPLAY_NAMES[result.engine]}{#if result.message}: {result.message}{/if}
         </li>
       {:else}
         <li>{t("preferences.agents.noClis")}</li>

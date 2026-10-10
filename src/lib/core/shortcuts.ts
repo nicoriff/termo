@@ -25,6 +25,7 @@ export type ShortcutAction =
   | "newCodex"
   | "newGemini"
   | "newCopilot"
+  | "newGrok"
   | "favoriteTab"
   | "toggleExplorer"
   | "toggleAgents"
@@ -48,6 +49,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newCodex",
   "newGemini",
   "newCopilot",
+  "newGrok",
   "favoriteTab",
   "toggleExplorer",
   "toggleAgents",
@@ -74,6 +76,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newCodex: "shortcuts.labels.newCodex",
   newGemini: "shortcuts.labels.newGemini",
   newCopilot: "shortcuts.labels.newCopilot",
+  newGrok: "shortcuts.labels.newGrok",
   favoriteTab: "shortcuts.labels.favoriteTab",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
   toggleAgents: "shortcuts.labels.toggleAgents",
@@ -248,6 +251,8 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   // Not G (Agents has it) nor I (the dev tools in debug builds).
   newGemini: { mac: "meta+shift+j", other: "ctrl+shift+j" },
   newCopilot: { mac: "meta+shift+o", other: "ctrl+shift+o" },
+  // K, the letter Grok ends in: G is the agents panel.
+  newGrok: { mac: "meta+shift+k", other: "ctrl+shift+k" },
   // F for favorite: adds the focused tab's conversation, or edits it.
   favoriteTab: { mac: "meta+shift+f", other: "ctrl+shift+f" },
   // Not plain Ctrl+B: the shell uses it to move the cursor back.

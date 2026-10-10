@@ -61,7 +61,8 @@
   let dialogEl: HTMLDivElement | undefined = $state();
 
   let hookStatus = $state<AgentHooksStatus | null>(null);
-  let hookChoice = $state<Record<ToolId, boolean>>({ claude: false, codex: false, gemini: false, copilot: false });
+  const noHooks = () => Object.fromEntries(TOOL_IDS.map((tool) => [tool, false])) as Record<ToolId, boolean>;
+  let hookChoice = $state<Record<ToolId, boolean>>(noHooks());
   let hooksBusy = $state(false);
   let hooksError = $state<string | null>(null);
   // Until the user flips one, the proposal follows what's found.
@@ -72,7 +73,7 @@
     newTabOptions.refresh();
     void getAgentHooksStatus()
       .then((status) => (hookStatus = status))
-      .catch(() => (hookStatus = { claude: false, codex: false, gemini: false, copilot: false }));
+      .catch(() => (hookStatus = noHooks()));
   });
 
   // Proposed: the hooks already there, plus the agents found on this machine.

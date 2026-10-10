@@ -20,12 +20,12 @@ use crate::i18n::{tr, Msg};
 const MAX_FAVORITES: usize = 200;
 /// Longer than any sensible name, short enough for a tab.
 const MAX_NAME_CHARS: usize = 80;
-const TOOLS: &[&str] = &["claude", "codex", "gemini", "copilot"];
+const TOOLS: &[&str] = &["claude", "codex", "gemini", "copilot", "grok"];
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentFavorite {
-    /// "claude", "codex", "gemini" or "copilot", matching ToolId.
+    /// "claude", "codex", "gemini", "copilot" or "grok", matching ToolId.
     pub tool: String,
     /// The agent's own session id — what its resume command takes.
     pub agent_session_id: String,

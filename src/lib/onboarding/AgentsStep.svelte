@@ -31,13 +31,17 @@
     codex: "#10a37f",
     gemini: "#4796e3",
     copilot: "#8957e5",
+    // Black and white, like its mark: whatever the text is.
+    grok: "currentColor",
   };
-  /** Where each agent sits around Termo, in percent of the diagram. */
+  /** Where each agent sits around Termo, in percent of the diagram: the five
+   * points of a pentagon, its tip up. */
   const SPOTS: Record<ToolId, { x: number; y: number }> = {
-    claude: { x: 17, y: 20 },
-    codex: { x: 83, y: 20 },
-    gemini: { x: 17, y: 80 },
-    copilot: { x: 83, y: 80 },
+    claude: { x: 14, y: 38 },
+    codex: { x: 86, y: 38 },
+    gemini: { x: 27, y: 86 },
+    copilot: { x: 73, y: 86 },
+    grok: { x: 50, y: 11 },
   };
   /** What a hook reports, in the order a turn goes through them. */
   const REPORTS = ["running", "awaiting", "finished"] as const;

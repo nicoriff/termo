@@ -7,6 +7,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolId, string> = {
   codex: "Codex",
   gemini: "Gemini CLI",
   copilot: "Copilot CLI",
+  grok: "Grok",
 };
 
 /** Which agents report their plan's usage: Claude Code through its status
@@ -17,4 +18,5 @@ export const REPORTS_PLAN_USAGE: Record<ToolId, boolean> = {
   codex: true,
   gemini: false,
   copilot: false,
+  grok: false,
 };

@@ -38,10 +38,12 @@ pub enum AgentTool {
     Codex,
     Gemini,
     Copilot,
+    Grok,
 }
 
 impl AgentTool {
-    const ALL: [AgentTool; 4] = [AgentTool::Claude, AgentTool::Codex, AgentTool::Gemini, AgentTool::Copilot];
+    const ALL: [AgentTool; 5] =
+        [AgentTool::Claude, AgentTool::Codex, AgentTool::Gemini, AgentTool::Copilot, AgentTool::Grok];
 
     fn name(self) -> &'static str {
         match self {
@@ -49,6 +51,7 @@ impl AgentTool {
             AgentTool::Codex => "codex",
             AgentTool::Gemini => "gemini",
             AgentTool::Copilot => "copilot",
+            AgentTool::Grok => "grok",
         }
     }
 
@@ -101,6 +104,19 @@ impl AgentTool {
                 "errorOccurred",
                 "sessionEnd",
             ],
+            // Grok takes Claude Code's names. It has no PermissionRequest:
+            // a tool waiting on the user comes as a Notification.
+            AgentTool::Grok => &[
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "Notification",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "Stop",
+                "StopFailure",
+                "SessionEnd",
+            ],
         }
     }
 
@@ -117,13 +133,37 @@ impl AgentTool {
             AgentTool::Gemini => home.join(".gemini").join("settings.json"),
             // A folder of hook files, one per owner: this one is Termo's alone.
             AgentTool::Copilot => crate::agents::spec::copilot_home(&home).join("hooks").join("termo.json"),
+            // The same for Grok, which merges every file in its hooks folder.
+            AgentTool::Grok => home.join(".grok").join("hooks").join("termo.json"),
         })
     }
 
     /// Whether the hooks file is Termo's own, written whole, rather than the
     /// tool's shared settings that Termo's entries are merged into.
     fn owns_file(self) -> bool {
-        self == AgentTool::Copilot
+        matches!(self, AgentTool::Copilot | AgentTool::Grok)
+    }
+
+    /// What goes in a hooks file that is Termo's own.
+    fn own_root(self, exe: &Path) -> Map<String, Value> {
+        match self {
+            AgentTool::Copilot => copilot_root(exe),
+            // Claude Code's shape, which is Grok's too.
+            _ => {
+                let mut root = Map::new();
+                let _ = add_ours(&mut root, self, exe);
+                root
+            }
+        }
+    }
+
+    /// Whether a file by the name of Termo's own is in fact Termo's: one the
+    /// user made by that name is left alone.
+    fn is_own_file(self, root: &Map<String, Value>) -> bool {
+        match self {
+            AgentTool::Copilot => is_copilot_file_ours(root),
+            _ => is_only_ours(root),
+        }
     }
 }
 
@@ -150,7 +190,9 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
 fn call_prefix(tool: AgentTool) -> &'static str {
     match tool {
         AgentTool::Codex | AgentTool::Gemini | AgentTool::Copilot => "& ",
-        AgentTool::Claude => "",
+        // Grok runs Claude Code's own hook entries as they are (it reads
+        // ~/.claude too), so it takes the command the way Claude Code does.
+        AgentTool::Claude | AgentTool::Grok => "",
     }
 }
 
@@ -289,6 +331,19 @@ fn has_any_ours(root: &Map<String, Value>) -> bool {
     })
 }
 
+/// Whether every hook in a file is Termo's, and there is at least one.
+fn is_only_ours(root: &Map<String, Value>) -> bool {
+    let groups: Vec<&Value> = root
+        .get("hooks")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|hooks| hooks.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .collect();
+    !groups.is_empty() && groups.iter().all(|group| is_our_group(group))
+}
+
 /// Copilot CLI's hook file, Termo's own (see AgentTool::owns_file): every
 /// event runs `termo --agent-hook copilot <event>`, through PowerShell on
 /// Windows and bash elsewhere — Copilot runs whichever field fits the
@@ -335,7 +390,7 @@ pub fn install(tool: AgentTool) -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     let file = tool.hooks_file()?;
     if tool.owns_file() {
-        return write_root(&file, &copilot_root(&exe));
+        return write_root(&file, &tool.own_root(&exe));
     }
     let mut root = read_root(&file)?;
     // One-time safety copy of the user's file before Termo first edits it.
@@ -355,7 +410,7 @@ pub fn uninstall(tool: AgentTool) -> anyhow::Result<()> {
     let mut root = read_root(&file)?;
     if tool.owns_file() {
         // Only a file that is Termo's: one by that name the user made stays.
-        if is_copilot_file_ours(&root) {
+        if tool.is_own_file(&root) {
             fs::remove_file(&file)?;
         }
         return Ok(());
@@ -367,7 +422,7 @@ pub fn uninstall(tool: AgentTool) -> anyhow::Result<()> {
 pub fn is_installed(tool: AgentTool) -> bool {
     tool.hooks_file().and_then(|file| read_root(&file)).is_ok_and(|root| {
         if tool.owns_file() {
-            is_copilot_file_ours(&root)
+            tool.is_own_file(&root)
         } else {
             has_ours(&root, tool)
         }
@@ -395,8 +450,8 @@ pub fn refresh_installed(app: &tauri::AppHandle) {
             continue;
         };
         if tool.owns_file() {
-            let updated = copilot_root(&exe);
-            if is_copilot_file_ours(&root) && updated != root {
+            let updated = tool.own_root(&exe);
+            if tool.is_own_file(&root) && updated != root {
                 let _ = write_root(&file, &updated);
             }
             continue;
@@ -421,6 +476,11 @@ pub fn run_hook_cli(tool: &str, event: &str) {
     else {
         return;
     };
+    let Some(tool) = reporting_tool(tool, std::env::var_os("GROK_HOOK_EVENT").is_some(), || {
+        is_installed(AgentTool::Grok)
+    }) else {
+        return;
+    };
     let dir = Path::new(&dir);
     // Codex has no status line to chain onto, so its plan usage is read from
     // the rollout each event points at (see codex_usage).
@@ -430,6 +490,18 @@ pub fn run_hook_cli(tool: &str, event: &str) {
         }
     }
     let _ = append_event(dir, &session, tool, event, &input);
+}
+
+/// Which agent an event is really from, or None when it's a repeat to drop.
+/// Grok runs Claude Code's hooks as well as its own (it reads ~/.claude for
+/// compatibility), so Termo's Claude entries fire inside a Grok session with
+/// "claude" on their command line: there the session is Grok's. With Termo's
+/// own Grok hooks installed too, those already reported it.
+fn reporting_tool<'a>(tool: &'a str, under_grok: bool, grok_hooks_installed: impl FnOnce() -> bool) -> Option<&'a str> {
+    if !under_grok || tool == AgentTool::Grok.name() {
+        return Some(tool);
+    }
+    (!grok_hooks_installed()).then_some(AgentTool::Grok.name())
 }
 
 fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str) -> std::io::Result<()> {
@@ -449,7 +521,11 @@ fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str)
     // Only Notification needs a field from the payload body; large payloads
     // (tool results) never touch the file.
     let detail = if event == "Notification" {
-        string_at("notification_type")
+        // Grok's payloads are camelCase.
+        match string_at("notification_type") {
+            kind if kind.is_empty() => string_at("notificationType"),
+            kind => kind,
+        }
     } else {
         String::new()
     };
@@ -689,6 +765,51 @@ mod tests {
         .unwrap();
         assert!(!is_copilot_file_ours(&users));
         assert!(!is_copilot_file_ours(&Map::new()));
+    }
+
+    #[test]
+    fn grok_hook_file_is_termos_own_in_claude_codes_shape() {
+        let root = AgentTool::Grok.own_root(exe());
+        for event in AgentTool::Grok.events() {
+            let command = root["hooks"][*event][0]["hooks"][0]["command"].as_str().unwrap();
+            assert!(command.ends_with(&format!("--agent-hook grok {event}")), "{command}");
+        }
+        assert!(AgentTool::Grok.is_own_file(&root));
+        assert!(has_ours(&root, AgentTool::Grok));
+    }
+
+    #[test]
+    fn a_grok_hook_file_with_the_users_hooks_is_not_ours() {
+        let mut mixed = AgentTool::Grok.own_root(exe());
+        mixed["hooks"]["Stop"].as_array_mut().unwrap().push(json!({ "hooks": [{ "type": "command", "command": "say done" }] }));
+        assert!(!AgentTool::Grok.is_own_file(&mixed));
+        assert!(!AgentTool::Grok.is_own_file(&Map::new()));
+    }
+
+    #[test]
+    fn claude_codes_hooks_running_under_grok_report_grok_once() {
+        // Not under Grok: whatever the command line says.
+        assert_eq!(reporting_tool("claude", false, || panic!("not asked")), Some("claude"));
+        // Grok's own hook, under Grok.
+        assert_eq!(reporting_tool("grok", true, || panic!("not asked")), Some("grok"));
+        // Claude Code's hook run by Grok: the session is Grok's...
+        assert_eq!(reporting_tool("claude", true, || false), Some("grok"));
+        // ...and already reported when Grok's own hooks are installed.
+        assert_eq!(reporting_tool("claude", true, || true), None);
+    }
+
+    #[test]
+    fn grok_payloads_are_camel_case_too() {
+        let dir = temp_dir();
+        let payload = r#"{"sessionId":"abc-1","cwd":"E:/proj","notificationType":"permission_prompt"}"#;
+        append_event(&dir, "s1", "grok", "Notification", payload).unwrap();
+        let mut offset = 0;
+        let updates = read_new_lines(&dir.join("s1.jsonl"), &mut offset);
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].tool, "grok");
+        assert_eq!(updates[0].status, Some(AgentStatus::Awaiting));
+        assert_eq!(updates[0].agent_session_id.as_deref(), Some("abc-1"));
     }
 
     #[test]

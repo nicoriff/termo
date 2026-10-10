@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.18.0",
+    "date": "2026-10-09",
+    "es": [
+      "**Grok**, la CLI de xAI, junto a los demás agentes: se abre en una pestaña desde el «+», la paleta o Ctrl+Shift+K (⌘⇧K en macOS), con sus hooks (en ~/.grok/hooks/termo.json), avisos, sonidos propios y su página en Preferencias. Las extensiones instalan servidores MCP también en Grok, y «agentes desde cualquier consola» lo incluye.",
+      "Una sesión de Grok ya no aparece como Claude Code: Grok ejecuta también los hooks de Claude Code, y Termo ahora reconoce de quién es la sesión."
+    ],
+    "en": [
+      "**Grok**, xAI's CLI, alongside the other agents: it opens in a tab from the “+”, the palette or Ctrl+Shift+K (⌘⇧K on macOS), with its hooks (in ~/.grok/hooks/termo.json), notices, its own sounds and its page in Preferences. Extensions install MCP servers into Grok too, and “agents from any console” includes it.",
+      "A Grok session no longer shows up as Claude Code: Grok runs Claude Code's hooks as well, and Termo now tells whose session it is."
+    ]
+  },
+  {
     "version": "0.17.0",
     "date": "2026-10-09",
     "es": [

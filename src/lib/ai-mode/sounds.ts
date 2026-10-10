@@ -39,6 +39,7 @@ export const DEFAULT_SOUNDS: Record<ToolId, Record<SoundEvent, SoundChoice>> = {
   codex: { awaiting: "pop", finished: "marimba" },
   gemini: { awaiting: "doorbell", finished: "harp" },
   copilot: { awaiting: "knock", finished: "success" },
+  grok: { awaiting: "blip", finished: "bell" },
 };
 
 export function isSoundChoice(value: string): value is SoundChoice {

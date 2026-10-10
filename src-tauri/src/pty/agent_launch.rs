@@ -30,6 +30,7 @@ fn target(tool: &str) -> Option<AgentTarget> {
         "codex" => AgentTarget::Codex,
         "gemini" => AgentTarget::Gemini,
         "copilot" => AgentTarget::Copilot,
+        "grok" => AgentTarget::Grok,
         _ => return None,
     })
 }
