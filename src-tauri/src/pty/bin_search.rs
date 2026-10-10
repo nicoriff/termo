@@ -8,7 +8,7 @@
 //! `~/.local/bin` — so PATH alone finds neither.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 /// Folders the user chose to install an agent's CLI into (see
 /// marketplace/agent_install.rs): on no PATH but the one Termo gives its
@@ -23,11 +23,43 @@ pub fn extra_dirs() -> Vec<PathBuf> {
     EXTRA_DIRS.lock().unwrap().clone()
 }
 
+/// The PATH the user's login shell ends up with (profile files, nvm and the
+/// like), which a GUI app doesn't inherit: Terminal.app opens login shells,
+/// Termo's own consoles don't. Asked of the shell once, since it runs the
+/// user's startup files; None where there's nothing to ask (Windows) or the
+/// shell doesn't answer in time.
+#[cfg(not(windows))]
+pub fn login_path() -> Option<std::ffi::OsString> {
+    static LOGIN_PATH: OnceLock<Option<std::ffi::OsString>> = OnceLock::new();
+    LOGIN_PATH
+        .get_or_init(|| {
+            use std::os::unix::ffi::OsStringExt;
+            let shell = std::env::var("SHELL").ok().filter(|shell| std::path::Path::new(shell).exists())?;
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                // Markers: an interactive shell may print a banner of its own.
+                let output = std::process::Command::new(shell)
+                    .args(["-l", "-i", "-c", "printf '<<termo-path>>%s<<termo-path>>' \"$PATH\""])
+                    .stdin(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .output();
+                let _ = tx.send(output);
+            });
+            let output = rx.recv_timeout(std::time::Duration::from_secs(5)).ok()?.ok()?;
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            let path = text.split("<<termo-path>>").nth(1)?.to_string();
+            (!path.is_empty()).then(|| std::ffi::OsString::from_vec(path.into_bytes()))
+        })
+        .clone()
+}
+
 /// PATH, plus the directories a GUI app's PATH is missing.
 pub fn candidate_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
         .unwrap_or_default();
+    #[cfg(not(windows))]
+    dirs.extend(login_path().iter().flat_map(std::env::split_paths));
     dirs.extend(extra_dirs());
     // A PATH is fixed when the process starts: a CLI installed since (or
     // while Explorer still had the old PATH) is only found where installers

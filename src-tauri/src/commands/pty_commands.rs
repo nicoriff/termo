@@ -123,6 +123,19 @@ fn spawn_console(
     let config = store::load(app);
     let mut args = args;
     let mut env = bash_color_env(&path, config.bash_prompt_colors);
+    // What a login shell would have as PATH, as Terminal.app's consoles do:
+    // the shell here isn't one, so it would never read the profile files
+    // that put `claude`, node or Homebrew on it.
+    #[cfg(not(windows))]
+    if let Some(login) = crate::pty::bin_search::login_path() {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let dirs = std::env::split_paths(&login).chain(std::env::split_paths(&inherited));
+        let mut seen = std::collections::HashSet::new();
+        let dirs: Vec<_> = dirs.filter(|dir| seen.insert(dir.clone())).collect();
+        if let Ok(joined) = std::env::join_paths(dirs) {
+            env.push(("PATH", joined.to_string_lossy().into_owned()));
+        }
+    }
     if let Ok(dir) = agent_hooks::events_dir(app) {
         env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
     }

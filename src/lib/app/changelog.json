@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.18.1",
+    "date": "2026-10-10",
+    "es": [
+      "Las consolas de Termo ahora arrancan con el mismo PATH que Terminal.app (el de tu shell de login), así que `claude`, `grok` y lo instalado con nvm o Homebrew se reconocen al escribirlos en macOS y Linux."
+    ],
+    "en": [
+      "Termo's consoles now start with the same PATH as Terminal.app (your login shell's), so `claude`, `grok` and anything installed with nvm or Homebrew are found when typed on macOS and Linux."
+    ]
+  },
+  {
     "version": "0.18.0",
     "date": "2026-10-10",
     "es": [
