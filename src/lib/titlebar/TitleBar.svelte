@@ -75,10 +75,6 @@
   });
 
   onDestroy(() => unlisten?.());
-
-  function handleDoubleClick() {
-    void toggleMaximize();
-  }
 </script>
 
 <!-- On macOS the window uses the native close/minimize/zoom buttons, drawn
@@ -92,7 +88,6 @@
   class:mac-fullscreen={isMac && fullscreen}
   class:linux={isLinux}
   data-tauri-drag-region
-  ondblclick={handleDoubleClick}
 >
   <!-- Linux, like GNOME: window buttons where the desktop's setting puts
        them, the menu on the other side, the title centered. -->
@@ -108,7 +103,7 @@
     </div>
   {/if}
 
-  <div class="titlebar-brand" data-tauri-drag-region>
+  <div class="titlebar-brand" data-tauri-drag-region="deep">
     <img class="titlebar-icon" src="/app-icon.png" alt="" />
     <span class="titlebar-title">{title}</span>
   </div>
