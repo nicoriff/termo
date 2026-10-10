@@ -405,6 +405,7 @@ export const en: Messages = {
         openai: "OpenAI API (through {cli})",
         google: "Google Gemini API (through {cli})",
         github: "GitHub Copilot service (through {cli})",
+        xai: "xAI API (through {cli})",
         local: "{cli}, on this computer",
       },
       kind: {
@@ -1108,6 +1109,7 @@ export const en: Messages = {
         codexHint: "OpenAI's agent. Runs its commands inside a sandbox.",
         geminiHint: "Google's agent. To only look it uses its plan mode, which only reads.",
         copilotHint: "GitHub's agent. Its permissions are granted tool by tool.",
+        grokHint: "xAI's agent. Termo answers each permission it asks for, by what the agent may do.",
         notInstalled: "Not installed on this computer.",
         workDir: "Working folder",
         workDirHint: "Where the agent works: one of your projects, or a folder of its own, kept apart.",
@@ -1306,7 +1308,7 @@ export const en: Messages = {
       },
       orchestration: {
         title: "Orchestration",
-        body: "Describe a complex piece of development and an orchestrator builds the team: it hands the tasks to Claude Code, Codex, Gemini CLI or Copilot CLI agents, each with its own model. You see the plan and its cost, and nothing runs until you approve it.",
+        body: "Describe a complex piece of development and an orchestrator builds the team: it hands the tasks to Claude Code, Codex, Gemini CLI, Copilot CLI or Grok agents, each with its own model. You see the plan and its cost, and nothing runs until you approve it.",
       },
       sampleAgent: "Change reviewer",
       samplePrompt: "Add Google sign-in, with its tests",

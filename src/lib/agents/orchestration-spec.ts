@@ -27,6 +27,7 @@ export const ENGINE_NAMES: Record<AgentEngine, string> = {
   codex: "Codex",
   gemini: "Gemini CLI",
   copilot: "Copilot CLI",
+  grok: "Grok",
 };
 
 export const STATUS_KEYS: Record<OrchestrationStatus, MessageKey> = {

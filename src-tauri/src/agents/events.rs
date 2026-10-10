@@ -1,7 +1,8 @@
 //! Turning each CLI's machine-readable output into one shape of event:
 //! Claude's `--output-format stream-json`, Codex's `exec --json`, Gemini
 //! CLI's `--output-format stream-json` and Copilot CLI's `--output-format
-//! json` all print one JSON object per line, in different vocabularies.
+//! json` all print one JSON object per line, in different vocabularies; so
+//! does Grok, whose lines are the messages of an ACP session (see acp.rs).
 
 use std::collections::HashSet;
 
@@ -136,6 +137,10 @@ pub fn describe_input(input: &serde_json::Value) -> String {
 /// the end.
 pub struct Parser {
     engine: Engine,
+    /// Grok: turns cut short so far (see acp::MAX_REFUSED_TURNS).
+    cut_short: u32,
+    /// Grok: what the run's turns cost so far, in its ticks.
+    spent_ticks: f64,
     /// Gemini CLI's answer so far, since the last tool call.
     pending: String,
     /// The errors the CLI reported, to explain a failure (see diagnose.rs).
@@ -148,7 +153,15 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(engine: Engine) -> Self {
-        Self { engine, pending: String::new(), errors: Vec::new(), model: String::new(), warned: HashSet::new() }
+        Self {
+            engine,
+            cut_short: 0,
+            spent_ticks: 0.0,
+            pending: String::new(),
+            errors: Vec::new(),
+            model: String::new(),
+            warned: HashSet::new(),
+        }
     }
 
     /// The events in one line of output (none for the many bookkeeping
@@ -162,6 +175,7 @@ impl Parser {
             Engine::Codex => parse_codex(&value, at),
             Engine::Gemini => self.gemini(&value, at),
             Engine::Copilot => parse_copilot(&value, at),
+            Engine::Grok => self.grok(&value, at),
         };
         events.extend(self.notice(&value, at));
         // What it reported as errors, kept to explain a failure.
@@ -275,6 +289,77 @@ impl Parser {
                 }
                 let answer = std::mem::take(&mut self.pending);
                 events.push(event(EventKind::Result, "", answer.trim().to_string(), at));
+            }
+            _ => {}
+        }
+        (events, outcome)
+    }
+}
+
+/// What Grok bills a turn at comes in "ticks": ten thousand million to the
+/// dollar.
+const GROK_TICKS_PER_USD: f64 = 1e10;
+
+impl Parser {
+    /// Grok's ACP messages. Like Gemini CLI's, its answer streams in pieces:
+    /// gathered into one Text event whenever it stops to use a tool, and
+    /// into the Result when the turn's reply comes.
+    fn grok(&mut self, value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
+        let mut events = Vec::new();
+        let mut outcome = Outcome::default();
+        let text = |pointer: &str| value.pointer(pointer).and_then(|text| text.as_str()).unwrap_or("");
+        match text("/method") {
+            "session/update" => match text("/params/update/sessionUpdate") {
+                "agent_message_chunk" => self.pending.push_str(text("/params/update/content/text")),
+                "tool_call" => {
+                    events.extend(self.flush(at));
+                    let detail = value.pointer("/params/update/rawInput").map(describe_input).unwrap_or_default();
+                    events.push(event(EventKind::Tool, text("/params/update/title"), detail, at));
+                }
+                "tool_call_update" if text("/params/update/status") == "failed" => {
+                    let said = text("/params/update/content/0/content/text");
+                    let message = if said.is_empty() { text("/params/update/title") } else { said };
+                    events.push(event(EventKind::Stderr, "", clip(message, MAX_DETAIL), at));
+                }
+                _ => {}
+            },
+            // Each turn says what it cost; the run's total goes with its answer.
+            "_x.ai/session_notification" if text("/params/update/sessionUpdate") == "turn_completed" => {
+                let ticks = value.pointer("/params/update/usage/costUsdTicks").and_then(|ticks| ticks.as_f64());
+                self.spent_ticks += ticks.unwrap_or(0.0);
+            }
+            // A reply to one of Termo's requests (acp.rs sends them).
+            "" => {
+                if let Some(message) = value.pointer("/error/message").and_then(|message| message.as_str()) {
+                    outcome.failed = true;
+                    events.push(event(EventKind::Stderr, "", message.to_string(), at));
+                } else if value.pointer("/result/agentCapabilities").is_some() {
+                    // Its answer to `initialize`: what it is and what it runs.
+                    let model = text("/result/_meta/modelState/currentModelId").to_string();
+                    self.model.clone_from(&model);
+                    let session = SessionInfo {
+                        engine: self.engine,
+                        version: text("/result/_meta/agentVersion").to_string(),
+                        model,
+                        ..SessionInfo::default()
+                    };
+                    events.push(RunEvent { kind: EventKind::Session, at, session: Some(session), ..RunEvent::default() });
+                } else if let Some(reason) = value.pointer("/result/stopReason").and_then(|reason| reason.as_str()) {
+                    // The turn's own reply. One cut short by a permission
+                    // Termo refused isn't the end: acp.rs sends it on, up to
+                    // a point.
+                    self.cut_short += u32::from(reason == super::acp::CANCELLED);
+                    if reason == super::acp::CANCELLED && self.cut_short <= super::acp::MAX_REFUSED_TURNS {
+                        events.extend(self.flush(at));
+                    } else {
+                        // Anything but a normal end (the model refusing, the
+                        // token or turn limit) left it unfinished.
+                        outcome.failed = reason != "end_turn";
+                        outcome.cost_usd = (self.spent_ticks > 0.0).then(|| self.spent_ticks / GROK_TICKS_PER_USD);
+                        let answer = std::mem::take(&mut self.pending);
+                        events.push(event(EventKind::Result, "", answer.trim().to_string(), at));
+                    }
+                }
             }
             _ => {}
         }
@@ -510,6 +595,70 @@ mod tests {
         // Output that ends without a result keeps what was said.
         parser.line(r#"{"type":"message","role":"assistant","content":"a medias","delta":true}"#, 1);
         assert_eq!(parser.finish(2), vec![event(EventKind::Text, "", "a medias".into(), 2)]);
+    }
+
+    /// Grok, over ACP: its answer comes in chunks, cut wherever it stops for
+    /// a tool, and the turn's reply closes it. Lines as it really sends them.
+    #[test]
+    fn grok_gathers_its_answer_around_tools_and_reports_the_cost() {
+        let mut parser = Parser::new(Engine::Grok);
+        let mut events = Vec::new();
+        let mut cost = None;
+        let mut failed = false;
+        for line in [
+            r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{},"_meta":{"agentVersion":"1.0.50","modelState":{"currentModelId":"grok-4.7"}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hmm"}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Voy a "}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"crearlo."}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"c0","title":"search_replace","rawInput":{"file_path":"a.txt","new_string":"hi","old_string":""}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"c0","status":"completed"}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"ok"}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"_x.ai/session_notification","params":{"update":{"sessionUpdate":"turn_completed","stop_reason":"end_turn","usage":{"costUsdTicks":272760000}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"_x.ai/session_notification","params":{"update":{"sessionUpdate":"turn_completed","stop_reason":"end_turn","usage":{"costUsdTicks":100000000}}}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"result":{"stopReason":"end_turn"}}"#,
+        ] {
+            let (mut found, outcome) = parser.line(line, 1);
+            events.append(&mut found);
+            cost = outcome.cost_usd.or(cost);
+            failed |= outcome.failed;
+        }
+        let said: Vec<(EventKind, &str, &str)> =
+            events.iter().map(|event| (event.kind, event.tool.as_str(), event.text.as_str())).collect();
+        assert_eq!(
+            said,
+            [
+                (EventKind::Session, "", ""),
+                (EventKind::Text, "", "Voy a crearlo."),
+                (EventKind::Tool, "search_replace", "a.txt"),
+                (EventKind::Result, "", "ok"),
+            ]
+        );
+        let session = events[0].session.as_ref().unwrap();
+        assert_eq!((session.version.as_str(), session.model.as_str()), ("1.0.50", "grok-4.7"));
+        assert_eq!(parser.model, "grok-4.7");
+        assert!((cost.unwrap() - 0.037276).abs() < 1e-9);
+        assert!(!failed);
+    }
+
+    #[test]
+    fn grok_turns_that_end_early_or_are_refused_fail() {
+        let limit = r#"{"jsonrpc":"2.0","id":4,"result":{"stopReason":"max_tokens"}}"#;
+        assert!(parse_line(Engine::Grok, limit, 1).1.failed);
+        // Cut short by a refused permission: sent on, until it's too many.
+        let cancelled = r#"{"jsonrpc":"2.0","id":4,"result":{"stopReason":"cancelled"}}"#;
+        let mut parser = Parser::new(Engine::Grok);
+        for _ in 0..crate::agents::acp::MAX_REFUSED_TURNS {
+            assert_eq!(parser.line(cancelled, 1), (Vec::new(), Outcome::default()));
+        }
+        let (events, outcome) = parser.line(cancelled, 1);
+        assert!(outcome.failed);
+        assert_eq!(events[0].kind, EventKind::Result);
+        let refused = r#"{"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"Authentication required"}}"#;
+        let (events, outcome) = parse_line(Engine::Grok, refused, 1);
+        assert!(outcome.failed);
+        assert_eq!(events[0], event(EventKind::Stderr, "", "Authentication required".into(), 1));
+        let tool = r#"{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","status":"failed","title":"Execute `x`","content":[{"type":"content","content":{"type":"text","text":"denied"}}]}}}"#;
+        assert_eq!(parse_line(Engine::Grok, tool, 1).0[0], event(EventKind::Stderr, "", "denied".into(), 1));
     }
 
     /// Copilot CLI: what it says and the tools it asks for come in one

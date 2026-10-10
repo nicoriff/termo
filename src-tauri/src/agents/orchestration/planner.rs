@@ -28,7 +28,7 @@ const TIMEOUT: Duration = Duration::from_secs(600);
 /// Room over the estimate, so a plan that goes a little over isn't stopped.
 const BUDGET_MARGIN: f64 = 1.3;
 
-pub const ENGINES: [Engine; 4] = [Engine::Claude, Engine::Codex, Engine::Gemini, Engine::Copilot];
+pub const ENGINES: [Engine; 5] = [Engine::Claude, Engine::Codex, Engine::Gemini, Engine::Copilot, Engine::Grok];
 
 pub fn engine_name(engine: Engine) -> &'static str {
     match engine {
@@ -36,6 +36,7 @@ pub fn engine_name(engine: Engine) -> &'static str {
         Engine::Codex => "codex",
         Engine::Gemini => "gemini",
         Engine::Copilot => "copilot",
+        Engine::Grok => "grok",
     }
 }
 
@@ -69,6 +70,7 @@ pub fn describe_catalog(catalog: &Catalog) -> String {
             Engine::Codex => "Codex CLI (OpenAI)",
             Engine::Gemini => "Gemini CLI (Google)",
             Engine::Copilot => "GitHub Copilot CLI (billed per request, no token price)",
+            Engine::Grok => "Grok (xAI)",
         };
         text.push_str(&format!("- engine \"{}\" — {provider}\n", engine_name(entry.engine)));
         if entry.models.is_empty() {
@@ -94,7 +96,7 @@ fn agent_schema() -> serde_json::Value {
             "name": { "type": "string" },
             "icon": { "type": "string" },
             "specialty": { "type": "string" },
-            "engine": { "type": "string", "enum": ["claude", "codex", "gemini", "copilot"] },
+            "engine": { "type": "string", "enum": ["claude", "codex", "gemini", "copilot", "grok"] },
             "model": { "type": "string" },
             "whyModel": { "type": "string" },
             "autonomy": { "type": "string", "enum": ["read", "edit", "run"] },

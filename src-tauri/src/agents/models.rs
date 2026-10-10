@@ -108,12 +108,13 @@ pub fn available(engine: Engine) -> Vec<ModelOption> {
         Engine::Codex => codex_home().map(|home| home.join("models_cache.json")),
         Engine::Gemini => return gemini_models(),
         Engine::Copilot => return copilot_models(),
+        Engine::Grok => return grok_models(),
     };
     let Some(text) = file.and_then(|file| std::fs::read_to_string(file).ok()) else { return Vec::new() };
     match engine {
         Engine::Claude => parse_claude(&text),
         Engine::Codex => parse_codex(&text),
-        Engine::Gemini | Engine::Copilot => Vec::new(),
+        Engine::Gemini | Engine::Copilot | Engine::Grok => Vec::new(),
     }
 }
 
@@ -144,9 +145,43 @@ fn copilot_models() -> Vec<ModelOption> {
     }]
 }
 
+/// Grok saves no list either, but tells: `grok models` prints what the
+/// account has, its default marked. Empty when it isn't installed or logged
+/// in.
+fn grok_models() -> Vec<ModelOption> {
+    use crate::marketplace::{agent_cli, model::AgentTarget};
+    agent_cli::locate(AgentTarget::Grok, None)
+        .and_then(|bin| agent_cli::run(&bin, &["models"]).ok())
+        .map(|output| parse_grok(&output))
+        .unwrap_or_default()
+}
+
+/// `grok models`' list: one model a line, after a `*` (the default) or a `-`.
+fn parse_grok(output: &str) -> Vec<ModelOption> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let main = line.starts_with("* ");
+            let id = line.strip_prefix("* ").or_else(|| line.strip_prefix("- "))?.split_whitespace().next()?;
+            Some(ModelOption { id: id.into(), name: id.into(), description: String::new(), main, note: String::new() })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn groks_own_listing_gives_its_models_and_which_is_the_default() {
+        let output = "You are logged in with grok.com.\n\nDefault model: grok-4.7\n\nAvailable models:\n  * grok-4.7 (default)\n  - grok-4.5\n";
+        let models = parse_grok(output);
+        let ids: Vec<&str> = models.iter().map(|model| model.id.as_str()).collect();
+        assert_eq!(ids, ["grok-4.7", "grok-4.5"]);
+        assert!(models[0].main && !models[1].main);
+        assert!(parse_grok("You are not authenticated.").is_empty());
+    }
 
     #[test]
     fn claudes_catalog_puts_the_main_models_first() {

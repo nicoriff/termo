@@ -404,6 +404,7 @@ export const es = {
         openai: "API de OpenAI (vía {cli})",
         google: "API de Google Gemini (vía {cli})",
         github: "Servicio de GitHub Copilot (vía {cli})",
+        xai: "API de xAI (vía {cli})",
         local: "{cli}, en esta computadora",
       },
       kind: {
@@ -1107,6 +1108,7 @@ export const es = {
         codexHint: "El agente de OpenAI. Corre sus comandos dentro de un sandbox.",
         geminiHint: "El agente de Google. Para mirar usa su modo plan, que solo lee.",
         copilotHint: "El agente de GitHub. Sus permisos se dan herramienta por herramienta.",
+        grokHint: "El agente de xAI. Termo le responde cada permiso que pide, según lo que el agente puede hacer.",
         notInstalled: "No está instalado en esta computadora.",
         workDir: "Carpeta de trabajo",
         workDirHint: "Dónde trabaja el agente: un proyecto tuyo, o una carpeta propia y aislada.",
@@ -1307,7 +1309,7 @@ export const es = {
       },
       orchestration: {
         title: "Orquestación",
-        body: "Describí un desarrollo complejo y un orquestador arma el equipo: reparte las tareas entre agentes de Claude Code, Codex, Gemini CLI o Copilot CLI, cada uno con su modelo. Ves el plan y su costo, y nada se ejecuta hasta que lo aprobás.",
+        body: "Describí un desarrollo complejo y un orquestador arma el equipo: reparte las tareas entre agentes de Claude Code, Codex, Gemini CLI, Copilot CLI o Grok, cada uno con su modelo. Ves el plan y su costo, y nada se ejecuta hasta que lo aprobás.",
       },
       sampleAgent: "Revisor de cambios",
       samplePrompt: "Agregá inicio de sesión con Google, con sus tests",

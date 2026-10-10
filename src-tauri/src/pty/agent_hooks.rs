@@ -180,7 +180,7 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
     )
 }
 
-/// Codex and Gemini CLI run their hooks through PowerShell on Windows, and there a statement
+/// Codex, Gemini CLI and Grok run their hooks through PowerShell on Windows, and there a statement
 /// that opens with a quoted path is an expression, not a command: the
 /// arguments after it are a syntax error ("Unexpected token"), so the hook
 /// never ran and Modo IA never heard from Codex. The call operator makes it
@@ -189,10 +189,10 @@ fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
 #[cfg(windows)]
 fn call_prefix(tool: AgentTool) -> &'static str {
     match tool {
-        AgentTool::Codex | AgentTool::Gemini | AgentTool::Copilot => "& ",
-        // Grok runs Claude Code's own hook entries as they are (it reads
-        // ~/.claude too), so it takes the command the way Claude Code does.
-        AgentTool::Claude | AgentTool::Grok => "",
+        // Grok too: Claude Code's entries, which it also runs (it reads
+        // ~/.claude), fail there with that very error.
+        AgentTool::Codex | AgentTool::Gemini | AgentTool::Copilot | AgentTool::Grok => "& ",
+        AgentTool::Claude => "",
     }
 }
 

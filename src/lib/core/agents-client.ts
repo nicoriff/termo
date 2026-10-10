@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Mirrors src-tauri/src/agents/spec.rs. */
-export type AgentEngine = "claude" | "codex" | "gemini" | "copilot";
+export type AgentEngine = "claude" | "codex" | "gemini" | "copilot" | "grok";
 export type AgentAutonomy = "read" | "edit" | "run";
 
 export interface McpServer {
@@ -312,7 +312,7 @@ export type RunEventKind =
   | "ended";
 
 /** Who answered with an error (see src-tauri/src/agents/diagnose.rs). */
-export type Provider = "anthropic" | "openai" | "google" | "github" | "local";
+export type Provider = "anthropic" | "openai" | "google" | "github" | "xai" | "local";
 
 export type FailureKind =
   | "auth"

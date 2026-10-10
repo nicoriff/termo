@@ -110,7 +110,9 @@ pub fn price_of(engine: Engine, model: &str) -> Option<Price> {
         Engine::Claude => (CLAUDE, CLAUDE_ALIASES),
         Engine::Codex => (CODEX, &[]),
         Engine::Gemini => (GEMINI, GEMINI_ALIASES),
-        Engine::Copilot => return None,
+        // Grok's token prices aren't in here: its runs report what they
+        // cost, and a plan with it shows no estimate.
+        Engine::Copilot | Engine::Grok => return None,
     };
     let id = aliases.iter().find(|(alias, _)| *alias == id).map_or(id, |(_, full)| *full);
     lookup(table, id)

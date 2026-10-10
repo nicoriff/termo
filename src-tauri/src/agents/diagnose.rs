@@ -23,6 +23,8 @@ pub enum Provider {
     Google,
     /// GitHub Copilot's service, through Copilot CLI.
     Github,
+    /// xAI's API, through Grok.
+    Xai,
     /// Nothing remote: the CLI itself, this computer, or Termo.
     #[default]
     Local,
@@ -90,6 +92,7 @@ pub fn provider_name(provider: Provider) -> &'static str {
         Provider::Openai => "OpenAI (Codex)",
         Provider::Google => "Google (Gemini CLI)",
         Provider::Github => "GitHub (Copilot CLI)",
+        Provider::Xai => "xAI (Grok)",
         Provider::Local => "CLI",
     }
 }
@@ -112,6 +115,7 @@ fn provider_of(engine: Engine) -> Provider {
         Engine::Codex => Provider::Openai,
         Engine::Gemini => Provider::Google,
         Engine::Copilot => Provider::Github,
+        Engine::Grok => Provider::Xai,
     }
 }
 

@@ -16,6 +16,7 @@ export const PROVIDER_KEYS: Record<Provider, MessageKey> = {
   openai: "agents.diagnosis.provider.openai",
   google: "agents.diagnosis.provider.google",
   github: "agents.diagnosis.provider.github",
+  xai: "agents.diagnosis.provider.xai",
   local: "agents.diagnosis.provider.local",
 };
 

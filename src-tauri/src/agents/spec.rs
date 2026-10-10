@@ -19,6 +19,7 @@ pub enum Engine {
     Codex,
     Gemini,
     Copilot,
+    Grok,
 }
 
 /// How far the agent may go on its own, in the terms the wizard explains:
@@ -519,6 +520,20 @@ pub struct Invocation {
     /// user's. Copilot CLI: its MCP servers, passed as
     /// `--additional-mcp-config @<file>`.
     pub settings: Option<String>,
+    /// Grok: the run as a session over ACP (see acp.rs), which is how it takes
+    /// its prompt and its MCP servers. Nothing goes through `stdin` then.
+    pub acp: Option<AcpRun>,
+}
+
+/// What an ACP session is opened with, and how its permission requests are
+/// answered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AcpRun {
+    pub prompt: String,
+    /// In ACP's shape: `name` in each, `headers` and `env` as lists of pairs.
+    pub mcp_servers: Vec<serde_json::Value>,
+    pub autonomy: Autonomy,
+    pub web: bool,
 }
 
 /// `system_prompt_file`: where the runner wrote the agent's logic (Claude
@@ -535,6 +550,7 @@ pub fn build_invocation(
         Engine::Codex => codex_invocation(spec, context, secrets),
         Engine::Gemini => gemini_invocation(spec, context, secrets),
         Engine::Copilot => copilot_invocation(spec, context, secrets),
+        Engine::Grok => grok_invocation(spec, context, secrets),
     }
 }
 
@@ -588,6 +604,7 @@ fn claude_invocation(
         stdin: with_context(&spec.task, context),
         env,
         settings: None,
+        acp: None,
     }
 }
 
@@ -699,6 +716,7 @@ fn codex_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<S
         stdin: codex_prompt(spec, context),
         env,
         settings: None,
+        acp: None,
     }
 }
 
@@ -750,6 +768,7 @@ fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<
         stdin: codex_prompt(spec, context),
         env,
         settings: Some(gemini_settings_json(spec)),
+        acp: None,
     }
 }
 
@@ -851,7 +870,68 @@ fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap
         stdin: codex_prompt(spec, context),
         env: Vec::new(),
         settings: copilot_mcp_config_json(spec, secrets),
+        acp: None,
     }
+}
+
+/// Grok runs as an ACP agent (`grok agent stdio`): the one way it takes MCP
+/// servers for a run. Its autonomy isn't a flag either: every edit and
+/// command comes back as a permission request, answered in acp.rs. `--no-leader`
+/// keeps the run in a process of its own, whatever the user's config shares.
+fn grok_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<String, String>) -> Invocation {
+    let mut args: Vec<String> = vec!["agent".into(), "--no-leader".into()];
+    if !spec.model.trim().is_empty() && is_valid_model(&spec.model) {
+        args.push("-m".into());
+        args.push(spec.model.trim().into());
+    }
+    args.push("stdio".into());
+    Invocation {
+        args,
+        stdin: String::new(),
+        env: Vec::new(),
+        settings: None,
+        acp: Some(AcpRun {
+            prompt: codex_prompt(spec, context),
+            mcp_servers: acp_servers(spec, secrets),
+            autonomy: spec.autonomy,
+            web: spec.tools.web,
+        }),
+    }
+}
+
+/// The run's MCP servers in ACP's shape, with the secrets they take already
+/// in place (the same checked configs Copilot CLI gets): a remote one by
+/// `type`, `url` and `headers`, a local one by `command`, `args` and `env`.
+pub fn acp_servers(spec: &AgentSpec, secrets: &HashMap<String, String>) -> Vec<serde_json::Value> {
+    let filled: serde_json::Value = copilot_mcp_config_json(spec, secrets)
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    let pairs = |map: Option<&serde_json::Value>| -> Vec<serde_json::Value> {
+        map.and_then(|map| map.as_object())
+            .into_iter()
+            .flatten()
+            .filter_map(|(name, value)| value.as_str().map(|value| serde_json::json!({ "name": name, "value": value })))
+            .collect()
+    };
+    usable_servers(spec)
+        .filter_map(|server| {
+            let config = filled.pointer(&format!("/mcpServers/{}", server.name.replace('~', "~0").replace('/', "~1")))?;
+            Some(match config.get("url").and_then(|url| url.as_str()) {
+                Some(url) => serde_json::json!({
+                    "type": config.get("type").and_then(|kind| kind.as_str()).unwrap_or("http"),
+                    "name": server.name,
+                    "url": url,
+                    "headers": pairs(config.get("headers")),
+                }),
+                None => serde_json::json!({
+                    "name": server.name,
+                    "command": config.get("command").and_then(|command| command.as_str()).unwrap_or_default(),
+                    "args": config.get("args").cloned().unwrap_or_else(|| serde_json::json!([])),
+                    "env": pairs(config.get("env")),
+                }),
+            })
+        })
+        .collect()
 }
 
 /// The run's MCP servers in Copilot CLI's shape, with the secrets they take
@@ -936,8 +1016,8 @@ pub fn copilot_foreign_server_args(spec: &AgentSpec, configs: &[serde_json::Valu
     names.into_iter().map(|name| format!("--disable-mcp-server={name}")).collect()
 }
 
-/// Codex, Gemini CLI and Copilot CLI have no flag for adding to the system
-/// prompt, so the logic goes ahead of the task in the prompt itself.
+/// Codex, Gemini CLI, Copilot CLI and Grok have no way of adding to the
+/// system prompt, so the logic goes ahead of the task in the prompt itself.
 fn codex_prompt(spec: &AgentSpec, context: Option<&str>) -> String {
     let task = with_context(&spec.task, context);
     if spec.instructions.trim().is_empty() {
@@ -1275,6 +1355,40 @@ mod tests {
     /// The rules after each `flag`, in order.
     fn values_after<'a>(args: &'a [String], flag: &str) -> Vec<&'a str> {
         args.windows(2).filter(|pair| pair[0] == flag).map(|pair| pair[1].as_str()).collect()
+    }
+
+    /// Grok: an ACP agent, with the prompt, the level and the servers in the
+    /// session rather than on the command line or stdin.
+    #[test]
+    fn grok_runs_as_an_acp_session_with_its_servers_filled_in() {
+        let mut agent = spec(Engine::Grok, Autonomy::Edit);
+        agent.model = "grok-4.7".into();
+        agent.tools.mcp.push(McpServer {
+            name: "remote".into(),
+            config: serde_json::json!({ "type": "http", "url": "https://x.example/mcp", "headers": { "X-Key": "${API_KEY}" } }),
+        });
+        agent.tools.mcp.push(McpServer {
+            name: "files".into(),
+            config: serde_json::json!({ "command": "npx", "args": ["-y", "@acme/files"], "env": { "TOKEN": "${API_KEY}" } }),
+        });
+        let secrets: HashMap<String, String> = [("API_KEY".to_string(), "s3cret".to_string())].into();
+        let run = build_invocation(&agent, None, None, &secrets);
+        assert_eq!(run.args, ["agent", "--no-leader", "-m", "grok-4.7", "stdio"]);
+        assert!(run.stdin.is_empty() && run.env.is_empty() && run.settings.is_none());
+        let acp = run.acp.unwrap();
+        assert_eq!(acp.prompt, "Sé breve\n\n---\n\nResumí los cambios");
+        assert_eq!((acp.autonomy, acp.web), (Autonomy::Edit, false));
+        assert_eq!(
+            acp.mcp_servers,
+            [
+                serde_json::json!({ "type": "http", "name": "remote", "url": "https://x.example/mcp",
+                    "headers": [{ "name": "X-Key", "value": "s3cret" }] }),
+                serde_json::json!({ "name": "files", "command": "npx", "args": ["-y", "@acme/files"],
+                    "env": [{ "name": "TOKEN", "value": "s3cret" }] }),
+            ]
+        );
+        // The other engines don't go through it.
+        assert!(build_invocation(&spec(Engine::Codex, Autonomy::Read), None, None, &no_secrets()).acp.is_none());
     }
 
     /// Copilot CLI: its tool permissions per level, never the shell below

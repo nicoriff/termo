@@ -68,6 +68,7 @@ pub(super) fn target(engine: Engine) -> AgentTarget {
         Engine::Codex => AgentTarget::Codex,
         Engine::Gemini => AgentTarget::Gemini,
         Engine::Copilot => AgentTarget::Copilot,
+        Engine::Grok => AgentTarget::Grok,
     }
 }
 
@@ -122,6 +123,10 @@ fn work_dir(root: &std::path::Path, spec: &AgentSpec) -> Result<PathBuf, String>
     }
     Ok(dir)
 }
+
+/// How long an ACP agent gets to exit once its turn is over and its input
+/// closed (Grok takes a few seconds) before it's ended.
+const ACP_EXIT_GRACE: Duration = Duration::from_secs(20);
 
 /// Ends the CLI and everything it started (shells, MCP servers).
 fn kill_tree(child: &mut Child) {
@@ -334,15 +339,30 @@ impl Runner {
             }
             tr(Msg::AgentRunFailed(&err.to_string()))
         })?;
+        // An ACP session (see acp.rs) is a conversation: its input stays open,
+        // in the hands of whoever reads its output, until the turn is over.
+        let mut conversation = None;
         if let Some(mut stdin) = child.stdin.take() {
-            let prompt = invocation.stdin;
-            // Its own thread: a CLI that writes before it has read all of its
-            // input can't deadlock against this write.
-            std::thread::spawn(move || {
-                use std::io::Write;
-                let _ = stdin.write_all(prompt.as_bytes());
-            });
+            use std::io::Write;
+            match invocation.acp {
+                Some(run) => {
+                    let driver = super::acp::Driver::new(run, dir.display().to_string());
+                    let _ = writeln!(stdin, "{}", driver.start());
+                    conversation = Some((driver, stdin));
+                }
+                None => {
+                    let prompt = invocation.stdin;
+                    // Its own thread: a CLI that writes before it has read all
+                    // of its input can't deadlock against this write.
+                    std::thread::spawn(move || {
+                        let _ = stdin.write_all(prompt.as_bytes());
+                    });
+                }
+            }
         }
+        // Set once an ACP turn is over: the agent then exits on its own, and
+        // is ended if it doesn't.
+        let turn_over = Arc::new(Mutex::new(None::<Instant>));
 
         let record = RunRecord {
             id: run_id,
@@ -398,7 +418,9 @@ impl Runner {
         let last_text = Arc::new(Mutex::new(String::new()));
         let stdout = child.stdout.take().map(|out| {
             let (log, shared, failed, last_text, engine) = (log.clone(), shared.clone(), failed.clone(), last_text.clone(), spec.engine);
+            let turn_over = turn_over.clone();
             std::thread::spawn(move || {
+                let mut conversation = conversation;
                 let mut parser = Parser::new(engine);
                 let handle = |events: Vec<RunEvent>, outcome: Outcome| {
                     if outcome.failed {
@@ -428,6 +450,17 @@ impl Runner {
                 for line in BufReader::new(out).lines().map_while(Result::ok) {
                     let (events, outcome) = parser.line(&line, now_millis());
                     handle(events, outcome);
+                    let Some((driver, stdin)) = conversation.as_mut() else { continue };
+                    use std::io::Write;
+                    let step = driver.line(&line);
+                    for reply in &step.send {
+                        let _ = writeln!(stdin, "{reply}");
+                    }
+                    if step.done {
+                        // Closing its input is what tells the agent to leave.
+                        conversation = None;
+                        *turn_over.lock().unwrap() = Some(Instant::now());
+                    }
                 }
                 // What a CLI said before its output ended without a result.
                 handle(parser.finish(now_millis()), Outcome::default());
@@ -467,11 +500,18 @@ impl Runner {
         let (engine_kind, engine_model) = (spec.engine, spec.model.clone());
         std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(u64::from(timeout_min) * 60);
+            let mut left_open = false;
             let (exit, forced) = loop {
                 match child.try_wait() {
                     Ok(Some(status)) => break (Some(status), None),
                     Ok(None) => {}
                     Err(_) => break (None, None),
+                }
+                // An ACP agent that stays after its turn: the run is done.
+                if turn_over.lock().unwrap().is_some_and(|since| since.elapsed() >= ACP_EXIT_GRACE) {
+                    left_open = true;
+                    kill_tree(&mut child);
+                    break (child.wait().ok(), None);
                 }
                 if stop.load(Ordering::Relaxed) {
                     kill_tree(&mut child);
@@ -490,7 +530,7 @@ impl Runner {
                 let _ = handle.join();
             }
 
-            let succeeded = exit.is_some_and(|status| status.success()) && !failed.load(Ordering::Relaxed);
+            let succeeded = (left_open || exit.is_some_and(|status| status.success())) && !failed.load(Ordering::Relaxed);
             let status = forced.unwrap_or(if succeeded { RunStatus::Success } else { RunStatus::Error });
             let answer = last_text.lock().unwrap().clone();
             let summary = match status {

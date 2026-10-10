@@ -2,6 +2,7 @@
 //! tools, when) that Termo runs in the background through Claude Code or
 //! Codex (see spec.rs), with its history kept on disk (store.rs).
 
+pub mod acp;
 pub mod console_bridge;
 pub mod diagnose;
 pub mod draft;

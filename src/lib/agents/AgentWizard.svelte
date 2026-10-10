@@ -88,6 +88,7 @@
     { id: "codex", label: "Codex", hint: "agents.wizard.engine.codexHint" },
     { id: "gemini", label: "Gemini CLI", hint: "agents.wizard.engine.geminiHint" },
     { id: "copilot", label: "Copilot CLI", hint: "agents.wizard.engine.copilotHint" },
+    { id: "grok", label: "Grok", hint: "agents.wizard.engine.grokHint" },
   ];
 
   const AUTONOMY: { id: AgentAutonomy; title: MessageKey; text: MessageKey }[] = [
