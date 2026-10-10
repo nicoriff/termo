@@ -139,9 +139,8 @@
             <small>{t(stateKey(tool))}</small>
           </span>
           <input
-            class="onb-switch"
+            class="onb-check"
             type="checkbox"
-            role="switch"
             checked={choice[tool]}
             disabled={busy || status === null}
             onchange={() => ontoggle(tool)}

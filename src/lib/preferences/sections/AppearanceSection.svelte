@@ -35,9 +35,7 @@
   <label class="toggle-row sync-row">
     <span>{t("preferences.appearance.syncWithOs")}</span>
     <input
-      class="appearance-switch"
       type="checkbox"
-      role="switch"
       checked={themeStore.syncWithOs}
       onchange={onSyncChange}
     />
@@ -152,43 +150,6 @@
 
   .toggle-row.sync-row {
     margin-top: 0;
-  }
-
-  .appearance-switch {
-    appearance: none;
-    position: relative;
-    width: 30px;
-    height: 18px;
-    margin: 0;
-    border: 1px solid var(--tabbar-fg, #d4d4d4);
-    border-radius: 9px;
-    background: var(--tabbar-border, #2a2a2a);
-  }
-
-  .appearance-switch::before {
-    content: "";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    top: 2px;
-    left: 2px;
-    border-radius: 50%;
-    background: var(--tabbar-fg, #d4d4d4);
-  }
-
-  .appearance-switch:checked {
-    background: var(--pane-active-border, #3a6df0);
-    border-color: var(--pane-active-border, #3a6df0);
-  }
-
-  .appearance-switch:checked::before {
-    transform: translateX(12px);
-    background: #fff;
-  }
-
-  .appearance-switch:focus-visible {
-    outline: 2px solid var(--pane-active-border, #3a6df0);
-    outline-offset: 3px;
   }
 
   /* Two columns: with ten presets, one column pushed the rest of the

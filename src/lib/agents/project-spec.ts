@@ -120,12 +120,16 @@ export interface GraphEdge {
   kind: "after" | "asks";
 }
 
-export const GRAPH = { nodeWidth: 150, nodeHeight: 46, columnGap: 70, rowGap: 22 };
+export const GRAPH = { nodeWidth: 150, nodeHeight: 46, columnGap: 70, rowGap: 22, looseGap: 44, loosePerRow: 3 };
 
 /** Lays the team out in columns: the entry agent first, then each agent one
  * column right of whoever sets it off (the one it follows, or one that can
- * ask it). Agents nothing reaches go in the first column. */
-export function layoutGraph(agents: AgentSpec[], entryId: string): { nodes: GraphNode[]; edges: GraphEdge[]; width: number; height: number } {
+ * ask it). Agents connected to no one go in rows of their own underneath
+ * (starting at `looseTop`), so they don't read as hanging from the entry. */
+export function layoutGraph(
+  agents: AgentSpec[],
+  entryId: string,
+): { nodes: GraphNode[]; edges: GraphEdge[]; width: number; height: number; looseTop: number | null } {
   const ids = new Set(agents.map((agent) => agent.id));
   const edges: GraphEdge[] = [];
   for (const agent of agents) {
@@ -135,8 +139,13 @@ export function layoutGraph(agents: AgentSpec[], entryId: string): { nodes: Grap
       if (ids.has(contact) && contact !== agent.id) edges.push({ from: agent.id, to: contact, kind: "asks" });
     }
   }
+  const linked = new Set(edges.flatMap((edge) => [edge.from, edge.to]));
+  if (ids.has(entryId)) linked.add(entryId);
+  const team = agents.filter((agent) => linked.has(agent.id));
+  const loose = agents.filter((agent) => !linked.has(agent.id));
+
   const column = new Map<string, number>();
-  const starts = [entryId, ...agents.map((agent) => agent.id)].filter((id) => ids.has(id));
+  const starts = [entryId, ...team.map((agent) => agent.id)].filter((id) => linked.has(id));
   for (const start of starts) {
     if (column.has(start)) continue;
     column.set(start, 0);
@@ -152,7 +161,7 @@ export function layoutGraph(agents: AgentSpec[], entryId: string): { nodes: Grap
     }
   }
   const rows = new Map<number, number>();
-  const nodes = agents.map((agent) => {
+  const nodes: GraphNode[] = team.map((agent) => {
     const col = column.get(agent.id) ?? 0;
     const row = rows.get(col) ?? 0;
     rows.set(col, row + 1);
@@ -164,12 +173,25 @@ export function layoutGraph(agents: AgentSpec[], entryId: string): { nodes: Grap
   });
   const columns = Math.max(1, ...[...column.values()].map((col) => col + 1));
   const maxRows = Math.max(1, ...rows.values());
-  return {
-    nodes,
-    edges,
-    width: columns * GRAPH.nodeWidth + (columns - 1) * GRAPH.columnGap,
-    height: maxRows * GRAPH.nodeHeight + (maxRows - 1) * GRAPH.rowGap,
-  };
+  let width = team.length > 0 ? columns * GRAPH.nodeWidth + (columns - 1) * GRAPH.columnGap : 0;
+  let height = team.length > 0 ? maxRows * GRAPH.nodeHeight + (maxRows - 1) * GRAPH.rowGap : 0;
+
+  const looseTop = loose.length === 0 ? null : team.length > 0 ? height + GRAPH.looseGap : 0;
+  if (looseTop !== null) {
+    const perRow = Math.max(columns, GRAPH.loosePerRow);
+    loose.forEach((agent, index) => {
+      nodes.push({
+        agent,
+        x: (index % perRow) * (GRAPH.nodeWidth + GRAPH.rowGap),
+        y: looseTop + Math.floor(index / perRow) * (GRAPH.nodeHeight + GRAPH.rowGap),
+      });
+    });
+    const across = Math.min(loose.length, perRow);
+    const down = Math.ceil(loose.length / perRow);
+    width = Math.max(width, across * GRAPH.nodeWidth + (across - 1) * GRAPH.rowGap);
+    height = looseTop + down * GRAPH.nodeHeight + (down - 1) * GRAPH.rowGap;
+  }
+  return { nodes, edges, width, height, looseTop };
 }
 
 /** The agents of each project, and the ones in none (under ""), in the

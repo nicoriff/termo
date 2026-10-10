@@ -782,6 +782,7 @@ export const en: Messages = {
         integrationsHint: "Add them from each agent's wizard, under Tools.",
         graphLabel: "Team diagram",
         entryBadge: "entry",
+        loose: "Not connected to other agents",
         legendAfter: "runs after",
         legendAsks: "can ask",
       },
@@ -1238,7 +1239,6 @@ export const en: Messages = {
   },
   onboarding: {
     title: "Getting started",
-    repeat: "Repeat getting started",
     command: "Open getting started",
     heading: "Initial setup",
     stepCount: "Step {current} of {total}",

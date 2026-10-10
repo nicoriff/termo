@@ -3,10 +3,12 @@
     "version": "0.17.0",
     "date": "2026-10-09",
     "es": [
-      "**Primeros pasos**: la primera vez que abrís Termo, un asistente te muestra cómo moverte entre tiles y pestañas, te cuenta de los agentes locales y la orquestación, y te deja elegir el tema, conectar los hooks de tus agentes y configurar los avisos. Lo podés repetir desde Acerca de Termo o desde la paleta de comandos."
+      "**Primeros pasos**: la primera vez que abrís Termo, un asistente te muestra cómo moverte entre tiles y pestañas, te cuenta de los agentes locales y la orquestación, y te deja elegir el tema, conectar los hooks de tus agentes y configurar los avisos. Lo podés repetir desde Acerca de Termo o desde la paleta de comandos.",
+      "En el diagrama de un proyecto, los agentes sin conexión con otros se muestran en una fila aparte, en vez de apilarse debajo del agente de entrada como si dependieran de él."
     ],
     "en": [
-      "**Getting started**: the first time you open Termo, an assistant shows you how to move between tiles and tabs, tells you about local agents and orchestration, and lets you pick the theme, connect your agents' hooks and set up notifications. You can repeat it from About Termo or from the command palette."
+      "**Getting started**: the first time you open Termo, an assistant shows you how to move between tiles and tabs, tells you about local agents and orchestration, and lets you pick the theme, connect your agents' hooks and set up notifications. You can repeat it from About Termo or from the command palette.",
+      "In a project's diagram, agents not connected to others are shown in a row of their own, instead of stacking under the entry agent as if they depended on it."
     ]
   },
   {

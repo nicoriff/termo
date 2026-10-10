@@ -97,9 +97,8 @@
     <label class="toggle-row">
       <span>{t("preferences.aiMode.notifyAwaiting")}</span>
       <input
-        class="onb-switch"
+        class="onb-check"
         type="checkbox"
-        role="switch"
         checked={appConfigStore.aiNotifyAwaiting}
         onchange={(e) => appConfigStore.setAiNotifyAwaiting(e.currentTarget.checked)}
       />
@@ -107,9 +106,8 @@
     <label class="toggle-row">
       <span>{t("preferences.aiMode.notifyFinished")}</span>
       <input
-        class="onb-switch"
+        class="onb-check"
         type="checkbox"
-        role="switch"
         checked={appConfigStore.aiNotifyFinished}
         onchange={(e) => appConfigStore.setAiNotifyFinished(e.currentTarget.checked)}
       />
@@ -117,9 +115,8 @@
     <label class="toggle-row">
       <span>{t("preferences.aiMode.notifyError")}</span>
       <input
-        class="onb-switch"
+        class="onb-check"
         type="checkbox"
-        role="switch"
         checked={appConfigStore.aiNotifyError}
         onchange={(e) => appConfigStore.setAiNotifyError(e.currentTarget.checked)}
       />
@@ -127,9 +124,8 @@
     <label class="toggle-row">
       <span>{t("onboarding.notifications.sounds")}</span>
       <input
-        class="onb-switch"
+        class="onb-check"
         type="checkbox"
-        role="switch"
         checked={soundsOn}
         onchange={(e) => setSounds(e.currentTarget.checked)}
       />

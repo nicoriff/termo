@@ -76,8 +76,6 @@
       <dd>{system}</dd>
     </dl>
 
-    <button class="about-link about-setup" onclick={() => uiState.openOnboarding()}>{t("onboarding.repeat")}</button>
-
     <p class="about-copyright">
       © {YEAR}
       <button class="about-link" onclick={() => void openUrl("https://github.com/nicoriff")}>@nicoriff</button>
@@ -85,6 +83,7 @@
 
     <div class="dialog-actions">
       <button class="dialog-button" onclick={() => uiState.openUpdates()}>{t("updates.check")}</button>
+      <button class="dialog-button" onclick={() => uiState.openOnboarding()}>{t("onboarding.title")}</button>
       <button class="dialog-button" onclick={() => void copyInfo()}>
         {copied ? t("about.copied") : t("about.copy")}
       </button>
@@ -116,7 +115,8 @@
 
   .dialog {
     pointer-events: auto;
-    width: min(360px, 92%);
+    /* Wide enough for its four buttons in one row. */
+    width: min(540px, 92%);
     margin-top: 10vh;
     display: flex;
     flex-direction: column;
@@ -196,11 +196,6 @@
     text-underline-offset: 2px;
   }
 
-  .about-setup {
-    margin-top: 14px;
-    font-size: 12px;
-  }
-
   .about-link:hover,
   .about-link:focus-visible {
     color: var(--pane-active-border, #3a6df0);
@@ -210,6 +205,7 @@
   .dialog-actions {
     align-self: stretch;
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 18px;

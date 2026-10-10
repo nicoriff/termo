@@ -49,7 +49,8 @@
         role="img"
         aria-label={t("onboarding.appearance.previewLabel", { theme: theme.name })}
         style="--p-bg:{c.background}; --p-fg:{c.foreground}; --p-ui:{theme.ui.background}; --p-ui-fg:{theme.ui
-          .foreground}; --p-border:{theme.ui.border}; --p-accent:{theme.ui.accent}; font-family:{themeStore.effectiveFontFamily}"
+          .foreground}; --p-border:{theme.ui.border}; --p-accent:{theme.ui.accent}"
+        style:font-family={themeStore.effectiveFontFamily}
       >
         <div class="preview-tabs">
           <span class="preview-tab active">pwsh</span>
@@ -79,7 +80,7 @@
       {t("preferences.appearance.syncWithOs")}
       <small>{t("preferences.appearance.syncWithOsHint")}</small>
     </span>
-    <input class="onb-switch" type="checkbox" role="switch" checked={themeStore.syncWithOs} onchange={onSyncChange} />
+    <input class="onb-check" type="checkbox" checked={themeStore.syncWithOs} onchange={onSyncChange} />
   </label>
 
   {#each appearances as appearance}

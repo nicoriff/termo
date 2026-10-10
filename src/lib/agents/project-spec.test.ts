@@ -95,16 +95,32 @@ describe("layoutGraph", () => {
     const b = agent("b");
     const c = agent("c", (spec) => (spec.triggers.after = { agentId: "a", on: "success" }));
     const loose = agent("d");
-    const { nodes, edges } = layoutGraph([a, b, c, loose], "a");
-    const columnOf = (id: string) => nodes.find((node) => node.agent.id === id)!.x;
-    expect(columnOf("a")).toBe(0);
-    expect(columnOf("b")).toBe(columnOf("c"));
-    expect(columnOf("b")).toBeGreaterThan(0);
-    expect(columnOf("d")).toBe(0);
+    const { nodes, edges, looseTop } = layoutGraph([a, b, c, loose], "a");
+    const at = (id: string) => nodes.find((node) => node.agent.id === id)!;
+    expect(at("a").x).toBe(0);
+    expect(at("b").x).toBe(at("c").x);
+    expect(at("b").x).toBeGreaterThan(0);
+    // The one connected to nobody goes under the team, not in its columns.
+    expect(looseTop).toBeGreaterThan(Math.max(at("b").y, at("c").y));
+    expect(at("d").y).toBe(looseTop);
     expect(edges).toEqual([
       { from: "a", to: "b", kind: "asks" },
       { from: "a", to: "c", kind: "after" },
     ]);
+  });
+
+  it("lays agents made by hand side by side, apart from the entry", () => {
+    const { nodes, looseTop } = layoutGraph([agent("a"), agent("b"), agent("c")], "a");
+    const at = (id: string) => nodes.find((node) => node.agent.id === id)!;
+    expect(at("a")).toMatchObject({ x: 0, y: 0 });
+    expect(at("b").y).toBe(looseTop);
+    expect(at("c").y).toBe(looseTop);
+    expect(at("c").x).toBeGreaterThan(at("b").x);
+  });
+
+  it("has no loose row when everyone is connected", () => {
+    const b = agent("b", (spec) => (spec.triggers.after = { agentId: "a", on: "success" }));
+    expect(layoutGraph([agent("a"), b], "a").looseTop).toBeNull();
   });
 });
 

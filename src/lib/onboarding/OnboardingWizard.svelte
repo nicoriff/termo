@@ -454,49 +454,16 @@
     overflow-wrap: anywhere;
   }
 
-  .onb-body :global(.onb-switch) {
-    appearance: none;
-    position: relative;
+  /* The same checkbox as Preferences. */
+  .onb-body :global(.onb-check) {
     flex-shrink: 0;
-    width: 30px;
-    height: 18px;
     margin: 0;
-    border: 1px solid var(--tabbar-fg, #d4d4d4);
-    border-radius: 9px;
-    background: var(--tabbar-border, #2a2a2a);
+    accent-color: var(--pane-active-border, #3a6df0);
     cursor: pointer;
   }
 
-  .onb-body :global(.onb-switch::before) {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--tabbar-fg, #d4d4d4);
-    transition: transform 120ms ease;
-  }
-
-  .onb-body :global(.onb-switch:checked) {
-    background: var(--pane-active-border, #3a6df0);
-    border-color: var(--pane-active-border, #3a6df0);
-  }
-
-  .onb-body :global(.onb-switch:checked::before) {
-    transform: translateX(12px);
-    background: #fff;
-  }
-
-  .onb-body :global(.onb-switch:disabled) {
-    opacity: 0.5;
+  .onb-body :global(.onb-check:disabled) {
     cursor: default;
-  }
-
-  .onb-body :global(.onb-switch:focus-visible) {
-    outline: 2px solid var(--pane-active-border, #3a6df0);
-    outline-offset: 3px;
   }
 
   .onb-footer {

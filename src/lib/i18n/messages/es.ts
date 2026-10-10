@@ -781,6 +781,7 @@ export const es = {
         integrationsHint: "Sumalas desde el asistente de cada agente, en Herramientas.",
         graphLabel: "Diagrama del equipo",
         entryBadge: "entrada",
+        loose: "Sin conexión con otros agentes",
         legendAfter: "corre después",
         legendAsks: "puede pedirle",
       },
@@ -1239,7 +1240,6 @@ export const es = {
   },
   onboarding: {
     title: "Primeros pasos",
-    repeat: "Repetir los primeros pasos",
     command: "Abrir los primeros pasos",
     heading: "Configuración inicial",
     stepCount: "Paso {current} de {total}",

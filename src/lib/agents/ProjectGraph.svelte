@@ -73,6 +73,9 @@
         marker-end="url(#arrow-{uid})"
       />
     {/each}
+    {#if layout.looseTop !== null}
+      <text class="loose" x="2" y={layout.looseTop + TOP - 8}>{t("agents.projects.review.loose")}</text>
+    {/if}
     {#each layout.nodes as node (node.agent.id)}
       <!-- A button only when something listens (onselect): the role and the
            tabindex come and go together. -->
@@ -179,6 +182,7 @@
   }
 
   .level,
+  .loose,
   .entry {
     font-size: 10px;
     opacity: 0.6;
