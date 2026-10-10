@@ -79,7 +79,9 @@
         <div class="notes">{@html renderMarkdownLite(notes)}</div>
       {/if}
 
-      {#if status.kind === "waiting"}
+      {#if status.kind === "available"}
+        <!-- Just the version and its notes above; the button is below. -->
+      {:else if status.kind === "waiting"}
         <ul class="busy">
           {#if status.consoles > 0}
             <li>{t("quit.busyConsoles", { count: String(status.consoles) })}</li>
@@ -118,7 +120,10 @@
     {/if}
 
     <div class="dialog-actions">
-      {#if status.kind === "waiting"}
+      {#if status.kind === "available"}
+        <button class="dialog-button" onclick={close}>{t("updates.later")}</button>
+        <button class="dialog-button primary" onclick={() => void updater.install()}>{t("updates.install")}</button>
+      {:else if status.kind === "waiting"}
         <button class="dialog-button" onclick={close}>{t("updates.later")}</button>
         <button class="dialog-button primary" onclick={() => void updater.install()}>{t("updates.installAnyway")}</button>
       {:else if status.kind === "error"}

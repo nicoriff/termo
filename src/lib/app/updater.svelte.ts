@@ -5,18 +5,21 @@ import { runningWork } from "./quit";
 
 /**
  * "Check for updates": asks the release server (plugins.updater in
- * tauri.conf.json) for a newer version and, when there is one, downloads it,
- * installs it and restarts — all in one go. Only signed builds are accepted:
- * the updater checks each against the public key in the config before
- * installing anything.
+ * tauri.conf.json) for a newer version and, when there is one, shows it with
+ * its notes and waits for the user to say install; then it downloads it,
+ * installs it and restarts. Only signed builds are accepted: the updater
+ * checks each against the public key in the config before installing
+ * anything.
  *
- * The one pause: installing closes every console and stops the agents, so
- * when something is running it waits for the user to say go.
+ * Installing closes every console and stops the agents, so when something is
+ * running the wait also warns about it.
  */
 export type UpdateStatus =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "upToDate" }
+  /** Found one, nothing running: waiting for a yes. */
+  | { kind: "available" }
   /** Found one, but installing would cut these short: waiting for a yes. */
   | { kind: "waiting"; consoles: number; agents: number }
   /** `total` is null when the server doesn't say how big the file is. */
@@ -55,7 +58,7 @@ class UpdaterStore {
         this.status = { kind: "waiting", consoles, agents: agents + background };
         return;
       }
-      await this.downloadAndInstall(update);
+      this.status = { kind: "available" };
     } catch (error) {
       this.status = { kind: "error", message: String(error) };
     }

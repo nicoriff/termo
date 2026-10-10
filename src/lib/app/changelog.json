@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.18.2",
+    "date": "2026-10-10",
+    "es": [
+      "«Buscar actualizaciones» ya no instala sola: muestra la versión nueva con sus novedades y espera a que elijas «Instalar y reiniciar» o «Más tarde»."
+    ],
+    "en": [
+      "“Check for updates” no longer installs on its own: it shows the new version with its notes and waits for you to pick “Install and restart” or “Later”."
+    ]
+  },
+  {
     "version": "0.18.1",
     "date": "2026-10-10",
     "es": [
