@@ -21,6 +21,7 @@ import {
   type Orchestration,
   type Plan,
 } from "$lib/core/orchestration-client";
+import type { AgentEngine } from "$lib/core/agents-client";
 import { agentsStore } from "./agents-store.svelte";
 import { announceOrchestration } from "./orchestration-attention";
 import { pendingQuestions } from "./orchestration-spec";
@@ -87,11 +88,11 @@ class OrchestrationStore {
   }
 
   /** What the planner would ask first; planning shows as going on meanwhile. */
-  async clarify(prompt: string, workDir: string, model: string): Promise<Clarifying> {
+  async clarify(prompt: string, workDir: string, engine: AgentEngine, model: string): Promise<Clarifying> {
     this.planning = true;
     this.startPhase("clarify");
     try {
-      return await clarifyOrchestration(prompt, workDir, model);
+      return await clarifyOrchestration(prompt, workDir, engine, model);
     } finally {
       this.planning = false;
       this.planningPhase = null;
@@ -104,11 +105,18 @@ class OrchestrationStore {
     this.planningStartedAt = Date.now();
   }
 
-  async plan(prompt: string, workDir: string, model: string, answers: Answered[] = [], overheadUsd = 0): Promise<Orchestration> {
+  async plan(
+    prompt: string,
+    workDir: string,
+    engine: AgentEngine,
+    model: string,
+    answers: Answered[] = [],
+    overheadUsd = 0,
+  ): Promise<Orchestration> {
     this.planning = true;
     this.startPhase("plan");
     try {
-      const orchestration = await planOrchestration(prompt, workDir, model, answers, overheadUsd);
+      const orchestration = await planOrchestration(prompt, workDir, engine, model, answers, overheadUsd);
       this.take(orchestration);
       return orchestration;
     } finally {

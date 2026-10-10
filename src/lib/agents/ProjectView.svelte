@@ -20,6 +20,7 @@
   } from "$lib/core/agents-client";
   import type { MessageKey } from "$lib/i18n/translate";
   import { agentsStore } from "./agents-store.svelte";
+  import { aiEngine } from "./ai-engine.svelte";
   import { AUTONOMY_TITLE_KEYS, TRIGGER_KEYS, agentState, ago, formatDuration, newAgentSpec, type AgentTone } from "./agent-spec";
   import { projectWarnings } from "./project-spec";
   import ProjectGraph from "./ProjectGraph.svelte";
@@ -144,7 +145,7 @@
     improving = true;
     applied = [];
     await act(async () => {
-      improvement = await improveProject(projectId);
+      improvement = await improveProject(projectId, aiEngine.value ?? "claude");
     });
     improving = false;
   }

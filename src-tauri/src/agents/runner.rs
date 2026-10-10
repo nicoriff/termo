@@ -51,7 +51,7 @@ struct StepPayload<'a> {
 
 /// Variables that would make the CLI think it's running inside another
 /// session (see the same list in pty/session.rs).
-const INHERITED_NOISE: &[&str] = &[
+pub(super) const INHERITED_NOISE: &[&str] = &[
     "CLAUDE_CODE_CHILD_SESSION",
     "CLAUDE_CODE_SESSION_ID",
     "CLAUDE_CODE_ENTRYPOINT",

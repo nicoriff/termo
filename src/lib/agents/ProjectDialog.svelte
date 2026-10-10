@@ -5,6 +5,8 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { draftProject, type AgentSpec, type GeneratedProject, type Project } from "$lib/core/agents-client";
+  import { aiEngine } from "./ai-engine.svelte";
+  import AiEnginePicker from "./AiEnginePicker.svelte";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { collectTiles } from "$lib/layout/split-tree";
@@ -38,7 +40,8 @@
     return active ? (sessionFolder(active) ?? null) : null;
   });
 
-  const claudeInstalled = $derived(newTabOptions.agentClis?.claude !== false);
+  /** Whose CLI drafts the team; null with no agent CLI installed. */
+  const engine = $derived(aiEngine.value);
   const projectAgents = $derived(editing ? agentsStore.agentsOf(editing.id) : []);
   const reviewAgents = $derived(draft?.agents ?? []);
   const warnings = $derived(draft ? projectWarnings(project, reviewAgents) : []);
@@ -63,11 +66,11 @@
   }
 
   async function generate() {
-    if (!description.trim() || generating) return;
+    if (!description.trim() || generating || !engine) return;
     generating = true;
     error = "";
     try {
-      const generated = await draftProject(description.trim(), project.workDir);
+      const generated = await draftProject(description.trim(), project.workDir, engine);
       draft = generated;
       project = generated.project;
       selected = null;
@@ -323,16 +326,17 @@
               </button>
             {/if}
           </div>
+          <AiEnginePicker id="project-engine" disabled={generating} />
           <div class="row">
-            <button class="button primary" disabled={generating || !description.trim() || !claudeInstalled} onclick={() => void generate()}>
+            <button class="button primary" disabled={generating || !description.trim() || !engine} onclick={() => void generate()}>
               ✨ {t("agents.projects.dialog.generate")}
             </button>
             <span class="hint" class:working={generating}>
               {generating
                 ? t("agents.projects.dialog.generating")
-                : claudeInstalled
+                : engine
                   ? t("agents.projects.dialog.aiHint")
-                  : t("agents.wizard.idea.aiNeedsClaude")}
+                  : t("agents.aiEngine.none")}
             </span>
           </div>
         {/if}

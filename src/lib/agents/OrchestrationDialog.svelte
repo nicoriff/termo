@@ -9,7 +9,10 @@
   import { collectTiles } from "$lib/layout/split-tree";
   import type { Answered, ClarifyQuestion } from "$lib/core/orchestration-client";
   import { orchestrationStore } from "./orchestration-store.svelte";
-  import { modelsOf } from "./orchestration-spec";
+  import { ENGINE_NAMES, modelsOf } from "./orchestration-spec";
+  import { aiEngine } from "./ai-engine.svelte";
+  import AiEnginePicker from "./AiEnginePicker.svelte";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import FolderField from "./FolderField.svelte";
   import PlanningProgress from "./PlanningProgress.svelte";
 
@@ -28,8 +31,15 @@
   let askCost = 0;
 
   const planning = $derived(orchestrationStore.planning);
-  const claudeInstalled = $derived(newTabOptions.agentClis?.claude !== false);
-  const models = $derived(modelsOf(orchestrationStore.catalog, "claude"));
+  /** Whose CLI plans and supervises; null with no agent CLI installed. */
+  const engine = $derived(aiEngine.value);
+  const models = $derived(engine ? modelsOf(orchestrationStore.catalog, engine) : []);
+
+  // A model is one engine's: another engine starts from its default.
+  $effect(() => {
+    void engine;
+    model = "";
+  });
 
   /** The folder the focused console is in: most likely the project. */
   const hereFolder = $derived.by(() => {
@@ -53,15 +63,15 @@
     uiState.closeOrchestrationDialog();
   }
 
-  const canAnalyze = $derived(!!prompt.trim() && !!workDir.trim() && !planning && claudeInstalled);
+  const canAnalyze = $derived(!!prompt.trim() && !!workDir.trim() && !planning && engine !== null);
 
   /** First what the orchestrator would ask; with nothing to ask (or no
    * answer from it), straight to planning. */
   async function analyze() {
-    if (!canAnalyze) return;
+    if (!canAnalyze || !engine) return;
     error = "";
     phase = "clarifying";
-    const asked = await orchestrationStore.clarify(prompt.trim(), workDir.trim(), model).catch(() => null);
+    const asked = await orchestrationStore.clarify(prompt.trim(), workDir.trim(), engine, model).catch(() => null);
     askCost = asked?.costUsd ?? 0;
     // Closed meanwhile: nobody to ask, so it plans as it is.
     if (asked && asked.questions.length > 0 && uiState.orchestrationDialog) {
@@ -83,10 +93,11 @@
   }
 
   async function plan(given: Answered[]) {
+    if (!engine) return;
     error = "";
     phase = "planning";
     try {
-      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), model, given, askCost);
+      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), engine, model, given, askCost);
       workspaceStore.openOrchestration(orchestration.id, orchestration.name);
       if (uiState.orchestrationDialog) close();
     } catch (reason) {
@@ -193,13 +204,20 @@
       </div>
       <p class="hint">{t("agents.orchestration.dialog.folderHint")}</p>
 
-      <label class="label" for="orchestration-model">{t("agents.orchestration.dialog.modelLabel")}</label>
-      <select id="orchestration-model" class="field narrow" bind:value={model} disabled={planning}>
-        <option value="">{t("agents.orchestration.dialog.modelDefault")}</option>
-        {#each models as option (option.id)}
-          <option value={option.id}>{option.name}</option>
-        {/each}
-      </select>
+      <AiEnginePicker id="orchestration-engine" label={t("agents.orchestration.dialog.engineLabel")} disabled={planning} />
+
+      <span class="label" id="orchestration-model-label">{t("agents.orchestration.dialog.modelLabel")}</span>
+      <SettingDropdown
+        options={[
+          { value: "", label: t("agents.orchestration.dialog.modelDefault", { engine: engine ? ENGINE_NAMES[engine] : "" }) },
+          ...models.map((option) => ({ value: option.id, label: option.name })),
+        ]}
+        value={model}
+        width="min(320px, 100%)"
+        labelledby="orchestration-model-label"
+        disabled={planning || !engine}
+        onpick={(value) => (model = value)}
+      />
       <p class="hint">{t("agents.orchestration.dialog.modelHint")}</p>
       {/if}
     </div>
@@ -215,9 +233,9 @@
               ? t("agents.orchestration.dialog.planning")
               : step === "questions"
                 ? t("agents.orchestration.clarify.hint")
-                : claudeInstalled
-                  ? t("agents.orchestration.dialog.note")
-                  : t("agents.wizard.idea.aiNeedsClaude")}
+                : engine
+                  ? t("agents.orchestration.dialog.note", { engine: ENGINE_NAMES[engine] })
+                  : t("agents.aiEngine.none")}
         </span>
       {/if}
       {#if step === "questions"}
@@ -351,10 +369,6 @@
 
   .field:focus {
     border-color: var(--pane-active-border, #3a6df0);
-  }
-
-  .field.narrow {
-    width: min(320px, 100%);
   }
 
   .row {

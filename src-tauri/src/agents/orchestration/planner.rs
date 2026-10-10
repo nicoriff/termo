@@ -12,7 +12,7 @@ use serde::Deserialize;
 use crate::i18n::{self, tr, Lang, Msg};
 use crate::marketplace::agent_cli;
 
-use super::super::draft::{ask_claude_streaming, Ask, Step};
+use super::super::draft::{ask_streaming, Ask, Step};
 use super::super::models;
 use super::super::project_ai::{language, MAX_AGENTS};
 use super::super::runner::target;
@@ -299,7 +299,13 @@ fn build(draft: PlanDraft, request: &str, work_dir: &str, model: &str, catalog: 
 
 /// Plans the work in `work_dir`, the project's folder: the planner reads it,
 /// and the whole team will work there. Errors come ready to show.
-pub fn generate(request: &str, work_dir: &str, model: &str, on_step: &dyn Fn(Step)) -> Result<Orchestration, String> {
+pub fn generate(
+    request: &str,
+    work_dir: &str,
+    engine: Engine,
+    model: &str,
+    on_step: &dyn Fn(Step),
+) -> Result<Orchestration, String> {
     let fail = |err: String| tr(Msg::OrchestrationPlanFailed(&err));
     let catalog = catalog();
     let folder = work_dir.trim();
@@ -309,12 +315,13 @@ pub fn generate(request: &str, work_dir: &str, model: &str, on_step: &dyn Fn(Ste
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { dir: Path::new(folder), model, read_files: true, timeout: TIMEOUT };
-    let answer =
-        ask_claude_streaming(&ask, prompt(request, work_dir, &catalog, i18n::current()), &schema(), on_step).map_err(fail)?;
+    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: TIMEOUT };
+    let answer = ask_streaming(&ask, prompt(request, work_dir, &catalog, i18n::current()), &schema(), on_step).map_err(fail)?;
     let draft: PlanDraft = serde_json::from_value(answer.value).map_err(|err| fail(err.to_string()))?;
     let mut orchestration = build(draft, request, work_dir, model, &catalog, uuid::Uuid::new_v4().to_string())
         .ok_or_else(|| fail("empty plan".into()))?;
+    // Whoever planned it supervises it and writes its report.
+    orchestration.orchestrator_engine = engine;
     orchestration.overhead_usd = answer.cost_usd.unwrap_or(0.0);
     Ok(orchestration)
 }
@@ -394,7 +401,13 @@ answer:
 }
 
 /// What the planner would ask before planning, if anything.
-pub fn clarify(request: &str, work_dir: &str, model: &str, on_step: &dyn Fn(Step)) -> Result<Clarifying, String> {
+pub fn clarify(
+    request: &str,
+    work_dir: &str,
+    engine: Engine,
+    model: &str,
+    on_step: &dyn Fn(Step),
+) -> Result<Clarifying, String> {
     let fail = |err: String| tr(Msg::OrchestrationPlanFailed(&err));
     let folder = work_dir.trim();
     if folder.is_empty() {
@@ -403,8 +416,8 @@ pub fn clarify(request: &str, work_dir: &str, model: &str, on_step: &dyn Fn(Step
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { dir: Path::new(folder), model, read_files: true, timeout: CLARIFY_TIMEOUT };
-    let answer = ask_claude_streaming(&ask, clarify_prompt(request, i18n::current()), &clarify_schema(), on_step).map_err(fail)?;
+    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: CLARIFY_TIMEOUT };
+    let answer = ask_streaming(&ask, clarify_prompt(request, i18n::current()), &clarify_schema(), on_step).map_err(fail)?;
     #[derive(Deserialize, Default)]
     #[serde(default)]
     struct Draft {
@@ -533,9 +546,15 @@ pub fn revise(
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { dir: Path::new(folder), model: &orchestration.orchestrator_model, read_files: true, timeout: TIMEOUT };
+    let ask = Ask {
+        engine: orchestration.orchestrator_engine,
+        dir: Path::new(folder),
+        model: &orchestration.orchestrator_model,
+        read_files: true,
+        timeout: TIMEOUT,
+    };
     let text = revision_prompt(&orchestration.prompt, plan, instructions, &catalog, i18n::current());
-    let answer = ask_claude_streaming(&ask, text, &revision_schema(), on_step).map_err(fail)?;
+    let answer = ask_streaming(&ask, text, &revision_schema(), on_step).map_err(fail)?;
     let draft: RevisionDraft = serde_json::from_value(answer.value).map_err(|err| fail(err.to_string()))?;
     let revised = sanitize(draft.plan, &catalog);
     if revised.tasks.is_empty() {
@@ -557,6 +576,50 @@ pub fn autonomy_name(autonomy: Autonomy) -> &'static str {
 mod tests {
     use super::super::plan::tests::catalog as test_catalog;
     use super::*;
+
+    /// Against the real CLIs, logged in, with TERMO_LIVE_ENGINE naming one
+    /// (codex by default): "cargo test plan_live -- --ignored --nocapture".
+    /// A real plan for a tiny project, with the whole schema, from an engine
+    /// other than Claude Code.
+    #[test]
+    #[ignore]
+    fn plan_live_another_engine_plans_a_real_orchestration() {
+        crate::ai_mode::set_enabled_for_tests(true);
+        let engine = match std::env::var("TERMO_LIVE_ENGINE").as_deref() {
+            Ok("gemini") => Engine::Gemini,
+            Ok("copilot") => Engine::Copilot,
+            Ok("grok") => Engine::Grok,
+            _ => Engine::Codex,
+        };
+        let dir = std::env::temp_dir().join(format!("termo-plan-live-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), "# Notas\n\nUna app de notas en la terminal, en Python. Todavía sin código.\n").unwrap();
+        let steps = std::cell::Cell::new(0);
+        let planned = generate(
+            "Agregá un comando para listar las notas, con un test.",
+            &dir.display().to_string(),
+            engine,
+            "",
+            &|_| steps.set(steps.get() + 1),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let orchestration = planned.unwrap_or_else(|err| panic!("{engine:?}: {err}"));
+        let plan = &orchestration.strategies[0].plan;
+        println!(
+            "{engine:?}: «{}», {} strategies, first with {} agents and {} tasks, {} steps, overhead {}",
+            orchestration.name,
+            orchestration.strategies.len(),
+            plan.agents.len(),
+            plan.tasks.len(),
+            steps.get(),
+            orchestration.overhead_usd
+        );
+        for agent in &plan.agents {
+            println!("  agent {} on {:?} {}", agent.name, agent.engine, agent.model);
+        }
+        assert_eq!(orchestration.orchestrator_engine, engine);
+        assert!(!plan.agents.is_empty() && !plan.tasks.is_empty());
+    }
 
     /// What the user answered before planning goes with the request; what
     /// they left blank doesn't.

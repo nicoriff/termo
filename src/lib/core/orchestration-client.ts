@@ -136,6 +136,8 @@ export interface Orchestration {
   prompt: string;
   workDir: string;
   status: OrchestrationStatus;
+  /** Whose CLI plans and supervises it. */
+  orchestratorEngine: AgentEngine;
   orchestratorModel: string;
   strategies: Strategy[];
   recommended: string;
@@ -195,19 +197,20 @@ export function listOrchestrations(): Promise<Orchestration[]> {
 
 /** Plans the work with AI: a draft to review, nothing runs yet. */
 /** What the planner would ask about the request first, if anything. */
-export function clarifyOrchestration(prompt: string, workDir: string, model: string): Promise<Clarifying> {
-  return invoke("orchestration_clarify", { prompt, workDir, model });
+export function clarifyOrchestration(prompt: string, workDir: string, engine: AgentEngine, model: string): Promise<Clarifying> {
+  return invoke("orchestration_clarify", { prompt, workDir, engine, model });
 }
 
 /** `answers`: to the questions asked first; `overheadUsd`: what asking them cost. */
 export function planOrchestration(
   prompt: string,
   workDir: string,
+  engine: AgentEngine,
   model: string,
   answers: Answered[] = [],
   overheadUsd = 0,
 ): Promise<Orchestration> {
-  return invoke("orchestration_plan", { prompt, workDir, model, answers, overheadUsd });
+  return invoke("orchestration_plan", { prompt, workDir, engine, model, answers, overheadUsd });
 }
 
 /** The user's answer to what an agent asked; the agent goes on. */

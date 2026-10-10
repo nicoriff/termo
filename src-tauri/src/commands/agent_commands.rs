@@ -179,9 +179,15 @@ pub async fn agent_runs(app: tauri::AppHandle, agent_id: String) -> Result<Vec<R
 
 /// "Build it with AI": a draft of the whole agent from a description.
 #[tauri::command]
-pub async fn agent_draft(app: tauri::AppHandle, description: String, work_dir: String) -> Result<Draft, String> {
+pub async fn agent_draft(
+    app: tauri::AppHandle,
+    description: String,
+    work_dir: String,
+    engine: Option<Engine>,
+) -> Result<Draft, String> {
     let scratch = root(&app)?.join(".draft");
-    tauri::async_runtime::spawn_blocking(move || draft::draft(&scratch, &description, &work_dir))
+    let engine = engine.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || draft::draft(&scratch, engine, &description, &work_dir))
         .await
         .map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))?
 }

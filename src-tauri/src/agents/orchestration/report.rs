@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::i18n::{self, tr, Lang, Msg};
 
-use super::super::draft::{ask_claude_with, Ask};
+use super::super::draft::{ask_with, Ask};
 use super::super::project_ai::{clip, language};
 use super::super::store::now_millis;
 use super::plan::{spent_usd, Orchestration, Outcome, Report, RevisionState, Status};
@@ -143,8 +143,14 @@ pub fn write(orchestration: &Orchestration) -> Result<Report, String> {
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { dir: Path::new(folder), model: &orchestration.orchestrator_model, read_files: true, timeout: TIMEOUT };
-    let answer = ask_claude_with(&ask, prompt(orchestration, i18n::current()), &schema()).map_err(fail)?;
+    let ask = Ask {
+        engine: orchestration.orchestrator_engine,
+        dir: Path::new(folder),
+        model: &orchestration.orchestrator_model,
+        read_files: true,
+        timeout: TIMEOUT,
+    };
+    let answer = ask_with(&ask, prompt(orchestration, i18n::current()), &schema()).map_err(fail)?;
     report_of(answer.value, answer.cost_usd.unwrap_or(0.0)).map_err(fail)
 }
 

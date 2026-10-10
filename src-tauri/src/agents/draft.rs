@@ -1,7 +1,15 @@
-//! The wizard's "Build it with AI": Claude Code, asked through its own CLI
-//! for a structured answer (`--json-schema`), turns the user's plain
-//! description into a first draft of every step — name, task, logic,
-//! autonomy, tools, schedule — that the user then reviews.
+//! The wizard's "Build it with AI": an agent CLI, asked for a structured
+//! answer, turns the user's plain description into a first draft of every
+//! step — name, task, logic, autonomy, tools, schedule — that the user then
+//! reviews.
+//!
+//! Asking is here too, for everything in Termo that needs an answer in a
+//! given shape (this draft, a team's, an orchestration's plan and its
+//! supervision): `ask_streaming`. Any engine can answer. Claude Code and
+//! Codex hold the model to the schema themselves (`--json-schema`,
+//! `--output-schema`); Gemini CLI, Copilot CLI and Grok are given it in the
+//! prompt, and what they say is checked and asked for again once if it
+//! doesn't fit.
 
 use super::events::describe_input;
 use std::path::Path;
@@ -14,7 +22,10 @@ use crate::i18n::{self, tr, Lang, Msg};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
-use super::spec::{claude_allowed_tools, claude_settings_json, is_valid_model, AgentSpec, Autonomy, GIT_SAFETY_ENV};
+use super::events::{EventKind, Parser};
+use super::spec::{
+    build_invocation, claude_allowed_tools, claude_settings_json, is_valid_model, AgentSpec, Autonomy, Engine, GIT_SAFETY_ENV,
+};
 
 /// Drafting is a single answer, no tools: anything longer has gone wrong.
 const TIMEOUT: Duration = Duration::from_secs(180);
@@ -102,7 +113,7 @@ pub fn prompt(description: &str, work_dir: &str, lang: Lang) -> String {
     };
     format!(
         "You design small autonomous agents for people with no experience building agents. \
-Each agent runs unattended through Claude Code in print mode (`claude -p`): it gets a task \
+Each agent runs unattended through an agent CLI in headless mode (Claude Code, Codex and the like): it gets a task \
 prompt plus instructions appended to its system prompt, works in {folder}, can never ask the \
 user anything mid-run, and whatever its permission level doesn't allow is refused.
 
@@ -163,21 +174,32 @@ pub fn parse_structured(stdout: &str) -> Result<serde_json::Value, String> {
     Ok(structured)
 }
 
-pub fn draft(scratch: &Path, description: &str, work_dir: &str) -> Result<Draft, String> {
-    let answer = ask_claude(scratch, prompt(description, work_dir, i18n::current()), &schema(), TIMEOUT)
+pub fn draft(scratch: &Path, engine: Engine, description: &str, work_dir: &str) -> Result<Draft, String> {
+    let answer = ask(engine, scratch, prompt(description, work_dir, i18n::current()), &schema(), TIMEOUT)
         .map_err(|err| tr(Msg::AgentDraftFailed(&err)))?;
     serde_json::from_value(answer).map_err(|err| tr(Msg::AgentDraftFailed(&err.to_string())))
 }
 
-/// One structured answer from Claude Code: `text` as the prompt, the answer
-/// shaped by `schema`. Errors come untranslated, for the caller to word.
-pub fn ask_claude(scratch: &Path, text: String, schema: &serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
-    let ask = Ask { dir: scratch, model: "sonnet", read_files: false, timeout };
-    ask_claude_with(&ask, text, schema).map(|answer| answer.value)
+/// One structured answer from `engine`'s CLI, with nothing around to look
+/// at: `text` as the prompt, the answer shaped by `schema`. Errors come
+/// untranslated, for the caller to word.
+pub fn ask(
+    engine: Engine,
+    scratch: &Path,
+    text: String,
+    schema: &serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    // Claude Code's mid model is plenty for a draft; the others' default.
+    let model = if engine == Engine::Claude { "sonnet" } else { "" };
+    let ask = Ask { engine, dir: scratch, model, read_files: false, timeout };
+    ask_with(&ask, text, schema).map(|answer| answer.value)
 }
 
 /// How one structured answer is asked for.
 pub struct Ask<'a> {
+    /// Whose CLI answers.
+    pub engine: Engine,
     /// Where the CLI runs. Without `read_files` it's an empty folder, so
     /// there's nothing around for it to go looking at.
     pub dir: &'a Path,
@@ -254,21 +276,284 @@ pub fn parse_cost(stdout: &str) -> Option<f64> {
     value.get("total_cost_usd").and_then(|cost| cost.as_f64())
 }
 
-pub fn ask_claude_with(ask: &Ask, text: String, schema: &serde_json::Value) -> Result<Answer, String> {
-    ask_claude_streaming(ask, text, schema, &|_| {})
+pub fn ask_with(ask: &Ask, text: String, schema: &serde_json::Value) -> Result<Answer, String> {
+    ask_streaming(ask, text, schema, &|_| {})
 }
 
 /// The same, telling `on_step` what the CLI does on the way to its answer.
-pub fn ask_claude_streaming(
-    ask: &Ask,
-    text: String,
-    schema: &serde_json::Value,
-    on_step: &dyn Fn(Step),
-) -> Result<Answer, String> {
+pub fn ask_streaming(ask: &Ask, text: String, schema: &serde_json::Value, on_step: &dyn Fn(Step)) -> Result<Answer, String> {
     // Drafting with AI is an AI feature too (see ai_mode.rs).
     if !crate::ai_mode::enabled() {
         return Err(crate::i18n::tr(crate::i18n::Msg::AiModeOff));
     }
+    if ask.engine == Engine::Claude {
+        return ask_claude(ask, text, schema, on_step);
+    }
+    // The others answer in text: what comes back is checked against the
+    // schema's shape, and asked for once more when it doesn't fit.
+    let mut cost: Option<f64> = None;
+    let mut problem = String::new();
+    for attempt in 0..2 {
+        let said = run_reader(ask, &shaped_prompt(&text, schema, (attempt > 0).then_some(problem.as_str())), schema, on_step)?;
+        cost = match (cost, said.cost_usd) {
+            (Some(before), Some(now)) => Some(before + now),
+            (before, now) => before.or(now),
+        };
+        match json_in(&said.text, schema) {
+            Ok(value) => return Ok(Answer { value, cost_usd: cost }),
+            Err(why) => problem = why,
+        }
+    }
+    Err(problem)
+}
+
+/// The prompt for an engine that takes no schema of its own: the request,
+/// then the shape the answer has to have, and what was wrong with the last
+/// one when this is the second time of asking.
+fn shaped_prompt(text: &str, schema: &serde_json::Value, problem: Option<&str>) -> String {
+    let again = match problem {
+        Some(problem) => format!("\n\nYour previous answer could not be used ({problem}). Answer again."),
+        None => String::new(),
+    };
+    format!(
+        "{text}\n\n---\nAnswer with one JSON object and nothing else — no explanation before or after it, no code fence — \
+that matches this JSON Schema:\n{schema}{again}"
+    )
+}
+
+/// The JSON object in what an engine said, with the keys the schema requires
+/// at its top. What's inside is the caller's to read into its own types.
+pub fn json_in(said: &str, schema: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let said = said.trim();
+    let whole = serde_json::from_str::<serde_json::Value>(said).ok();
+    // Around it, some still put a sentence or a code fence.
+    let inside = || {
+        let (start, end) = (said.find('{')?, said.rfind('}')?);
+        serde_json::from_str::<serde_json::Value>(said.get(start..=end)?).ok()
+    };
+    let value = whole.filter(serde_json::Value::is_object).or_else(inside).ok_or("the answer has no JSON object in it")?;
+    let required = schema.get("required").and_then(|keys| keys.as_array()).into_iter().flatten();
+    for key in required.filter_map(|key| key.as_str()) {
+        if value.get(key).is_none() {
+            return Err(format!("the answer is missing \"{key}\""));
+        }
+    }
+    Ok(value)
+}
+
+/// A schema as Codex's `--output-schema` takes it: every object closed, and
+/// every one of its properties required (the caller's types fill in the
+/// rest by default anyway).
+pub fn strict_schema(schema: &serde_json::Value) -> serde_json::Value {
+    let mut schema = schema.clone();
+    fn close(node: &mut serde_json::Value) {
+        let Some(object) = node.as_object_mut() else { return };
+        if let Some(properties) = object.get("properties").and_then(|properties| properties.as_object()) {
+            let keys: Vec<serde_json::Value> = properties.keys().cloned().map(serde_json::Value::String).collect();
+            object.insert("required".into(), serde_json::Value::Array(keys));
+            object.insert("additionalProperties".into(), serde_json::Value::Bool(false));
+        }
+        for (_, child) in object.iter_mut() {
+            match child {
+                serde_json::Value::Object(children) if children.get("type").is_none() && children.get("properties").is_none() => {
+                    // A map of named schemas ("properties" itself).
+                    children.values_mut().for_each(close);
+                }
+                serde_json::Value::Object(_) => close(child),
+                serde_json::Value::Array(items) => items.iter_mut().for_each(close),
+                _ => {}
+            }
+        }
+    }
+    close(&mut schema);
+    schema
+}
+
+/// What an engine said in a run that only looks, and what it cost when the
+/// CLI says.
+struct Said {
+    text: String,
+    cost_usd: Option<f64>,
+}
+
+/// How long an ACP agent gets to leave once its turn is over (see runner.rs).
+const ACP_EXIT_GRACE: Duration = Duration::from_secs(20);
+
+/// Runs `ask.engine`'s CLI once as an agent that may only look (the same
+/// invocation an agent of the user's at that level gets), with `prompt`,
+/// and gathers its answer. Its steps go to `on_step` as they happen.
+fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn Fn(Step)) -> Result<Said, String> {
+    let bin = agent_cli::require(super::runner::target(ask.engine), None)?;
+    if !ask.read_files {
+        std::fs::create_dir_all(ask.dir).map_err(|err| err.to_string())?;
+    }
+    let reader = AgentSpec {
+        engine: ask.engine,
+        autonomy: Autonomy::Read,
+        model: ask.model.trim().to_string(),
+        task: prompt.to_string(),
+        work_dir: ask.dir.display().to_string(),
+        ..AgentSpec::default()
+    };
+    let invocation = build_invocation(&reader, None, None, &std::collections::HashMap::new());
+    let mut args = invocation.args.clone();
+    // Files for this one answer, out of the folder it may be reading.
+    let scratch = std::env::temp_dir();
+    let id = uuid::Uuid::new_v4();
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    let mut cmd = Command::new(&bin);
+    if ask.engine == Engine::Codex {
+        let file = scratch.join(format!("termo-schema-{id}.json"));
+        std::fs::write(&file, strict_schema(schema).to_string()).map_err(|err| err.to_string())?;
+        args.push("--output-schema".into());
+        args.push(file.display().to_string());
+        files.push(file);
+    }
+    if let (Engine::Gemini, Some(settings)) = (ask.engine, &invocation.settings) {
+        // Its settings for the run, on top of the system's (see runner.rs).
+        let file = scratch.join(format!("termo-gemini-{id}.json"));
+        super::console_bridge::write_private(&file, &super::gemini_system::with_system(settings)).map_err(|err| err.to_string())?;
+        cmd.env("GEMINI_CLI_SYSTEM_SETTINGS_PATH", &file);
+        files.push(file);
+    }
+    if ask.engine == Engine::Gemini {
+        // Headless, Gemini CLI refuses a folder it hasn't been told to trust.
+        // This one only looks, and the folder is the one the user picked.
+        cmd.env("GEMINI_CLI_TRUST_WORKSPACE", "true");
+    }
+    cmd.args(&args)
+        .current_dir(ask.dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        // Never read: piped, a chatty stderr would fill up and stall the CLI.
+        .stderr(Stdio::null())
+        .env("NO_COLOR", "1");
+    for key in super::runner::INHERITED_NOISE {
+        cmd.env_remove(key);
+    }
+    cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
+    cmd.envs(GIT_SAFETY_ENV.iter().copied());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let cleanup = |files: &[std::path::PathBuf]| files.iter().for_each(|file| drop(std::fs::remove_file(file)));
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(err) => {
+            cleanup(&files);
+            return Err(err.to_string());
+        }
+    };
+    // Grok's is a conversation (see acp.rs): its input stays open until the
+    // turn is over. The others take the prompt and are left to it.
+    let mut conversation = None;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        match invocation.acp {
+            Some(run) => {
+                let driver = super::acp::Driver::new(run, ask.dir.display().to_string());
+                let _ = writeln!(stdin, "{}", driver.start());
+                conversation = Some((driver, stdin));
+            }
+            None => {
+                let text = invocation.stdin;
+                std::thread::spawn(move || {
+                    let _ = stdin.write_all(text.as_bytes());
+                });
+            }
+        }
+    }
+    let stdout = child.stdout.take().expect("piped");
+    let (lines, received) = std::sync::mpsc::channel::<String>();
+    let reading = std::thread::spawn(move || {
+        use std::io::BufRead;
+        for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut parser = Parser::new(ask.engine);
+    let mut said = Said { text: String::new(), cost_usd: None };
+    let mut failed = false;
+    let mut errors: Vec<String> = Vec::new();
+    let mut turn_over: Option<Instant> = None;
+    let mut take = |events: Vec<super::events::RunEvent>, cost: Option<f64>, line_failed: bool| {
+        failed |= line_failed;
+        said.cost_usd = cost.or(said.cost_usd);
+        for event in events {
+            match event.kind {
+                EventKind::Tool => on_step(Step::Tool { name: event.tool, detail: event.text }),
+                // The last thing it says is the answer; on the way, a step.
+                EventKind::Text | EventKind::Result if !event.text.trim().is_empty() => {
+                    on_step(Step::Text { text: event.text.clone() });
+                    said.text = event.text;
+                }
+                EventKind::Stderr if !event.text.trim().is_empty() => errors.push(event.text),
+                _ => {}
+            }
+        }
+    };
+    let deadline = Instant::now() + ask.timeout;
+    let timed_out = loop {
+        while let Ok(line) = received.try_recv() {
+            let (events, outcome) = parser.line(&line, 0);
+            take(events, outcome.cost_usd, outcome.failed);
+            if let Some((driver, stdin)) = conversation.as_mut() {
+                use std::io::Write;
+                let step = driver.line(&line);
+                for reply in &step.send {
+                    let _ = writeln!(stdin, "{reply}");
+                }
+                if step.done {
+                    conversation = None;
+                    turn_over = Some(Instant::now());
+                }
+            }
+        }
+        if child.try_wait().ok().flatten().is_some() {
+            break false;
+        }
+        if turn_over.is_some_and(|since| since.elapsed() >= ACP_EXIT_GRACE) {
+            super::runner::kill_tree(&mut child);
+            let _ = child.wait();
+            break false;
+        }
+        if Instant::now() >= deadline {
+            super::runner::kill_tree(&mut child);
+            let _ = child.wait();
+            break true;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    };
+    let _ = reading.join();
+    while let Ok(line) = received.try_recv() {
+        let (events, outcome) = parser.line(&line, 0);
+        take(events, outcome.cost_usd, outcome.failed);
+    }
+    take(parser.finish(0), None, false);
+    cleanup(&files);
+    if timed_out {
+        return Err("timeout".into());
+    }
+    if failed || said.text.trim().is_empty() {
+        return Err(if errors.is_empty() { "no answer".to_string() } else { errors.join("\n") });
+    }
+    Ok(said)
+}
+
+/// Claude Code's own way: the schema is its to hold the answer to, and the
+/// answer comes apart from what it says.
+fn ask_claude(ask: &Ask, text: String, schema: &serde_json::Value, on_step: &dyn Fn(Step)) -> Result<Answer, String> {
     let bin = agent_cli::require(AgentTarget::Claude, None)?;
     if !ask.read_files {
         std::fs::create_dir_all(ask.dir).map_err(|err| err.to_string())?;
@@ -364,6 +649,79 @@ pub fn ask_claude_streaming(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_the_json_an_engine_answered_with_whatever_is_around_it() {
+        let schema = serde_json::json!({ "type": "object", "properties": { "name": {}, "task": {} }, "required": ["name"] });
+        assert_eq!(json_in(r#"{"name":"a"}"#, &schema).unwrap()["name"], "a");
+        let fenced = "Here it is:\n```json\n{\"name\": \"b\", \"task\": \"x {y}\"}\n```\nDone.";
+        assert_eq!(json_in(fenced, &schema).unwrap()["task"], "x {y}");
+        assert!(json_in("I could not do that.", &schema).unwrap_err().contains("no JSON object"));
+        assert!(json_in(r#"{"task":"x"}"#, &schema).unwrap_err().contains("\"name\""));
+        // A list isn't an answer, though it's JSON.
+        assert!(json_in("[1, 2]", &schema).is_err());
+    }
+
+    #[test]
+    fn the_second_time_of_asking_says_what_was_wrong() {
+        let schema = serde_json::json!({ "type": "object" });
+        let first = shaped_prompt("Plan it", &schema, None);
+        assert!(first.starts_with("Plan it") && first.contains(r#"{"type":"object"}"#) && !first.contains("previous answer"));
+        assert!(shaped_prompt("Plan it", &schema, Some("the answer is missing \"name\"")).contains("missing \"name\""));
+    }
+
+    #[test]
+    fn a_schema_for_codex_closes_every_object_and_requires_all_of_it() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "agents": { "type": "array", "items": { "type": "object", "properties": { "key": { "type": "string" }, "web": { "type": "boolean" } }, "required": ["key"] } }
+            },
+            "required": ["name"]
+        });
+        let strict = strict_schema(&schema);
+        assert_eq!(strict["required"], serde_json::json!(["name", "agents"]));
+        assert_eq!(strict["additionalProperties"], false);
+        let item = &strict["properties"]["agents"]["items"];
+        assert_eq!(item["required"], serde_json::json!(["key", "web"]));
+        assert_eq!(item["additionalProperties"], false);
+        // A property is a schema, not an object to close.
+        assert!(strict["properties"]["name"].get("additionalProperties").is_none());
+    }
+
+    /// Against the real CLIs, logged in: `cargo test ask_live -- --ignored
+    /// --nocapture`. Each one installed answers in the shape asked for.
+    #[test]
+    #[ignore]
+    fn ask_live_every_installed_engine_answers_in_shape() {
+        crate::ai_mode::set_enabled_for_tests(true);
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "capital": { "type": "string" },
+                "facts": { "type": "array", "items": { "type": "object", "properties": { "about": { "type": "string" } }, "required": ["about"] } }
+            },
+            "required": ["capital", "facts"]
+        });
+        let dir = std::env::temp_dir().join(format!("termo-ask-live-{}", uuid::Uuid::new_v4()));
+        for engine in [Engine::Codex, Engine::Gemini, Engine::Copilot, Engine::Grok] {
+            if agent_cli::locate(crate::agents::runner::target(engine), None).is_none() {
+                println!("{engine:?}: not installed, skipped");
+                continue;
+            }
+            let ask = Ask { engine, dir: &dir, model: "", read_files: false, timeout: Duration::from_secs(240) };
+            let steps = std::cell::Cell::new(0);
+            let answer = ask_streaming(&ask, "What is the capital of France? Give two short facts about it.".into(), &schema, &|_| {
+                steps.set(steps.get() + 1)
+            });
+            match answer {
+                Ok(answer) => println!("{engine:?}: {} ({} steps, cost {:?})", answer.value, steps.get(), answer.cost_usd),
+                Err(err) => println!("{engine:?}: FAILED {err}"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// What the CLI does on the way is told as steps; its answer isn't one.
     #[test]

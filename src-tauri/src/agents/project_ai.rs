@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::{self, tr, Lang, Msg};
 
-use super::draft::{ask_claude, DraftIntegration, DraftSchedule};
+use super::draft::{ask, DraftIntegration, DraftSchedule};
 use super::projects::{Project, ProjectLimits};
 use super::spec::{AfterAgent, AfterOutcome, AgentSpec, Autonomy, Engine, Schedule};
 use super::store::RunRecord;
@@ -293,7 +293,7 @@ pub fn project_prompt(description: &str, work_dir: &str, lang: Lang) -> String {
     let language = language(lang);
     format!(
         "You design small teams of autonomous agents for people with no experience building agents. \
-Each agent runs unattended through Claude Code in print mode (`claude -p`), {folder}: it gets a task \
+Each agent runs unattended through an agent CLI in headless mode (Claude Code, Codex and the like), {folder}: it gets a task \
 prompt plus instructions appended to its system prompt, can never ask the user anything mid-run, and \
 whatever its permission level doesn't allow is refused.
 
@@ -338,12 +338,17 @@ The user's description:
     )
 }
 
-pub fn generate(scratch: &Path, description: &str, work_dir: &str) -> Result<GeneratedProject, String> {
+/// `engine`: whose CLI drafts the team, and the one its agents then run on —
+/// it's the one the user has.
+pub fn generate(scratch: &Path, engine: Engine, description: &str, work_dir: &str) -> Result<GeneratedProject, String> {
     let fail = |err: String| tr(Msg::ProjectDraftFailed(&err));
     let answer =
-        ask_claude(scratch, project_prompt(description, work_dir, i18n::current()), &project_schema(), TIMEOUT).map_err(fail)?;
+        ask(engine, scratch, project_prompt(description, work_dir, i18n::current()), &project_schema(), TIMEOUT).map_err(fail)?;
     let draft: ProjectDraft = serde_json::from_value(answer).map_err(|err| fail(err.to_string()))?;
-    let generated = build(draft, work_dir, || uuid::Uuid::new_v4().to_string());
+    let mut generated = build(draft, work_dir, || uuid::Uuid::new_v4().to_string());
+    for agent in &mut generated.agents {
+        agent.engine = engine;
+    }
     if generated.agents.is_empty() {
         return Err(fail("no agents".into()));
     }
@@ -442,7 +447,7 @@ pub fn improve_prompt(project: &Project, agents: &[AgentSpec], runs: &[RunRecord
     let language = language(lang);
     format!(
         "You review a team of autonomous agents a person set up in Termo, and suggest how to improve it \
-from how its recent runs went. Each agent runs unattended through Claude Code or Codex, can't ask anything \
+from how its recent runs went. Each agent runs unattended through an agent CLI (Claude Code, Codex and the like), can't ask anything \
 mid-run, and whatever its permission level (autonomy: read < edit < run) doesn't allow is refused.
 
 The project: {name}. Its goal: {goal}
@@ -487,9 +492,15 @@ pub fn valid_suggestions(suggestions: Vec<Suggestion>, agents: &[AgentSpec]) -> 
         .collect()
 }
 
-pub fn improve(scratch: &Path, project: &Project, agents: &[AgentSpec], runs: &[RunRecord]) -> Result<Improvement, String> {
+pub fn improve(
+    scratch: &Path,
+    engine: Engine,
+    project: &Project,
+    agents: &[AgentSpec],
+    runs: &[RunRecord],
+) -> Result<Improvement, String> {
     let fail = |err: String| tr(Msg::ProjectImproveFailed(&err));
-    let answer = ask_claude(scratch, improve_prompt(project, agents, runs, i18n::current()), &improve_schema(), TIMEOUT)
+    let answer = ask(engine, scratch, improve_prompt(project, agents, runs, i18n::current()), &improve_schema(), TIMEOUT)
         .map_err(fail)?;
     let mut improvement: Improvement = serde_json::from_value(answer).map_err(|err| fail(err.to_string()))?;
     improvement.suggestions = valid_suggestions(improvement.suggestions, agents);

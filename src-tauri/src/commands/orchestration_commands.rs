@@ -6,6 +6,7 @@ use crate::agents::orchestration::plan::{
 };
 use crate::agents::orchestration::{planner, questions, report, store};
 use crate::agents::draft::Step;
+use crate::agents::spec::Engine;
 use crate::agents::store::now_millis;
 use crate::agents::projects;
 use crate::commands::agent_commands::{delete_agent, root};
@@ -70,10 +71,12 @@ pub async fn orchestration_clarify(
     app: tauri::AppHandle,
     prompt: String,
     work_dir: String,
+    engine: Option<Engine>,
     model: String,
 ) -> Result<planner::Clarifying, String> {
     let on_step = progress(&app, "clarify", None);
-    tauri::async_runtime::spawn_blocking(move || planner::clarify(&prompt, &work_dir, &model, &on_step))
+    let engine = engine.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || planner::clarify(&prompt, &work_dir, engine, &model, &on_step))
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))?
 }
@@ -86,6 +89,7 @@ pub async fn orchestration_plan(
     app: tauri::AppHandle,
     prompt: String,
     work_dir: String,
+    engine: Option<Engine>,
     model: String,
     answers: Option<Vec<planner::Answered>>,
     overhead_usd: Option<f64>,
@@ -93,7 +97,9 @@ pub async fn orchestration_plan(
     let root = root(&app)?;
     let request = planner::with_answers(&prompt, &answers.unwrap_or_default());
     let on_step = progress(&app, "plan", None);
-    let mut planned = tauri::async_runtime::spawn_blocking(move || planner::generate(&request, &work_dir, &model, &on_step))
+    let engine = engine.unwrap_or_default();
+    let mut planned =
+        tauri::async_runtime::spawn_blocking(move || planner::generate(&request, &work_dir, engine, &model, &on_step))
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
     planned.overhead_usd += overhead_usd.filter(|usd| usd.is_finite() && *usd > 0.0).unwrap_or(0.0);

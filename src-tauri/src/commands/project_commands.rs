@@ -3,7 +3,7 @@ use tauri::State;
 use crate::agents::portable::{self, ImportReport};
 use crate::agents::project_ai::{self, GeneratedProject, Improvement};
 use crate::agents::projects::{self, Project, Stats, VersionInfo};
-use crate::agents::spec::{is_valid_id, AgentSpec};
+use crate::agents::spec::{is_valid_id, AgentSpec, Engine};
 use crate::agents::store::{self, RunRecord, RunTrigger};
 use crate::commands::agent_commands::{delete_agent, root, save_agent};
 use crate::i18n::{tr, Msg};
@@ -150,9 +150,15 @@ pub fn project_import(
 
 /// A team drafted with AI from a description, not saved yet.
 #[tauri::command]
-pub async fn project_draft(app: tauri::AppHandle, description: String, work_dir: String) -> Result<GeneratedProject, String> {
+pub async fn project_draft(
+    app: tauri::AppHandle,
+    description: String,
+    work_dir: String,
+    engine: Option<Engine>,
+) -> Result<GeneratedProject, String> {
     let scratch = root(&app)?.join(".draft");
-    tauri::async_runtime::spawn_blocking(move || project_ai::generate(&scratch, &description, &work_dir))
+    let engine = engine.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || project_ai::generate(&scratch, engine, &description, &work_dir))
         .await
         .map_err(|err| tr(Msg::ProjectDraftFailed(&err.to_string())))?
 }
@@ -178,15 +184,16 @@ pub fn project_create(
     Ok((projects::list_in(&root), store::list_in(&root)))
 }
 
-/// Changes Claude suggests from how the project's runs went.
+/// Changes an engine suggests from how the project's runs went.
 #[tauri::command]
-pub async fn project_improve(app: tauri::AppHandle, id: String) -> Result<Improvement, String> {
+pub async fn project_improve(app: tauri::AppHandle, id: String, engine: Option<Engine>) -> Result<Improvement, String> {
     let root = root(&app)?;
     let project = project(&root, &id)?;
     let agents = projects::agents_of(&root, &id);
     let runs = projects::runs_of(&root, &id);
     let scratch = root.join(".draft");
-    tauri::async_runtime::spawn_blocking(move || project_ai::improve(&scratch, &project, &agents, &runs))
+    let engine = engine.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || project_ai::improve(&scratch, engine, &project, &agents, &runs))
         .await
         .map_err(|err| tr(Msg::ProjectImproveFailed(&err.to_string())))?
 }

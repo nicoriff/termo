@@ -18,12 +18,20 @@
     value,
     onpick,
     onopen,
+    disabled = false,
+    width,
+    labelledby,
   }: {
     options: DropdownOption[];
     value: string;
     onpick: (value: string) => void;
     /** Called when the panel opens — for lists that may have changed since. */
     onopen?: () => void;
+    disabled?: boolean;
+    /** Any CSS width, where the row's 180px doesn't suit (a dialog's field). */
+    width?: string;
+    /** The id of the text that names it, when that isn't beside it in a row. */
+    labelledby?: string;
   } = $props();
 
   let open = $state(false);
@@ -97,6 +105,8 @@
       return;
     }
     if (event.key === "Escape") {
+      // The panel's to close, not the dialog it may be in.
+      event.stopPropagation();
       close();
     } else if (event.key === "ArrowDown") {
       highlighted = (highlighted + 1) % options.length;
@@ -116,13 +126,16 @@
   }
 </script>
 
-<div class="dropdown">
+<div class="dropdown" style:width>
   <button
     bind:this={triggerEl}
     class="dropdown-trigger"
     class:open
+    type="button"
+    {disabled}
     onclick={toggle}
     onkeydown={onKeydown}
+    aria-labelledby={labelledby}
     aria-haspopup="listbox"
     aria-expanded={open}
   >
@@ -189,6 +202,11 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
+  }
+
+  .dropdown-trigger:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .dropdown-trigger span {

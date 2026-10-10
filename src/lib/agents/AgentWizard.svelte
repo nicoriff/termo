@@ -3,6 +3,8 @@
   import { fade, fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { aiEngine } from "./ai-engine.svelte";
+  import AiEnginePicker from "./AiEnginePicker.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import {
     deleteAgent,
@@ -224,12 +226,16 @@
   const addedSecrets: string[] = [];
 
   async function buildWithAi() {
-    if (!spec.description.trim() || drafting) return;
+    const drafter = aiEngine.value;
+    if (!spec.description.trim() || drafting || !drafter) return;
     drafting = true;
     draftError = "";
     try {
-      const draft = await draftAgent(spec.description.trim(), spec.workDir);
+      const draft = await draftAgent(spec.description.trim(), spec.workDir, drafter);
       applyDraft(spec, draft);
+      // An agent on an engine that isn't installed couldn't run: it goes on
+      // the one that just drafted it.
+      if (!installed(spec.engine)) chooseEngine(drafter);
       suggestions = draft.integrations;
       draftNote = draft.explanation;
       direction = 1;
@@ -444,10 +450,16 @@
               bind:value={spec.description}
               disabled={drafting}
             ></textarea>
+            <AiEnginePicker
+              id="agent-draft-engine"
+              label={t("agents.wizard.idea.draftEngine")}
+              hint={t("agents.wizard.idea.draftEngineHint", { step: t("agents.wizard.steps.engine") })}
+              disabled={drafting}
+            />
             <div class="row">
               <button
                 class="button primary"
-                disabled={drafting || !spec.description.trim() || !installed("claude")}
+                disabled={drafting || !spec.description.trim() || !aiEngine.value}
                 onclick={() => void buildWithAi()}
               >
                 ✨ {t("agents.wizard.idea.buildWithAi")}
@@ -455,9 +467,9 @@
               <span class="hint" class:working={drafting}>
                 {drafting
                   ? t("agents.wizard.idea.thinking")
-                  : installed("claude")
+                  : aiEngine.value
                     ? t("agents.wizard.idea.aiHint")
-                    : t("agents.wizard.idea.aiNeedsClaude")}
+                    : t("agents.aiEngine.none")}
               </span>
             </div>
             {#if draftError}<p class="error">{draftError}</p>{/if}

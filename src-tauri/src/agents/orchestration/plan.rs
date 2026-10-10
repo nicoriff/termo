@@ -236,7 +236,10 @@ pub struct Orchestration {
     pub prompt: String,
     pub work_dir: String,
     pub status: Status,
-    /// The Claude model that plans and supervises; empty: the CLI's default.
+    /// Whose CLI plans and supervises. Claude Code's in the ones from before
+    /// there was a choice.
+    pub orchestrator_engine: Engine,
+    /// Its model; empty: the CLI's default.
     pub orchestrator_model: String,
     pub strategies: Vec<Strategy>,
     /// The key of the strategy the planner would pick, and why.

@@ -25,6 +25,12 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::SeqCst)
 }
 
+/// For the tests that talk to a real CLI, which have no app to switch it on.
+#[cfg(test)]
+pub fn set_enabled_for_tests(on: bool) {
+    ENABLED.store(on, Ordering::SeqCst);
+}
+
 /// At launch, with the saved setting. The scheduler's thread starts either
 /// way and idles while Modo IA is off, so turning it on later needs nothing
 /// more from it.

@@ -1177,6 +1177,7 @@
                   <span class="box-title">{t("agents.orchestration.view.orchestrator")}</span>
                   <span class="box-sub">
                     {t("agents.orchestration.view.orchestratorModel", {
+                      engine: ENGINE_NAMES[orchestration.orchestratorEngine ?? "claude"],
                       model: orchestration.orchestratorModel || t("agents.orchestration.view.defaultModel"),
                     })}
                   </span>
@@ -1275,6 +1276,7 @@
                 <div class="label">{t("agents.orchestration.detail.model")}</div>
                 <p class="value">
                   {t("agents.orchestration.view.orchestratorModel", {
+                    engine: ENGINE_NAMES[orchestration.orchestratorEngine ?? "claude"],
                     model: orchestration.orchestratorModel || t("agents.orchestration.view.defaultModel"),
                   })}
                 </p>

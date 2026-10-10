@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::i18n::{self, Lang};
 
-use super::super::draft::{ask_claude_with, Ask};
+use super::super::draft::{ask_with, Ask};
 use super::super::project_ai::{clip, language};
 use super::plan::{
     agent_of, projected_usd, spent_usd, task_estimate, Catalog, Change, Orchestration, PlannedAgent, PlannedTask,
@@ -81,7 +81,7 @@ pub fn schema() -> serde_json::Value {
                         },
                         "task": { "type": "string" },
                         "agent": { "type": "string" },
-                        "engine": { "type": "string", "enum": ["", "claude", "codex", "gemini", "copilot"] },
+                        "engine": { "type": "string", "enum": ["", "claude", "codex", "gemini", "copilot", "grok"] },
                         "model": { "type": "string" },
                         "newAgent": strategy_plan["agents"]["items"].clone(),
                         "newTask": strategy_plan["tasks"]["items"].clone()
@@ -250,8 +250,14 @@ the goal needs it."
 /// One review of the orchestration as it stands. `scratch`: an empty folder
 /// to answer from. Errors come untranslated: the caller goes on without it.
 pub fn review(scratch: &Path, orchestration: &Orchestration, catalog: &Catalog) -> Result<Review, String> {
-    let ask = Ask { dir: scratch, model: &orchestration.orchestrator_model, read_files: false, timeout: TIMEOUT };
-    let answer = ask_claude_with(&ask, prompt(orchestration, catalog, i18n::current()), &schema())?;
+    let ask = Ask {
+        engine: orchestration.orchestrator_engine,
+        dir: scratch,
+        model: &orchestration.orchestrator_model,
+        read_files: false,
+        timeout: TIMEOUT,
+    };
+    let answer = ask_with(&ask, prompt(orchestration, catalog, i18n::current()), &schema())?;
     review_of(answer.value, answer.cost_usd)
 }
 

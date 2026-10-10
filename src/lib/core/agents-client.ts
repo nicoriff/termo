@@ -255,8 +255,8 @@ export function importProject(path: string): Promise<[Project[], AgentSpec[], Im
 }
 
 /** A team drafted with AI, not saved yet. Takes a while. */
-export function draftProject(description: string, workDir: string): Promise<GeneratedProject> {
-  return invoke("project_draft", { description, workDir });
+export function draftProject(description: string, workDir: string, engine: AgentEngine): Promise<GeneratedProject> {
+  return invoke("project_draft", { description, workDir, engine });
 }
 
 /** Saves a reviewed project with its agents. */
@@ -265,8 +265,8 @@ export function createProject(project: Project, agents: AgentSpec[]): Promise<[P
 }
 
 /** Changes suggested from how the project's runs went. Takes a while. */
-export function improveProject(id: string): Promise<Improvement> {
-  return invoke("project_improve", { id });
+export function improveProject(id: string, engine: AgentEngine): Promise<Improvement> {
+  return invoke("project_improve", { id, engine });
 }
 
 export function projectVersions(id: string): Promise<ProjectVersion[]> {
@@ -423,9 +423,9 @@ export interface AgentDraft {
 }
 
 /** "Build it with AI": a first draft of the whole agent. Takes a while
- * (Claude answers through its CLI). */
-export function draftAgent(description: string, workDir: string): Promise<AgentDraft> {
-  return invoke("agent_draft", { description, workDir });
+ * (`engine` answers through its CLI). */
+export function draftAgent(description: string, workDir: string, engine: AgentEngine): Promise<AgentDraft> {
+  return invoke("agent_draft", { description, workDir, engine });
 }
 
 export interface AgentMcpRequest {
