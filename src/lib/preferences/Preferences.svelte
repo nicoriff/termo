@@ -5,6 +5,7 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { preferencesReady, setBackgroundBlur } from "$lib/core/window-client";
   import { isWindows } from "$lib/core/platform";
+  import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import AppearanceSection from "./sections/AppearanceSection.svelte";
   import FontSection from "./sections/FontSection.svelte";
   import ConsoleSection from "./sections/ConsoleSection.svelte";
@@ -123,6 +124,8 @@
   // Another window asks for a page of this one: the marketplace panel,
   // for where a source's key goes.
   onMount(() => {
+    // Which agents' CLIs are installed, to dim the ones that aren't.
+    newTabOptions.refresh();
     let unlisten: (() => void) | null = null;
     void listen<string>("preferences-section", (event) => {
       if (event.payload === "marketplace") {
@@ -193,7 +196,11 @@
         {#if node.children && expanded[node.id]}
           <div class="sidebar-children" transition:slide={{ duration: 120 }}>
             {#each node.children as child (child.id)}
-              <div class="sidebar-row child" class:selected={selected === child.id}>
+              <div
+                class="sidebar-row child"
+                class:selected={selected === child.id}
+                class:missing={child.tool !== undefined && newTabOptions.agentClis?.[child.tool] === false}
+              >
                 {@render chevronSpacer()}
                 <button class="sidebar-item" onclick={() => (selected = child.id)}>
                   {#if child.tool}
@@ -362,6 +369,11 @@
 
   .sidebar-row.child .sidebar-item {
     font-size: 11px;
+  }
+
+  /* An agent whose CLI isn't installed. */
+  .sidebar-row.missing .sidebar-item {
+    opacity: 0.5;
   }
 
   .detail {

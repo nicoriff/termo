@@ -126,6 +126,8 @@ class AppConfigStore {
   /** The keep-awake button in the title bar. */
   keepAwakeButton = $state(true);
   tabsFillWidth = $state(false);
+  /** Where an agent's CLI was installed when not npm's own folder, by agent. */
+  agentInstallDirs = $state<Record<string, string>>({});
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
@@ -237,6 +239,7 @@ class AppConfigStore {
     this.keepAwakeButton = config.keep_awake_button ?? true;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
+    this.agentInstallDirs = config.agent_install_dirs ?? {};
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.lastSeenVersion = config.last_seen_version ?? null;
@@ -369,6 +372,13 @@ class AppConfigStore {
     void this.persist();
   }
 
+  /** Null: npm's own folder, which needs no remembering. */
+  setAgentInstallDir(tool: ToolId, dir: string | null): void {
+    const { [tool]: _previous, ...others } = this.agentInstallDirs;
+    this.agentInstallDirs = dir ? { ...others, [tool]: dir } : others;
+    void this.persist();
+  }
+
   setTabsFillWidth(fill: boolean): void {
     this.tabsFillWidth = fill;
     void this.persist();
@@ -470,6 +480,7 @@ class AppConfigStore {
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
       tabs_fill_width: this.tabsFillWidth,
+      agent_install_dirs: this.agentInstallDirs,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       last_seen_version: this.lastSeenVersion,

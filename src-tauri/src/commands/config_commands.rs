@@ -21,6 +21,7 @@ pub fn save_config(
     config: AppConfig,
 ) -> Result<(), String> {
     store::save(&app, &config).map_err(|err| err.to_string())?;
+    crate::marketplace::agent_install::apply(&config.agent_install_dirs);
     // Modo IA switched in Preferences: the agents and their server follow at once.
     crate::ai_mode::set(&app, &app.state::<AppState>().agents, config.ai_mode_enabled);
     // Lets every other open window (e.g. Preferences vs. the main window)

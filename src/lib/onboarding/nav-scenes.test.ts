@@ -22,6 +22,18 @@ describe("the setup's navigation miniatures", () => {
     expect([0, 1, 2, 3].map((frame) => sceneFrame("tabs", frame).activeTab)).toEqual([0, 1, 2, 0]);
   });
 
+  it("opens the palette, types, picks a command and runs it", () => {
+    expect(sceneFrame("palette", 0).palette).toBeNull();
+    expect(sceneFrame("palette", 1)).toMatchObject({ palette: { typed: 0, selected: 0 }, key: "commandPalette" });
+    expect(sceneFrame("palette", 3).palette).toEqual({ typed: 1, selected: 0 });
+    expect(sceneFrame("palette", 4)).toMatchObject({ palette: { typed: 1, selected: 1 }, key: "down" });
+    // Enter runs it: the palette is gone and the tile is split.
+    const ran = sceneFrame("palette", 5);
+    expect(ran).toMatchObject({ palette: null, key: "enter", focused: "c" });
+    expect(sceneFrame("palette", 4).tiles.c.shown).toBe(false);
+    expect(ran.tiles.c.shown).toBe(true);
+  });
+
   it("splits one tile into three, one split at a time", () => {
     const shown = (frame: number) =>
       Object.values(sceneFrame("split", frame).tiles).filter((tile) => tile.shown).length;

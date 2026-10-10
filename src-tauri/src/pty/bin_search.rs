@@ -8,12 +8,27 @@
 //! `~/.local/bin` — so PATH alone finds neither.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// Folders the user chose to install an agent's CLI into (see
+/// marketplace/agent_install.rs): on no PATH but the one Termo gives its
+/// own consoles.
+static EXTRA_DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+pub fn set_extra_dirs(dirs: Vec<PathBuf>) {
+    *EXTRA_DIRS.lock().unwrap() = dirs;
+}
+
+pub fn extra_dirs() -> Vec<PathBuf> {
+    EXTRA_DIRS.lock().unwrap().clone()
+}
 
 /// PATH, plus the directories a GUI app's PATH is missing.
 pub fn candidate_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
         .unwrap_or_default();
+    dirs.extend(extra_dirs());
     // A PATH is fixed when the process starts: a CLI installed since (or
     // while Explorer still had the old PATH) is only found where installers
     // put it.

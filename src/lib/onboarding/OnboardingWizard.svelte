@@ -18,6 +18,7 @@
   import DoneStep from "./DoneStep.svelte";
   import NavigationStep from "./NavigationStep.svelte";
   import NotificationsStep from "./NotificationsStep.svelte";
+  import AgentInstallDialog from "$lib/agent-install/AgentInstallDialog.svelte";
   import TeamStep from "./TeamStep.svelte";
   import WelcomeStep from "./WelcomeStep.svelte";
 
@@ -88,6 +89,20 @@
 
   const hooksPending = $derived(hookStatus !== null && TOOL_IDS.some((tool) => hookChoice[tool] !== hookStatus![tool]));
   const hooked = $derived(TOOL_IDS.filter((tool) => hookStatus?.[tool]));
+
+  /** The agent whose CLI is being installed from the hooks step. */
+  let installing = $state<ToolId | null>(null);
+
+  async function installClosed(installed: boolean) {
+    const tool = installing;
+    installing = null;
+    if (!installed || !tool) return;
+    newTabOptions.refresh();
+    // It may have set up the hooks on its way out: that's a choice made.
+    const status = await getAgentHooksStatus().catch(() => hookStatus);
+    hookStatus = status;
+    if (status?.[tool]) hookChoice = { ...hookChoice, [tool]: true };
+  }
 
   function toggleHook(tool: ToolId) {
     hooksTouched = true;
@@ -172,6 +187,10 @@
   }
 </script>
 
+{#if installing}
+  <AgentInstallDialog tool={installing} onclose={(installed) => void installClosed(installed)} />
+{/if}
+
 <div class="onb-backdrop" transition:fade={{ duration: 140 }}>
   <div
     class="onb-dialog"
@@ -222,7 +241,14 @@
         {:else if step === "appearance"}
           <AppearanceStep />
         {:else if step === "agents"}
-          <AgentsStep status={hookStatus} choice={hookChoice} busy={hooksBusy} error={hooksError} ontoggle={toggleHook} />
+          <AgentsStep
+            status={hookStatus}
+            choice={hookChoice}
+            busy={hooksBusy}
+            error={hooksError}
+            ontoggle={toggleHook}
+            oninstall={(tool) => (installing = tool)}
+          />
         {:else if step === "notifications"}
           <NotificationsStep tools={hooked} />
         {:else}

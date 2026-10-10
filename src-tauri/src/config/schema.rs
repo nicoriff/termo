@@ -156,6 +156,9 @@ pub struct AppConfig {
     /// Where the marketplace searches MCP servers first: "official" or
     /// "smithery" (see marketplace/sources.rs).
     pub marketplace_source: String,
+    /// Where the user installed an agent's CLI when not npm's own folder,
+    /// by agent ("grok" → the folder): see marketplace/agent_install.rs.
+    pub agent_install_dirs: std::collections::BTreeMap<String, String>,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
@@ -220,6 +223,7 @@ impl Default for AppConfig {
             agents_in_activity_bar: true,
             agents_from_any_console: false,
             marketplace_source: "official".into(),
+            agent_install_dirs: std::collections::BTreeMap::new(),
             keep_awake_button: true,
             tabs_fill_width: false,
             status_line_wrapped: None,

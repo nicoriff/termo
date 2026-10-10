@@ -6,8 +6,33 @@ use crate::marketplace::installed::Installed;
 use crate::marketplace::mcp_registry::McpPage;
 use crate::marketplace::model::CatalogItem;
 use crate::marketplace::sources::{self, SourceId, SourceStatus};
-use crate::marketplace::{agent_cli, model::AgentTarget, model::MarketplaceStatus};
+use crate::marketplace::{agent_cli, agent_install, model::AgentTarget, model::MarketplaceStatus};
 use crate::state::AppState;
+
+/// What installing an agent's CLI would run, and whether npm is there to
+/// run it (see marketplace/agent_install.rs).
+#[tauri::command]
+pub async fn agent_cli_install_info(tool: AgentTarget) -> Result<agent_install::InstallInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || agent_install::info(tool)).await.map_err(|err| err.to_string())
+}
+
+/// Installs an agent's CLI with npm, into `dir` when it isn't npm's own
+/// folder. Each step and line goes out as an `agent-cli-install` event.
+#[tauri::command]
+pub async fn install_agent_cli(
+    app: tauri::AppHandle,
+    tool: AgentTarget,
+    dir: Option<String>,
+) -> Result<agent_install::Installed, String> {
+    tauri::async_runtime::spawn_blocking(move || agent_install::install(&app, tool, dir.as_deref()))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+pub fn cancel_agent_cli_install() {
+    agent_install::cancel();
+}
 
 /// Which agent CLIs this machine has, so the panel can say why installing
 /// isn't available instead of failing at the moment the user clicks.

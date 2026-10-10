@@ -14,6 +14,7 @@
     busy,
     error,
     ontoggle,
+    oninstall,
   }: {
     /** What's installed right now; null until the first check answers. */
     status: AgentHooksStatus | null;
@@ -22,6 +23,8 @@
     busy: boolean;
     error: string | null;
     ontoggle: (tool: ToolId) => void;
+    /** Asked for an agent whose CLI isn't on this computer. */
+    oninstall: (tool: ToolId) => void;
   } = $props();
 
   const SIGNAL_MS = 1800;
@@ -63,6 +66,10 @@
       report
     ],
   );
+
+  /** Hooks for a CLI that isn't there are for nothing: it's installed first.
+   * Ones already in place can still be taken out. */
+  const missing = (tool: ToolId) => newTabOptions.agentClis?.[tool] === false && !status?.[tool];
 
   function stateKey(tool: ToolId): MessageKey {
     const installed = status?.[tool] ?? false;
@@ -119,7 +126,7 @@
         class:on={choice[tool]}
         style="left:{SPOTS[tool].x}%; top:{SPOTS[tool].y}%; --agent:{COLORS[tool]}"
         aria-pressed={choice[tool]}
-        disabled={busy || status === null}
+        disabled={busy || status === null || missing(tool)}
         onclick={() => ontoggle(tool)}
       >
         <span class="node-logo"><ConsoleIcon kind={tool} size={26} /></span>
@@ -142,13 +149,17 @@
             {TOOL_DISPLAY_NAMES[tool]}
             <small>{t(stateKey(tool))}</small>
           </span>
-          <input
-            class="onb-check"
-            type="checkbox"
-            checked={choice[tool]}
-            disabled={busy || status === null}
-            onchange={() => ontoggle(tool)}
-          />
+          {#if missing(tool)}
+            <button class="install" disabled={busy} onclick={() => oninstall(tool)}>{t("agentInstall.install")}</button>
+          {:else}
+            <input
+              class="onb-check"
+              type="checkbox"
+              checked={choice[tool]}
+              disabled={busy || status === null}
+              onchange={() => ontoggle(tool)}
+            />
+          {/if}
         </label>
       </li>
     {/each}
@@ -331,6 +342,27 @@
   .agent-text {
     flex: 1;
     min-width: 0;
+  }
+
+  .install {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .install:hover:not(:disabled) {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .install:focus-visible {
+    outline: 2px solid var(--pane-active-border, #3a6df0);
+    outline-offset: 2px;
   }
 
   .agent-text small {

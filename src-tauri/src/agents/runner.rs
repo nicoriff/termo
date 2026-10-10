@@ -129,7 +129,7 @@ fn work_dir(root: &std::path::Path, spec: &AgentSpec) -> Result<PathBuf, String>
 const ACP_EXIT_GRACE: Duration = Duration::from_secs(20);
 
 /// Ends the CLI and everything it started (shells, MCP servers).
-fn kill_tree(child: &mut Child) {
+pub(crate) fn kill_tree(child: &mut Child) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -36,12 +36,14 @@
     zoom: "onboarding.navigation.zoom.title",
     tabs: "onboarding.navigation.tabs.title",
     split: "onboarding.navigation.split.title",
+    palette: "onboarding.navigation.palette.title",
   };
   const BODIES: Record<NavScene, MessageKey> = {
     picker: "onboarding.navigation.picker.body",
     zoom: "onboarding.navigation.zoom.body",
     tabs: "onboarding.navigation.tabs.body",
     split: "onboarding.navigation.split.body",
+    palette: "onboarding.navigation.palette.body",
   };
 
   // The user's own bindings, so what the miniature presses is what works.
@@ -54,6 +56,7 @@
     down: "↓",
     enter: "Enter",
     cycleTab: binding("cycleTab"),
+    commandPalette: binding("commandPalette"),
     splitVertical: t("commands.splitVertical"),
     splitHorizontal: t("commands.splitHorizontal"),
   });
@@ -62,7 +65,11 @@
     zoom: [keyLabels.zoomUp, keyLabels.zoomDown],
     tabs: [keyLabels.cycleTab, binding("newTab")],
     split: [binding("commandPalette")],
+    palette: [binding("commandPalette"), "Enter"],
   });
+  /** What the palette's search finds in its scene, and what's typed for it. */
+  const paletteCommands = $derived([t("commands.splitVertical"), t("commands.splitHorizontal")]);
+  const paletteSearch = $derived(t("onboarding.navigation.palette.search"));
 
   let scene = $state<NavScene>("picker");
   let frame = $state(0);
@@ -125,6 +132,19 @@
             </div>
           </div>
         {/each}
+        {#if view.palette}
+          {@const palette = view.palette}
+          <div class="mini-palette" transition:fade={{ duration: 140 }}>
+            <div class="mini-palette-box">
+              <div class="mini-palette-input">
+                {paletteSearch.slice(0, Math.round(paletteSearch.length * palette.typed))}<i></i>
+              </div>
+              {#each paletteCommands as command, index}
+                <div class="mini-palette-row" class:selected={palette.selected === index}>{command}</div>
+              {/each}
+            </div>
+          </div>
+        {/if}
         {#if view.picker}
           <div class="mini-picker" transition:fade={{ duration: 140 }}>
             <div class="mini-map">
@@ -334,6 +354,57 @@
 
   .mini-map-tile div.selected {
     border: 2px solid var(--pane-active-border, #3a6df0);
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
+  }
+
+  /* The command palette, dropping from the top as the real one does. */
+  .mini-palette {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .mini-palette-box {
+    align-self: flex-start;
+    width: 68%;
+    margin-top: 7%;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 5px;
+    background: var(--tabbar-active-bg-solid, #1e1e1e);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    font-size: 9px;
+    overflow: hidden;
+  }
+
+  .mini-palette-input {
+    display: flex;
+    align-items: center;
+    min-height: 13px;
+    padding: 5px 7px;
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  /* The caret. */
+  .mini-palette-input i {
+    width: 1px;
+    height: 10px;
+    margin-left: 1px;
+    background: currentColor;
+  }
+
+  .mini-palette-row {
+    padding: 4px 7px;
+    opacity: 0.7;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .mini-palette-row.selected {
+    opacity: 1;
     background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
   }
 

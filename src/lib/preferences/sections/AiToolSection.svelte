@@ -13,6 +13,9 @@
   import { SHORTCUT_LABEL_KEYS, type ShortcutAction } from "$lib/core/shortcuts";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
+  import AgentInstallDialog from "$lib/agent-install/AgentInstallDialog.svelte";
+  import { marketplaceStatus } from "$lib/core/marketplace-client";
+  import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { SOUND_IDS, playSound, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import type { ToolId } from "$lib/ai-mode/pattern-table";
@@ -36,6 +39,9 @@
     };
     /** What the status bar shows for it without installing anything. */
     statusBarHint?: MessageKey;
+    /** For a CLI that can't be handed Termo's agents for one session: how
+     * its tabs get them. */
+    agentsHint?: MessageKey;
   }
 
   const DETAILS: Record<ToolId, ToolDetails> = {
@@ -75,6 +81,7 @@
       shortcut: "newGrok",
       hooksFile: "~/.grok/hooks/termo.json",
       statusBarHint: "preferences.aiMode.grokStatusBarHint",
+      agentsHint: "preferences.aiMode.grokAgentsHint",
     },
   };
 
@@ -91,14 +98,35 @@
   let busy = $state<"hooks" | "statusLine" | null>(null);
   let error = $state<string | null>(null);
 
+  /** Where its CLI is, null when it isn't installed; undefined until checked. */
+  let cliPath = $state<string | null | undefined>(undefined);
+  let installing = $state(false);
+
   async function refresh() {
     hooks = (await getAgentHooksStatus())[tool];
     statusLine = details.statusLine ? await details.statusLine.installed() : null;
   }
 
+  async function findCli() {
+    cliPath = await marketplaceStatus()
+      .then((status) => status[`${tool}Cli`])
+      .catch(() => undefined);
+  }
+
   onMount(() => {
     void refresh();
+    void findCli();
   });
+
+  function installClosed(installed: boolean) {
+    installing = false;
+    if (!installed) return;
+    // It may have set up the hooks on its way out.
+    void refresh();
+    void findCli();
+    // The sidebar's own note of which agents are missing.
+    newTabOptions.refresh();
+  }
 
   async function run(what: "hooks" | "statusLine", action: () => Promise<void>) {
     busy = what;
@@ -142,6 +170,23 @@
   <h2>{name}</h2>
 </div>
 
+{#if cliPath === null}
+  <div class="missing">
+    <span>
+      {t("agentInstall.notInstalled", { tool: name })}
+      <small>{t("agentInstall.notInstalledHint")}</small>
+    </span>
+    <button class="action-btn primary" onclick={() => (installing = true)}>{t("agentInstall.install")}</button>
+  </div>
+{:else if cliPath}
+  <p class="cli-path">{t("agentInstall.installedAt", { path: cliPath })}</p>
+{/if}
+{#if installing}
+  <AgentInstallDialog {tool} onclose={installClosed} />
+{/if}
+
+<!-- Nothing here does anything for a CLI that isn't there. -->
+<div class="settings" class:off={cliPath === null} inert={cliPath === null}>
 <section>
   <h3>{t("preferences.aiMode.tabs")}</h3>
   <div class="row">
@@ -185,6 +230,13 @@
   {/if}
 </section>
 
+{#if details.agentsHint}
+  <section>
+    <h3>{t("preferences.agents.consoles")}</h3>
+    <p class="setting-hint first">{t(details.agentsHint)}</p>
+  </section>
+{/if}
+
 <section>
   <h3>{t("preferences.aiMode.sounds")}</h3>
   <label class="row toggle-row">
@@ -220,6 +272,7 @@
   </div>
   <p class="setting-hint">{t("preferences.aiMode.soundsToolHint")}</p>
 </section>
+</div>
 
 <style>
   .tool-title {
@@ -227,6 +280,47 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 16px;
+  }
+
+  .missing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .missing small {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    opacity: 0.65;
+  }
+
+  .action-btn.primary {
+    flex-shrink: 0;
+    background: var(--pane-active-border, #3a6df0);
+    border-color: var(--pane-active-border, #3a6df0);
+    color: #fff;
+  }
+
+  .cli-path {
+    margin: -8px 0 16px;
+    font-size: 10px;
+    opacity: 0.6;
+    overflow-wrap: anywhere;
+  }
+
+  .settings {
+    transition: opacity 120ms ease;
+  }
+
+  .settings.off {
+    opacity: 0.4;
   }
 
   h2 {

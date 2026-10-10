@@ -97,6 +97,8 @@ pub fn run() {
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
             let loaded = config::store::load(app.handle());
+            // Before anything looks for an agent's CLI.
+            marketplace::agent_install::apply(&loaded.agent_install_dirs);
             let ai_mode_on = loaded.ai_mode_enabled;
             ai_mode::init(app.handle(), &app.state::<AppState>().agents, ai_mode_on);
             // Every console's CLI settings point at this Termo (its port and
@@ -214,6 +216,9 @@ pub fn run() {
             commands::project_commands::project_versions,
             commands::project_commands::project_restore,
             commands::marketplace_commands::marketplace_status,
+            commands::marketplace_commands::agent_cli_install_info,
+            commands::marketplace_commands::install_agent_cli,
+            commands::marketplace_commands::cancel_agent_cli_install,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,
             commands::marketplace_commands::uninstall_item,

@@ -4,7 +4,7 @@
  * draws (and so it can be tested in plain Node).
  */
 
-export type NavScene = "picker" | "zoom" | "tabs" | "split";
+export type NavScene = "picker" | "zoom" | "tabs" | "split" | "palette";
 export type TileId = "a" | "b" | "c";
 
 /** The key (or command) a beat shows as pressed. */
@@ -15,6 +15,7 @@ export type SceneKey =
   | "down"
   | "enter"
   | "cycleTab"
+  | "commandPalette"
   | "splitVertical"
   | "splitHorizontal";
 
@@ -34,15 +35,18 @@ export interface SceneFrame {
   picker: TileId | null;
   /** Which of tile "a"'s tabs is in front. */
   activeTab: number;
+  /** The command palette while it's open: how much of the search has been
+   * typed (0 to 1) and which of its commands is selected. */
+  palette: { typed: number; selected: number } | null;
   key: SceneKey | null;
 }
 
-export const NAV_SCENES: readonly NavScene[] = ["picker", "zoom", "tabs", "split"];
+export const NAV_SCENES: readonly NavScene[] = ["picker", "zoom", "tabs", "split", "palette"];
 
-export const SCENE_LENGTH: Record<NavScene, number> = { picker: 6, zoom: 5, tabs: 4, split: 5 };
+export const SCENE_LENGTH: Record<NavScene, number> = { picker: 6, zoom: 5, tabs: 4, split: 5, palette: 7 };
 
 /** The beat that stands for the whole scene when motion is reduced. */
-export const STILL_FRAME: Record<NavScene, number> = { picker: 2, zoom: 1, tabs: 1, split: 3 };
+export const STILL_FRAME: Record<NavScene, number> = { picker: 2, zoom: 1, tabs: 1, split: 3, palette: 4 };
 
 export const FULL: Rect = { left: 0, top: 0, width: 100, height: 100 };
 const LEFT: Rect = { left: 0, top: 0, width: 50, height: 100 };
@@ -64,6 +68,7 @@ function threeTiles(): SceneFrame {
     zoomed: null,
     picker: null,
     activeTab: 0,
+    palette: null,
     key: null,
   };
 }
@@ -104,5 +109,19 @@ export function sceneFrame(scene: NavScene, frame: number): SceneFrame {
       }
       view.key = frame === 1 ? "splitVertical" : frame === 3 ? "splitHorizontal" : null;
       return view;
+    // Two tiles; the palette opens, a search is typed, the second command it
+    // finds is picked, and running it splits the focused tile.
+    case "palette": {
+      const ran = frame >= 5;
+      view.tiles.b = { rect: ran ? TOP_RIGHT : RIGHT, shown: true };
+      view.tiles.c = { rect: ran ? BOTTOM_RIGHT : BOTTOM_RIGHT_EDGE, shown: ran };
+      view.focused = ran ? "c" : "b";
+      if (frame >= 1 && frame <= 4) {
+        view.palette = { typed: frame === 1 ? 0 : frame === 2 ? 0.5 : 1, selected: frame === 4 ? 1 : 0 };
+      }
+      const keys: (SceneKey | null)[] = [null, "commandPalette", null, null, "down", "enter", null];
+      view.key = keys[frame] ?? null;
+      return view;
+    }
   }
 }

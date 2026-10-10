@@ -3,6 +3,7 @@
 //! registry, installed through each agent's own CLI (see agent_cli.rs).
 
 pub mod agent_cli;
+pub mod agent_install;
 pub mod catalog;
 pub mod claude_plugins;
 pub mod downloads;

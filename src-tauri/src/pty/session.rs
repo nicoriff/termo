@@ -83,6 +83,16 @@ impl PtySession {
             }
             cmd.env("PATH", path);
         }
+        // An agent CLI installed where the user chose is on no PATH: on this
+        // console's it is, after everything else.
+        let extra = super::bin_search::extra_dirs();
+        if !extra.is_empty() {
+            let base = cmd.get_env("PATH").map(std::ffi::OsString::from).or_else(|| std::env::var_os("PATH"));
+            let dirs = base.iter().flat_map(std::env::split_paths).chain(extra);
+            if let Ok(path) = std::env::join_paths(dirs) {
+                cmd.env("PATH", path);
+            }
+        }
         // Lets agent hooks running inside this console report back to its
         // tab (see pty/agent_hooks.rs).
         let id = Uuid::new_v4();
