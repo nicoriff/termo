@@ -31,7 +31,7 @@ pub(crate) fn claude_dir() -> Option<PathBuf> {
 }
 
 /// Codex's home: `$CODEX_HOME`, or `~/.codex`.
-fn codex_home() -> Option<PathBuf> {
+pub(crate) fn codex_home() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .or_else(|| dirs::home_dir().map(|home| home.join(".codex")))

@@ -46,6 +46,9 @@ export interface Coverage {
   prompts: boolean;
   tools: boolean;
   subagents: boolean;
+  /** Its tokens are billed at a price each; not Copilot CLI's, which counts
+   * requests instead. */
+  priced: boolean;
 }
 
 export type CompanionTool = "claude" | "codex" | "gemini" | "copilot" | "grok";
