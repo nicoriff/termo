@@ -23,7 +23,7 @@ use crate::companion::{Compaction, Coverage, Request, SessionUsage, Tokens, Turn
 use crate::agents::models::codex_home;
 
 const TOOL: &str = "codex";
-const PROMPT_EXCERPT: usize = 400;
+const PROMPT_EXCERPT: usize = super::PROMPT_KEPT;
 
 #[derive(Deserialize)]
 struct Line {

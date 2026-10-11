@@ -167,6 +167,18 @@ export const es = {
     turnsTitle: "Los mensajes más caros",
     turnMeta: "{requests} llamadas · {tools} herramientas · {tokens} tokens",
     automaticTurn: "(automático: una tarea en segundo plano)",
+    advice: {
+      suggest: "Sugerir un prompt mejor",
+      asking: "Consultando…",
+      sends: "Envía este mensaje a {engine}. Tiene un costo chico.",
+      noEngine: "No hay ningún agente instalado para consultar.",
+      title: "Versión sugerida",
+      alreadyGood: "Este mensaje ya está bien como está.",
+      cost: "La sugerencia costó {amount}",
+      copy: "Copiar",
+      copied: "Copiado",
+      failed: "No se pudo obtener la sugerencia: {error}",
+    },
     findings: {
       contextBloat: {
         title: "Contexto muy cargado",

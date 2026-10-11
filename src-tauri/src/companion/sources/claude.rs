@@ -25,7 +25,7 @@ use crate::companion::{pricing, Compaction, Coverage, Request, SessionUsage, Tok
 const TOOL: &str = "claude";
 
 /// How much of a prompt is kept to show.
-const PROMPT_EXCERPT: usize = 400;
+const PROMPT_EXCERPT: usize = super::PROMPT_KEPT;
 
 /// What Claude Code answers itself with when the API fails: not a model.
 const SYNTHETIC_MODEL: &str = "<synthetic>";

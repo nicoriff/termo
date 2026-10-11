@@ -24,7 +24,7 @@ use super::{excerpt, jsonl, millis, modified_millis, SessionFile, Size};
 use crate::companion::{Coverage, Request, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "copilot";
-const PROMPT_EXCERPT: usize = 400;
+const PROMPT_EXCERPT: usize = super::PROMPT_KEPT;
 const EVENTS: &str = "events.jsonl";
 
 #[derive(Deserialize)]

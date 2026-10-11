@@ -8,6 +8,7 @@
 //!
 //! Plain data and pure functions: the words are localized in the frontend.
 
+pub mod advice;
 pub mod pricing;
 pub mod rules;
 pub mod sources;
@@ -69,7 +70,8 @@ pub struct Request {
 pub struct Turn {
     /// Unix milliseconds of the prompt.
     pub at: i64,
-    /// The start of the prompt, for telling turns apart in the panel.
+    /// The prompt, or the start of a very long one (see
+    /// `sources::PROMPT_KEPT`).
     pub prompt: String,
     pub prompt_chars: u32,
     /// Not typed by the user: a background task reporting back, a resumed

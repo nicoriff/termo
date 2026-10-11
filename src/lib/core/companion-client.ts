@@ -127,6 +127,37 @@ export function companionLive(tool: string, sessionId: string): Promise<Live | n
   return invoke("companion_live", { tool, sessionId });
 }
 
+/** A prompt to look over, and how its turn went. */
+export interface AdviceRequest {
+  /** Whose CLI answers. */
+  engine: CompanionTool;
+  /** The agent the prompt was sent to, by its name. */
+  agent: string;
+  prompt: string;
+  model: string | null;
+  requestCount: number;
+  toolCalls: number;
+  contextTokens: number;
+  outputTokens: number;
+}
+
+export interface Advice {
+  rewritten: string;
+  /** What was changed and why, in a few short lines. */
+  changes: string[];
+  /** The prompt was fine as it was. */
+  alreadyGood: boolean;
+  /** What asking cost, as the CLI reports it. */
+  costUsd: number | null;
+}
+
+/** A prompt written again to cost less, by the CLI of one of the user's
+ * agents. The only call here that asks a model, so it costs something and
+ * takes a while; it fails with the CLI's own words. */
+export function companionAdvise(request: AdviceRequest): Promise<Advice> {
+  return invoke("companion_advise", { request });
+}
+
 export interface ModelShare {
   model: string;
   tokens: number;
