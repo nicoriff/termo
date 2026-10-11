@@ -39,6 +39,14 @@ impl PtyManager {
         self.sessions.iter().filter_map(|session| session.pid()).collect()
     }
 
+    /// Every live console's id and process id, for the diagnostics panel.
+    pub fn roots(&self) -> Vec<(Uuid, u32)> {
+        self.sessions
+            .iter()
+            .filter_map(|session| Some((*session.key(), session.pid()?)))
+            .collect()
+    }
+
     /// The same, for one window's consoles: what closing it would end.
     pub fn pids_of(&self, owner: &str) -> Vec<u32> {
         self.sessions

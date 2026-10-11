@@ -52,6 +52,7 @@ class UiState {
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
   marketplaceOpen = $state(false);
+  diagnosticsOpen = $state(false);
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
@@ -266,6 +267,18 @@ class UiState {
     this.orchestrationDialog = false;
     if (this.agentLaunch?.target.kind === "agent") this.agentLaunch = null;
     this.marketplaceOpen = false;
+  }
+
+  /** Docked beside the consoles rather than over them, so it isn't one of
+   * the overlays above: the consoles keep the keyboard while it's open. */
+  toggleDiagnostics(): void {
+    if (this.diagnosticsOpen) this.closeDiagnostics();
+    else this.diagnosticsOpen = true;
+  }
+
+  closeDiagnostics(): void {
+    this.diagnosticsOpen = false;
+    this.refocusTerminals();
   }
 
   closeMarketplace(): void {

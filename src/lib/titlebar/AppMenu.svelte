@@ -150,6 +150,11 @@
     uiState.openMarketplace();
   }
 
+  function showDiagnostics() {
+    onclose();
+    uiState.toggleDiagnostics();
+  }
+
   function showAgents() {
     onclose();
     agentsStore.setOpen(true);
@@ -347,6 +352,22 @@
     <span class="app-menu-hint">{hint("toggleAgents")}</span>
   </button>
   {/if}
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showDiagnostics}>
+    <!-- A pulse line: the usual mark for a live reading. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M1 6.5h2.2l1.5-3.5 2.6 6 1.4-2.5H11"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="app-menu-text">{t("diagnostics.open")}</span>
+    <span class="app-menu-hint">{hint("diagnostics")}</span>
+  </button>
 
   <div class="app-menu-divider"></div>
 

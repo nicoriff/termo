@@ -266,6 +266,36 @@ pub async fn pty_memory(app: tauri::AppHandle, id: String) -> Result<Option<u64>
     .map_err(|err| err.to_string())
 }
 
+/// CPU and memory of the app, the machine and each console, for the
+/// diagnostics panel (see pty/memory.rs). Off the main thread: it refreshes
+/// the process table.
+#[tauri::command]
+pub async fn diagnostics_snapshot(app: tauri::AppHandle) -> Result<crate::pty::memory::Diagnostics, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let consoles: Vec<(String, u32)> =
+            state.pty.roots().into_iter().map(|(id, pid)| (id.to_string(), pid)).collect();
+        state.memory.diagnostics(&consoles)
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
+/// Ends everything running under a console's shell (not the shell: closing
+/// its tab does that, through the usual `pty_kill`). What the diagnostics
+/// panel's "Kill" does to a tab that is stuck; the number is how many
+/// processes it ended.
+#[tauri::command]
+pub async fn pty_kill_tree(app: tauri::AppHandle, id: String) -> Result<usize, String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.pty.pid(id).ok().flatten().map_or(0, |pid| state.memory.kill_descendants(pid))
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
 /// How many consoles have something running under their shell: every
 /// window's (quitting), or with `this_window` only the asking window's
 /// (closing it). Off the main thread for the same reason as pty_memory: it

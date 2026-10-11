@@ -11,7 +11,7 @@ pub mod console_shims;
 pub mod copilot_status;
 pub mod cwd_report;
 mod manager;
-mod memory;
+pub mod memory;
 pub mod oh_my_posh;
 pub mod powershell_keys;
 pub mod utf8_console;
