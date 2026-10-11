@@ -154,6 +154,8 @@ pub fn run() {
             commands::window_commands::quit_app,
             commands::pty_commands::busy_consoles,
             commands::pty_commands::diagnostics_snapshot,
+            commands::companion_commands::companion_session,
+            commands::companion_commands::companion_recent,
             commands::pty_commands::pty_kill_tree,
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,

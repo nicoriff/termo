@@ -155,6 +155,11 @@
     uiState.toggleDiagnostics();
   }
 
+  function showCompanion() {
+    onclose();
+    uiState.toggleCompanion();
+  }
+
   function showAgents() {
     onclose();
     agentsStore.setOpen(true);
@@ -350,6 +355,16 @@
     </svg>
     <span class="app-menu-text">{t("agents.title")}</span>
     <span class="app-menu-hint">{hint("toggleAgents")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showCompanion}>
+    <!-- A coin: what the sessions cost. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M6 3.4v5.2M7.4 4.6c-.3-.5-.8-.7-1.4-.7-.8 0-1.4.4-1.4 1s.5.9 1.4 1.1 1.4.5 1.4 1.1-.6 1-1.4 1c-.6 0-1.1-.2-1.4-.7" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round" />
+    </svg>
+    <span class="app-menu-text">{t("companion.open")}</span>
+    <span class="app-menu-hint">{hint("companion")}</span>
   </button>
   {/if}
 

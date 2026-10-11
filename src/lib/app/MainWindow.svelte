@@ -34,6 +34,7 @@
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import DiagnosticsPanel from "$lib/diagnostics/DiagnosticsPanel.svelte";
+  import CompanionPanel from "$lib/companion/CompanionPanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -171,6 +172,16 @@
       return;
     }
     if (
+      appConfigStore.aiModeEnabled &&
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("companion"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.toggleCompanion();
+      return;
+    }
+    if (
       !workspaceStore.overviewOpen &&
       workspaceStore.focusedTileId &&
       eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleExplorer"))
@@ -278,6 +289,9 @@
     {/if}
     {#if uiState.diagnosticsOpen}
       <DiagnosticsPanel />
+    {/if}
+    {#if uiState.companionOpen && appConfigStore.aiModeEnabled}
+      <CompanionPanel />
     {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />

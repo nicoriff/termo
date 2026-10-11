@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use super::SessionUsage;
+
 /// A session found on disk, before it's read.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +22,22 @@ pub struct SessionFile {
     /// Unix milliseconds of its last change.
     pub modified_at: i64,
     pub bytes: u64,
+}
+
+/// Every agent's sessions changed since `since` (Unix milliseconds), newest
+/// first.
+pub fn list(since: i64) -> Vec<SessionFile> {
+    let mut found = claude::list(since);
+    found.sort_by_key(|file| std::cmp::Reverse(file.modified_at));
+    found
+}
+
+/// One session of `tool`'s, by the agent's own id for it.
+pub fn read(tool: &str, session_id: &str) -> Option<SessionUsage> {
+    match tool {
+        "claude" => claude::read(&claude::find(session_id)?),
+        _ => None,
+    }
 }
 
 /// Unix milliseconds of an RFC 3339 timestamp; 0 when it isn't one.
