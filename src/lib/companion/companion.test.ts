@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding, SessionSummary, SessionUsage, Tokens, Turn } from "../core/companion-client";
+import type { Finding, Live, SessionSummary, SessionUsage, Tokens, Turn } from "../core/companion-client";
 import {
   dearestTurns,
   findingAmount,
@@ -7,6 +7,7 @@ import {
   formatSpan,
   formatTokens,
   formatUsd,
+  nudgeFor,
   projectName,
   sessionCost,
   summarizePeriod,
@@ -184,5 +185,46 @@ describe("a period", () => {
     expect(projectName("E:\\Proyectos\\Termini")).toBe("Termini");
     expect(projectName("/home/me/api/")).toBe("api");
     expect(projectName("/")).toBe("/");
+  });
+});
+
+describe("the notice on the status bar", () => {
+  const MINUTE = 60_000;
+  const finding = (kind: Finding["kind"], severity: Finding["severity"]): Finding => ({ kind, severity, turns: [], numbers: {}, wastedUsd: null });
+  const live = (over: Partial<Live>): Live => ({ contextTokens: 0, cacheExpiresAt: null, cacheTtlMs: null, findings: [], ...over });
+  const hour = live({ cacheExpiresAt: 60 * MINUTE, cacheTtlMs: 60 * MINUTE });
+
+  it("is the gravest finding, once a session", () => {
+    const now = live({ findings: [finding("contextBloat", "high"), finding("largeResults", "warning")] });
+    expect(nudgeFor("s", now, 0, [], {})).toEqual({ kind: "contextBloat", key: "s:contextBloat" });
+    // Looked at, or muted for good: the next one down.
+    expect(nudgeFor("s", now, 0, [], { "s:contextBloat": true })?.kind).toBe("largeResults");
+    expect(nudgeFor("s", now, 0, ["contextBloat"], {})?.kind).toBe("largeResults");
+    expect(nudgeFor("s", now, 0, ["contextBloat", "largeResults"], {})).toBeNull();
+    // Another session's is its own.
+    expect(nudgeFor("other", now, 0, [], { "s:contextBloat": true })?.kind).toBe("contextBloat");
+    expect(nudgeFor("s", live({}), 0, [], {})).toBeNull();
+  });
+
+  it("warns of the cache only in its last stretch", () => {
+    expect(nudgeFor("s", hour, 30 * MINUTE, [], {})).toBeNull();
+    expect(nudgeFor("s", hour, 56 * MINUTE, [], {})).toEqual({ kind: "cacheExpiring", key: `s:cacheExpiring:${60 * MINUTE}`, minutes: 4 });
+    expect(nudgeFor("s", hour, 59.8 * MINUTE, [], {})?.minutes).toBe(1);
+    // Gone already: nothing left to save.
+    expect(nudgeFor("s", hour, 61 * MINUTE, [], {})).toBeNull();
+    // A five-minute cache gets a little over a minute's warning.
+    const short = live({ cacheExpiresAt: 5 * MINUTE, cacheTtlMs: 5 * MINUTE });
+    expect(nudgeFor("s", short, 3 * MINUTE, [], {})).toBeNull();
+    expect(nudgeFor("s", short, 4 * MINUTE, [], {})?.kind).toBe("cacheExpiring");
+  });
+
+  it("puts the cache before a finding, and each expiry gets its own notice", () => {
+    const both = live({ ...hour, findings: [finding("contextBloat", "high")] });
+    expect(nudgeFor("s", both, 58 * MINUTE, [], {})?.kind).toBe("cacheExpiring");
+    expect(nudgeFor("s", both, 58 * MINUTE, ["cacheExpiring"], {})?.kind).toBe("contextBloat");
+    const seen = { [`s:cacheExpiring:${60 * MINUTE}`]: true as const };
+    expect(nudgeFor("s", both, 58 * MINUTE, [], seen)?.kind).toBe("contextBloat");
+    const later = live({ cacheExpiresAt: 120 * MINUTE, cacheTtlMs: 60 * MINUTE });
+    expect(nudgeFor("s", later, 118 * MINUTE, [], seen)?.kind).toBe("cacheExpiring");
   });
 });

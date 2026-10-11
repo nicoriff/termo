@@ -351,6 +351,49 @@ fn long_session(session: &SessionUsage) -> Option<Finding> {
     Some(Finding::new(FindingKind::LongSession, Severity::Info, Vec::new(), &[("turns", typed as f64), ("days", days)]))
 }
 
+/// What's worth a word while the session is still going: asked for as each
+/// turn ends, for the quiet notice on the status bar.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Live {
+    /// The context the last request carried.
+    pub context_tokens: u64,
+    /// When what the last request cached stops being there (Unix
+    /// milliseconds), and how long it's kept for. None unless the context is
+    /// large enough for writing it again to cost something, and the agent is
+    /// one whose cache is known to last a set time.
+    pub cache_expires_at: Option<i64>,
+    pub cache_ttl_ms: Option<i64>,
+    /// The findings that are about what to do next, and still true of the
+    /// last few turns: one already put right (a compacted context) is no
+    /// longer among them.
+    pub findings: Vec<Finding>,
+}
+
+/// The findings that call for doing something differently from here on.
+const LIVE_KINDS: [FindingKind; 4] =
+    [FindingKind::ContextBloat, FindingKind::OversizedModel, FindingKind::SmallTurnsLargeContext, FindingKind::LargeResults];
+
+/// How far back a finding still counts as going on.
+const RECENT_TURNS: usize = 3;
+
+pub fn live(session: &SessionUsage) -> Live {
+    let last = session.turns.iter().rev().find_map(|turn| turn.requests.last());
+    let context_tokens = last.map(|request| request.tokens.context()).unwrap_or(0);
+    let recent_from = session.turns.len().saturating_sub(RECENT_TURNS);
+    let findings = findings(session)
+        .into_iter()
+        .filter(|finding| LIVE_KINDS.contains(&finding.kind) && finding.turns.iter().any(|turn| *turn >= recent_from))
+        .collect();
+    // Only Claude Code's cache is known to run out on a clock like this.
+    let cache_ttl_ms = (session.tool == "claude" && session.coverage.cache && context_tokens >= LARGE_CONTEXT).then(|| {
+        let wrote = session.turns.iter().rev().flat_map(|turn| turn.requests.iter().rev()).find(|request| request.tokens.cache_write > 0);
+        if wrote.is_some_and(|request| request.cache_write_1h > 0) { CACHE_TTL_1H_MS } else { CACHE_TTL_MS }
+    });
+    let cache_expires_at = cache_ttl_ms.zip(last).map(|(ttl, request)| request.at + ttl);
+    Live { context_tokens, cache_expires_at, cache_ttl_ms, findings }
+}
+
 fn indexes(session: &SessionUsage, matches: impl Fn(&Turn) -> bool) -> Vec<usize> {
     session.turns.iter().enumerate().filter(|(_, turn)| matches(turn)).map(|(index, _)| index).collect()
 }
@@ -556,6 +599,41 @@ mod tests {
         assert!(kinds(&session).contains(&FindingKind::ContextBloat));
         session.coverage = Coverage::default();
         assert!(findings(&session).is_empty(), "{:?}", findings(&session));
+    }
+
+    #[test]
+    fn a_live_reading_is_about_now() {
+        let full = |at| {
+            let mut turn = turn(600, vec![request(at, Tokens { cache_read: 250_000, cache_write: 2_000, output: 2_000, ..Default::default() })]);
+            turn.tool_calls = 4;
+            turn
+        };
+        let mut session = session((0..6).map(|n| full(n * MINUTE)).collect());
+        session.tool = "claude".into();
+        let now = live(&session);
+        assert_eq!(now.context_tokens, 252_000);
+        assert_eq!(now.findings.iter().map(|finding| finding.kind).collect::<Vec<_>>(), [FindingKind::ContextBloat]);
+        // Five minutes from the last request, the cache it wrote is gone.
+        assert_eq!((now.cache_expires_at, now.cache_ttl_ms), (Some(5 * MINUTE + 5 * MINUTE), Some(5 * MINUTE)));
+
+        // Written for an hour, it lasts one.
+        session.turns[5].requests[0].cache_write_1h = 2_000;
+        assert_eq!(live(&session).cache_ttl_ms, Some(60 * MINUTE));
+
+        // Compacted since: the session still has the finding, but it isn't
+        // what's happening any more, and a small context has no cache to mind.
+        session.turns.extend((6..10).map(|n| ordinary_turn(n * MINUTE)));
+        session.finish();
+        assert!(kinds(&session).contains(&FindingKind::ContextBloat));
+        let after = live(&session);
+        assert!(after.findings.is_empty(), "{:?}", after.findings);
+        assert_eq!((after.cache_expires_at, after.context_tokens), (None, 30_550));
+
+        // Another agent's cache isn't on a clock anyone knows.
+        let mut other = session.clone();
+        other.turns.truncate(6);
+        other.tool = "codex".into();
+        assert_eq!(live(&other).cache_expires_at, None);
     }
 
     #[test]

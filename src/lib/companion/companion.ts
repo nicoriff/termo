@@ -2,6 +2,7 @@ import type {
   CompanionTool,
   Finding,
   FindingKind,
+  Live,
   SessionSummary,
   SessionUsage,
   Tokens,
@@ -233,4 +234,57 @@ export function summarizePeriod(summaries: readonly SessionSummary[]): Period {
 export function projectName(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? cwd;
+}
+
+/** What the status bar's notice is about: one of the findings, or the cache
+ * about to run out. */
+export type NudgeKind = FindingKind | "cacheExpiring";
+
+/** Every kind there can be a notice of, in the order Preferences lists them. */
+export const NUDGE_KINDS: readonly NudgeKind[] = ["cacheExpiring", "contextBloat", "smallTurnsLargeContext", "oversizedModel", "largeResults"];
+
+/** The few words a notice is, on the status bar and in Preferences. */
+export function nudgeTitle(kind: NudgeKind): MessageKey {
+  return kind === "cacheExpiring" ? "companion.nudge.cacheTitle" : FINDING_TEXT[kind].title;
+}
+
+export interface Nudge {
+  kind: NudgeKind;
+  /** What it's remembered by once looked at. A finding's is the session and
+   * the kind, so it's shown once a session; the cache's takes the moment it
+   * expires, so each time it's about to gets its own. */
+  key: string;
+  /** For `cacheExpiring`: whole minutes left, at least one. */
+  minutes?: number;
+}
+
+/** The cache is worth a word in the last stretch before it expires: five
+ * minutes of an hour's, a little over one of a five-minute one. */
+const CACHE_WARNING_MS = 5 * 60_000;
+const CACHE_WARNING_SHARE = 0.25;
+
+/** The one thing to say about a session now, or nothing: the cache about to
+ * expire first, since that has a deadline, then the gravest finding. Kinds
+ * the user muted, and notices already looked at, are passed over. */
+export function nudgeFor(
+  sessionId: string,
+  live: Live,
+  now: number,
+  muted: readonly string[],
+  seen: Readonly<Record<string, true>>,
+): Nudge | null {
+  if (live.cacheExpiresAt != null && live.cacheTtlMs != null && !muted.includes("cacheExpiring")) {
+    const left = live.cacheExpiresAt - now;
+    const warning = Math.min(CACHE_WARNING_MS, live.cacheTtlMs * CACHE_WARNING_SHARE);
+    const key = `${sessionId}:cacheExpiring:${live.cacheExpiresAt}`;
+    if (left > 0 && left <= warning && !seen[key]) {
+      return { kind: "cacheExpiring", key, minutes: Math.max(1, Math.ceil(left / 60_000)) };
+    }
+  }
+  // Already ordered, gravest first.
+  for (const finding of live.findings) {
+    const key = `${sessionId}:${finding.kind}`;
+    if (!muted.includes(finding.kind) && !seen[key]) return { kind: finding.kind, key };
+  }
+  return null;
 }

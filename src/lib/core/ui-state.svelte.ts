@@ -294,6 +294,11 @@ class UiState {
     }
   }
 
+  openCompanion(): void {
+    this.companionOpen = true;
+    this.diagnosticsOpen = false;
+  }
+
   closeCompanion(): void {
     this.companionOpen = false;
     this.refocusTerminals();

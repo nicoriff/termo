@@ -108,6 +108,8 @@ export interface AppConfig {
   ai_sound_volume: number;
   ai_dock_badge: boolean;
   agents_in_activity_bar: boolean;
+  companion_nudges?: boolean;
+  companion_muted?: string[];
   agents_from_any_console?: boolean;
   marketplace_source?: string;
   keep_awake_button: boolean;

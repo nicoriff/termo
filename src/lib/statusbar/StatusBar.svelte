@@ -9,6 +9,10 @@
   import { i18n, t } from "$lib/i18n/i18n.svelte";
   import { getCopilotPlanUsage, type CopilotPlanUsage } from "$lib/core/copilot-usage-client";
   import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
+  import { companionNudges } from "$lib/companion/companion-nudges.svelte";
+  import { companionStore } from "$lib/companion/companion-store.svelte";
+  import { nudgeTitle } from "$lib/companion/companion";
+  import { uiState } from "$lib/core/ui-state.svelte";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
   import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
@@ -142,6 +146,24 @@
     return Math.min(100, Math.max(0, percent));
   }
 
+  /** What the Companion has to say about the active console's session. */
+  const nudge = $derived(companionNudges.for(activeTabId));
+  const nudgeText = $derived(
+    !nudge
+      ? ""
+      : nudge.kind === "cacheExpiring"
+        ? t("companion.nudge.cacheExpiring", { minutes: String(nudge.minutes ?? 1) })
+        : t(nudgeTitle(nudge.kind)),
+  );
+
+  /** Looked at: the panel says the rest, and the notice doesn't come back. */
+  function openNudge() {
+    if (!nudge) return;
+    companionNudges.markSeen(nudge);
+    companionStore.picked = null;
+    uiState.openCompanion();
+  }
+
   function formatBytes(bytes: number): string {
     const mb = bytes / (1024 * 1024);
     return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
@@ -193,6 +215,11 @@
       {t("statusBar.cost", { value: formatUsd(costUsd) })}
     </span>
   {/if}
+  {#if nudge}
+    <button class="status-item status-companion" title={t("companion.nudge.hint")} onclick={openNudge}>
+      <span class="nudge-dot" aria-hidden="true"></span>{nudgeText}
+    </button>
+  {/if}
   {#if memoryBytes !== null}
     <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
       {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
@@ -218,6 +245,31 @@
   .status-item {
     white-space: nowrap;
     opacity: 0.85;
+  }
+
+  .status-companion {
+    margin-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .status-companion:hover {
+    opacity: 1;
+    text-decoration: underline;
+  }
+
+  .nudge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #f5a623;
   }
 
   .status-engine {

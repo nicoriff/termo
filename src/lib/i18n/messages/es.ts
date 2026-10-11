@@ -119,6 +119,11 @@ export const es = {
       period: "Período",
     },
     backToTab: "Volver a la sesión de esta pestaña",
+    nudge: {
+      hint: "Abrir el Companion",
+      cacheTitle: "La caché por vencer",
+      cacheExpiring: "La caché vence en {minutes} min",
+    },
     period: {
       range: "Últimos {days} días",
       loading: "Leyendo las sesiones… La primera vez puede tardar.",
@@ -1836,6 +1841,9 @@ export const es = {
     agents: {
       access: "Acceso",
       inActivityBar: "Mostrar el botón de Agentes en la barra vertical",
+      companionNudges: "Avisos del Companion en la barra de estado",
+      companionNudgesHint:
+        "Cuando un agente termina un turno, el Companion revisa la sesión y, si hay algo para mejorar, lo dice con un aviso corto en la barra de estado. No interrumpe ni suena. Abajo elegís sobre qué avisa.",
       inActivityBarHint:
         "La barra vertical está en el borde izquierdo de la ventana. Aunque lo ocultes, el panel se sigue abriendo con {shortcut}, desde el menú ≡ o la paleta de comandos.",
       consoles: "Agentes desde las consolas",

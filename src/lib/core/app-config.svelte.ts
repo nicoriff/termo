@@ -125,6 +125,10 @@ class AppConfigStore {
   aiDockBadge = $state(true);
   /** The Agents button in the window's vertical bar. */
   agentsInActivityBar = $state(true);
+  /** The Companion's notices on the status bar. */
+  companionNudges = $state(true);
+  /** The kinds of notice not to show (see companion.ts's NudgeKind). */
+  companionMuted = $state<string[]>([]);
   /** The user's agents also in consoles opened outside Termo. */
   agentsFromAnyConsole = $state(false);
   /** Where the marketplace searches MCP servers first. */
@@ -240,6 +244,8 @@ class AppConfigStore {
     this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
     this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
+    this.companionNudges = config.companion_nudges ?? true;
+    this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
     this.keepAwakeButton = config.keep_awake_button ?? true;
@@ -363,6 +369,18 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setCompanionNudges(enabled: boolean): void {
+    this.companionNudges = enabled;
+    void this.persist();
+  }
+
+  /** Whether the Companion gives notice of `kind` at all. */
+  setCompanionNotice(kind: string, enabled: boolean): void {
+    const others = this.companionMuted.filter((muted) => muted !== kind);
+    this.companionMuted = enabled ? others : [...others, kind];
+    void this.persist();
+  }
+
   setMarketplaceSource(source: "official" | "smithery"): void {
     this.marketplaceSource = source;
     void this.persist();
@@ -482,6 +500,8 @@ class AppConfigStore {
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,
+      companion_nudges: this.companionNudges,
+      companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,

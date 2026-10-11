@@ -120,6 +120,11 @@ export const en: Messages = {
       period: "Period",
     },
     backToTab: "Back to this tab's session",
+    nudge: {
+      hint: "Open the Companion",
+      cacheTitle: "The cache about to expire",
+      cacheExpiring: "The cache expires in {minutes} min",
+    },
     period: {
       range: "Last {days} days",
       loading: "Reading the sessions… The first time can take a while.",
@@ -1835,6 +1840,9 @@ export const en: Messages = {
     agents: {
       access: "Access",
       inActivityBar: "Show the Agents button in the vertical bar",
+      companionNudges: "Companion notices on the status bar",
+      companionNudgesHint:
+        "When an agent finishes a turn, the Companion looks over the session and, if something could be better, says so in a short notice on the status bar. It never interrupts or makes a sound. Below, pick what it gives notice of.",
       inActivityBarHint:
         "The vertical bar is on the window's left edge. Even with the button hidden, the panel still opens with {shortcut}, from the ≡ menu or from the command palette.",
       consoles: "Agents from consoles",
