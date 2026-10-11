@@ -79,8 +79,8 @@ class WorkspaceStore {
     return session.id;
   }
 
-  /** The agent a console started with has exited and the console now runs
-   * its shell (see TerminalInstance). */
+  /** The agent a console started with has exited and, being the window's
+   * only tab, the console now runs its shell (see TerminalInstance). */
   dropAgent(sessionId: string): void {
     if (!this.root) return;
     const loc = collectSessions(this.root).find((candidate) => candidate.session.id === sessionId);
@@ -251,6 +251,16 @@ class WorkspaceStore {
       if (tileVanishes && this.zoomedTileId === tileId) this.zoomedTileId = null;
       aiStatusStore.remove(sessionId);
     }
+  }
+
+  /** Closes a tab wherever it lives — its console's process has ended.
+   * False when it's the only tab left, which stays. */
+  closeSession(sessionId: string): boolean {
+    if (!this.root || countSessions(this.root) <= 1) return false;
+    const loc = collectSessions(this.root).find((candidate) => candidate.session.id === sessionId);
+    if (!loc) return false;
+    this.closeTab(loc.tileId, sessionId);
+    return true;
   }
 
   setActiveSession(tileId: string, sessionId: string): void {

@@ -4,6 +4,7 @@
   import { TerminalInstance } from "./TerminalInstance";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
+  import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import type { AgentLaunch } from "$lib/layout/split-tree";
   import { fade } from "svelte/transition";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -39,6 +40,11 @@
     // is keyed by the former since that's what TileChrome looks up by.
     instance = new TerminalInstance(sessionId);
     instance.onStarting = (value) => (starting = value);
+    // The shell exited (`exit`, Ctrl+D): its tab goes with it. The window's
+    // only tab can't close, so that one gets a fresh shell instead.
+    instance.onExit = () => {
+      if (!workspaceStore.closeSession(sessionId)) void instance?.restartShell(shellPath, shellArgs, cwd);
+    };
     void instance.mount(container, shellPath, shellArgs, cwd, agent);
 
     resizeObserver = new ResizeObserver(() => instance?.resize());

@@ -1,8 +1,8 @@
 //! Starting an agent CLI as a console's own process, instead of typing its
 //! command into a shell: the tab shows the agent straight away, with no
-//! shell starting first. When it exits the frontend starts the user's shell
-//! in the same tab (see TerminalInstance), so leaving the agent still drops
-//! you at a prompt in that folder.
+//! shell starting first. When it exits the frontend closes its tab, or, in
+//! the window's only tab, starts the user's shell there (see
+//! TerminalInstance).
 //!
 //! On Windows npm installs the Node CLIs (codex, gemini, copilot) as `.cmd`
 //! shims, which only cmd.exe runs. Elsewhere they're scripts run by `node`

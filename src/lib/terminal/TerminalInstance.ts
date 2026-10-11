@@ -352,11 +352,12 @@ export class TerminalInstance {
       // hook: the status bar and the tab show the agent right away.
       this.classifyState.detectedTool = agent.tool;
       this.setStarting(true);
-      // The agent as the console's own process; once it exits, the shell in
-      // its place, so leaving it drops you at a prompt in that folder.
-      const started = await this.start({ shellPath, shellArgs, cwd, agent }, () =>
-        void this.fallBackToShell(shellPath, shellArgs, cwd),
-      );
+      // The agent as the console's own process: once it exits, its tab goes
+      // with it. The window's only tab can't close, so there the shell takes
+      // its place, at a prompt in that folder.
+      const started = await this.start({ shellPath, shellArgs, cwd, agent }, () => {
+        if (!workspaceStore.closeSession(this.tabId)) void this.fallBackToShell(shellPath, shellArgs, cwd);
+      });
       if (started || this.disposed) return;
       // It couldn't start (uninstalled since): the shell, under the reason.
     }
@@ -381,12 +382,23 @@ export class TerminalInstance {
     if (!buildNumber || buildNumber < OLD_CONPTY_BEFORE_BUILD) this.term.unicode.activeVersion = "6";
   }
 
-  /** After the agent a console started with exits: its shell, in the same
-   * tab and the same xterm, so what the agent left on screen stays above. */
+  /** After the agent a console started with exits and its tab has to stay
+   * (the window's only one): its shell, in the same tab and the same xterm,
+   * so what the agent left on screen stays above. */
   private async fallBackToShell(shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
     if (this.disposed) return;
     this.setStarting(false);
+    await this.restartShell(shellPath, shellArgs, cwd);
+  }
+
+  /** A fresh shell in this same tab and xterm, once the process it was
+   * running has exited. */
+  async restartShell(shellPath?: string, shellArgs?: string[], cwd?: string): Promise<void> {
+    if (this.disposed) return;
     unregisterPty(this.tabId);
+    // Its process is gone, but the console it ran in is still open: on
+    // Windows that's a conhost.exe that stays until the session is killed.
+    if (this.sessionId) void killPty(this.sessionId);
     this.sessionId = null;
     workspaceStore.dropAgent(this.tabId);
     // A shell now: nothing of the agent's state or usage applies any more.
