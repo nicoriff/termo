@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.19.1",
+    "date": "2026-10-11",
+    "es": [
+      "**Las pestañas se cierran solas**: al salir de un agente abierto en su propia pestaña (Claude Code, Codex y los demás), la pestaña se cierra, en vez de quedar en tu consola. Si abriste el agente tipeando su comando en una consola, volvés a esa consola como siempre. Y al escribir `exit` en una consola, su pestaña también se cierra. La última pestaña de la ventana no se cierra: queda con una consola nueva.",
+      "En Windows, salir de un agente ya no deja la pestaña colgada sin responder.",
+      "En Windows, abrir un agente que todavía no se ejecutó ya no hace aparecer por un instante una ventana de CMD."
+    ],
+    "en": [
+      "**Tabs close on their own**: leaving an agent opened in its own tab (Claude Code, Codex and the rest) closes the tab, instead of dropping you into your console. If you started the agent by typing its command in a console, you return to that console as before. And typing `exit` in a console closes its tab too. The window's last tab doesn't close: it gets a fresh console.",
+      "On Windows, leaving an agent no longer leaves its tab hanging, unresponsive.",
+      "On Windows, opening an agent that hasn't run yet no longer flashes a CMD window."
+    ]
+  },
+  {
     "version": "0.19.0",
     "date": "2026-10-11",
     "es": [
