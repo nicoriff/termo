@@ -33,6 +33,7 @@
   import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
+  import DiagnosticsPanel from "$lib/diagnostics/DiagnosticsPanel.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -158,6 +159,15 @@
       event.preventDefault();
       event.stopPropagation();
       uiState.openMarketplace();
+      return;
+    }
+    if (
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("diagnostics"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.openDiagnostics();
       return;
     }
     if (
@@ -327,6 +337,9 @@
     {/if}
     {#if uiState.marketplaceOpen}
       <MarketplacePanel />
+    {/if}
+    {#if uiState.diagnosticsOpen}
+      <DiagnosticsPanel />
     {/if}
     {#if uiState.terminalContextMenu}
       <TerminalContextMenu />

@@ -52,6 +52,7 @@ class UiState {
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
   marketplaceOpen = $state(false);
+  diagnosticsOpen = $state(false);
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
@@ -84,6 +85,7 @@ class UiState {
       this.projectDialog !== null ||
       this.orchestrationDialog ||
       this.marketplaceOpen ||
+      this.diagnosticsOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
@@ -266,6 +268,15 @@ class UiState {
     this.orchestrationDialog = false;
     if (this.agentLaunch?.target.kind === "agent") this.agentLaunch = null;
     this.marketplaceOpen = false;
+  }
+
+  openDiagnostics(): void {
+    this.diagnosticsOpen = true;
+  }
+
+  closeDiagnostics(): void {
+    this.diagnosticsOpen = false;
+    this.refocusTerminals();
   }
 
   closeMarketplace(): void {

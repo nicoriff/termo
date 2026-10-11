@@ -61,6 +61,12 @@ export function buildCommands(): Command[] {
       label: t("onboarding.command"),
       run: () => uiState.openOnboarding(),
     },
+    {
+      id: "diagnostics.open",
+      group: "navigation",
+      label: t("commands.openDiagnostics"),
+      run: () => uiState.openDiagnostics(),
+    },
   ];
 
   // Extensions and agents are Modo IA's: only listed with it on.

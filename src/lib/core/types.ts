@@ -44,6 +44,8 @@ export interface ShortcutsConfig {
   command_palette_other: string | null;
   marketplace_mac: string | null;
   marketplace_other: string | null;
+  diagnostics_mac: string | null;
+  diagnostics_other: string | null;
   copy_mac: string | null;
   copy_other: string | null;
   paste_mac: string | null;

@@ -33,6 +33,7 @@ export type ShortcutAction =
   | "zoomTile"
   | "commandPalette"
   | "marketplace"
+  | "diagnostics"
   | "copy"
   | "paste"
   | "selectAll"
@@ -57,6 +58,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "zoomTile",
   "commandPalette",
   "marketplace",
+  "diagnostics",
   "copy",
   "paste",
   "selectAll",
@@ -84,6 +86,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   zoomTile: "shortcuts.labels.zoomTile",
   commandPalette: "shortcuts.labels.commandPalette",
   marketplace: "shortcuts.labels.marketplace",
+  diagnostics: "shortcuts.labels.diagnostics",
   copy: "shortcuts.labels.copy",
   paste: "shortcuts.labels.paste",
   selectAll: "shortcuts.labels.selectAll",
@@ -262,6 +265,7 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
   commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },
   marketplace: { mac: "meta+shift+m", other: "ctrl+shift+m" },
+  diagnostics: { mac: "meta+shift+d", other: "ctrl+shift+d" },
   // Ctrl+C/Ctrl+V belong to the shell everywhere but macOS, hence the Shift.
   copy: { mac: "meta+c", other: "ctrl+shift+c" },
   paste: { mac: "meta+v", other: "ctrl+shift+v" },

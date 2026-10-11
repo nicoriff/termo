@@ -152,6 +152,8 @@ pub fn run() {
             commands::agent_session_commands::remove_agent_favorite,
             commands::window_commands::quit_app,
             commands::pty_commands::busy_consoles,
+            commands::pty_commands::diagnostics_snapshot,
+            commands::pty_commands::pty_kill_tree,
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,

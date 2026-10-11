@@ -89,3 +89,42 @@ function base64ToBytes(base64: string): Uint8Array {
   }
   return bytes;
 }
+
+/** What a process tree is using (see src-tauri/src/pty/memory.rs). */
+export interface TreeUsage {
+  /** Summed over the tree; 100 is one full core, so it can pass 100. */
+  cpu: number;
+  /** Resident bytes. */
+  memory: number;
+  processes: number;
+  /** The newest process under the shell, or the shell at its prompt. */
+  running: string;
+  uptimeSecs: number;
+}
+
+export interface ConsoleUsage extends TreeUsage {
+  /** The console's PTY id (see pty-registry.ts for its tab). */
+  id: string;
+  pid: number;
+}
+
+export interface Diagnostics {
+  cores: number;
+  /** CPU is 0–100 across all cores. */
+  system: { cpu: number; memoryUsed: number; memoryTotal: number };
+  /** Termo and everything under it, consoles included. */
+  app: TreeUsage;
+  /** Every window's consoles. */
+  consoles: ConsoleUsage[];
+}
+
+/** CPU and memory of the app, the machine and each console. CPU is measured
+ * between two calls, so the first one reads 0. */
+export function getDiagnostics(): Promise<Diagnostics> {
+  return invoke("diagnostics_snapshot");
+}
+
+/** Ends everything running under a console's shell, leaving the shell. */
+export function killPtyTree(id: string): Promise<number> {
+  return invoke("pty_kill_tree", { id });
+}
