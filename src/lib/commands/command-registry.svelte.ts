@@ -90,6 +90,12 @@ export function buildCommands(): Command[] {
         label: t("commands.createAgent"),
         run: () => uiState.openAgentWizard(null, true),
       },
+      {
+        id: "companion.open",
+        group: "agents",
+        label: uiState.companionOpen ? t("commands.closeCompanion") : t("commands.openCompanion"),
+        run: () => uiState.toggleCompanion(),
+      },
     );
   }
 

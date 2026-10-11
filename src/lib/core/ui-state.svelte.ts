@@ -53,6 +53,7 @@ class UiState {
    * shortcut has to stand down while it's up. */
   marketplaceOpen = $state(false);
   diagnosticsOpen = $state(false);
+  companionOpen = $state(false);
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
@@ -273,11 +274,28 @@ class UiState {
    * the overlays above: the consoles keep the keyboard while it's open. */
   toggleDiagnostics(): void {
     if (this.diagnosticsOpen) this.closeDiagnostics();
-    else this.diagnosticsOpen = true;
+    else {
+      this.diagnosticsOpen = true;
+      this.companionOpen = false;
+    }
   }
 
   closeDiagnostics(): void {
     this.diagnosticsOpen = false;
+    this.refocusTerminals();
+  }
+
+  /** Docked in the same place as the diagnostics panel, so one at a time. */
+  toggleCompanion(): void {
+    if (this.companionOpen) this.closeCompanion();
+    else {
+      this.companionOpen = true;
+      this.diagnosticsOpen = false;
+    }
+  }
+
+  closeCompanion(): void {
+    this.companionOpen = false;
     this.refocusTerminals();
   }
 

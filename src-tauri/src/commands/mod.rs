@@ -1,6 +1,7 @@
 pub mod agent_commands;
 pub mod agent_hook_commands;
 pub mod agent_session_commands;
+pub mod companion_commands;
 pub mod config_commands;
 pub mod explorer_commands;
 pub mod folder_commands;

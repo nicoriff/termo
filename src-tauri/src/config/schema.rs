@@ -55,6 +55,8 @@ pub struct ShortcutsConfig {
     pub marketplace_other: Option<String>,
     pub diagnostics_mac: Option<String>,
     pub diagnostics_other: Option<String>,
+    pub companion_mac: Option<String>,
+    pub companion_other: Option<String>,
     pub copy_mac: Option<String>,
     pub copy_other: Option<String>,
     pub paste_mac: Option<String>,
