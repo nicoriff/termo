@@ -75,13 +75,6 @@ export function formatUptime(secs: number): string {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
 
-export type SortMode = "cpu" | "memory";
-
-/** The rows ordered by what they use most, without touching `rows`. */
-export function sortByUsage<T extends { cpu: number; memory: number }>(rows: readonly T[], mode: SortMode): T[] {
-  return [...rows].sort((a, b) => b[mode] - a[mode] || b.memory - a.memory);
-}
-
 const HEAVY_CPU = 80;
 const HEAVY_MEMORY = 1024 * 1024 * 1024;
 

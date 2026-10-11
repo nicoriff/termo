@@ -17,12 +17,9 @@
     formatPercent,
     formatUptime,
     isHeavy,
-    sortByUsage,
-    type SortMode,
   } from "./diagnostics";
   import Sparkline from "./Sparkline.svelte";
 
-  let sort = $state<SortMode>("cpu");
   /** The tab whose "Kill" is waiting for a yes. */
   let confirming = $state<string | null>(null);
 
@@ -49,7 +46,9 @@
         type: tabTitleStore.typeFor(tab.session),
       });
     }
-    return sortByUsage(found, sort);
+    // In the order of the tabs, not by use: rows that reshuffle every second
+    // can't be clicked.
+    return found;
   });
   const elsewhere = $derived(report ? report.consoles.length - rows.length : 0);
 
@@ -236,17 +235,7 @@
       </section>
 
       <section class="tabs">
-        <div class="tabs-head">
-          <h2>{t("diagnostics.tabs")}</h2>
-          <div class="sort" role="group" aria-label={t("diagnostics.sortBy")}>
-            <button class="chip" class:on={sort === "cpu"} onclick={() => (sort = "cpu")}>
-              {t("diagnostics.sortCpu")}
-            </button>
-            <button class="chip" class:on={sort === "memory"} onclick={() => (sort = "memory")}>
-              {t("diagnostics.sortMemory")}
-            </button>
-          </div>
-        </div>
+        <h2>{t("diagnostics.tabs")}</h2>
 
         {#if rows.length === 0}
           <p class="note">{t("diagnostics.empty")}</p>
@@ -261,13 +250,24 @@
               <span class="tab-type">{row.type}</span>
               {#if isHeavy(row)}<span class="badge">{t("diagnostics.heavy")}</span>{/if}
             </div>
-            <div class="tab-stats">
-              <div class="figures">
-                <span><b>{formatPercent(cpuOfMachine(row.cpu, report.cores))}</b> {t("diagnostics.cpu")}</span>
-                <span><b>{formatBytes(row.memory)}</b></span>
+            <div class="charts">
+              <div class="chart">
+                <div class="chart-head">
+                  <span>{t("diagnostics.cpu")}</span>
+                  <span class="value">{formatPercent(cpuOfMachine(row.cpu, report.cores))}</span>
+                </div>
+                <div class="plot small">
+                  <Sparkline values={history?.cpu ?? []} ceiling={100} label={t("diagnostics.chartCpu")} />
+                </div>
               </div>
-              <div class="mini">
-                <Sparkline values={history?.cpu ?? []} ceiling={100} label={t("diagnostics.chartCpu")} />
+              <div class="chart">
+                <div class="chart-head">
+                  <span>{t("diagnostics.memory")}</span>
+                  <span class="value">{formatBytes(row.memory)}</span>
+                </div>
+                <div class="plot small">
+                  <Sparkline values={history?.memory ?? []} label={t("diagnostics.chartMemory")} />
+                </div>
               </div>
             </div>
             <p class="meta">
@@ -447,6 +447,10 @@
     opacity: 1;
   }
 
+  .plot.small {
+    height: 28px;
+  }
+
   .plot {
     height: 40px;
     margin: 4px 0;
@@ -464,23 +468,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-
-  .tabs-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .sort {
-    display: flex;
-    gap: 4px;
-  }
-
-  .chip.on {
-    background: var(--pane-active-border, #3a6df0);
-    border-color: transparent;
-    color: #fff;
   }
 
   .tab-top {
@@ -517,25 +504,6 @@
     color: #f5a623;
     border: 1px solid color-mix(in srgb, #f5a623 60%, transparent);
     white-space: nowrap;
-  }
-
-  .tab-stats {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .figures {
-    display: flex;
-    flex-direction: column;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    min-width: 96px;
-  }
-
-  .mini {
-    flex: 1;
-    height: 28px;
   }
 
   .actions {

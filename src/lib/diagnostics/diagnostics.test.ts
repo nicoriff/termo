@@ -7,7 +7,6 @@ import {
   HISTORY_LENGTH,
   isHeavy,
   pushSample,
-  sortByUsage,
   sparklineArea,
   sparklinePoints,
 } from "./diagnostics";
@@ -97,24 +96,6 @@ describe("formatting", () => {
     expect(formatUptime(185)).toBe("3 min");
     expect(formatUptime(3600)).toBe("1 h");
     expect(formatUptime(7500)).toBe("2 h 5 min");
-  });
-});
-
-describe("sortByUsage", () => {
-  const rows = [
-    { name: "a", cpu: 5, memory: 300 },
-    { name: "b", cpu: 50, memory: 100 },
-    { name: "c", cpu: 5, memory: 900 },
-  ];
-
-  it("puts the biggest first, breaking CPU ties by memory", () => {
-    expect(sortByUsage(rows, "cpu").map((row) => row.name)).toEqual(["b", "c", "a"]);
-    expect(sortByUsage(rows, "memory").map((row) => row.name)).toEqual(["c", "a", "b"]);
-  });
-
-  it("leaves the original order alone", () => {
-    sortByUsage(rows, "cpu");
-    expect(rows.map((row) => row.name)).toEqual(["a", "b", "c"]);
   });
 });
 
