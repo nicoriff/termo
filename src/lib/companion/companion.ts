@@ -1,4 +1,12 @@
-import type { Finding, FindingKind, SessionUsage, Tokens, Turn } from "../core/companion-client";
+import type {
+  CompanionTool,
+  Finding,
+  FindingKind,
+  SessionSummary,
+  SessionUsage,
+  Tokens,
+  Turn,
+} from "../core/companion-client";
 import type { MessageKey } from "../i18n/translate";
 
 /** "850", "12.4k", "3.2M": token counts are only ever read at a glance. */
@@ -145,4 +153,84 @@ export function findingAmount(finding: Finding): { usd: number; kind: "wasted" |
   if (finding.wastedUsd != null) return { usd: finding.wastedUsd, kind: "wasted" };
   const spent = finding.numbers.spentUsd;
   return spent != null && spent > 0 ? { usd: spent, kind: "spent" } : null;
+}
+
+/** A row of the period view: an agent's or a project's share of it. */
+export interface PeriodRow<Key> {
+  key: Key;
+  sessions: number;
+  tokens: number;
+  /** Of the sessions whose cost is known. */
+  costUsd: number;
+}
+
+export interface HabitRow {
+  kind: FindingKind;
+  /** How many sessions it was found in. */
+  sessions: number;
+  /** Null when it can't be put a figure on in any of them. */
+  wastedUsd: number | null;
+}
+
+export interface Period {
+  sessions: number;
+  tokens: number;
+  /** Of the sessions whose cost is known. */
+  costUsd: number;
+  /** Sessions with tokens but no cost: a model without a price, or an agent
+   * that isn't billed by token. They add to `tokens` and not to `costUsd`. */
+  unpriced: number;
+  byTool: PeriodRow<CompanionTool>[];
+  /** By folder; the null key is the sessions that have none. */
+  byProject: PeriodRow<string | null>[];
+  habits: HabitRow[];
+}
+
+/** Everything the period view shows, worked out of its sessions: the totals,
+ * who and what they went to (dearest first, then by tokens), and the habits
+ * found, the ones that wasted the most first. */
+export function summarizePeriod(summaries: readonly SessionSummary[]): Period {
+  const byTool = new Map<CompanionTool, PeriodRow<CompanionTool>>();
+  const byProject = new Map<string | null, PeriodRow<string | null>>();
+  const habits = new Map<FindingKind, HabitRow>();
+  const period: Period = { sessions: 0, tokens: 0, costUsd: 0, unpriced: 0, byTool: [], byProject: [], habits: [] };
+
+  const add = <Key>(rows: Map<Key, PeriodRow<Key>>, key: Key, tokens: number, cost: number) => {
+    const row = rows.get(key) ?? { key, sessions: 0, tokens: 0, costUsd: 0 };
+    row.sessions += 1;
+    row.tokens += tokens;
+    row.costUsd += cost;
+    rows.set(key, row);
+  };
+
+  for (const summary of summaries) {
+    const tokens = totalTokens(summary.tokens);
+    const cost = summary.costUsd ?? 0;
+    period.sessions += 1;
+    period.tokens += tokens;
+    period.costUsd += cost;
+    if (summary.costUsd == null) period.unpriced += 1;
+    add(byTool, summary.tool, tokens, cost);
+    add(byProject, summary.cwd, tokens, cost);
+    for (const finding of summary.findings) {
+      const habit = habits.get(finding.kind) ?? { kind: finding.kind, sessions: 0, wastedUsd: null };
+      habit.sessions += 1;
+      if (finding.wastedUsd != null) habit.wastedUsd = (habit.wastedUsd ?? 0) + finding.wastedUsd;
+      habits.set(finding.kind, habit);
+    }
+  }
+
+  const dearest = <Key>(a: PeriodRow<Key>, b: PeriodRow<Key>) => b.costUsd - a.costUsd || b.tokens - a.tokens;
+  period.byTool = [...byTool.values()].sort(dearest);
+  period.byProject = [...byProject.values()].sort(dearest);
+  period.habits = [...habits.values()].sort(
+    (a, b) => (b.wastedUsd ?? 0) - (a.wastedUsd ?? 0) || b.sessions - a.sessions || a.kind.localeCompare(b.kind),
+  );
+  return period;
+}
+
+/** A folder's own name, which is what tells projects apart at a glance. */
+export function projectName(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? cwd;
 }
