@@ -110,6 +110,45 @@ export interface SessionFile {
   bytes: number;
 }
 
+export interface ModelShare {
+  model: string;
+  tokens: number;
+  costUsd: number | null;
+}
+
+export interface FindingBrief {
+  kind: FindingKind;
+  severity: Severity;
+  wastedUsd: number | null;
+}
+
+/** A session in brief, for looking at many at once. */
+export interface SessionSummary {
+  tool: CompanionTool;
+  sessionId: string;
+  cwd: string | null;
+  title: string | null;
+  startedAt: number;
+  endedAt: number;
+  /** The prompts the user typed. */
+  turns: number;
+  tokens: Tokens;
+  /** The agent's own figure when it wrote one down, else the estimate. */
+  costUsd: number | null;
+  costReported: boolean;
+  /** Billed by token at all (see Coverage.priced). */
+  priced: boolean;
+  models: ModelShare[];
+  findings: FindingBrief[];
+}
+
+/** Every agent's sessions of the last `days`, in brief, newest first. The
+ * first look at a stretch reads every session in it, which can take a few
+ * seconds; after that only the ones worked in since. */
+export function companionOverview(days: number): Promise<SessionSummary[]> {
+  return invoke("companion_overview", { days });
+}
+
 /** One session, by the agent's own id for it; null when it isn't on disk. */
 export function companionSession(tool: string, sessionId: string): Promise<SessionReport | null> {
   return invoke("companion_session", { tool, sessionId });

@@ -11,12 +11,13 @@
 pub mod pricing;
 pub mod rules;
 pub mod sources;
+pub mod summary;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// What a request was billed for, by kind. The agents that don't tell cached
 /// tokens apart report them all as `input`.
-#[derive(Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Tokens {
     /// Sent and not served from the cache.

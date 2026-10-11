@@ -1,4 +1,14 @@
-import { companionRecent, companionSession, type SessionReport } from "../core/companion-client";
+import {
+  companionOverview,
+  companionRecent,
+  companionSession,
+  type SessionReport,
+  type SessionSummary,
+} from "../core/companion-client";
+
+/** The stretches the period view offers, in days. */
+export const PERIODS = [7, 30] as const;
+export type PeriodDays = (typeof PERIODS)[number];
 
 /** The docked panel's width: a default, and how far it can be dragged. */
 export const PANEL_WIDTH = { initial: 400, min: 320, max: 680 };
@@ -40,9 +50,19 @@ class CompanionStore {
   /** There are no sessions at all. */
   empty = $state(false);
 
+  /** A session picked from the period's list, shown instead of the tab's. */
+  picked = $state<SessionRef | null>(null);
+
+  days = $state<PeriodDays>(7);
+  /** The period's sessions in brief; null until they've been read. */
+  overview = $state<SessionSummary[] | null>(null);
+  overviewLoading = $state(false);
+  overviewFailed = $state(false);
+
   /** The last request made, so an answer that arrives late for a session
    * since moved on from is dropped. */
   private asked = 0;
+  private askedOverview = 0;
 
   /** `persist` once a drag is let go, not on every pixel of it. */
   setWidth(width: number, persist = false): void {
@@ -77,6 +97,26 @@ class CompanionStore {
       this.failed = true;
     } finally {
       if (asked === this.asked) this.loading = false;
+    }
+  }
+
+  /** Reads the last `days` of every agent's sessions. What's on screen
+   * stays until the new reading arrives, unless the stretch changed. */
+  async loadOverview(days: PeriodDays): Promise<void> {
+    const asked = ++this.askedOverview;
+    if (days !== this.days) this.overview = null;
+    this.days = days;
+    this.overviewLoading = true;
+    try {
+      const overview = await companionOverview(days);
+      if (asked !== this.askedOverview) return;
+      this.overview = overview;
+      this.overviewFailed = false;
+    } catch {
+      if (asked !== this.askedOverview) return;
+      this.overviewFailed = true;
+    } finally {
+      if (asked === this.askedOverview) this.overviewLoading = false;
     }
   }
 }
