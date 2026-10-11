@@ -110,6 +110,23 @@ export interface SessionFile {
   bytes: number;
 }
 
+/** What's worth a word about a session while it's still going. */
+export interface Live {
+  /** The context the last request carried. */
+  contextTokens: number;
+  /** When what the last request cached stops being there (Unix ms), and how
+   * long it's kept for; null where that isn't known or doesn't matter. */
+  cacheExpiresAt: number | null;
+  cacheTtlMs: number | null;
+  /** The findings about what to do next that still hold, gravest first. */
+  findings: Finding[];
+}
+
+/** A session's live reading, asked for as each of its turns ends. */
+export function companionLive(tool: string, sessionId: string): Promise<Live | null> {
+  return invoke("companion_live", { tool, sessionId });
+}
+
 export interface ModelShare {
   model: string;
   tokens: number;

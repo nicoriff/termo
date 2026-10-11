@@ -39,6 +39,13 @@ pub async fn companion_session(tool: String, session_id: String) -> Result<Optio
     .await
 }
 
+/// What's worth a word about a session right now: asked for as each of its
+/// turns ends (see `rules::live`).
+#[tauri::command]
+pub async fn companion_live(tool: String, session_id: String) -> Result<Option<rules::Live>, String> {
+    off_main(move || sources::read(&tool, &session_id).map(|session| rules::live(&session))).await
+}
+
 /// The longest stretch that can be asked for at once.
 const MAX_DAYS: u32 = 90;
 

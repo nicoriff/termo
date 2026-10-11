@@ -35,6 +35,7 @@
   import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
   import DiagnosticsPanel from "$lib/diagnostics/DiagnosticsPanel.svelte";
   import CompanionPanel from "$lib/companion/CompanionPanel.svelte";
+  import { companionNudges } from "$lib/companion/companion-nudges.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -58,6 +59,7 @@
     let unlisten: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
+    const stopCompanionNudges = companionNudges.start();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
@@ -103,6 +105,7 @@
       unlisten?.();
       stopAgentAttention();
       stopAgentRunAttention();
+      stopCompanionNudges();
     };
   });
 
