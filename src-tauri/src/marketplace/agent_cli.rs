@@ -50,6 +50,21 @@ pub fn require(target: AgentTarget, override_path: Option<&str>) -> Result<PathB
 /// CLI's own explanation, short of pasting a stack trace into the panel.
 const MAX_STDERR: usize = 2000;
 
+/// `bin`, set to run out of sight: Termo has no console of its own, so on
+/// Windows a CLI started from it would otherwise open one — a window that
+/// flashes by for as long as the command takes.
+fn command(bin: &PathBuf) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(bin);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// Runs `bin` with `args` and returns its stdout.
 ///
 /// Two deliberate choices: the arguments go as a vector, never through a
@@ -58,7 +73,7 @@ const MAX_STDERR: usize = 2000;
 /// something gets an immediate EOF and exits, instead of blocking this
 /// thread forever behind a prompt nobody can see or answer.
 pub fn run(bin: &PathBuf, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(bin)
+    let output = command(bin)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -93,7 +108,7 @@ pub struct CommandOutput {
 /// marketplace declares a command that a person has to approve first) whose
 /// details live in that output.
 pub fn run_capture(bin: &PathBuf, args: &[&str]) -> Result<CommandOutput, String> {
-    let output = Command::new(bin)
+    let output = command(bin)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
