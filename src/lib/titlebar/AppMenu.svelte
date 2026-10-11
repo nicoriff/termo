@@ -178,6 +178,11 @@
   }
 </script>
 
+<!-- The menu and its flyouts are placed once, from the window's size then: a
+     resize (the backdrop never sees it — the window's edge or the OS's
+     zoom button handles it) would leave them hanging where they were. -->
+<svelte:window onresize={onclose} />
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="app-menu-backdrop" onpointerdown={onclose}></div>
 
