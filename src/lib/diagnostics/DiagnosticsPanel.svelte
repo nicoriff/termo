@@ -7,6 +7,7 @@
   import { killPtyTree } from "$lib/core/pty-client";
   import { collectSessions, countSessions } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
+  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { getTabId } from "$lib/terminal/pty-registry";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { diagnosticsStore, PANEL_WIDTH } from "./diagnostics-store.svelte";
@@ -43,6 +44,9 @@
         tabId: tab.session.id,
         tileId: tab.tileId,
         title: tabTitleStore.titleFor(tab.session.id, tab.session.title),
+        // What the tab itself shows: the agent running in it, else its shell.
+        kind: tabTitleStore.kindFor(tab.session),
+        type: tabTitleStore.typeFor(tab.session),
       });
     }
     return sortByUsage(found, sort);
@@ -252,7 +256,9 @@
           {@const history = diagnosticsStore.byConsole[row.id]}
           <article class="tab" class:heavy={isHeavy(row)}>
             <div class="tab-top">
+              <span class="tab-kind" title={row.type}><ConsoleIcon kind={row.kind} size={16} /></span>
               <span class="tab-title" title={row.title}>{row.title}</span>
+              <span class="tab-type">{row.type}</span>
               {#if isHeavy(row)}<span class="badge">{t("diagnostics.heavy")}</span>{/if}
             </div>
             <div class="tab-stats">
@@ -491,6 +497,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .tab-kind {
+    flex-shrink: 0;
+    display: inline-flex;
+  }
+
+  .tab-type {
+    flex-shrink: 0;
+    font-size: 11px;
+    opacity: 0.6;
   }
 
   .badge {
