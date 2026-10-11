@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::companion::rules::{self, Finding};
 use crate::companion::sources::{self, SessionFile};
 use crate::companion::summary::{self, SessionSummary};
-use crate::companion::{pricing, SessionUsage};
+use crate::companion::{advice, pricing, SessionUsage};
 use tauri::Manager;
 
 /// How many of the latest sessions the panel offers to look at.
@@ -44,6 +44,16 @@ pub async fn companion_session(tool: String, session_id: String) -> Result<Optio
 #[tauri::command]
 pub async fn companion_live(tool: String, session_id: String) -> Result<Option<rules::Live>, String> {
     off_main(move || sources::read(&tool, &session_id).map(|session| rules::live(&session))).await
+}
+
+/// A prompt written again to cost less, by the CLI of one of the user's
+/// agents: the only thing here that asks a model, and only when asked to
+/// (see companion/advice.rs). The error is the CLI's own, for the panel to
+/// word.
+#[tauri::command]
+pub async fn companion_advise(app: tauri::AppHandle, request: advice::AdviceRequest) -> Result<advice::Advice, String> {
+    let scratch = app.path().app_data_dir().map_err(|err| err.to_string())?.join("companion").join(".advice");
+    off_main(move || advice::advise(&scratch, &request)).await?
 }
 
 /// The longest stretch that can be asked for at once.

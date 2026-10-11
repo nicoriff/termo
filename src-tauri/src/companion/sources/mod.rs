@@ -18,6 +18,11 @@ use serde::{Deserialize, Serialize};
 
 use super::SessionUsage;
 
+/// How much of each prompt is kept: all of an ordinary one, so it can be
+/// shown and looked over (see companion/advice.rs), and the start of one
+/// that runs to pages.
+pub(crate) const PROMPT_KEPT: usize = 6000;
+
 /// A session found on disk, before it's read.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]

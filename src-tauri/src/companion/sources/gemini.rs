@@ -21,7 +21,7 @@ use super::{excerpt, jsonl, millis, modified_millis, SessionFile, Size};
 use crate::companion::{Coverage, Request, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "gemini";
-const PROMPT_EXCERPT: usize = 400;
+const PROMPT_EXCERPT: usize = super::PROMPT_KEPT;
 
 #[derive(Deserialize)]
 struct Line {

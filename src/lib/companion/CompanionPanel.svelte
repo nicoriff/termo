@@ -9,7 +9,9 @@
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { companionStore, PANEL_WIDTH, PERIODS } from "./companion-store.svelte";
-  import type { SessionSummary } from "$lib/core/companion-client";
+  import type { SessionSummary, Turn } from "$lib/core/companion-client";
+  import { aiEngine } from "$lib/agents/ai-engine.svelte";
+  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import {
     dearestTurns,
     FINDING_TEXT,
@@ -90,6 +92,36 @@
   function open(summary: SessionSummary) {
     companionStore.picked = { tool: summary.tool, sessionId: summary.sessionId };
     view = "session";
+  }
+
+  /** What a turn's better version is kept under (see the store). */
+  const adviceKey = (index: number) => (session ? `${session.tool}:${session.sessionId}:${index}` : "");
+
+  /** Sends the turn's prompt, and how the turn went, to be written again. */
+  function suggest(index: number, turn: Turn) {
+    const engine = aiEngine.value;
+    if (!session || !engine) return;
+    void companionStore.advise(adviceKey(index), {
+      engine,
+      agent: TOOL_DISPLAY_NAMES[session.tool],
+      prompt: turn.prompt,
+      model: turn.model,
+      requestCount: turn.requestCount,
+      toolCalls: turn.toolCalls,
+      contextTokens: turn.tokens.input + turn.tokens.cacheWrite + turn.tokens.cacheRead,
+      outputTokens: turn.tokens.output,
+    });
+  }
+
+  /** The key of the version just copied, for a moment. */
+  let copied = $state("");
+
+  async function copy(key: string, text: string) {
+    await writeText(text).catch(() => {});
+    copied = key;
+    setTimeout(() => {
+      if (copied === key) copied = "";
+    }, 1500);
   }
 
   const day = (at: number) =>
@@ -398,7 +430,7 @@
           {#each dearest as { index, turn } (index)}
             <article class="turn">
               <div class="turn-top">
-                <span class="turn-prompt" class:automatic={turn.automatic} title={turn.prompt}>
+                <span class="turn-prompt" class:automatic={turn.automatic} title={turn.prompt.slice(0, 400)}>
                   {turn.automatic ? t("companion.automaticTurn") : turn.prompt}
                 </span>
                 <span class="value">{turn.costUsd != null ? formatUsd(turn.costUsd) : "—"}</span>
@@ -411,6 +443,55 @@
                 })}
                 {#if turn.model}· {turn.model}{/if}
               </p>
+              {#if !turn.automatic && turn.prompt}
+                {@const key = adviceKey(index)}
+                {@const state = companionStore.advice[key]}
+                {#if state?.status === "done"}
+                  <div class="advice">
+                    {#if state.advice.alreadyGood}
+                      <p class="advice-note">{t("companion.advice.alreadyGood")}</p>
+                    {:else}
+                      <span class="label">{t("companion.advice.title")}</span>
+                      <p class="rewritten">{state.advice.rewritten}</p>
+                      {#if state.advice.changes.length > 0}
+                        <ul class="changes">
+                          {#each state.advice.changes as change (change)}
+                            <li>{change}</li>
+                          {/each}
+                        </ul>
+                      {/if}
+                    {/if}
+                    <div class="advice-foot">
+                      <span class="meta">
+                        {#if state.advice.costUsd != null}
+                          {t("companion.advice.cost", { amount: formatUsd(state.advice.costUsd) })}
+                        {/if}
+                      </span>
+                      {#if !state.advice.alreadyGood}
+                        <button onclick={() => void copy(key, state.advice.rewritten)}>
+                          {copied === key ? t("companion.advice.copied") : t("companion.advice.copy")}
+                        </button>
+                      {/if}
+                    </div>
+                  </div>
+                {:else}
+                  {#if state?.status === "failed"}
+                    <p class="note error" role="alert">{t("companion.advice.failed", { error: state.error })}</p>
+                  {/if}
+                  <div class="advice-foot">
+                    <span class="meta">
+                      {#if aiEngine.value}
+                        {t("companion.advice.sends", { engine: TOOL_DISPLAY_NAMES[aiEngine.value] })}
+                      {:else}
+                        {t("companion.advice.noEngine")}
+                      {/if}
+                    </span>
+                    <button onclick={() => suggest(index, turn)} disabled={!aiEngine.value || state?.status === "asking"}>
+                      {state?.status === "asking" ? t("companion.advice.asking") : t("companion.advice.suggest")}
+                    </button>
+                  </div>
+                {/if}
+              {/if}
             </article>
           {/each}
         </section>
@@ -804,6 +885,44 @@
 
   .turn-prompt.automatic {
     opacity: 0.6;
+  }
+
+  .advice {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .rewritten {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+    user-select: text;
+  }
+
+  .changes {
+    margin: 0;
+    padding-left: 16px;
+    opacity: 0.85;
+    line-height: 1.45;
+  }
+
+  .advice-note {
+    margin: 0;
+  }
+
+  .advice-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .advice-foot button {
+    flex-shrink: 0;
   }
 
   .note {

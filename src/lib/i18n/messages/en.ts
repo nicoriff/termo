@@ -168,6 +168,18 @@ export const en: Messages = {
     turnsTitle: "The costliest messages",
     turnMeta: "{requests} calls · {tools} tools · {tokens} tokens",
     automaticTurn: "(automatic: a background task)",
+    advice: {
+      suggest: "Suggest a better prompt",
+      asking: "Asking…",
+      sends: "Sends this message to {engine}. It has a small cost.",
+      noEngine: "No agent is installed to ask.",
+      title: "Suggested version",
+      alreadyGood: "This message is fine as it is.",
+      cost: "The suggestion cost {amount}",
+      copy: "Copy",
+      copied: "Copied",
+      failed: "Couldn't get the suggestion: {error}",
+    },
     findings: {
       contextBloat: {
         title: "A very full context",

@@ -1,10 +1,16 @@
 import {
+  companionAdvise,
   companionOverview,
   companionRecent,
   companionSession,
+  type Advice,
+  type AdviceRequest,
   type SessionReport,
   type SessionSummary,
 } from "../core/companion-client";
+
+/** Where asking for a better version of a turn's prompt stands. */
+export type AdviceState = { status: "asking" } | { status: "done"; advice: Advice } | { status: "failed"; error: string };
 
 /** The stretches the period view offers, in days. */
 export const PERIODS = [7, 30] as const;
@@ -49,6 +55,10 @@ class CompanionStore {
   latest = $state(false);
   /** There are no sessions at all. */
   empty = $state(false);
+
+  /** The better versions asked for, by `<tool>:<session>:<turn>`. They're
+   * kept while the app runs: each one was paid for. */
+  advice = $state<Record<string, AdviceState>>({});
 
   /** A session picked from the period's list, shown instead of the tab's. */
   picked = $state<SessionRef | null>(null);
@@ -97,6 +107,18 @@ class CompanionStore {
       this.failed = true;
     } finally {
       if (asked === this.asked) this.loading = false;
+    }
+  }
+
+  /** Asks for a better version of one prompt, kept under `key`. */
+  async advise(key: string, request: AdviceRequest): Promise<void> {
+    if (this.advice[key]?.status === "asking") return;
+    this.advice = { ...this.advice, [key]: { status: "asking" } };
+    try {
+      const advice = await companionAdvise(request);
+      this.advice = { ...this.advice, [key]: { status: "done", advice } };
+    } catch (reason) {
+      this.advice = { ...this.advice, [key]: { status: "failed", error: String(reason) } };
     }
   }
 

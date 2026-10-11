@@ -23,7 +23,7 @@ use super::{excerpt, jsonl, modified_millis, SessionFile, Size};
 use crate::companion::{Coverage, Request, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "grok";
-const PROMPT_EXCERPT: usize = 400;
+const PROMPT_EXCERPT: usize = super::PROMPT_KEPT;
 const UPDATES: &str = "updates.jsonl";
 
 /// Grok writes costs in ten-billionths of a dollar.
