@@ -64,8 +64,8 @@ export function buildCommands(): Command[] {
     {
       id: "diagnostics.open",
       group: "navigation",
-      label: t("commands.openDiagnostics"),
-      run: () => uiState.openDiagnostics(),
+      label: uiState.diagnosticsOpen ? t("commands.closeDiagnostics") : t("commands.openDiagnostics"),
+      run: () => uiState.toggleDiagnostics(),
     },
   ];
 

@@ -167,7 +167,7 @@
     ) {
       event.preventDefault();
       event.stopPropagation();
-      uiState.openDiagnostics();
+      uiState.toggleDiagnostics();
       return;
     }
     if (
@@ -276,6 +276,9 @@
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
     {/if}
+    {#if uiState.diagnosticsOpen}
+      <DiagnosticsPanel />
+    {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />
     {/if}
@@ -337,9 +340,6 @@
     {/if}
     {#if uiState.marketplaceOpen}
       <MarketplacePanel />
-    {/if}
-    {#if uiState.diagnosticsOpen}
-      <DiagnosticsPanel />
     {/if}
     {#if uiState.terminalContextMenu}
       <TerminalContextMenu />

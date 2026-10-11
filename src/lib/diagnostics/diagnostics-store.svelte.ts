@@ -3,6 +3,25 @@ import { cpuOfMachine, pushSample } from "./diagnostics";
 
 const POLL_MS = 1000;
 
+/** The docked panel's width: a default, and how far it can be dragged. */
+export const PANEL_WIDTH = { initial: 380, min: 300, max: 640 };
+const WIDTH_KEY = "termo.diagnostics.width";
+
+export function clampPanelWidth(width: number): number {
+  return Math.round(Math.min(PANEL_WIDTH.max, Math.max(PANEL_WIDTH.min, width)));
+}
+
+/** Only a convenience: a browser storage that's missing or throws just means
+ * the default width. */
+function loadWidth(): number {
+  try {
+    const saved = Number(localStorage.getItem(WIDTH_KEY));
+    return saved ? clampPanelWidth(saved) : PANEL_WIDTH.initial;
+  } catch {
+    return PANEL_WIDTH.initial;
+  }
+}
+
 /** A console's last minute, by the PTY id the backend reports. */
 export interface ConsoleHistory {
   cpu: number[];
@@ -16,6 +35,7 @@ export interface ConsoleHistory {
  * The history starts over each time the panel opens.
  */
 class DiagnosticsStore {
+  width = $state(loadWidth());
   latest = $state<Diagnostics | null>(null);
   failed = $state(false);
   /** Percent of the whole machine, so the three CPU lines share a scale. */
@@ -27,6 +47,17 @@ class DiagnosticsStore {
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private asking = false;
+
+  /** `persist` once a drag is let go, not on every pixel of it. */
+  setWidth(width: number, persist = false): void {
+    this.width = clampPanelWidth(width);
+    if (!persist) return;
+    try {
+      localStorage.setItem(WIDTH_KEY, String(this.width));
+    } catch {
+      // Not remembered; it still applies.
+    }
+  }
 
   start(): void {
     if (this.timer) return;

@@ -85,7 +85,6 @@ class UiState {
       this.projectDialog !== null ||
       this.orchestrationDialog ||
       this.marketplaceOpen ||
-      this.diagnosticsOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
@@ -270,8 +269,11 @@ class UiState {
     this.marketplaceOpen = false;
   }
 
-  openDiagnostics(): void {
-    this.diagnosticsOpen = true;
+  /** Docked beside the consoles rather than over them, so it isn't one of
+   * the overlays above: the consoles keep the keyboard while it's open. */
+  toggleDiagnostics(): void {
+    if (this.diagnosticsOpen) this.closeDiagnostics();
+    else this.diagnosticsOpen = true;
   }
 
   closeDiagnostics(): void {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { fade, fly } from "svelte/transition";
+  import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -9,7 +9,7 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { getTabId } from "$lib/terminal/pty-registry";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
-  import { diagnosticsStore } from "./diagnostics-store.svelte";
+  import { diagnosticsStore, PANEL_WIDTH } from "./diagnostics-store.svelte";
   import {
     cpuOfMachine,
     formatBytes,
@@ -21,7 +21,6 @@
   } from "./diagnostics";
   import Sparkline from "./Sparkline.svelte";
 
-  let panelEl = $state<HTMLDivElement | undefined>(undefined);
   let sort = $state<SortMode>("cpu");
   /** The tab whose "Kill" is waiting for a yes. */
   let confirming = $state<string | null>(null);
@@ -50,29 +49,62 @@
   });
   const elsewhere = $derived(report ? report.consoles.length - rows.length : 0);
 
-  onMount(() => {
-    diagnosticsStore.start();
-    panelEl?.focus();
-  });
+  // Nothing takes focus on opening: the panel sits beside the consoles, which
+  // keep the keyboard until the user clicks into it.
+  onMount(() => diagnosticsStore.start());
   onDestroy(() => diagnosticsStore.stop());
+
+  let resizing = $state(false);
+
+  /** Dragging the left edge: the width follows the pointer, and is
+   * remembered once it's let go. */
+  function startResize(event: PointerEvent) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = diagnosticsStore.width;
+    resizing = true;
+    const move = (e: PointerEvent) => diagnosticsStore.setWidth(startWidth - (e.clientX - startX));
+    const end = () => {
+      resizing = false;
+      diagnosticsStore.setWidth(diagnosticsStore.width, true);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  }
+
+  function onResizeKey(event: KeyboardEvent) {
+    const step = event.shiftKey ? 40 : 10;
+    if (event.key === "ArrowLeft") diagnosticsStore.setWidth(diagnosticsStore.width + step, true);
+    else if (event.key === "ArrowRight") diagnosticsStore.setWidth(diagnosticsStore.width - step, true);
+    else return;
+    event.preventDefault();
+  }
 
   function close() {
     uiState.closeDiagnostics();
   }
 
+  /** Only while focus is inside the panel: Escape backs out of a pending
+   * "Kill", then closes it. */
   function onKeydown(event: KeyboardEvent) {
-    // The panel owns the keyboard while it's open (MainWindow's window-level
-    // handler bails out on overlayOpen), so nothing here reaches the console.
-    event.stopPropagation();
     if (event.key !== "Escape") return;
     event.preventDefault();
+    event.stopPropagation();
     if (confirming) confirming = null;
     else close();
   }
 
+  /** The panel stays: it's there to watch while working in the tab. */
   function goTo(tabId: string) {
     workspaceStore.focusSession(tabId);
-    close();
+    uiState.refocusTerminals();
   }
 
   function closeTab(row: { tileId: string; tabId: string }) {
@@ -89,20 +121,31 @@
   const peak = (series: readonly number[]) => (series.length ? Math.max(...series) : 0);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="dg-backdrop" onpointerdown={close} transition:fade={{ duration: 120 }}></div>
-
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside
   class="dg-panel"
-  role="dialog"
-  tabindex="-1"
+  class:resizing
+  style="--dg-width:{diagnosticsStore.width}px"
   aria-label={t("diagnostics.title")}
-  bind:this={panelEl}
-  onpointerdown={(event) => event.stopPropagation()}
   onkeydown={onKeydown}
-  transition:fly={{ x: 420, duration: 180, easing: cubicOut }}
+  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
 >
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div
+    class="resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label={t("diagnostics.resize")}
+    aria-valuemin={PANEL_WIDTH.min}
+    aria-valuemax={PANEL_WIDTH.max}
+    aria-valuenow={diagnosticsStore.width}
+    title={t("diagnostics.resize")}
+    tabindex="0"
+    onpointerdown={startResize}
+    ondblclick={() => diagnosticsStore.setWidth(PANEL_WIDTH.initial, true)}
+    onkeydown={onResizeKey}
+  ></div>
+
   <header class="dg-header">
     <h1>{t("diagnostics.title")}</h1>
     <button class="icon" onclick={close} aria-label={t("diagnostics.close")}>✕</button>
@@ -255,31 +298,48 @@
       </section>
     {/if}
   </div>
-</div>
+</aside>
 
 <style>
-  .dg-backdrop {
-    position: absolute;
-    inset: 0;
-    z-index: 599;
-    background: rgba(0, 0, 0, 0.35);
-  }
-
   .dg-panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 600;
-    width: min(420px, 100%);
+    position: relative;
+    flex-shrink: 0;
+    width: var(--dg-width, 380px);
     display: flex;
     flex-direction: column;
-    background: var(--tabbar-active-bg-solid, #1e1e1e);
+    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     border-left: 1px solid var(--tabbar-border, #2a2a2a);
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
     overflow: hidden;
+    font-size: 12px;
+  }
+
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 25;
+    width: 6px;
+    cursor: ew-resize;
     outline: none;
+  }
+
+  .resize-handle:hover,
+  .resize-handle:focus-visible,
+  .dg-panel.resizing .resize-handle {
+    background: var(--divider-hover-bg, #3a6df0);
+    opacity: 0.6;
+  }
+
+  /* While dragging, the pointer shouldn't select text or flicker back to an
+     arrow over the consoles. */
+  .dg-panel.resizing {
+    user-select: none;
+  }
+
+  :global(body:has(.dg-panel.resizing)) {
+    cursor: ew-resize;
   }
 
   .dg-header {

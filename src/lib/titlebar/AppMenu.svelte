@@ -152,7 +152,7 @@
 
   function showDiagnostics() {
     onclose();
-    uiState.openDiagnostics();
+    uiState.toggleDiagnostics();
   }
 
   function showAgents() {
