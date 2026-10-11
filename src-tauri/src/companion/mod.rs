@@ -57,6 +57,9 @@ pub struct Request {
     /// The part of `tokens.cache_write` saved for an hour rather than five
     /// minutes, which costs more.
     pub cache_write_1h: u64,
+    /// What the agent itself says it cost, for the ones that do: taken over
+    /// the price table's figure.
+    pub reported_cost_usd: Option<f64>,
 }
 
 /// What the user asked, and everything the agent did to answer it.
@@ -114,6 +117,9 @@ pub struct Coverage {
     pub prompts: bool,
     pub tools: bool,
     pub subagents: bool,
+    /// Its tokens are billed at a price each, or would be without a
+    /// subscription. Not Copilot CLI's, which counts requests instead.
+    pub priced: bool,
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
@@ -152,7 +158,8 @@ impl SessionUsage {
             for request in &turn.requests {
                 turn.tokens.add(&request.tokens);
                 turn.peak_context = turn.peak_context.max(request.tokens.context());
-                turn_cost = match (turn_cost, pricing::cost(request)) {
+                let priced = if self.coverage.priced { pricing::cost(request) } else { None };
+                turn_cost = match (turn_cost, request.reported_cost_usd.or(priced)) {
                     (Some(sum), Some(cost)) => Some(sum + cost),
                     _ => None,
                 };
@@ -169,7 +176,8 @@ impl SessionUsage {
             };
         }
         self.tokens = tokens;
-        self.cost_usd = if self.coverage.tokens { cost } else { None };
+        // A session nothing was asked of has no cost to speak of, not a zero.
+        self.cost_usd = if self.coverage.tokens && tokens.total() > 0 { cost } else { None };
     }
 }
 
@@ -190,13 +198,13 @@ mod tests {
     use super::*;
 
     fn request(model: &str, input: u64, output: u64) -> Request {
-        Request { at: 0, model: model.into(), tokens: Tokens { input, output, ..Default::default() }, cache_write_1h: 0 }
+        Request { model: model.into(), tokens: Tokens { input, output, ..Default::default() }, ..Default::default() }
     }
 
     #[test]
     fn a_session_adds_up_its_turns_and_its_subagents() {
         let mut session = SessionUsage {
-            coverage: Coverage { tokens: true, ..Default::default() },
+            coverage: Coverage { tokens: true, priced: true, ..Default::default() },
             subagent_tokens: Tokens { input: 1_000_000, ..Default::default() },
             subagent_cost_usd: Some(1.0),
             turns: vec![Turn {
@@ -219,7 +227,7 @@ mod tests {
     #[test]
     fn a_model_without_a_price_leaves_the_cost_unknown() {
         let mut session = SessionUsage {
-            coverage: Coverage { tokens: true, ..Default::default() },
+            coverage: Coverage { tokens: true, priced: true, ..Default::default() },
             subagent_cost_usd: Some(0.0),
             turns: vec![Turn { requests: vec![request("some-new-model", 10, 10)], ..Default::default() }],
             ..Default::default()

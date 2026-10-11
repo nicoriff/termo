@@ -14,15 +14,12 @@
 //! Subagents write their own files, under `<session>/subagents/`.
 
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{excerpt, millis, modified_millis, SessionFile};
+use super::{excerpt, jsonl, millis, modified_millis, SessionFile, Size};
 use crate::companion::{pricing, Compaction, Coverage, Request, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "claude";
@@ -118,61 +115,6 @@ struct CompactMetadata {
     after: u64,
 }
 
-/// The characters of text in a JSON value, counted as it's read: a tool
-/// result can be megabytes, and none of it is kept.
-struct Size(u64);
-
-impl<'de> Deserialize<'de> for Size {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Counter;
-        impl<'de> Visitor<'de> for Counter {
-            type Value = Size;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("any JSON value")
-            }
-            fn visit_str<E: de::Error>(self, text: &str) -> Result<Size, E> {
-                Ok(Size(text.chars().count() as u64))
-            }
-            fn visit_bool<E: de::Error>(self, _: bool) -> Result<Size, E> {
-                Ok(Size(0))
-            }
-            fn visit_i64<E: de::Error>(self, _: i64) -> Result<Size, E> {
-                Ok(Size(0))
-            }
-            fn visit_u64<E: de::Error>(self, _: u64) -> Result<Size, E> {
-                Ok(Size(0))
-            }
-            fn visit_f64<E: de::Error>(self, _: f64) -> Result<Size, E> {
-                Ok(Size(0))
-            }
-            fn visit_unit<E: de::Error>(self) -> Result<Size, E> {
-                Ok(Size(0))
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut items: A) -> Result<Size, A::Error> {
-                let mut total = 0;
-                while let Some(Size(size)) = items.next_element()? {
-                    total += size;
-                }
-                Ok(Size(total))
-            }
-            fn visit_map<A: MapAccess<'de>>(self, mut entries: A) -> Result<Size, A::Error> {
-                let mut total = 0;
-                while let Some(key) = entries.next_key::<String>()? {
-                    // A block's `type` names it; it isn't part of what it says.
-                    if key == "type" {
-                        entries.next_value::<de::IgnoredAny>()?;
-                    } else {
-                        total += entries.next_value::<Size>()?.0;
-                    }
-                }
-                Ok(Size(total))
-            }
-        }
-        deserializer.deserialize_any(Counter)
-    }
-}
-
 fn projects_dir() -> Option<PathBuf> {
     crate::agents::models::claude_dir().map(|dir| dir.join("projects"))
 }
@@ -223,19 +165,19 @@ pub fn read(path: &Path) -> Option<SessionUsage> {
     let mut session = SessionUsage {
         tool: TOOL.into(),
         session_id: path.file_stem()?.to_str()?.to_string(),
-        coverage: Coverage { tokens: true, cache: true, prompts: true, tools: true, subagents: true },
+        coverage: Coverage { tokens: true, cache: true, prompts: true, tools: true, subagents: true, priced: true },
         ..Default::default()
     };
     let mut subagents = Subagents::default();
     let mut seen = HashSet::new();
-    for line in lines(path)? {
+    for line in jsonl::<Line>(path)? {
         take(&mut session, &mut subagents, &mut seen, line);
     }
     // Next to the session's file, in a folder of its name.
     let own = path.with_extension("").join("subagents");
     for entry in std::fs::read_dir(own).into_iter().flatten().flatten() {
         let mut seen = HashSet::new();
-        for line in lines(&entry.path()).into_iter().flatten() {
+        for line in jsonl::<Line>(&entry.path()).into_iter().flatten() {
             if let Some(request) = request_of(&line, &mut seen) {
                 subagents.add(&request);
             }
@@ -245,12 +187,6 @@ pub fn read(path: &Path) -> Option<SessionUsage> {
     session.subagent_cost_usd = if subagents.unpriced { None } else { Some(subagents.cost) };
     session.finish();
     Some(session)
-}
-
-/// The lines of a session that read as one; the rest are skipped.
-fn lines(path: &Path) -> Option<impl Iterator<Item = Line>> {
-    let reader = BufReader::with_capacity(1 << 20, File::open(path).ok()?);
-    Some(reader.split(b'\n').map_while(Result::ok).filter_map(|line| serde_json::from_slice(&line).ok()))
 }
 
 #[derive(Default)]
@@ -294,6 +230,7 @@ fn request_of(line: &Line, seen: &mut HashSet<String>) -> Option<Request> {
             output: usage.output_tokens,
         },
         cache_write_1h: usage.cache_creation.as_ref().map(|cache| cache.ephemeral_1h_input_tokens).unwrap_or(0),
+        reported_cost_usd: None,
     })
 }
 
@@ -513,34 +450,6 @@ mod tests {
         assert_eq!(session.subagent_cost_usd, Some(0.1));
         assert_eq!(session.tokens.input, 1_000_100);
         assert_eq!(session.turns.len(), 1);
-    }
-
-    /// Against this computer's own sessions, largest first, to see what the
-    /// rules make of real ones and how long reading takes:
-    /// `cargo test --lib companion_live -- --ignored --nocapture`.
-    #[test]
-    #[ignore]
-    fn companion_live_reads_this_computers_sessions() {
-        let mut files = list(0);
-        files.sort_by_key(|file| std::cmp::Reverse(file.bytes));
-        for file in files.iter().take(6) {
-            let started = std::time::Instant::now();
-            let session = read(&file.path).expect("a listed session reads");
-            println!(
-                "\n{} · {:.1} MB in {:?} · {} turns · {} tokens · est ${:.2} · reported {:?} · subagents ${:.2}",
-                session.session_id,
-                file.bytes as f64 / 1e6,
-                started.elapsed(),
-                session.turns.len(),
-                session.tokens.total(),
-                session.cost_usd.unwrap_or(f64::NAN),
-                session.reported_cost_usd,
-                session.subagent_cost_usd.unwrap_or(f64::NAN),
-            );
-            for finding in crate::companion::rules::findings(&session) {
-                println!("  {:?} {:?} on {} turns, wasted {:?}: {:?}", finding.severity, finding.kind, finding.turns.len(), finding.wasted_usd, finding.numbers);
-            }
-        }
     }
 
     #[test]

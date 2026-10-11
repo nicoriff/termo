@@ -361,10 +361,10 @@ mod tests {
     use crate::companion::{Compaction, Coverage, Request, Tokens};
 
     const MINUTE: i64 = 60_000;
-    const FULL: Coverage = Coverage { tokens: true, cache: true, prompts: true, tools: true, subagents: true };
+    const FULL: Coverage = Coverage { tokens: true, cache: true, prompts: true, tools: true, subagents: true, priced: true };
 
     fn request(at: i64, tokens: Tokens) -> Request {
-        Request { at, model: "claude-opus-5-5".into(), tokens, cache_write_1h: 0 }
+        Request { at, model: "claude-opus-5-5".into(), tokens, ..Default::default() }
     }
 
     fn turn(prompt_chars: u32, requests: Vec<Request>) -> Turn {

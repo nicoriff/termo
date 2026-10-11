@@ -46,7 +46,7 @@ function session(over: Partial<SessionUsage>): SessionUsage {
     compactions: [],
     costUsd: null,
     reportedCostUsd: null,
-    coverage: { tokens: true, cache: true, prompts: true, tools: true, subagents: true },
+    coverage: { tokens: true, cache: true, prompts: true, tools: true, subagents: true, priced: true },
     ...over,
   };
 }
