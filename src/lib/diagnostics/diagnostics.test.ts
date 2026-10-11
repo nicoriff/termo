@@ -7,6 +7,7 @@ import {
   HISTORY_LENGTH,
   isHeavy,
   pushSample,
+  sortRows,
   sparklineArea,
   sparklinePoints,
 } from "./diagnostics";
@@ -96,6 +97,34 @@ describe("formatting", () => {
     expect(formatUptime(185)).toBe("3 min");
     expect(formatUptime(3600)).toBe("1 h");
     expect(formatUptime(7500)).toBe("2 h 5 min");
+  });
+});
+
+describe("sortRows", () => {
+  const rows = [
+    { name: "a", cpu: 5, memory: 300 },
+    { name: "b", cpu: 50, memory: 100 },
+    { name: "c", cpu: 5, memory: 900 },
+  ];
+  const names = (key: Parameters<typeof sortRows>[1]) => sortRows(rows, key).map((row) => row.name);
+
+  it("keeps the tabs' order when asked to", () => {
+    expect(names("tabs")).toEqual(["a", "b", "c"]);
+  });
+
+  it("orders by CPU either way, the tie going to memory", () => {
+    expect(names("cpu-desc")).toEqual(["b", "c", "a"]);
+    expect(names("cpu-asc")).toEqual(["a", "c", "b"]);
+  });
+
+  it("orders by memory either way", () => {
+    expect(names("memory-desc")).toEqual(["c", "a", "b"]);
+    expect(names("memory-asc")).toEqual(["b", "a", "c"]);
+  });
+
+  it("leaves the original order alone", () => {
+    sortRows(rows, "cpu-desc");
+    expect(rows.map((row) => row.name)).toEqual(["a", "b", "c"]);
   });
 });
 

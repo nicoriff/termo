@@ -75,6 +75,21 @@ export function formatUptime(secs: number): string {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
 
+export type SortKey = "tabs" | "cpu-desc" | "cpu-asc" | "memory-desc" | "memory-asc";
+
+export const SORT_KEYS: readonly SortKey[] = ["tabs", "cpu-desc", "cpu-asc", "memory-desc", "memory-asc"];
+
+/** The rows ordered by `key` without touching `rows`. "tabs" keeps them as
+ * given (the tabs' own order); the others order by what's used, the other
+ * figure breaking ties, and a row that is still tied keeps its place. */
+export function sortRows<T extends { cpu: number; memory: number }>(rows: readonly T[], key: SortKey): T[] {
+  if (key === "tabs") return [...rows];
+  const [field, direction] = key.split("-") as ["cpu" | "memory", "asc" | "desc"];
+  const other = field === "cpu" ? "memory" : "cpu";
+  const sign = direction === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => sign * (a[field] - b[field]) || sign * (a[other] - b[other]));
+}
+
 const HEAVY_CPU = 80;
 const HEAVY_MEMORY = 1024 * 1024 * 1024;
 

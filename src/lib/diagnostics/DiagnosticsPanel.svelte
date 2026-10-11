@@ -17,8 +17,23 @@
     formatPercent,
     formatUptime,
     isHeavy,
+    SORT_KEYS,
+    sortRows,
+    type SortKey,
   } from "./diagnostics";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import Sparkline from "./Sparkline.svelte";
+
+  /** Starts in the tabs' own order: rows that reshuffle on their own every
+   * second are hard to click. */
+  let sort = $state<SortKey>("tabs");
+  const sortOptions = $derived(SORT_KEYS.map((key) => ({ value: key, label: t(`diagnostics.sort.${key}`) })));
+
+  /** The dropdown's own keys (arrows, Enter, Escape) are its own: they don't
+   * also close the panel. */
+  function keepKeys(event: KeyboardEvent) {
+    if (["ArrowDown", "ArrowUp", "Enter", " ", "Escape"].includes(event.key)) event.stopPropagation();
+  }
 
   /** The tab whose "Kill" is waiting for a yes. */
   let confirming = $state<string | null>(null);
@@ -46,9 +61,7 @@
         type: tabTitleStore.typeFor(tab.session),
       });
     }
-    // In the order of the tabs, not by use: rows that reshuffle every second
-    // can't be clicked.
-    return found;
+    return sortRows(found, sort);
   });
   const elsewhere = $derived(report ? report.consoles.length - rows.length : 0);
 
@@ -235,7 +248,19 @@
       </section>
 
       <section class="tabs">
-        <h2>{t("diagnostics.tabs")}</h2>
+        <div class="tabs-head">
+          <h2>{t("diagnostics.tabs")}</h2>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="sort" onkeydown={keepKeys}>
+            <span class="sort-label">{t("diagnostics.sortBy")}</span>
+            <SettingDropdown
+              options={sortOptions}
+              value={sort}
+              width="170px"
+              onpick={(value) => (sort = value as SortKey)}
+            />
+          </div>
+        </div>
 
         {#if rows.length === 0}
           <p class="note">{t("diagnostics.empty")}</p>
@@ -468,6 +493,25 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .tabs-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .sort {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sort-label {
+    font-size: 11px;
+    opacity: 0.6;
+    white-space: nowrap;
   }
 
   .tab-top {
