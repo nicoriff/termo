@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.19.0",
+    "date": "2026-10-11",
+    "es": [
+      "**Diagnóstico**: un panel fijo a la derecha (desde el menú, la paleta o ⌘⇧D / Ctrl+Shift+D) que mide en vivo el consumo de CPU y memoria de Termo y del sistema, con sus gráficos del último minuto.",
+      "En el panel, cada pestaña muestra su consola (ícono y tipo), su CPU y su memoria en dos gráficos, qué está ejecutando, cuántos procesos tiene y cuánto lleva activa. Se pueden ordenar por CPU o memoria, de mayor a menor o al revés, y desde ahí ir a la pestaña, cerrarla o matar sus procesos. Los que consumen mucho se resaltan.",
+      "El menú de la ventana se cierra al cambiar su tamaño, en vez de quedar abierto fuera de lugar."
+    ],
+    "en": [
+      "**Diagnostics**: a panel docked on the right (from the menu, the palette or ⌘⇧D / Ctrl+Shift+D) that measures Termo's and the system's CPU and memory use live, with charts of the last minute.",
+      "In the panel, each tab shows its console (icon and type), its CPU and memory in two charts, what it's running, how many processes it has and how long it's been up. They can be sorted by CPU or memory, high to low or the other way, and from there you can go to the tab, close it or kill its processes. Heavy ones are highlighted.",
+      "The window menu closes when the window is resized, instead of staying open out of place."
+    ]
+  },
+  {
     "version": "0.18.2",
     "date": "2026-10-10",
     "es": [
