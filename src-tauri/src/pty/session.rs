@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -158,8 +158,17 @@ impl PtySession {
         // hold their own independent copy.
         #[cfg(unix)]
         let poll_channel = channel.clone();
+        #[cfg(windows)]
+        let exit_channel = channel.clone();
         let reader_channel = channel;
         let reader_child = Arc::clone(&child);
+        // The exit is reported once, by whichever thread sees it first: this
+        // one at EOF, or on Windows the one watching the process (below).
+        let exit_sent = Arc::new(AtomicBool::new(false));
+        let reader_exit_sent = Arc::clone(&exit_sent);
+        // Bumped on every read, so that thread can tell the output went quiet.
+        let reads = Arc::new(AtomicU64::new(0));
+        let reader_reads = Arc::clone(&reads);
         std::thread::spawn(move || {
             let mut reader = reader;
             let mut buf = [0u8; 8192];
@@ -172,9 +181,13 @@ impl PtySession {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        reader_reads.fetch_add(1, Ordering::Relaxed);
                         if let Some(recorder) = &reader_recorder {
                             recorder.output(&buf[..n]);
                         }
+                        // Nothing follows the exit: by then the tab may be
+                        // running another process in this same terminal.
+                        forwarding = forwarding && !reader_exit_sent.load(Ordering::Relaxed);
                         if forwarding {
                             let data = STANDARD.encode(&buf[..n]);
                             forwarding = reader_channel.send(PtyEvent::Data { data }).is_ok();
@@ -191,10 +204,46 @@ impl PtySession {
                 .ok()
                 .map(|status| status.exit_code() as i32)
                 .unwrap_or(-1);
-            if forwarding {
+            if forwarding && !reader_exit_sent.swap(true, Ordering::Relaxed) {
                 let _ = reader_channel.send(PtyEvent::Exit { code });
             }
         });
+
+        // On Windows the reader above doesn't reach EOF when the process
+        // exits: ConPTY keeps its output pipe open until the console itself
+        // is closed, and that only happens once the session is killed. So the
+        // process is watched here, and its exit reported once what it last
+        // wrote has been read out.
+        #[cfg(windows)]
+        {
+            let watch_child = Arc::clone(&child);
+            let watch_stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let code = loop {
+                    if watch_stop.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    // Polled rather than a blocking wait(), which would hold
+                    // the lock kill() needs.
+                    match watch_child.lock().unwrap().try_wait() {
+                        Ok(Some(status)) => break status.exit_code() as i32,
+                        Ok(None) => {}
+                        Err(_) => break -1,
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                };
+                for _ in 0..20 {
+                    let seen = reads.load(Ordering::Relaxed);
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    if reads.load(Ordering::Relaxed) == seen {
+                        break;
+                    }
+                }
+                if !watch_stop.load(Ordering::Relaxed) && !exit_sent.swap(true, Ordering::Relaxed) {
+                    let _ = exit_channel.send(PtyEvent::Exit { code });
+                }
+            });
+        }
 
         // Confirming signal for Modo IA's tool detection: which process is
         // currently in the foreground of this PTY. A dedicated thread rather
