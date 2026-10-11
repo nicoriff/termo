@@ -24,7 +24,7 @@ pub struct ModelOption {
 }
 
 /// Claude Code's config folder: `$CLAUDE_CONFIG_DIR`, or `~/.claude`.
-fn claude_dir() -> Option<PathBuf> {
+pub(crate) fn claude_dir() -> Option<PathBuf> {
     std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .or_else(|| dirs::home_dir().map(|home| home.join(".claude")))

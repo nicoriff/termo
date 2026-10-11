@@ -3,6 +3,7 @@ mod agent_sessions;
 mod ai_mode;
 mod agents;
 mod commands;
+mod companion;
 mod config;
 mod copilot_quota;
 mod i18n;
