@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.20.1",
+    "date": "2026-10-12",
+    "es": [
+      "**Agentes que se pierden al cambiar de Node.js**: si actualizás Node.js con un gestor de versiones (nvm, fnm, Volta), los agentes instalados con npm quedan en la versión anterior y dejan de aparecer. Termo ahora lo nota al abrir y ofrece reinstalarlos todos juntos. Tus sesiones y la configuración de cada agente no se tocan. Si desinstalaste un agente a propósito, no pregunta."
+    ],
+    "en": [
+      "**Agents lost when Node.js changes**: if you update Node.js with a version manager (nvm, fnm, Volta), the agents installed with npm stay with the previous version and stop showing up. Termo now notices on opening and offers to reinstall them all at once. Your sessions and each agent's settings are left alone. If you uninstalled an agent on purpose, it doesn't ask."
+    ]
+  },
+  {
     "version": "0.20.0",
     "date": "2026-10-11",
     "es": [
