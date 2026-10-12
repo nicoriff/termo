@@ -18,6 +18,7 @@
   import CommitGraph from "./CommitGraph.svelte";
   import { commitSides, emptyGraphState, layoutGraph, type GraphRow, type GraphState } from "./git-graph";
   import { gitStore } from "./git-store.svelte";
+  import { gitReviewStore } from "./git-review-store.svelte";
   import { splitPath } from "./git-summary";
 
   /** A repository's whole history as a graph, a page at a time, with any
@@ -119,6 +120,10 @@
     });
   }
 
+  function reviewCommit() {
+    if (detail) gitReviewStore.ask({ kind: "commit", sha: detail.sha });
+  }
+
   function copySha() {
     if (!detail) return;
     void writeText(detail.sha).then(() => {
@@ -169,6 +174,12 @@
           </p>
           <p class="dim">{new Date(detail.time * 1000).toLocaleString(i18n.locale, { dateStyle: "full", timeStyle: "short" })}</p>
           <pre class="message">{detail.message}</pre>
+          <!-- The reviews are of the repository in the panel: this tab's, when it's the one in view. -->
+          {#if gitReviewStore.available && gitStore.root === root && detail.parents.length <= 1}
+            <button class="review-commit" disabled={gitReviewStore.busy} onclick={reviewCommit}>
+              {t("git.review.reviewCommit")}
+            </button>
+          {/if}
           <p class="files-title">{t("git.graph.files", { n: String(detail.files.length) })}</p>
           {#if detail.parents.length > 1}
             <p class="dim">{t("git.graph.mergeNote")}</p>
@@ -361,6 +372,28 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     user-select: text;
+  }
+
+  .review-commit {
+    align-self: flex-start;
+    margin-top: 8px;
+    padding: 3px 9px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .review-commit:hover:not(:disabled) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .review-commit:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .files-title {

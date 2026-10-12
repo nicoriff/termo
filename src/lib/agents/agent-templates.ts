@@ -1,4 +1,4 @@
-import type { AgentAutonomy, AgentSchedule, AgentSpec } from "$lib/core/agents-client";
+import type { AgentAutonomy, AgentGitRole, AgentSchedule, AgentSpec } from "$lib/core/agents-client";
 import type { MessageKey } from "$lib/i18n/translate";
 
 /** A ready-made starting point in the wizard's first step. Its texts are
@@ -15,6 +15,8 @@ export interface AgentTemplate {
   schedule: AgentSchedule | null;
   /** Works on a project: the current console's folder is a good default. */
   inProject: boolean;
+  /** Made for the Git panel's code reviews. */
+  gitRole?: AgentGitRole;
 }
 
 const key = (id: string, field: string) => `agents.templates.${id}.${field}` as MessageKey;
@@ -22,7 +24,7 @@ const key = (id: string, field: string) => `agents.templates.${id}.${field}` as 
 function template(
   id: string,
   icon: string,
-  options: Pick<AgentTemplate, "autonomy" | "web" | "schedule" | "inProject">,
+  options: Pick<AgentTemplate, "autonomy" | "web" | "schedule" | "inProject" | "gitRole">,
 ): AgentTemplate {
   return {
     id,
@@ -36,7 +38,8 @@ function template(
 }
 
 export const AGENT_TEMPLATES: AgentTemplate[] = [
-  template("reviewer", "🔍", { autonomy: "read", web: false, schedule: null, inProject: true }),
+  template("reviewer", "🔍", { autonomy: "read", web: false, schedule: null, inProject: true, gitRole: "reviewer" }),
+  template("fixer", "🛠", { autonomy: "edit", web: false, schedule: null, inProject: true, gitRole: "fixer" }),
   template("dailySummary", "📊", {
     autonomy: "read",
     web: false,
@@ -61,6 +64,7 @@ export function applyTemplate(
   spec.task = translate(chosen.task);
   spec.instructions = translate(chosen.instructions);
   spec.autonomy = chosen.autonomy;
+  spec.gitRole = chosen.gitRole ?? "none";
   spec.tools.web = chosen.web;
   spec.triggers.schedule = chosen.schedule ? structuredClone(chosen.schedule) : null;
   if (chosen.inProject && here && !spec.workDir) spec.workDir = here;

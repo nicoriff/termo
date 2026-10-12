@@ -25,6 +25,7 @@
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
   import ExplorerPanel from "$lib/explorer/ExplorerPanel.svelte";
   import { gitStore } from "$lib/git/git-store.svelte";
+  import { gitReviewStore } from "$lib/git/git-review-store.svelte";
   import GitPanel from "$lib/git/GitPanel.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
@@ -78,6 +79,7 @@
     const stopCompanionNudges = companionNudges.start();
     const stopQuickAsk = quickAskStore.start();
     const stopGit = gitStore.start();
+    const stopGitReviews = gitReviewStore.start();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
@@ -130,6 +132,7 @@
       stopCompanionNudges();
       stopQuickAsk();
       stopGit();
+      stopGitReviews();
     };
   });
 

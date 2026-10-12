@@ -70,6 +70,7 @@ export function newAgentSpec(id: string): AgentSpec {
     enabled: true,
     deploy: { github: null },
     projectId: "",
+    gitRole: "none",
     createdAt: 0,
     updatedAt: 0,
   };

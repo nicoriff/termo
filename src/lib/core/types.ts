@@ -138,6 +138,15 @@ export interface AppConfig {
   git_status_pr?: boolean;
   git_pr_enabled?: boolean;
   git_auto_fetch_minutes?: number;
+  git_review_enabled?: boolean;
+  git_review_agent_id?: string;
+  git_review_fix_agent_id?: string;
+  git_review_scope?: string;
+  git_review_min_severity?: string;
+  git_review_before_push?: string;
+  git_review_on_pr_create?: boolean;
+  git_review_instructions?: string;
+  git_review_timeout_min?: number;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;

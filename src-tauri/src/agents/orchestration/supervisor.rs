@@ -256,6 +256,7 @@ pub fn review(scratch: &Path, orchestration: &Orchestration, catalog: &Catalog) 
         model: &orchestration.orchestrator_model,
         read_files: false,
         timeout: TIMEOUT,
+        cancel: None,
     };
     let answer = ask_with(&ask, prompt(orchestration, catalog, i18n::current()), &schema())?;
     review_of(answer.value, answer.cost_usd)
