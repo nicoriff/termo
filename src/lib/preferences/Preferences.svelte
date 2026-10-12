@@ -169,7 +169,7 @@
   <span class="chevron-spacer"></span>
 {/snippet}
 
-<div class="window-chrome" class:bordered={!isWindows}>
+<div class="window-chrome" class:inset-frame={isWindows}>
   <TitleBar title={t("preferences.title")} showSettingsButton={false} showMaximizeButton={false} />
   <div class="body">
     <nav class="sidebar">
@@ -269,14 +269,29 @@
     box-sizing: border-box;
     border-radius: 10px;
     overflow: hidden;
+    position: relative;
   }
 
-  /* Neutral translucent gray rather than a theme color, so the edge stays
-     visible over both light and dark windows behind this one. Not on
-     Windows: the native rounded window region (window_shape.rs) clips it
-     into a broken-looking frame at the corners. */
-  .window-chrome.bordered {
-    border: 1px solid rgba(128, 128, 128, 0.45);
+  /* The frame, in the theme's accent like the quick question's dialog, and a
+     soft glow of it just inside. Drawn over the content rather than as a
+     border of the box, so nothing in the window moves for it. */
+  .window-chrome::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+    border: 1px solid color-mix(in srgb, var(--pane-active-border, #3a6df0) 70%, var(--tabbar-border, #2a2a2a));
+    border-radius: 10px;
+    box-shadow: inset 0 0 14px color-mix(in srgb, var(--pane-active-border, #3a6df0) 14%, transparent);
+  }
+
+  /* On Windows the native rounded window region (window_shape.rs) cuts a
+     jagged edge that eats a border drawn right on it, so the frame sits one
+     pixel in, clear of the cut. */
+  .window-chrome.inset-frame::after {
+    inset: 1px;
+    border-radius: 9px;
   }
 
   .body {
