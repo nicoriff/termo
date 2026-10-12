@@ -43,8 +43,12 @@ pub struct ShortcutsConfig {
     pub new_window_other: Option<String>,
     pub toggle_explorer_mac: Option<String>,
     pub toggle_explorer_other: Option<String>,
+    pub toggle_git_mac: Option<String>,
+    pub toggle_git_other: Option<String>,
     pub toggle_agents_mac: Option<String>,
     pub toggle_agents_other: Option<String>,
+    pub toggle_orchestration_mac: Option<String>,
+    pub toggle_orchestration_other: Option<String>,
     pub cycle_tab_mac: Option<String>,
     pub cycle_tab_other: Option<String>,
     pub zoom_tile_mac: Option<String>,
@@ -188,6 +192,23 @@ pub struct AppConfig {
     pub keep_awake_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
+    /// Everything git: the panel, the status bar's item, the diff and graph
+    /// tabs (see src-tauri/src/git).
+    pub git_enabled: bool,
+    /// The Git button in the window's vertical bar.
+    pub git_in_activity_bar: bool,
+    /// The repository's item on the status bar, and what it shows: the
+    /// branch, how far it is from its upstream, what changed, its request.
+    pub git_status_bar: bool,
+    pub git_status_branch: bool,
+    pub git_status_sync: bool,
+    pub git_status_changes: bool,
+    pub git_status_pr: bool,
+    /// Asking gh / glab for the branch's pull request.
+    pub git_pr_enabled: bool,
+    /// Fetching on its own every so many minutes while a repository is in
+    /// view; 0 for never.
+    pub git_auto_fetch_minutes: u16,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -258,6 +279,15 @@ impl Default for AppConfig {
             agent_clis_known: std::collections::BTreeMap::new(),
             keep_awake_button: true,
             tabs_fill_width: false,
+            git_enabled: true,
+            git_in_activity_bar: true,
+            git_status_bar: true,
+            git_status_branch: true,
+            git_status_sync: true,
+            git_status_changes: true,
+            git_status_pr: true,
+            git_pr_enabled: true,
+            git_auto_fetch_minutes: 0,
             status_line_wrapped: None,
             last_seen_version: None,
             default_layout: None,

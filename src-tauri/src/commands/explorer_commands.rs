@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 
+pub use crate::git::GitMark;
+use crate::git::{brings_filters, git_command};
 use crate::i18n::{tr, Msg};
 
 /// Past this, a file isn't opened: an editor tab isn't the place for it, and
@@ -34,25 +35,12 @@ pub struct ExplorerEntry {
     pub is_dir: bool,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum GitMark {
-    Modified,
-    Added,
-    Untracked,
-    Deleted,
-    Renamed,
-    Conflict,
-}
-
 /// The repository `path` is inside, found by walking up to the folder that
 /// holds `.git` (a folder in a normal clone, a file in a worktree). Outside
 /// any repository, the folder itself.
 #[tauri::command]
 pub fn explorer_root(path: String) -> ExplorerRoot {
-    let start = PathBuf::from(&path);
-    let repo = start.ancestors().find(|dir| dir.join(".git").exists());
-    match repo {
+    match crate::git::repo_root(Path::new(&path)) {
         Some(root) => ExplorerRoot { path: root.to_string_lossy().into_owned(), is_repo: true },
         None => ExplorerRoot { path, is_repo: false },
     }
@@ -109,35 +97,11 @@ const STATUS_ARGS: &[&str] = &[
     "--ignore-submodules=all",
 ];
 
-fn git_command(root: &Path) -> Command {
-    // A GUI app's PATH often lacks where git lives (see pty/bin_search.rs).
-    let git = crate::pty::bin_search::find_binary("git").unwrap_or_else(|| PathBuf::from("git"));
-    let mut command = Command::new(git);
-    command.arg("-C").arg(root);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // No console window flashing up on every refresh.
-        command.creation_flags(0x0800_0000);
-    }
-    command
-}
-
-/// Whether the repository's own config (`git config --local --list`, its
-/// includes followed) defines a filter driver: a program `git status` could
-/// start. Reading the config never runs one.
-fn defines_filters(local_config: &str) -> bool {
-    local_config
-        .lines()
-        .filter_map(|line| line.split_once('=').map_or(Some(line), |(key, _)| Some(key)))
-        .any(|key| key.trim().to_ascii_lowercase().starts_with("filter."))
-}
-
 fn changed_files(root: &Path) -> HashMap<String, GitMark> {
     // A repository whose own config brings filters goes without marks rather
-    // than have the explorer start its programs just by being opened.
-    let config = git_command(root).args(["config", "--local", "--includes", "--list"]).output();
-    if config.is_ok_and(|output| defines_filters(&String::from_utf8_lossy(&output.stdout))) {
+    // than have the explorer start its programs just by being opened (see
+    // git/mod.rs, which the Git panel shares this with).
+    if brings_filters(root) {
         return HashMap::new();
     }
     let Ok(output) = git_command(root).args(STATUS_ARGS).output() else {
@@ -227,19 +191,12 @@ fn write_text(path: &Path, content: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     fn scratch() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("termo-explorer-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir
-    }
-
-    #[test]
-    fn filter_drivers_in_the_repositorys_config_are_spotted() {
-        assert!(defines_filters("core.bare=false\nfilter.crypt.clean=git-crypt clean\n"));
-        assert!(defines_filters("Filter.X.Process=x"));
-        assert!(!defines_filters("core.bare=false\nremote.origin.url=https://x/filter.git\n"));
-        assert!(!defines_filters(""));
     }
 
     #[test]

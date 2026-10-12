@@ -164,6 +164,29 @@ pub enum Msg<'a> {
     OrchestrationDoneWhen,
     OrchestrationBuildsOn,
     OrchestrationLastAttempt,
+    GitNotFound,
+    GitNotARepo,
+    /// Another action is still running on the repository.
+    GitBusy,
+    /// what went wrong
+    GitFailed(&'a str),
+    GitTimedOut,
+    /// what git said
+    GitNeedsCredentials(&'a str),
+    GitCancelled,
+    GitBranchNameInvalid(&'a str),
+    GitNoUpstream,
+    GitNoRemote,
+    GitDetached,
+    GitCommitNeedsMessage,
+    /// The service's CLI: gh or glab.
+    PrCliMissing(&'a str),
+    PrNotSignedIn(&'a str),
+    PrUnreadable(&'a str),
+    /// what the CLI said
+    PrFailed(&'a str),
+    PrUnsupported,
+    PrNeedsTitle,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -463,6 +486,47 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (AiModeOff, En) => "AI Mode is off: turn it on in Preferences to use agents".into(),
 
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
+
+        (GitNotFound, Es) => "No se encontró git en esta computadora".into(),
+        (GitNotFound, En) => "git wasn't found on this computer".into(),
+        (GitNotARepo, Es) => "Esa carpeta no es un repositorio de git".into(),
+        (GitNotARepo, En) => "That folder isn't a git repository".into(),
+        (GitBusy, Es) => "Ya hay una acción de git en curso en este repositorio".into(),
+        (GitBusy, En) => "A git action is already running on this repository".into(),
+        (GitFailed(error), Es) => format!("Git no pudo hacerlo: {error}"),
+        (GitFailed(error), En) => format!("Git couldn't do it: {error}"),
+        (GitTimedOut, Es) => "Git tardó demasiado y se canceló. Revisá la conexión y probá de nuevo.".into(),
+        (GitTimedOut, En) => "Git took too long and was cancelled. Check the connection and try again.".into(),
+        (GitNeedsCredentials(said), Es) => {
+            format!("Git necesita que te identifiques y acá no tiene dónde preguntar. Corré el comando una vez en la consola para guardar las credenciales.\n{said}")
+        }
+        (GitNeedsCredentials(said), En) => {
+            format!("Git needs you to sign in and has nowhere to ask here. Run the command once in the console to save the credentials.\n{said}")
+        }
+        (GitCancelled, Es) => "Cancelado".into(),
+        (GitCancelled, En) => "Cancelled".into(),
+        (GitBranchNameInvalid(name), Es) => format!("\"{name}\" no sirve como nombre de rama"),
+        (GitBranchNameInvalid(name), En) => format!("\"{name}\" can't be a branch's name"),
+        (GitNoUpstream, Es) => "Esta rama todavía no está en el remoto: publicala primero".into(),
+        (GitNoUpstream, En) => "This branch isn't on the remote yet: publish it first".into(),
+        (GitNoRemote, Es) => "El repositorio no tiene ningún remoto configurado".into(),
+        (GitNoRemote, En) => "The repository has no remote set up".into(),
+        (GitDetached, Es) => "No estás en ninguna rama (HEAD suelto): cambiá a una rama primero".into(),
+        (GitDetached, En) => "You aren't on a branch (detached HEAD): switch to one first".into(),
+        (GitCommitNeedsMessage, Es) => "Escribí un mensaje para el commit".into(),
+        (GitCommitNeedsMessage, En) => "Write a message for the commit".into(),
+        (PrCliMissing(cli), Es) => format!("Hace falta tener instalado «{cli}»"),
+        (PrCliMissing(cli), En) => format!("\"{cli}\" needs to be installed"),
+        (PrNotSignedIn(cli), Es) => format!("Iniciá sesión con «{cli} auth login» en una consola"),
+        (PrNotSignedIn(cli), En) => format!("Sign in with \"{cli} auth login\" in a console"),
+        (PrUnreadable(cli), Es) => format!("No se entendió lo que respondió «{cli}»"),
+        (PrUnreadable(cli), En) => format!("Couldn't make sense of what \"{cli}\" answered"),
+        (PrFailed(error), Es) => format!("No se pudo: {error}"),
+        (PrFailed(error), En) => format!("It couldn't be done: {error}"),
+        (PrUnsupported, Es) => "Acá no hay cómo consultar los pull requests de este servicio".into(),
+        (PrUnsupported, En) => "There's no way here to ask this service for its pull requests".into(),
+        (PrNeedsTitle, Es) => "Ponele un título".into(),
+        (PrNeedsTitle, En) => "Give it a title".into(),
     }
 }
 
@@ -572,6 +636,24 @@ mod tests {
             Msg::OrchestrationDoneWhen,
             Msg::OrchestrationBuildsOn,
             Msg::OrchestrationLastAttempt,
+            Msg::GitNotFound,
+            Msg::GitNotARepo,
+            Msg::GitBusy,
+            Msg::GitFailed("exit 1"),
+            Msg::GitTimedOut,
+            Msg::GitNeedsCredentials("terminal prompts disabled"),
+            Msg::GitCancelled,
+            Msg::GitBranchNameInvalid("-x"),
+            Msg::GitNoUpstream,
+            Msg::GitNoRemote,
+            Msg::GitDetached,
+            Msg::GitCommitNeedsMessage,
+            Msg::PrCliMissing("gh"),
+            Msg::PrNotSignedIn("gh"),
+            Msg::PrUnreadable("gh"),
+            Msg::PrFailed("x"),
+            Msg::PrUnsupported,
+            Msg::PrNeedsTitle,
         ]
     }
 

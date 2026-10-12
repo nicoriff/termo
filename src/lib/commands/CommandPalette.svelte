@@ -10,6 +10,7 @@
     tabs: "commands.groups.tabs",
     layouts: "commands.groups.layouts",
     appearance: "commands.groups.appearance",
+    git: "commands.groups.git",
     aiMode: "commands.groups.aiMode",
     agents: "commands.groups.agents",
     extensions: "commands.groups.extensions",

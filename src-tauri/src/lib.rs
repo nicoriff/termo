@@ -6,6 +6,7 @@ mod commands;
 mod companion;
 mod config;
 mod copilot_quota;
+mod git;
 mod i18n;
 mod keep_awake;
 mod layouts;
@@ -131,6 +132,18 @@ pub fn run() {
             commands::explorer_commands::git_status,
             commands::explorer_commands::read_text_file,
             commands::explorer_commands::write_text_file,
+            commands::git_commands::git_snapshot,
+            commands::git_commands::git_blob,
+            commands::git_commands::git_branches,
+            commands::git_commands::git_graph,
+            commands::git_commands::git_commit_detail,
+            commands::git_commands::git_run,
+            commands::git_commands::git_cancel,
+            commands::git_commands::git_busy,
+            commands::git_commands::git_pr,
+            commands::git_commands::git_pr_update,
+            commands::git_commands::git_pr_create,
+            commands::git_commands::git_tools,
             commands::window_commands::minimize_window,
             commands::window_commands::toggle_maximize,
             commands::window_commands::close_window,

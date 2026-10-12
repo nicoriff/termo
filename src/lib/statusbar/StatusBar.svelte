@@ -1,7 +1,7 @@
 <script lang="ts">
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { getPtyMemory } from "$lib/core/pty-client";
-  import { collectTiles, isConsoleTab } from "$lib/layout/split-tree";
+  import { isConsoleTab } from "$lib/layout/split-tree";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -16,16 +16,13 @@
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
   import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
+  import GitStatusItem from "./GitStatusItem.svelte";
 
   const MEMORY_POLL_MS = 2000;
   /** A plan's monthly count barely moves; the backend keeps it as long. */
   const COPILOT_POLL_MS = 5 * 60 * 1000;
 
-  const activeSession = $derived.by(() => {
-    if (!workspaceStore.root || !workspaceStore.focusedTileId) return null;
-    const tile = collectTiles(workspaceStore.root).find((t) => t.id === workspaceStore.focusedTileId);
-    return tile?.sessions.find((session) => session.id === tile.activeSessionId) ?? null;
-  });
+  const activeSession = $derived(workspaceStore.focusedSession);
   const activeTabId = $derived(activeSession?.id ?? null);
   /** The active tab's console, when it is one (not a file or an agent's runs). */
   const activeConsole = $derived(activeSession && isConsoleTab(activeSession) ? activeSession : null);
@@ -220,11 +217,15 @@
       <span class="nudge-dot" aria-hidden="true"></span>{nudgeText}
     </button>
   {/if}
-  {#if memoryBytes !== null}
-    <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
-      {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
-    </span>
-  {/if}
+  <!-- The right end: the repository, then the console's memory. -->
+  <div class="status-right">
+    <GitStatusItem />
+    {#if memoryBytes !== null}
+      <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
+        {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
+      </span>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -342,7 +343,14 @@
     gap: 6px;
   }
 
-  .status-memory {
+  .status-right {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .status-memory {
+    margin-left: 12px;
   }
 </style>

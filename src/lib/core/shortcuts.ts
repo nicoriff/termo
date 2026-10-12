@@ -28,7 +28,9 @@ export type ShortcutAction =
   | "newGrok"
   | "favoriteTab"
   | "toggleExplorer"
+  | "toggleGit"
   | "toggleAgents"
+  | "toggleOrchestration"
   | "cycleTab"
   | "zoomTile"
   | "commandPalette"
@@ -55,7 +57,9 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newGrok",
   "favoriteTab",
   "toggleExplorer",
+  "toggleGit",
   "toggleAgents",
+  "toggleOrchestration",
   "cycleTab",
   "zoomTile",
   "commandPalette",
@@ -85,7 +89,9 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newGrok: "shortcuts.labels.newGrok",
   favoriteTab: "shortcuts.labels.favoriteTab",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
+  toggleGit: "shortcuts.labels.toggleGit",
   toggleAgents: "shortcuts.labels.toggleAgents",
+  toggleOrchestration: "shortcuts.labels.toggleOrchestration",
   cycleTab: "shortcuts.labels.cycleTab",
   zoomTile: "shortcuts.labels.zoomTile",
   commandPalette: "shortcuts.labels.commandPalette",
@@ -266,7 +272,11 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   favoriteTab: { mac: "meta+shift+f", other: "ctrl+shift+f" },
   // Not plain Ctrl+B: the shell uses it to move the cursor back.
   toggleExplorer: { mac: "meta+shift+b", other: "ctrl+shift+b" },
+  // S, from source control: G is the agents panel's.
+  toggleGit: { mac: "meta+shift+s", other: "ctrl+shift+s" },
   toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },
+  // R, from oRchestration: O is Copilot's.
+  toggleOrchestration: { mac: "meta+shift+r", other: "ctrl+shift+r" },
   cycleTab: { mac: "ctrl+tab", other: "ctrl+tab" },
   zoomTile: { mac: serializeKeybinding(["meta"], ARROW_KEY), other: serializeKeybinding(["alt"], ARROW_KEY) },
   commandPalette: { mac: "meta+shift+p", other: "ctrl+shift+p" },

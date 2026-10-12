@@ -31,8 +31,12 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_window_other: null,
   toggle_explorer_mac: null,
   toggle_explorer_other: null,
+  toggle_git_mac: null,
+  toggle_git_other: null,
   toggle_agents_mac: null,
   toggle_agents_other: null,
+  toggle_orchestration_mac: null,
+  toggle_orchestration_other: null,
   cycle_tab_mac: null,
   cycle_tab_other: null,
   zoom_tile_mac: null,
@@ -75,7 +79,9 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   favoriteTab: { mac: "favorite_tab_mac", other: "favorite_tab_other" },
   newWindow: { mac: "new_window_mac", other: "new_window_other" },
   toggleExplorer: { mac: "toggle_explorer_mac", other: "toggle_explorer_other" },
+  toggleGit: { mac: "toggle_git_mac", other: "toggle_git_other" },
   toggleAgents: { mac: "toggle_agents_mac", other: "toggle_agents_other" },
+  toggleOrchestration: { mac: "toggle_orchestration_mac", other: "toggle_orchestration_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
   zoomTile: { mac: "zoom_tile_mac", other: "zoom_tile_other" },
   commandPalette: { mac: "command_palette_mac", other: "command_palette_other" },
@@ -92,6 +98,10 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   aiFinished: { mac: "ai_finished_mac", other: "ai_finished_other" },
   aiNextPending: { mac: "ai_next_pending_mac", other: "ai_next_pending_other" },
 };
+
+/** What the repository's item on the status bar can show. */
+export type GitStatusPart = "branch" | "sync" | "changes" | "pr";
+export const GIT_STATUS_PARTS: GitStatusPart[] = ["branch", "sync", "changes", "pr"];
 
 interface InitOptions {
   /** MainWindow restores the persisted window size on launch; Preferences
@@ -147,6 +157,17 @@ class AppConfigStore {
   /** The keep-awake button in the title bar. */
   keepAwakeButton = $state(true);
   tabsFillWidth = $state(false);
+  /** Everything git: the panel, the status bar's item, the diff and graph tabs. */
+  gitEnabled = $state(true);
+  /** The Git button in the window's vertical bar. */
+  gitInActivityBar = $state(true);
+  /** The repository's item on the status bar, and each thing it shows. */
+  gitStatusBar = $state(true);
+  gitStatusParts = $state<Record<GitStatusPart, boolean>>({ branch: true, sync: true, changes: true, pr: true });
+  /** Asking gh / glab for the branch's pull request. */
+  gitPrEnabled = $state(true);
+  /** Minutes between fetches made on their own; 0 for never. */
+  gitAutoFetchMinutes = $state(0);
   /** Where an agent's CLI was installed when not npm's own folder, by agent. */
   agentInstallDirs = $state<Record<string, string>>({});
   /** Which Node.js each agent's CLI was last found under (see
@@ -269,6 +290,17 @@ class AppConfigStore {
     this.keepAwakeButton = config.keep_awake_button ?? true;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
+    this.gitEnabled = config.git_enabled ?? true;
+    this.gitInActivityBar = config.git_in_activity_bar ?? true;
+    this.gitStatusBar = config.git_status_bar ?? true;
+    this.gitStatusParts = {
+      branch: config.git_status_branch ?? true,
+      sync: config.git_status_sync ?? true,
+      changes: config.git_status_changes ?? true,
+      pr: config.git_status_pr ?? true,
+    };
+    this.gitPrEnabled = config.git_pr_enabled ?? true;
+    this.gitAutoFetchMinutes = config.git_auto_fetch_minutes ?? 0;
     this.agentInstallDirs = config.agent_install_dirs ?? {};
     this.agentClisKnown = config.agent_clis_known ?? {};
     this.defaultLayout = config.default_layout;
@@ -447,6 +479,36 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setGitEnabled(enabled: boolean): void {
+    this.gitEnabled = enabled;
+    void this.persist();
+  }
+
+  setGitInActivityBar(visible: boolean): void {
+    this.gitInActivityBar = visible;
+    void this.persist();
+  }
+
+  setGitStatusBar(visible: boolean): void {
+    this.gitStatusBar = visible;
+    void this.persist();
+  }
+
+  setGitStatusPart(part: GitStatusPart, visible: boolean): void {
+    this.gitStatusParts = { ...this.gitStatusParts, [part]: visible };
+    void this.persist();
+  }
+
+  setGitPrEnabled(enabled: boolean): void {
+    this.gitPrEnabled = enabled;
+    void this.persist();
+  }
+
+  setGitAutoFetchMinutes(minutes: number): void {
+    this.gitAutoFetchMinutes = Math.round(Math.min(1440, Math.max(0, minutes)));
+    void this.persist();
+  }
+
   setTabsFillWidth(fill: boolean): void {
     this.tabsFillWidth = fill;
     void this.persist();
@@ -554,6 +616,15 @@ class AppConfigStore {
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
       tabs_fill_width: this.tabsFillWidth,
+      git_enabled: this.gitEnabled,
+      git_in_activity_bar: this.gitInActivityBar,
+      git_status_bar: this.gitStatusBar,
+      git_status_branch: this.gitStatusParts.branch,
+      git_status_sync: this.gitStatusParts.sync,
+      git_status_changes: this.gitStatusParts.changes,
+      git_status_pr: this.gitStatusParts.pr,
+      git_pr_enabled: this.gitPrEnabled,
+      git_auto_fetch_minutes: this.gitAutoFetchMinutes,
       agent_install_dirs: this.agentInstallDirs,
       agent_clis_known: this.agentClisKnown,
       default_layout: this.defaultLayout,

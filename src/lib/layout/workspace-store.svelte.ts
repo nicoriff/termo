@@ -11,6 +11,8 @@ import {
   makeOrchestrationSession,
   makeProjectSession,
   makeFileSession,
+  makeDiffSession,
+  makeGitGraphSession,
   computeLayout,
   countSessions,
   makeSession,
@@ -19,6 +21,7 @@ import {
   updateLeaf,
   updateRatio,
   type AgentLaunch,
+  type DiffTarget,
   type DropZone,
   type SessionTab,
   type SplitDirection,
@@ -231,6 +234,57 @@ class WorkspaceStore {
     if (!updated) return;
     this.root = updated;
     this.focusedTileId = tileId;
+  }
+
+  /** Shows what changed in a file in a tab: the one that already shows
+   * that same pair of versions, brought forward, or a new one in the
+   * focused tile. */
+  openDiff(diff: DiffTarget): void {
+    this.openOwnTab(
+      (session) =>
+        session.diff?.root === diff.root &&
+        session.diff.path === diff.path &&
+        session.diff.from === diff.from &&
+        session.diff.to === diff.to,
+      () => makeDiffSession(diff),
+    );
+  }
+
+  /** Shows a repository's history in a tab; each repository has one. */
+  openGitGraph(root: string, title: string): void {
+    this.openOwnTab(
+      (session) => session.gitGraph?.root === root,
+      () => makeGitGraphSession(title, root),
+    );
+  }
+
+  /** Brings forward the tab `matches` finds, wherever it is, or opens the
+   * one `make` builds in the focused tile. */
+  private openOwnTab(matches: (session: SessionTab) => boolean, make: () => SessionTab): void {
+    if (!this.root) return;
+    const open = collectSessions(this.root).find((loc) => matches(loc.session));
+    if (open) {
+      this.setActiveSession(open.tileId, open.session.id);
+      return;
+    }
+    const tileId = this.focusedTileId ?? collectTiles(this.root)[0]?.id;
+    if (!tileId) return;
+    const session = make();
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
+  }
+
+  /** The tab in focus: the active one of the focused tile. */
+  get focusedSession(): SessionTab | null {
+    if (!this.root || !this.focusedTileId) return null;
+    const tile = collectTiles(this.root).find((candidate) => candidate.id === this.focusedTileId);
+    return tile?.sessions.find((session) => session.id === tile.activeSessionId) ?? null;
   }
 
   closeTab(tileId: string, sessionId: string): void {
@@ -467,6 +521,10 @@ class WorkspaceStore {
  * reported, else where it opened), or the folder of the file it shows. */
 export function sessionFolder(session: SessionTab): string | undefined {
   if (isFileTab(session)) return fileFolder(session.filePath);
+  // A diff or a history is of a repository: whatever follows the tab in
+  // focus (the explorer, the Git panel) stays on it.
+  if (session.diff) return session.diff.root;
+  if (session.gitGraph) return session.gitGraph.root;
   if (session.agentRun || session.projectView || session.orchestrationView) return undefined;
   return tabCwd.byTab[session.id] ?? session.cwd;
 }
