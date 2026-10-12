@@ -35,6 +35,7 @@ export type ShortcutAction =
   | "marketplace"
   | "diagnostics"
   | "companion"
+  | "quickAsk"
   | "copy"
   | "paste"
   | "selectAll"
@@ -61,6 +62,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "marketplace",
   "diagnostics",
   "companion",
+  "quickAsk",
   "copy",
   "paste",
   "selectAll",
@@ -90,6 +92,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   marketplace: "shortcuts.labels.marketplace",
   diagnostics: "shortcuts.labels.diagnostics",
   companion: "shortcuts.labels.companion",
+  quickAsk: "shortcuts.labels.quickAsk",
   copy: "shortcuts.labels.copy",
   paste: "shortcuts.labels.paste",
   selectAll: "shortcuts.labels.selectAll",
@@ -270,6 +273,7 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   marketplace: { mac: "meta+shift+m", other: "ctrl+shift+m" },
   diagnostics: { mac: "meta+shift+d", other: "ctrl+shift+d" },
   companion: { mac: "meta+shift+y", other: "ctrl+shift+y" },
+  quickAsk: { mac: "meta+shift+h", other: "ctrl+shift+h" },
   // Ctrl+C/Ctrl+V belong to the shell everywhere but macOS, hence the Shift.
   copy: { mac: "meta+c", other: "ctrl+shift+c" },
   paste: { mac: "meta+v", other: "ctrl+shift+v" },

@@ -288,3 +288,16 @@ export function nudgeFor(
   }
   return null;
 }
+
+/** Whose CLI answers a quick question: the one picked in Preferences when
+ * it's installed, else the first installed. Null when none is. */
+export function quickAskEngine(picked: string, installed: readonly CompanionTool[]): CompanionTool | null {
+  return installed.find((engine) => engine === picked) ?? installed[0] ?? null;
+}
+
+/** Whether a console's last exchange can go along with a quick question:
+ * only where the agent's session files are read for it, which for now is
+ * Claude Code's. */
+export function sendsExchange(tool: string | undefined): boolean {
+  return tool === "claude";
+}

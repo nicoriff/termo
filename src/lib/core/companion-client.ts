@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PlanStep } from "./orchestration-client";
 
 /** What a request was billed for, by kind (see src-tauri/src/companion). */
 export interface Tokens {
@@ -156,6 +157,50 @@ export interface Advice {
  * takes a while; it fails with the CLI's own words. */
 export function companionAdvise(request: AdviceRequest): Promise<Advice> {
   return invoke("companion_advise", { request });
+}
+
+/** The last thing asked in a session, and what its agent answered. */
+export interface Exchange {
+  prompt: string;
+  reply: string;
+}
+
+export interface QuickRequest {
+  /** Whose CLI answers. */
+  engine: CompanionTool;
+  /** The folder of the console the question came up in. */
+  cwd: string | null;
+  question: string;
+  /** The questions asked before it, oldest first. */
+  history: { question: string; answer: string }[];
+  /** The session's last exchange, when it goes along. */
+  exchange: Exchange | null;
+}
+
+export interface QuickAnswer {
+  answer: string;
+  /** What asking cost, as the CLI reports it. */
+  costUsd: number | null;
+}
+
+/** A step of a quick question being answered: the `companion-quick-step`
+ * event, with the id its asking was given. */
+export interface QuickStep {
+  id: string;
+  step: PlanStep;
+}
+
+/** A quick question, answered to one side of the session it came up in (see
+ * src-tauri/src/companion/quick.rs). It asks a model, so it costs something
+ * and takes a while; it fails with the CLI's own words. */
+export function companionQuickAsk(id: string, request: QuickRequest): Promise<QuickAnswer> {
+  return invoke("companion_quick_ask", { id, request });
+}
+
+/** A session's last exchange; null where there's none to read, which for
+ * now is every agent's but Claude Code's. */
+export function companionLastExchange(tool: string, sessionId: string): Promise<Exchange | null> {
+  return invoke("companion_last_exchange", { tool, sessionId });
 }
 
 export interface ModelShare {

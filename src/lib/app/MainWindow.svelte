@@ -36,6 +36,8 @@
   import DiagnosticsPanel from "$lib/diagnostics/DiagnosticsPanel.svelte";
   import CompanionPanel from "$lib/companion/CompanionPanel.svelte";
   import { companionNudges } from "$lib/companion/companion-nudges.svelte";
+  import QuickAsk from "$lib/companion/QuickAsk.svelte";
+  import { quickAskStore } from "$lib/companion/quick-ask-store.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
@@ -54,12 +56,16 @@
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
 
+  /** The quick question is there only with every switch it hangs from on. */
+  const quickAskAvailable = $derived(appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.quickAskEnabled);
+
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopCompanionNudges = companionNudges.start();
+    const stopQuickAsk = quickAskStore.start();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
@@ -106,6 +112,7 @@
       stopAgentAttention();
       stopAgentRunAttention();
       stopCompanionNudges();
+      stopQuickAsk();
     };
   });
 
@@ -176,12 +183,23 @@
     }
     if (
       appConfigStore.aiModeEnabled &&
+      appConfigStore.companionEnabled &&
       !workspaceStore.overviewOpen &&
       eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("companion"))
     ) {
       event.preventDefault();
       event.stopPropagation();
       uiState.toggleCompanion();
+      return;
+    }
+    if (
+      quickAskAvailable &&
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("quickAsk"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.openQuickAsk();
       return;
     }
     if (
@@ -293,8 +311,11 @@
     {#if uiState.diagnosticsOpen}
       <DiagnosticsPanel />
     {/if}
-    {#if uiState.companionOpen && appConfigStore.aiModeEnabled}
+    {#if uiState.companionOpen && appConfigStore.aiModeEnabled && appConfigStore.companionEnabled}
       <CompanionPanel />
+    {/if}
+    {#if uiState.quickAskOpen && quickAskAvailable}
+      <QuickAsk />
     {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />

@@ -45,6 +45,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   diagnostics_other: null,
   companion_mac: null,
   companion_other: null,
+  quick_ask_mac: null,
+  quick_ask_other: null,
   copy_mac: null,
   copy_other: null,
   paste_mac: null,
@@ -80,6 +82,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   marketplace: { mac: "marketplace_mac", other: "marketplace_other" },
   diagnostics: { mac: "diagnostics_mac", other: "diagnostics_other" },
   companion: { mac: "companion_mac", other: "companion_other" },
+  quickAsk: { mac: "quick_ask_mac", other: "quick_ask_other" },
   copy: { mac: "copy_mac", other: "copy_other" },
   paste: { mac: "paste_mac", other: "paste_other" },
   selectAll: { mac: "select_all_mac", other: "select_all_other" },
@@ -125,8 +128,16 @@ class AppConfigStore {
   aiDockBadge = $state(true);
   /** The Agents button in the window's vertical bar. */
   agentsInActivityBar = $state(true);
+  /** The Companion at all: its panel, its notices and the quick question. */
+  companionEnabled = $state(true);
   /** The Companion's notices on the status bar. */
   companionNudges = $state(true);
+  /** The quick question popup: off unless turned on. */
+  quickAskEnabled = $state(false);
+  /** Whose CLI answers a quick question; empty is the first one installed. */
+  quickAskEngine = $state("");
+  /** Whether a quick question starts with "send the last exchange" ticked. */
+  quickAskWithExchange = $state(false);
   /** The kinds of notice not to show (see companion.ts's NudgeKind). */
   companionMuted = $state<string[]>([]);
   /** The user's agents also in consoles opened outside Termo. */
@@ -244,7 +255,11 @@ class AppConfigStore {
     this.aiSoundVolume = config.ai_sound_volume;
     this.aiDockBadge = config.ai_dock_badge;
     this.agentsInActivityBar = config.agents_in_activity_bar ?? true;
+    this.companionEnabled = config.companion_enabled ?? true;
     this.companionNudges = config.companion_nudges ?? true;
+    this.quickAskEnabled = config.quick_ask_enabled ?? false;
+    this.quickAskEngine = config.quick_ask_engine ?? "";
+    this.quickAskWithExchange = config.quick_ask_with_exchange ?? false;
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
@@ -366,6 +381,26 @@ class AppConfigStore {
 
   setAgentsInActivityBar(visible: boolean): void {
     this.agentsInActivityBar = visible;
+    void this.persist();
+  }
+
+  setCompanionEnabled(enabled: boolean): void {
+    this.companionEnabled = enabled;
+    void this.persist();
+  }
+
+  setQuickAskEnabled(enabled: boolean): void {
+    this.quickAskEnabled = enabled;
+    void this.persist();
+  }
+
+  setQuickAskEngine(engine: string): void {
+    this.quickAskEngine = engine;
+    void this.persist();
+  }
+
+  setQuickAskWithExchange(enabled: boolean): void {
+    this.quickAskWithExchange = enabled;
     void this.persist();
   }
 
@@ -500,7 +535,11 @@ class AppConfigStore {
       ai_sound_volume: this.aiSoundVolume,
       ai_dock_badge: this.aiDockBadge,
       agents_in_activity_bar: this.agentsInActivityBar,
+      companion_enabled: this.companionEnabled,
       companion_nudges: this.companionNudges,
+      quick_ask_enabled: this.quickAskEnabled,
+      quick_ask_engine: this.quickAskEngine,
+      quick_ask_with_exchange: this.quickAskWithExchange,
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
       marketplace_source: this.marketplaceSource,

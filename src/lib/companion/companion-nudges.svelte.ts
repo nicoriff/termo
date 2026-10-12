@@ -40,6 +40,12 @@ class CompanionNudges {
     };
   }
 
+  /** Every switch a notice hangs from: with any of them off, no session is
+   * read and nothing is shown. */
+  private get on(): boolean {
+    return appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.companionNudges;
+  }
+
   private forget(tabId: string): void {
     if (!(tabId in this.byTab)) return;
     const next = { ...this.byTab };
@@ -48,7 +54,7 @@ class CompanionNudges {
   }
 
   private async read(tabId: string): Promise<void> {
-    if (!appConfigStore.aiModeEnabled || !appConfigStore.companionNudges) return;
+    if (!this.on) return;
     const session = tabAgentSessions.byTab[tabId];
     if (!session) return;
     try {
@@ -61,7 +67,7 @@ class CompanionNudges {
 
   /** What there is to say about `tabId`'s session now, if anything. */
   for(tabId: string | null): Nudge | null {
-    if (!tabId || !appConfigStore.aiModeEnabled || !appConfigStore.companionNudges) return null;
+    if (!tabId || !this.on) return null;
     const reading = this.byTab[tabId];
     if (!reading) return null;
     // A notice about the turn before is out of date while the next one runs.

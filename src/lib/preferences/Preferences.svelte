@@ -14,6 +14,7 @@
   import AiModeSection from "./sections/AiModeSection.svelte";
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import AiAgentsSection from "./sections/AiAgentsSection.svelte";
+  import AiCompanionSection from "./sections/AiCompanionSection.svelte";
   import MarketplaceSection from "./sections/MarketplaceSection.svelte";
   import { listen } from "@tauri-apps/api/event";
   import AiToolSection from "./sections/AiToolSection.svelte";
@@ -34,6 +35,7 @@
     | "ai-mode"
     | "ai-notifications"
     | "ai-agents"
+    | "ai-companion"
     | "marketplace"
     | `ai-tool-${ToolId}`
     | "mac"
@@ -76,6 +78,7 @@
       children: [
         { id: "ai-notifications", label: "preferences.sidebar.aiNotifications" },
         { id: "ai-agents", label: "preferences.sidebar.aiAgents" },
+        { id: "ai-companion", label: "preferences.sidebar.aiCompanion" },
         // Each agent CLI's own settings: its tab, hooks, status bar and sounds.
         ...TOOL_IDS.map((tool) => ({ id: `ai-tool-${tool}` as const, name: TOOL_DISPLAY_NAMES[tool], tool })),
       ],
@@ -234,6 +237,8 @@
         <AiNotificationsSection />
       {:else if selected === "ai-agents"}
         <AiAgentsSection />
+      {:else if selected === "ai-companion"}
+        <AiCompanionSection />
       {:else if selected === "marketplace"}
         <MarketplaceSection />
       {:else if selected.startsWith("ai-tool-")}

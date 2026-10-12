@@ -60,6 +60,16 @@ pub fn read(tool: &str, session_id: &str) -> Option<SessionUsage> {
     }
 }
 
+/// The last exchange of one of `tool`'s sessions (see `quick::Exchange`).
+/// None too for the agents whose sessions aren't read for it yet: only
+/// Claude Code's are.
+pub fn last_exchange(tool: &str, session_id: &str) -> Option<super::quick::Exchange> {
+    match tool {
+        "claude" => claude::last_exchange(&claude::find(session_id)?),
+        _ => None,
+    }
+}
+
 /// Unix milliseconds of an RFC 3339 timestamp; 0 when it isn't one.
 pub(crate) fn millis(timestamp: &str) -> i64 {
     chrono::DateTime::parse_from_rfc3339(timestamp).map(|at| at.timestamp_millis()).unwrap_or(0)

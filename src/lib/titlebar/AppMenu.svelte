@@ -155,6 +155,11 @@
     uiState.toggleDiagnostics();
   }
 
+  function askQuick() {
+    onclose();
+    uiState.openQuickAsk();
+  }
+
   function showCompanion() {
     onclose();
     uiState.toggleCompanion();
@@ -357,6 +362,7 @@
     <span class="app-menu-hint">{hint("toggleAgents")}</span>
   </button>
 
+  {#if appConfigStore.companionEnabled}
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showCompanion}>
     <!-- A coin: what the sessions cost. -->
     <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -366,6 +372,17 @@
     <span class="app-menu-text">{t("companion.open")}</span>
     <span class="app-menu-hint">{hint("companion")}</span>
   </button>
+  {#if appConfigStore.quickAskEnabled}
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={askQuick}>
+    <!-- A speech bubble: a question to one side. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2 2.5h8v5.5H5.5L3.5 10V8H2z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+    </svg>
+    <span class="app-menu-text">{t("companion.quick.open")}</span>
+    <span class="app-menu-hint">{hint("quickAsk")}</span>
+  </button>
+  {/if}
+  {/if}
   {/if}
 
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showDiagnostics}>

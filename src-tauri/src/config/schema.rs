@@ -57,6 +57,8 @@ pub struct ShortcutsConfig {
     pub diagnostics_other: Option<String>,
     pub companion_mac: Option<String>,
     pub companion_other: Option<String>,
+    pub quick_ask_mac: Option<String>,
+    pub quick_ask_other: Option<String>,
     pub copy_mac: Option<String>,
     pub copy_other: Option<String>,
     pub paste_mac: Option<String>,
@@ -154,8 +156,19 @@ pub struct AppConfig {
     pub ai_dock_badge: bool,
     /// The Agents button in the window's vertical bar.
     pub agents_in_activity_bar: bool,
+    /// The Companion at all: its panel, its notices and the quick question.
+    pub companion_enabled: bool,
     /// The Companion's notices on the status bar, as a turn ends.
     pub companion_nudges: bool,
+    /// The quick question popup (see companion/quick.rs). Off unless the
+    /// user turns it on.
+    pub quick_ask_enabled: bool,
+    /// Whose CLI answers a quick question: an agent's id, or empty for the
+    /// first one installed.
+    pub quick_ask_engine: String,
+    /// Whether a quick question starts with the session's last exchange
+    /// ticked to go along with it.
+    pub quick_ask_with_exchange: bool,
     /// The kinds of notice the user asked not to see again.
     pub companion_muted: Vec<String>,
     /// The user's agents also in consoles opened outside Termo: Termo's MCP
@@ -229,7 +242,11 @@ impl Default for AppConfig {
             ai_sound_volume: 70,
             ai_dock_badge: true,
             agents_in_activity_bar: true,
+            companion_enabled: true,
             companion_nudges: true,
+            quick_ask_enabled: false,
+            quick_ask_engine: String::new(),
+            quick_ask_with_exchange: false,
             companion_muted: Vec::new(),
             agents_from_any_console: false,
             marketplace_source: "official".into(),

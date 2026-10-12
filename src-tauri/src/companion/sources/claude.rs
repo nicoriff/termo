@@ -20,6 +20,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{excerpt, jsonl, millis, modified_millis, SessionFile, Size};
+use crate::companion::quick::Exchange;
 use crate::companion::{pricing, Compaction, Coverage, Request, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "claude";
@@ -234,6 +235,34 @@ fn request_of(line: &Line, seen: &mut HashSet<String>) -> Option<Request> {
     })
 }
 
+/// The last thing the user typed in a session, and what the agent has said
+/// in answer since: its words, without its thinking or what its tools
+/// returned. None when nothing has been typed yet.
+pub fn last_exchange(path: &Path) -> Option<Exchange> {
+    let mut prompt = String::new();
+    let mut reply: Vec<String> = Vec::new();
+    for line in jsonl::<Line>(path)? {
+        if line.sidechain {
+            continue;
+        }
+        match line.kind.as_str() {
+            "user" => {
+                if let Said::Prompt(text) = said(&line) {
+                    prompt = text;
+                    reply.clear();
+                }
+            }
+            "assistant" => {
+                if let Some(Content::Blocks(blocks)) = line.message.and_then(|message| message.content) {
+                    reply.extend(blocks.into_iter().filter(|block| block.kind == "text").filter_map(|block| block.text));
+                }
+            }
+            _ => {}
+        }
+    }
+    (!prompt.is_empty()).then(|| Exchange { prompt, reply: reply.join("\n\n") })
+}
+
 /// What a `user` line is, of the things Claude Code logs as one.
 enum Said {
     /// Typed by the user.
@@ -430,6 +459,28 @@ mod tests {
         assert_eq!(session.started_at, millis("2026-10-01T10:00:00Z"));
         assert_eq!(session.ended_at, millis("2026-10-01T10:08:00Z"));
         assert!(session.cost_usd.is_some());
+    }
+
+    #[test]
+    fn the_last_exchange_is_the_last_prompt_and_what_was_said_since() {
+        let said = |id: &str, blocks: Value| assistant(id, "2026-10-01T10:00:05Z", "claude-opus-5-5", usage(1, 0, 0, 1), blocks);
+        let (dir, path) = session_file(&[
+            json!({ "type": "user", "message": { "role": "user", "content": "first question" } }),
+            said("m1", json!([{ "type": "text", "text": "first answer" }])),
+            json!({ "type": "user", "message": { "role": "user", "content": "fix the login" } }),
+            said("m2", json!([{ "type": "thinking", "thinking": "hm" }])),
+            said("m2", json!([{ "type": "text", "text": "Looking at auth.rs." }])),
+            said("m2", json!([{ "type": "tool_use", "name": "Read", "input": { "file_path": "/work/auth.rs" } }])),
+            // What a tool returned isn't something anyone said.
+            json!({ "type": "user", "message": { "role": "user", "content": [{ "type": "tool_result", "content": "fn login() {}" }] } }),
+            said("m3", json!([{ "type": "text", "text": "Fixed it." }])),
+        ]);
+        let exchange = last_exchange(&path).unwrap();
+        assert_eq!(exchange, Exchange { prompt: "fix the login".into(), reply: "Looking at auth.rs.\n\nFixed it.".into() });
+
+        std::fs::write(&path, json!({ "type": "ai-title", "aiTitle": "Nothing asked" }).to_string()).unwrap();
+        assert_eq!(last_exchange(&path), None);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

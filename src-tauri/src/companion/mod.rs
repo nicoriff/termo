@@ -10,6 +10,7 @@
 
 pub mod advice;
 pub mod pricing;
+pub mod quick;
 pub mod rules;
 pub mod sources;
 pub mod summary;
