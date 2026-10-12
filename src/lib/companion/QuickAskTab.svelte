@@ -25,12 +25,11 @@
     aria-label={label}
     onclick={() => uiState.openQuickAsk()}
   >
-    <!-- A bolt over a question mark: a quick one. -->
+    <!-- A bolt: a quick one. -->
     <span class="qa-tab-mark" aria-hidden="true">
-      <svg viewBox="0 0 12 12" width="15" height="15">
+      <svg viewBox="0 0 12 12" width="19" height="19">
         <path d="M7.2 0.8 2.4 6.8h3.2l-0.9 4.4 4.9-6.2H6.3z" fill="currentColor" />
       </svg>
-      <span>?</span>
     </span>
     <span class="qa-tab-text">{label}</span>
   </button>
@@ -47,8 +46,8 @@
     gap: 6px;
     height: 50px;
     /* At rest only the mark shows. */
-    max-width: 24px;
-    padding: 0 4px;
+    max-width: 26px;
+    padding: 0 3px;
     overflow: hidden;
     white-space: nowrap;
     border: 1px solid var(--pane-active-border, #3a6df0);
@@ -83,14 +82,9 @@
 
   .qa-tab-mark {
     flex-shrink: 0;
-    width: 16px;
+    width: 19px;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 1px;
-    font-size: 14px;
-    line-height: 1;
-    font-weight: 700;
   }
 
   .qa-tab-text {
