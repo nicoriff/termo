@@ -21,6 +21,8 @@
   import DivergenceGraph from "./DivergenceGraph.svelte";
   import ForgeIcon from "./ForgeIcon.svelte";
   import GitPrSection from "./GitPrSection.svelte";
+  import GitReviewSection from "./GitReviewSection.svelte";
+  import { gitReviewStore } from "./git-review-store.svelte";
   import { commitSides, layoutGraph } from "./git-graph";
   import { gitStore } from "./git-store.svelte";
   import { CHANGE_GROUPS, GROUP_LABEL, groupChanges, markIn, splitPath, type ChangeGroup } from "./git-summary";
@@ -29,7 +31,7 @@
   const GRAPH_COMMITS = 30;
   const COLLAPSED_KEY = "termo.git.collapsedSections";
 
-  type SectionId = "changes" | "pr" | "branches" | "history" | "remotes";
+  type SectionId = "changes" | "review" | "pr" | "branches" | "history" | "remotes";
 
   function loadCollapsed(): SectionId[] {
     try {
@@ -497,6 +499,9 @@
                       </span>
                       <span class="file-mark">{MARK_LETTER[mark]}</span>
                     {/if}
+                    {#if gitReviewStore.marks.has(file.path)}
+                      <span class="review-mark {gitReviewStore.marks.get(file.path)}" title={t("git.review.marked")} aria-label={t("git.review.marked")}></span>
+                    {/if}
                   </div>
                 {/each}
               {/if}
@@ -529,6 +534,15 @@
             </div>
           {/if}
         </section>
+
+        {#if gitReviewStore.enabled}
+          <section>
+            {@render sectionHead("review", t("git.review.title"), gitReviewStore.open || null)}
+            {#if !collapsed.includes("review") || gitReviewStore.gate}
+              <GitReviewSection />
+            {/if}
+          </section>
+        {/if}
 
         {#if appConfigStore.gitPrEnabled}
           <section>
@@ -1129,6 +1143,24 @@
     font-size: 10px;
     font-weight: 700;
     text-align: center;
+  }
+
+  /* A review pointed something out in the file: a dot in its severity's
+     color, whatever the row's own. */
+  .review-mark {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5b8def;
+  }
+
+  .review-mark.warning {
+    background: #d7a72a;
+  }
+
+  .review-mark.serious {
+    background: #e05a5a;
   }
 
   /* The row's buttons show when it's pointed at or has the keyboard. */

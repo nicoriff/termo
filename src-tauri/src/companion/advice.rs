@@ -119,7 +119,7 @@ pub fn advise(scratch: &Path, request: &AdviceRequest) -> Result<Advice, String>
     std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
     // The small model is plenty for this, where the CLI lets one be named.
     let model = if request.engine == Engine::Claude { "haiku" } else { "" };
-    let ask = Ask { engine: request.engine, dir: scratch, model, read_files: false, timeout: TIMEOUT };
+    let ask = Ask { engine: request.engine, dir: scratch, model, read_files: false, timeout: TIMEOUT, cancel: None };
     let answer = ask_with(&ask, prompt(request, i18n::current()), &schema())?;
     advice_from(answer.value, answer.cost_usd)
 }

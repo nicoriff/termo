@@ -13,6 +13,7 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { fileName, type DiffTarget } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
+  import { diffJump } from "./diff-jump.svelte";
   import { editorTheme } from "./editor-theme";
   import { fileTabs } from "./file-tabs.svelte";
 
@@ -29,6 +30,15 @@
   let stats = $state({ added: 0, removed: 0 });
   /** What the view was last built from, to tell a real change from a poll. */
   let shown: { before: string; after: string } | null = null;
+  /** Brings the line a finding is on into view, once: the file is on
+   * screen, and the request is for this file. */
+  function jump() {
+    if (!view) return;
+    const asked = diffJump.take(diff);
+    if (asked === null) return;
+    const line = view.state.doc.line(Math.min(Math.max(1, asked), view.state.doc.lines));
+    view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+  }
 
   const themeSlot = new Compartment();
   const languageSlot = new Compartment();
@@ -144,6 +154,7 @@
       }),
     });
     view.scrollDOM.scrollTop = scroll;
+    jump();
 
     const description = LanguageDescription.matchFilename(languages, fileName(diff.path));
     if (description) {
@@ -166,6 +177,12 @@
     void fileTabs.savedTick;
     void gitStore.snapshot;
     if (live && loaded) void load();
+  });
+
+  // Asked for a line while already open.
+  $effect(() => {
+    void diffJump.target;
+    if (loaded) jump();
   });
 
   // Follows theme and font changes made in Preferences.

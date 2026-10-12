@@ -192,9 +192,12 @@ pub fn ask(
 ) -> Result<serde_json::Value, String> {
     // Claude Code's mid model is plenty for a draft; the others' default.
     let model = if engine == Engine::Claude { "sonnet" } else { "" };
-    let ask = Ask { engine, dir: scratch, model, read_files: false, timeout };
+    let ask = Ask { engine, dir: scratch, model, read_files: false, timeout, cancel: None };
     ask_with(&ask, text, schema).map(|answer| answer.value)
 }
+
+/// What asking fails with when `Ask::cancel` was set.
+pub const CANCELLED: &str = "cancelled";
 
 /// How one structured answer is asked for.
 pub struct Ask<'a> {
@@ -210,6 +213,15 @@ pub struct Ask<'a> {
     /// and nothing outside it.
     pub read_files: bool,
     pub timeout: Duration,
+    /// Set from elsewhere to give up on the answer: the CLI is stopped and
+    /// asking fails with `CANCELLED`.
+    pub cancel: Option<&'a std::sync::atomic::AtomicBool>,
+}
+
+impl Ask<'_> {
+    fn cancelled(&self) -> bool {
+        self.cancel.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
+    }
 }
 
 pub struct Answer {
@@ -302,6 +314,7 @@ pub fn ask_streaming(ask: &Ask, text: String, schema: &serde_json::Value, on_ste
     if !crate::ai_mode::enabled() {
         return Err(crate::i18n::tr(crate::i18n::Msg::AiModeOff));
     }
+    folder_guard(ask)?;
     if ask.engine == Engine::Claude {
         return ask_claude(ask, text, schema, on_step);
     }
@@ -321,6 +334,17 @@ pub fn ask_streaming(ask: &Ask, text: String, schema: &serde_json::Value, on_ste
         }
     }
     Err(problem)
+}
+
+/// An agent that looks at a folder runs git there, and git runs what the
+/// folder's repository names in its config (see git::runs_programs_to_look):
+/// in one that does, nothing is asked. The reason comes worded, like the
+/// one for Modo IA being off.
+fn folder_guard(ask: &Ask) -> Result<(), String> {
+    if ask.read_files && crate::git::runs_programs_to_look(ask.dir) {
+        return Err(tr(Msg::AskFolderRunsPrograms));
+    }
+    Ok(())
 }
 
 /// The prompt for an engine that takes no schema of its own: the request,
@@ -520,6 +544,7 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
         }
     };
     let deadline = Instant::now() + ask.timeout;
+    let mut cancelled = false;
     let timed_out = loop {
         while let Ok(line) = received.try_recv() {
             let (events, outcome) = parser.line(&line, 0);
@@ -544,6 +569,12 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
             let _ = child.wait();
             break false;
         }
+        if ask.cancelled() {
+            super::runner::kill_tree(&mut child);
+            let _ = child.wait();
+            cancelled = true;
+            break false;
+        }
         if Instant::now() >= deadline {
             super::runner::kill_tree(&mut child);
             let _ = child.wait();
@@ -558,6 +589,9 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
     }
     take(parser.finish(0), None, false);
     cleanup(&files);
+    if cancelled {
+        return Err(CANCELLED.into());
+    }
     if timed_out {
         return Err("timeout".into());
     }
@@ -647,6 +681,11 @@ fn ask_claude(ask: &Ask, text: String, schema: &serde_json::Value, on_step: &dyn
         if child.try_wait().ok().flatten().is_some() {
             break;
         }
+        if ask.cancelled() {
+            super::runner::kill_tree(&mut child);
+            let _ = child.wait();
+            return Err(CANCELLED.into());
+        }
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
@@ -665,6 +704,22 @@ fn ask_claude(ask: &Ask, text: String, schema: &serde_json::Value, on_step: &dyn
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nothing_is_asked_in_a_folder_whose_repository_names_programs() {
+        let Some(git) = crate::pty::bin_search::find_binary("git") else { return };
+        let base = std::env::temp_dir().join(format!("termo-ask-guard-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&base).unwrap();
+        let run = |args: &[&str]| assert!(std::process::Command::new(&git).arg("-C").arg(&base).args(args).output().unwrap().status.success());
+        run(&["init", "-q"]);
+        let ask = |read_files: bool| Ask { engine: Engine::Claude, dir: &base, model: "", read_files, timeout: Duration::from_secs(1), cancel: None };
+        assert!(folder_guard(&ask(true)).is_ok());
+        run(&["config", "filter.x.clean", "anything"]);
+        assert_eq!(folder_guard(&ask(true)).unwrap_err(), tr(Msg::AskFolderRunsPrograms));
+        // With nothing of the folder to look at, there's no git to run in it.
+        assert!(folder_guard(&ask(false)).is_ok());
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn finds_the_json_an_engine_answered_with_whatever_is_around_it() {
@@ -740,7 +795,7 @@ mod tests {
                 println!("{engine:?}: not installed, skipped");
                 continue;
             }
-            let ask = Ask { engine, dir: &dir, model: "", read_files: false, timeout: Duration::from_secs(240) };
+            let ask = Ask { engine, dir: &dir, model: "", read_files: false, timeout: Duration::from_secs(240), cancel: None };
             let steps = std::cell::Cell::new(0);
             let answer = ask_streaming(&ask, "What is the capital of France? Give two short facts about it.".into(), &schema, &|_| {
                 steps.set(steps.get() + 1)

@@ -129,6 +129,7 @@ pub enum Msg<'a> {
     KeepAwakeReason,
     /// An agent run asked for while Modo IA is off (see ai_mode.rs).
     AiModeOff,
+    AskFolderRunsPrograms,
     /// the planner's error
     OrchestrationPlanFailed(&'a str),
     /// the error
@@ -187,6 +188,22 @@ pub enum Msg<'a> {
     PrFailed(&'a str),
     PrUnsupported,
     PrNeedsTitle,
+    GitReviewBusy,
+    /// why
+    GitReviewFailed(&'a str),
+    GitReviewNothing,
+    GitReviewCancelled,
+    GitReviewTimedOut,
+    GitReviewUnavailable,
+    GitReviewNoBase,
+    GitReviewGone,
+    GitReviewFixNeedsEdit,
+    GitReviewAgentGone,
+    GitReviewNoPr,
+    GitReviewCommentTitle,
+    GitReviewSerious,
+    GitReviewWarning,
+    GitReviewSuggestion,
 }
 
 pub fn tr(msg: Msg) -> String {
@@ -484,6 +501,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (OrchestrationLastAttempt, En) => "Your previous attempt at this task failed like this:".into(),
         (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
         (AiModeOff, En) => "AI Mode is off: turn it on in Preferences to use agents".into(),
+        (AskFolderRunsPrograms, Es) => {
+            "La configuración del repositorio de esta carpeta nombra programas que git ejecutaría al mirarla (filtros o drivers de diff), así que Termo no deja que un agente la mire por su cuenta".into()
+        }
+        (AskFolderRunsPrograms, En) => {
+            "The config of this folder's repository names programs git would run to look at it (filters or diff drivers), so Termo doesn't let an agent look at it on its own".into()
+        }
 
         (AgentConnectorBadName(name), En) => format!("\"{name}\" can't be a name: use letters, digits and _ (or - in a header)"),
 
@@ -527,6 +550,40 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (PrUnsupported, En) => "There's no way here to ask this service for its pull requests".into(),
         (PrNeedsTitle, Es) => "Ponele un título".into(),
         (PrNeedsTitle, En) => "Give it a title".into(),
+        (GitReviewBusy, Es) => "Ya hay una revisión en curso en este repositorio".into(),
+        (GitReviewBusy, En) => "There's already a review under way in this repository".into(),
+        (GitReviewFailed(error), Es) => format!("La revisión no se pudo hacer: {error}"),
+        (GitReviewFailed(error), En) => format!("The review couldn't be done: {error}"),
+        (GitReviewNothing, Es) => "No hay cambios para revisar".into(),
+        (GitReviewNothing, En) => "There are no changes to review".into(),
+        (GitReviewCancelled, Es) => "Revisión cancelada".into(),
+        (GitReviewCancelled, En) => "Review cancelled".into(),
+        (GitReviewTimedOut, Es) => "La revisión tardó más de lo permitido. Se puede subir el tiempo en Preferencias → Git".into(),
+        (GitReviewTimedOut, En) => "The review took longer than allowed. The time can be raised in Preferences → Git".into(),
+        (GitReviewUnavailable, Es) => {
+            "La configuración de este repositorio nombra programas que git ejecutaría al mirar los cambios (filtros o drivers de diff), así que Termo no lo hace revisar".into()
+        }
+        (GitReviewUnavailable, En) => {
+            "This repository's config names programs git would run to look at changes (filters or diff drivers), so Termo doesn't have it reviewed".into()
+        }
+        (GitReviewNoBase, Es) => "No se encontró una rama base contra la cual revisar".into(),
+        (GitReviewNoBase, En) => "No base branch was found to review against".into(),
+        (GitReviewGone, Es) => "Esa revisión ya no está".into(),
+        (GitReviewGone, En) => "That review is no longer there".into(),
+        (GitReviewFixNeedsEdit, Es) => "Ese agente solo puede mirar: para arreglar hace falta uno que pueda cambiar archivos".into(),
+        (GitReviewFixNeedsEdit, En) => "That agent can only look: fixing takes one that can change files".into(),
+        (GitReviewAgentGone, Es) => "El agente elegido para arreglar ya no está, o dejó de ser un arreglador. Elegí otro en Preferencias → Git".into(),
+        (GitReviewAgentGone, En) => "The agent picked to fix is gone, or isn't a fixer any more. Pick another in Preferences → Git".into(),
+        (GitReviewNoPr, Es) => "Esta rama no tiene un pull request abierto".into(),
+        (GitReviewNoPr, En) => "This branch has no open pull request".into(),
+        (GitReviewCommentTitle, Es) => "Revisión de código (Termo)".into(),
+        (GitReviewCommentTitle, En) => "Code review (Termo)".into(),
+        (GitReviewSerious, Es) => "Grave".into(),
+        (GitReviewSerious, En) => "Serious".into(),
+        (GitReviewWarning, Es) => "Aviso".into(),
+        (GitReviewWarning, En) => "Warning".into(),
+        (GitReviewSuggestion, Es) => "Sugerencia".into(),
+        (GitReviewSuggestion, En) => "Suggestion".into(),
     }
 }
 
@@ -615,6 +672,7 @@ mod tests {
             Msg::KeepAwakeFailed("access denied"),
             Msg::KeepAwakeReason,
             Msg::AiModeOff,
+            Msg::AskFolderRunsPrograms,
             Msg::OrchestrationPlanFailed("timeout"),
             Msg::OrchestrationReportFailed("timeout"),
             Msg::OrchestrationCanAsk,
@@ -654,6 +712,21 @@ mod tests {
             Msg::PrFailed("x"),
             Msg::PrUnsupported,
             Msg::PrNeedsTitle,
+            Msg::GitReviewBusy,
+            Msg::GitReviewFailed("x"),
+            Msg::GitReviewNothing,
+            Msg::GitReviewCancelled,
+            Msg::GitReviewTimedOut,
+            Msg::GitReviewUnavailable,
+            Msg::GitReviewNoBase,
+            Msg::GitReviewGone,
+            Msg::GitReviewFixNeedsEdit,
+            Msg::GitReviewAgentGone,
+            Msg::GitReviewNoPr,
+            Msg::GitReviewCommentTitle,
+            Msg::GitReviewSerious,
+            Msg::GitReviewWarning,
+            Msg::GitReviewSuggestion,
         ]
     }
 

@@ -4,6 +4,7 @@
   import { gitBranches, type Branch, type GitOp } from "$lib/core/git-client";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { gitStore } from "$lib/git/git-store.svelte";
+  import { gitReviewStore } from "$lib/git/git-review-store.svelte";
   import { changesLabel, syncLabel } from "$lib/git/git-summary";
   import ForgeIcon from "$lib/git/ForgeIcon.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -120,21 +121,24 @@
           <circle cx="11" cy="4" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4" />
         </svg>
       {/if}
-      {#if parts.branch}
-        <span class="branch">{snap.branch ?? snap.head?.sha.slice(0, 7) ?? "HEAD"}</span>
-      {/if}
-      {#if parts.sync && sync}
-        <span class="sync">{sync}</span>
-      {/if}
-      {#if parts.changes && changes}
-        <span class="changes" class:conflicts={gitStore.counts.conflicts > 0}>{changes}</span>
-      {/if}
-      {#if parts.pr && pr}
-        <span class="pr {pr.state}">#{pr.number}</span>
-      {/if}
-      {#if snap.state}
-        <span class="state">{t(`git.statesShort.${snap.state}`)}</span>
-      {/if}
+      <!-- On one baseline: the tags are set smaller than the text beside them. -->
+      <span class="texts">
+        {#if parts.branch}
+          <span class="branch">{snap.branch ?? snap.head?.sha.slice(0, 7) ?? "HEAD"}</span>
+        {/if}
+        {#if parts.sync && sync}
+          <span class="sync">{sync}</span>
+        {/if}
+        {#if parts.changes && changes}
+          <span class="changes" class:conflicts={gitStore.counts.conflicts > 0}>{changes}</span>
+        {/if}
+        {#if parts.pr && pr}
+          <span class="pr {pr.state}">#{pr.number}</span>
+        {/if}
+        {#if snap.state}
+          <span class="state">{t(`git.statesShort.${snap.state}`)}</span>
+        {/if}
+      </span>
     </button>
 
     {#if open}
@@ -183,6 +187,23 @@
           <button role="menuitem" disabled={busy || snap.stashCount === 0} onclick={() => run({ kind: "stashPop" })}>
             {t("git.actions.stashPop")}{#if snap.stashCount > 0}<span class="aside">{snap.stashCount}</span>{/if}
           </button>
+          {#if gitReviewStore.available}
+            <hr />
+            <button
+              role="menuitem"
+              disabled={gitReviewStore.busy || gitStore.counts.total === 0}
+              onclick={() => closeAnd(() => gitReviewStore.ask({ kind: "changes" }))}
+            >
+              {t("git.review.reviewChanges")}
+            </button>
+            <button
+              role="menuitem"
+              disabled={gitReviewStore.busy || snap.detached || !snap.base || snap.base.ahead === 0}
+              onclick={() => closeAnd(() => gitReviewStore.ask({ kind: "branch" }))}
+            >
+              {t("git.review.reviewBranch")}
+            </button>
+          {/if}
           <hr />
           {#if pr}
             <button role="menuitem" onclick={() => browse(pr.url)}>{t("git.statusBar.openPr", { n: String(pr.number) })} ↗</button>
@@ -236,6 +257,17 @@
     width: 11px;
     height: 11px;
     flex-shrink: 0;
+  }
+
+  .texts {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .texts:empty {
+    display: none;
   }
 
   .branch {

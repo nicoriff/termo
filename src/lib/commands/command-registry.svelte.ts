@@ -19,6 +19,7 @@ import { newTabOptions } from "../layout/new-tab-options.svelte";
 import { agentsStore, type AgentsSection } from "../agents/agents-store.svelte";
 import { explorerStore } from "../explorer/explorer-store.svelte";
 import { gitStore } from "../git/git-store.svelte";
+import { gitReviewStore } from "../git/git-review-store.svelte";
 import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
 import type { Command } from "./commands";
@@ -104,6 +105,12 @@ export function buildCommands(): Command[] {
           run: () => workspaceStore.openGitGraph(root, t("git.graph.tab", { name: fileName(root) })),
         },
       );
+      if (gitReviewStore.available && !gitReviewStore.running) {
+        commands.push(
+          { id: "git.reviewChanges", group: "git", label: t("commands.gitReviewChanges"), run: () => gitReviewStore.ask({ kind: "changes" }) },
+          { id: "git.reviewBranch", group: "git", label: t("commands.gitReviewBranch"), run: () => gitReviewStore.ask({ kind: "branch" }) },
+        );
+      }
     }
   }
 

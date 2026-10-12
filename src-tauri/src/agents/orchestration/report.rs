@@ -149,6 +149,7 @@ pub fn write(orchestration: &Orchestration) -> Result<Report, String> {
         model: &orchestration.orchestrator_model,
         read_files: true,
         timeout: TIMEOUT,
+        cancel: None,
     };
     let answer = ask_with(&ask, prompt(orchestration, i18n::current()), &schema()).map_err(fail)?;
     report_of(answer.value, answer.cost_usd.unwrap_or(0.0)).map_err(fail)

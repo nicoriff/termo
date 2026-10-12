@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { GitMark } from "./explorer-client";
+import type { AgentEngine } from "./agents-client";
+import type { PlanStep } from "./orchestration-client";
 
 /** See src-tauri/src/git and src-tauri/src/commands/git_commands.rs. */
 export type ForgeKind = "github" | "gitlab" | "bitbucket" | "azure" | "gitea" | "generic";
@@ -256,4 +258,116 @@ export function gitTools(): Promise<GitTools> {
 
 export function onGitOp(handler: (event: GitOpEvent) => void): Promise<UnlistenFn> {
   return listen<GitOpEvent>("git-op", (event) => handler(event.payload));
+}
+
+/** A code review by an agent CLI: see src-tauri/src/git/review.rs. */
+export type ReviewScope = { kind: "changes" } | { kind: "branch" } | { kind: "commit"; sha: string };
+export type ReviewSeverity = "serious" | "warning" | "suggestion";
+
+export interface ReviewFinding {
+  id: string;
+  /** Relative to the repository, with forward slashes. */
+  path: string;
+  /** In the file's new version; 0 when it's about the file as a whole. */
+  line: number;
+  endLine: number;
+  severity: ReviewSeverity;
+  title: string;
+  /** Markdown. */
+  body: string;
+  suggestion: string;
+  dismissed: boolean;
+  /** The file isn't what was reviewed any more. */
+  stale: boolean;
+}
+
+export interface Review {
+  id: string;
+  root: string;
+  branch: string;
+  scope: ReviewScope;
+  /** HEAD when it was made. */
+  head: string;
+  base: string | null;
+  /** The revision the change starts from, to show a file against. */
+  from: string | null;
+  /** Unix milliseconds. */
+  createdAt: number;
+  engine: AgentEngine;
+  model: string | null;
+  costUsd: number | null;
+  summary: string;
+  findings: ReviewFinding[];
+  /** The diff was too long to send whole. */
+  partial: boolean;
+}
+
+export interface StoredReviews {
+  /** What the user wants every review of this repository to mind. */
+  note: string;
+  reviews: Review[];
+}
+
+export interface ReviewRequest {
+  scope: ReviewScope;
+  /** Whose CLI reviews, when no agent is named. */
+  engine: AgentEngine;
+  agentId: string | null;
+  /** The branch a pull request of this one goes to. */
+  base: string | null;
+  instructions: string;
+  timeoutMin: number;
+}
+
+export interface ReviewStepEvent {
+  root: string;
+  step: PlanStep;
+}
+
+/** Resolves with the review when it's done; rejects with why it wasn't. */
+export function gitReviewStart(root: string, request: ReviewRequest): Promise<Review> {
+  return invoke("git_review_start", { root, request });
+}
+
+export function gitReviewCancel(root: string): Promise<void> {
+  return invoke("git_review_cancel", { root });
+}
+
+/** The repositories with a review under way. */
+export function gitReviewBusy(): Promise<string[]> {
+  return invoke("git_review_busy");
+}
+
+export function gitReviewLoad(root: string): Promise<StoredReviews> {
+  return invoke("git_review_load", { root });
+}
+
+export function gitReviewDismiss(root: string, reviewId: string, findingId: string, dismissed: boolean): Promise<StoredReviews> {
+  return invoke("git_review_dismiss", { root, reviewId, findingId, dismissed });
+}
+
+export function gitReviewClear(root: string, reviewId: string): Promise<StoredReviews> {
+  return invoke("git_review_clear", { root, reviewId });
+}
+
+export function gitReviewSetNote(root: string, note: string): Promise<StoredReviews> {
+  return invoke("git_review_set_note", { root, note });
+}
+
+/** The comment publishing would leave, to show before it does. */
+export function gitReviewComment(root: string, reviewId: string, findingIds: string[]): Promise<string> {
+  return invoke("git_review_comment", { root, reviewId, findingIds });
+}
+
+export function gitReviewPublish(root: string, reviewId: string, findingIds: string[]): Promise<void> {
+  return invoke("git_review_publish", { root, reviewId, findingIds });
+}
+
+/** Hands a finding to one of the user's agents to fix: a run of that agent. */
+export function gitReviewFix(root: string, reviewId: string, findingId: string, agentId: string): Promise<unknown> {
+  return invoke("git_review_fix", { root, reviewId, findingId, agentId });
+}
+
+export function onGitReviewStep(handler: (event: ReviewStepEvent) => void): Promise<UnlistenFn> {
+  return listen<ReviewStepEvent>("git-review-step", (event) => handler(event.payload));
 }

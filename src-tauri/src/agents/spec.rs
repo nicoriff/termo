@@ -198,6 +198,22 @@ pub struct Deploy {
     pub github: Option<GithubDeploy>,
 }
 
+/// What an agent is there for in the Git panel's code reviews (see
+/// git/review.rs), said when it's made: only the ones made for it are
+/// offered there.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum GitRole {
+    /// Nothing: an agent like any other.
+    #[default]
+    None,
+    /// Reviews changes: its engine, model and instructions are what a review
+    /// is asked with.
+    Reviewer,
+    /// Fixes what a review found: a finding is handed to it.
+    Fixer,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AgentSpec {
@@ -227,6 +243,7 @@ pub struct AgentSpec {
     pub deploy: Deploy,
     /// The project it belongs to (see projects.rs); empty: none.
     pub project_id: String,
+    pub git_role: GitRole,
     /// Unix seconds.
     pub created_at: i64,
     pub updated_at: i64,
@@ -253,6 +270,7 @@ impl Default for AgentSpec {
             enabled: true,
             deploy: Deploy::default(),
             project_id: String::new(),
+            git_role: GitRole::default(),
             created_at: 0,
             updated_at: 0,
         }

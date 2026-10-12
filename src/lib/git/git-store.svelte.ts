@@ -134,6 +134,15 @@ class GitStore {
   private adopted = "";
   /** Whether the action under way was started from this window. */
   private ownRun = false;
+  /** Asked before anything is pushed from here; false keeps it from going.
+   * The reviews set it (see git-review-store.svelte.ts). */
+  beforePush: (() => Promise<boolean>) | null = null;
+  /** Gives up on what `beforePush` is waiting for. */
+  cancelBeforePush: (() => void) | null = null;
+  /** A push is waiting on `beforePush`. */
+  private holding = false;
+  /** Told when a pull request was opened for the branch. */
+  afterPrCreate: (() => void) | null = null;
 
   /** Starts following the tab in focus. The main window calls it once;
    * returns what stops it. */
@@ -306,6 +315,31 @@ class GitStore {
     const root = this.root;
     if (!root) return false;
     if (!quiet) this.error = null;
+    const pushes = op.kind === "push" || op.kind === "sync";
+    if (pushes && !quiet && this.beforePush) {
+      if (this.running) return false;
+      // The wait can be long (a review, then a question): the repository is
+      // busy for as long as it lasts, so nothing else is started on it here.
+      const [branch, head] = [this.branch, this.snapshot?.head?.sha ?? null];
+      this.ownRun = true;
+      this.holding = true;
+      this.running = { root, op: op.kind, lines: [] };
+      let go = false;
+      try {
+        go = await this.beforePush();
+        await this.refresh();
+      } finally {
+        this.holding = false;
+      }
+      // What was let through is that branch as it was. Moved on since (from
+      // a console), or with another repository in view, it isn't pushed.
+      const same = this.root === root && this.branch === branch && (this.snapshot?.head?.sha ?? null) === head;
+      if (!go || !same) {
+        this.ownRun = false;
+        this.running = null;
+        return false;
+      }
+    }
     this.ownRun = true;
     this.running = { root, op: op.kind, lines: [] };
     try {
@@ -323,7 +357,8 @@ class GitStore {
   }
 
   cancel(): void {
-    if (this.running) void gitCancel(this.running.root);
+    if (this.holding) this.cancelBeforePush?.();
+    else if (this.running) void gitCancel(this.running.root);
   }
 
   /** Commits, and pushes right after when asked to. */
@@ -362,7 +397,9 @@ class GitStore {
   }
 
   async createPr(pr: NewPr): Promise<boolean> {
-    return this.changePr((root) => gitPrCreate(root, pr));
+    const created = await this.changePr((root) => gitPrCreate(root, pr));
+    if (created) this.afterPrCreate?.();
+    return created;
   }
 
   private async changePr(change: (root: string) => Promise<PrState>): Promise<boolean> {
