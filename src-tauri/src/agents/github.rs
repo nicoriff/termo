@@ -203,16 +203,9 @@ pub fn workflow_yaml(spec: &AgentSpec, crons: &[String]) -> String {
 
 /// `owner/repo` from a GitHub remote URL (https or ssh).
 pub fn github_repo(url: &str) -> Option<String> {
-    let url = url.trim();
-    let rest = url
-        .strip_prefix("https://github.com/")
-        .or_else(|| url.strip_prefix("http://github.com/"))
-        .or_else(|| url.strip_prefix("git@github.com:"))
-        .or_else(|| url.strip_prefix("ssh://git@github.com/"))?;
-    let rest = rest.trim_end_matches('/').trim_end_matches(".git");
-    let mut parts = rest.split('/');
-    let (owner, repo) = (parts.next()?, parts.next()?);
-    (!owner.is_empty() && !repo.is_empty() && parts.next().is_none()).then(|| format!("{owner}/{repo}"))
+    let forge = crate::git::forge::parse(url)?;
+    (forge.host.eq_ignore_ascii_case("github.com") && !forge.owner.contains('/'))
+        .then(|| format!("{}/{}", forge.owner, forge.repo))
 }
 
 pub(crate) fn git_output(repo: &Path, args: &[&str]) -> Option<String> {

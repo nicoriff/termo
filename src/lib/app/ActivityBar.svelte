@@ -1,10 +1,12 @@
 <script lang="ts">
   import { t } from "$lib/i18n/i18n.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { formatKeybindingLabel } from "$lib/core/shortcuts";
+  import { formatKeybindingLabel, type ShortcutAction } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
+  import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+  import { gitStore } from "$lib/git/git-store.svelte";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -12,15 +14,61 @@
   const orchestrating = $derived(orchestrationStore.all.filter((item) => item.status === "running").length);
   /** Questions from agents waiting on the user: they win the badge. */
   const asked = $derived(orchestrationStore.waitingQuestions);
-  const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
-  const localHint = $derived(`${t("agents.sections.local")} (${shortcut})`);
-  const orchestrationHint = $derived(t("agents.sections.orchestration"));
+  const keys = (action: ShortcutAction) => formatKeybindingLabel(appConfigStore.getEffectiveShortcut(action), isMac);
+  const localHint = $derived(`${t("agents.sections.local")} (${keys("toggleAgents")})`);
+  const orchestrationHint = $derived(`${t("agents.sections.orchestration")} (${keys("toggleOrchestration")})`);
+  const explorerHint = $derived(`${t("explorer.toggle")} (${keys("toggleExplorer")})`);
+  const gitHint = $derived(`${t("git.title")} (${keys("toggleGit")})`);
+  /** Files with anything to commit, in the repository of the tab in focus. */
+  const changed = $derived(gitStore.counts.total);
 </script>
 
 <!-- The window's vertical tab strip: one button per side panel, each opening
      and closing its own. The agents panel has one per section. -->
 <nav class="activity-bar" aria-label={t("activityBar.label")}>
-  {#if appConfigStore.agentsInActivityBar}
+  <button
+    class="activity-item"
+    class:active={explorerStore.open}
+    title={explorerHint}
+    aria-label={explorerHint}
+    aria-pressed={explorerStore.open}
+    onclick={() => explorerStore.toggle()}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M3.5 18.5v-13h6l2 2.5h9v10.5z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+      />
+      <path d="M7.5 12h9M7.5 15h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+    </svg>
+  </button>
+  {#if appConfigStore.gitEnabled && appConfigStore.gitInActivityBar}
+    <button
+      class="activity-item"
+      class:active={gitStore.open}
+      title={gitHint}
+      aria-label={gitHint}
+      aria-pressed={gitStore.open}
+      onclick={() => gitStore.toggle()}
+    >
+      <!-- A branch leaving the trunk. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7.5 7.2v9.6M7.5 12.6c6.2 0 9-1.2 9-5.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="7.5" cy="5.2" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="7.5" cy="18.8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="16.5" cy="5.6" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+      {#if gitStore.running}
+        <span class="activity-badge">…</span>
+      {:else if changed > 0}
+        <span class="activity-badge" title={t("git.changes.badge", { n: String(changed) })}>{changed > 99 ? "99+" : changed}</span>
+      {/if}
+    </button>
+  {/if}
+  {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
     <button
       class="activity-item"
       class:active={agentsStore.open && agentsStore.section === "local"}

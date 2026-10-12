@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fly } from "svelte/transition";
+  import { untrack } from "svelte";
+  import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { explorerRoot, gitStatus, listEntries, type GitMark } from "$lib/core/explorer-client";
@@ -8,12 +9,13 @@
   import { fileTabs } from "$lib/editor/file-tabs.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import { fileName, type TileNode } from "$lib/layout/split-tree";
+  import { collectTiles, fileName, isFileTab } from "$lib/layout/split-tree";
+  import { agentsStore } from "$lib/agents/agents-store.svelte";
+  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { explorerStore } from "./explorer-store.svelte";
   import { folderHasChanges, visibleRows, type TreeEntry } from "./explorer-tree";
   import { fileBadge } from "./file-icons";
-
-  let { tile }: { tile: TileNode } = $props();
+  import { MARK_LETTER, markColor } from "./git-marks";
 
   /** How often git is asked again while the panel is open: edits made from
    * the console (or an agent) show up without a manual refresh. */
@@ -23,25 +25,14 @@
   const INDENT = 16;
   const INSET = 8;
 
-  const MARK_LETTER: Record<GitMark, string> = {
-    modified: "M",
-    added: "A",
-    untracked: "U",
-    deleted: "D",
-    renamed: "R",
-    conflict: "C",
-  };
+  const focusedTab = $derived(workspaceStore.focusedSession);
 
-  /** The folder the tile's active tab is in; the tree shows the repository
-   * around it. */
-  const folder = $derived.by(() => {
-    const active = tile.sessions.find((session) => session.id === tile.activeSessionId);
-    return active ? (sessionFolder(active) ?? null) : null;
-  });
+  /** The folder that tab is in; the tree shows the repository around it. */
+  const folder = $derived(focusedTab ? (sessionFolder(focusedTab) ?? null) : null);
+  const onFile = $derived(focusedTab !== null && isFileTab(focusedTab));
 
   let root = $state<string | null>(null);
   let isRepo = $state(false);
-  let loadingRoot = $state(false);
   const children = new SvelteMap<string, TreeEntry[]>();
   const expanded = new SvelteSet<string>();
   let marks = $state<Record<string, GitMark>>({});
@@ -52,15 +43,16 @@
   const rows = $derived(root ? visibleRows(root, children, expanded) : []);
   const changedPaths = $derived(Object.keys(marks));
 
-  // A new folder can mean a new repository: start that tree over.
+  // A new folder can mean a new repository: start that tree over. A tab that
+  // is in no folder (an agent's runs, a project) leaves the tree as it was,
+  // and so does a file from the tree itself: outside a repository its folder
+  // would otherwise become the root.
   $effect(() => {
     const at = folder;
-    if (!at) {
-      root = null;
-      return;
-    }
+    if (!at) return;
+    const showing = untrack(() => root);
+    if (showing && onFile && (at === showing || folderHasChanges(showing, [at]))) return;
     let cancelled = false;
-    loadingRoot = true;
     void explorerRoot(at).then(async (found) => {
       if (cancelled) return;
       if (found.path !== root) {
@@ -72,7 +64,6 @@
         await load(found.path);
         await refreshMarks();
       }
-      loadingRoot = false;
     });
     return () => {
       cancelled = true;
@@ -128,35 +119,20 @@
     if (!row) return;
     selected = index;
     if (row.isDir) void toggleFolder(row.path);
-    else workspaceStore.openFile(tile.id, row.path);
+    else {
+      const tileId = workspaceStore.focusedTileId ?? (workspaceStore.root ? collectTiles(workspaceStore.root)[0]?.id : undefined);
+      if (tileId) workspaceStore.openFile(tileId, row.path);
+    }
   }
 
   function close() {
-    explorerStore.close(tile.id);
+    explorerStore.setOpen(false);
     uiState.refocusTerminals();
   }
 
   function markFor(path: string, isDir: boolean): GitMark | "folder" | null {
     if (!isDir) return marks[path] ?? null;
     return folderHasChanges(path, changedPaths) ? "folder" : null;
-  }
-
-  function markColor(mark: GitMark | "folder"): string {
-    const c = themeStore.current.colors;
-    switch (mark) {
-      case "modified":
-      case "folder":
-        return c.yellow;
-      case "added":
-      case "untracked":
-        return c.green;
-      case "deleted":
-        return c.red;
-      case "renamed":
-        return c.blue;
-      case "conflict":
-        return c.magenta;
-    }
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -181,7 +157,7 @@
           }
         }
       }
-    } else if (event.key === "Escape") close();
+    } else if (event.key === "Escape") uiState.refocusTerminals();
     else return;
     event.preventDefault();
   }
@@ -194,18 +170,15 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
+<aside
   class="explorer"
-  role="tree"
-  tabindex="0"
+  style="--explorer-width:{agentsStore.width}px"
+  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("explorer.toggle")}
-  bind:this={panelEl}
-  onkeydown={onKeydown}
-  onpointerdown={(e) => e.stopPropagation()}
-  in:fly={{ x: -28, duration: 170, easing: cubicOut, opacity: 0 }}
-  out:fly={{ x: -28, duration: 130, easing: cubicOut, opacity: 0 }}
 >
+  <SidebarResizeHandle />
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div class="explorer-inner" role="tree" tabindex="0" aria-label={t("explorer.toggle")} bind:this={panelEl} onkeydown={onKeydown}>
   <header class="explorer-header">
     <svg class="header-icon" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" stroke-width="1.1" />
@@ -229,9 +202,9 @@
   </header>
 
   <div class="explorer-list" bind:this={listEl}>
-    {#if !folder}
+    {#if !root && !folder}
       <p class="explorer-note">{t("explorer.noFolder")}</p>
-    {:else if loadingRoot && !root}
+    {:else if !root}
       <p class="explorer-note">{t("explorer.loading")}</p>
     {:else if rows.length === 0}
       <p class="explorer-note">{t("explorer.empty")}</p>
@@ -245,7 +218,7 @@
           aria-selected={index === selected}
           aria-expanded={row.isDir ? expanded.has(row.path) : undefined}
           tabindex="-1"
-          style="padding-left:{INSET + row.depth * INDENT}px; {mark ? `color:${markColor(mark)}` : ''}"
+          style="padding-left:{INSET + row.depth * INDENT}px; {mark ? `color:${markColor(mark, themeStore.current.colors)}` : ''}"
           title={mark && mark !== "folder" ? `${row.path} — ${t(`explorer.marks.${mark}`)}` : row.path}
           use:keepVisible={index === selected}
           onclick={() => activate(index)}
@@ -289,29 +262,32 @@
       {/each}
     {/if}
   </div>
-</div>
+  </div>
+</aside>
 
 <style>
-  /* Floats over the tile's console, below its tab strip, sliding in from
-     the left edge. */
+  /* Docked at the window's left edge, like the agents panel: the consoles
+     make room for it. The width animates; the content inside keeps its own
+     fixed width so nothing reflows while it slides. */
   .explorer {
-    position: absolute;
-    top: 28px;
-    left: 0;
-    bottom: 0;
-    z-index: 12;
-    width: min(300px, 85%);
-    display: flex;
-    flex-direction: column;
-    pointer-events: auto;
-    background: var(--tabbar-active-bg-solid, #1e1e1e);
+    position: relative;
+    flex-shrink: 0;
+    width: var(--explorer-width, 264px);
+    overflow: hidden;
     border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    box-shadow: 6px 0 18px rgba(0, 0, 0, 0.35);
+    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
-  .explorer:focus {
+  .explorer-inner {
+    width: var(--explorer-width, 264px);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .explorer-inner:focus {
     outline: none;
   }
 
@@ -320,7 +296,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 6px 6px 10px;
+    min-height: 28px;
+    padding: 0 6px 0 10px;
     border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
   }
 
@@ -410,7 +387,7 @@
     background: rgba(58, 109, 240, 0.18);
   }
 
-  .explorer:focus-within .explorer-row.selected {
+  .explorer-inner:focus-within .explorer-row.selected {
     box-shadow: inset 2px 0 0 var(--pane-active-border, #3a6df0);
   }
 

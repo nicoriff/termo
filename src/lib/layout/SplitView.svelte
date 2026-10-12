@@ -12,6 +12,8 @@
   import TileChrome from "./TileChrome.svelte";
   import Terminal from "$lib/terminal/Terminal.svelte";
   import FileEditor from "$lib/editor/FileEditor.svelte";
+  import DiffView from "$lib/editor/DiffView.svelte";
+  import GitGraphView from "$lib/git/GitGraphView.svelte";
   import AgentRunView from "$lib/agents/AgentRunView.svelte";
   import ProjectView from "$lib/agents/ProjectView.svelte";
   import OrchestrationView from "$lib/agents/OrchestrationView.svelte";
@@ -93,6 +95,14 @@
             active={workspaceStore.focusedTileId === loc.tileId &&
               tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
           />
+        {:else if loc.session.diff}
+          <DiffView
+            diff={loc.session.diff}
+            active={workspaceStore.focusedTileId === loc.tileId &&
+              tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+          />
+        {:else if loc.session.gitGraph}
+          <GitGraphView root={loc.session.gitGraph.root} />
         {:else if loc.session.agentRun}
           <AgentRunView agentId={loc.session.agentRun.agentId} runId={loc.session.agentRun.runId} />
         {:else if loc.session.projectView}

@@ -13,8 +13,6 @@
   import type { ShellInfo } from "$lib/core/types";
   import { dropZoneAt, fileName, type DropZone, type PaneInsets, type PaneRect, type TileNode } from "./split-tree";
   import { fileTabs } from "$lib/editor/file-tabs.svelte";
-  import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-  import ExplorerPanel from "$lib/explorer/ExplorerPanel.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { agentSessionsStore } from "$lib/ai-mode/agent-sessions-store.svelte";
@@ -480,6 +478,17 @@
           <svg class="tile-tab-file" viewBox="0 0 12 14" aria-hidden="true">
             <path d="M1.5 1.5h6l3 3v8h-9z M7.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.diff}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M4 1.5v4M2 3.5h4M2 10.5h4M9 2v10M12 5 9 2 6.5 4.5" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+        {:else if session.gitGraph}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M4 4.2v5.6M4 7.4c3.8 0 5.5-.6 5.5-3" fill="none" stroke="currentColor" stroke-width="1" />
+            <circle cx="4" cy="3" r="1.3" fill="none" stroke="currentColor" stroke-width="1" />
+            <circle cx="4" cy="11" r="1.3" fill="none" stroke="currentColor" stroke-width="1" />
+            <circle cx="9.5" cy="3.4" r="1.3" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
         {:else if session.projectView}
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <path d="M1.5 3.5h4l1.5 1.5h5.5v7h-11z" fill="none" stroke="currentColor" stroke-width="1" />
@@ -510,7 +519,8 @@
         <span
           class="tile-tab-title"
           title={favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
-            (session.agentRun || session.projectView || session.orchestrationView
+            session.diff?.path ??
+            (session.agentRun || session.projectView || session.orchestrationView || session.gitGraph
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >
@@ -726,23 +736,7 @@
     </div>
   {/if}
 
-  {#if explorerStore.open[tile.id]}
-    <ExplorerPanel {tile} />
-  {/if}
-
   <div class="tile-toolbar">
-    <button
-      class:on={explorerStore.open[tile.id]}
-      title={`${t("explorer.toggle")} (${formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleExplorer"), isMac)})`}
-      aria-label={t("explorer.toggle")}
-      aria-pressed={!!explorerStore.open[tile.id]}
-      onclick={() => explorerStore.toggle(tile.id)}
-    >
-      <svg viewBox="0 0 12 12" width="11" height="11">
-        <path d="M1 2.5v8h10v-6.5h-4.5l-1-1.5z" fill="none" stroke="currentColor" />
-        <path d="M3 6.5h6M3 8.5h4" stroke="currentColor" />
-      </svg>
-    </button>
     <button title={t("tabs.splitVertical")} onclick={() => void split("row")}>
       <svg viewBox="0 0 12 12" width="11" height="11">
         <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
@@ -1284,12 +1278,6 @@
 
   .tile-toolbar button:hover {
     background: rgba(255, 255, 255, 0.15);
-    color: #fff;
-  }
-
-  /* The explorer button while its panel is open. */
-  .tile-toolbar button.on {
-    background: var(--pane-active-border, #3a6df0);
     color: #fff;
   }
 </style>

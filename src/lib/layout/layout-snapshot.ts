@@ -15,8 +15,11 @@ import {
   makeFileSession,
   makeOrchestrationSession,
   makeProjectSession,
+  makeDiffSession,
+  makeGitGraphSession,
   makeSession,
   makeTile,
+  type DiffTarget,
   type SplitDirection,
   type SplitNode,
 } from "./split-tree";
@@ -35,6 +38,9 @@ export interface LayoutSession {
   projectView?: { projectId: string };
   /** An orchestration's tab, or its console's. */
   orchestrationView?: { orchestrationId: string; console?: boolean };
+  /** A file's changes, or a repository's history. */
+  diff?: DiffTarget;
+  gitGraph?: { root: string };
   /** The agent conversation this console had open, when the layout was saved
    * with sessions. Restoring reopens it with the agent's own resume command. */
   agentTool?: ToolId;
@@ -90,6 +96,14 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
       }
       if (session.orchestrationView !== undefined) {
         stored.orchestrationView = { ...session.orchestrationView };
+        return stored;
+      }
+      if (session.diff !== undefined) {
+        stored.diff = { ...session.diff };
+        return stored;
+      }
+      if (session.gitGraph !== undefined) {
+        stored.gitGraph = { ...session.gitGraph };
         return stored;
       }
       if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
@@ -153,6 +167,8 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string):
           ),
           newId,
         );
+      if (session.diff) return withId(makeDiffSession(session.diff), newId);
+      if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
       const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
       if (session.agentTool && session.agentSessionId) {
         resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });

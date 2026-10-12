@@ -23,6 +23,9 @@
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+  import ExplorerPanel from "$lib/explorer/ExplorerPanel.svelte";
+  import { gitStore } from "$lib/git/git-store.svelte";
+  import GitPanel from "$lib/git/GitPanel.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
@@ -74,6 +77,7 @@
     const stopAgentRunAttention = startAgentRunAttention();
     const stopCompanionNudges = companionNudges.start();
     const stopQuickAsk = quickAskStore.start();
+    const stopGit = gitStore.start();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
     void agentsStore.init();
@@ -125,6 +129,7 @@
       stopAgentRunAttention();
       stopCompanionNudges();
       stopQuickAsk();
+      stopGit();
     };
   });
 
@@ -215,21 +220,36 @@
       uiState.openQuickAsk();
       return;
     }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleExplorer"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      explorerStore.toggle();
+      // Closed from the keyboard, which the panel had: back to the console.
+      if (!explorerStore.open) uiState.refocusTerminals();
+      return;
+    }
     if (
+      appConfigStore.gitEnabled &&
       !workspaceStore.overviewOpen &&
-      workspaceStore.focusedTileId &&
-      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleExplorer"))
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleGit"))
     ) {
       event.preventDefault();
       event.stopPropagation();
-      explorerStore.toggle(workspaceStore.focusedTileId);
+      gitStore.toggle();
+      if (!gitStore.open) uiState.refocusTerminals();
       return;
     }
-    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleAgents"))) {
-      event.preventDefault();
-      event.stopPropagation();
-      agentsStore.toggle();
-      return;
+    if (!workspaceStore.overviewOpen) {
+      for (const [action, section] of [
+        ["toggleAgents", "local"],
+        ["toggleOrchestration", "orchestration"],
+      ] as const) {
+        if (!eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut(action))) continue;
+        event.preventDefault();
+        event.stopPropagation();
+        agentsStore.toggleSection(section);
+        return;
+      }
     }
     // The focused tab's conversation, as a favorite to add or edit (Modo IA).
     if (
@@ -311,12 +331,14 @@
     <AiModePanel />
   {/if}
   <main class="content">
-    <!-- Only while it has something to show: Agents is its one button. -->
-    {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
-      <ActivityBar />
-    {/if}
+    <ActivityBar />
+    <!-- One side panel at a time (see explorerStore). -->
     {#if agentsStore.open}
       <AgentsSidebar />
+    {:else if explorerStore.open}
+      <ExplorerPanel />
+    {:else if gitStore.open && appConfigStore.gitEnabled}
+      <GitPanel />
     {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />

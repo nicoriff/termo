@@ -23,6 +23,7 @@
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import PlatformSection from "./sections/PlatformSection.svelte";
   import GeneralSection from "./sections/GeneralSection.svelte";
+  import GitSection from "./sections/GitSection.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
 
   type SectionId =
@@ -31,6 +32,7 @@
     | "font"
     | "console"
     | "shortcuts"
+    | "git"
     | "oh-my-posh"
     | "ai-mode"
     | "ai-notifications"
@@ -91,6 +93,7 @@
         { id: "marketplace", label: "preferences.sidebar.marketplace" },
       ],
     },
+    { id: "git", label: "preferences.sidebar.git" },
     { id: "shortcuts", label: "preferences.sidebar.shortcuts" },
   ];
 
@@ -229,6 +232,8 @@
         <ConsoleSection />
       {:else if selected === "shortcuts"}
         <ShortcutsSection />
+      {:else if selected === "git"}
+        <GitSection />
       {:else if selected === "oh-my-posh"}
         <OhMyPoshSection />
       {:else if selected === "ai-mode"}

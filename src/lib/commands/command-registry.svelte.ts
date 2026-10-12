@@ -16,7 +16,10 @@ import { requestAgentLaunch } from "../agent-launch/request-launch";
 import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
 import { TOOL_IDS } from "../ai-mode/pattern-table";
 import { newTabOptions } from "../layout/new-tab-options.svelte";
-import { agentsStore } from "../agents/agents-store.svelte";
+import { agentsStore, type AgentsSection } from "../agents/agents-store.svelte";
+import { explorerStore } from "../explorer/explorer-store.svelte";
+import { gitStore } from "../git/git-store.svelte";
+import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
 import type { Command } from "./commands";
 
@@ -37,6 +40,7 @@ function focusedTile() {
  * order. Called from a `$derived`, so it re-runs when the workspace, the
  * config or the language change. */
 export function buildCommands(): Command[] {
+  const sectionOpen = (section: AgentsSection) => agentsStore.open && agentsStore.section === section;
   const commands: Command[] = [
     {
       id: "navigation.newWindow",
@@ -68,7 +72,40 @@ export function buildCommands(): Command[] {
       label: uiState.diagnosticsOpen ? t("commands.closeDiagnostics") : t("commands.openDiagnostics"),
       run: () => uiState.toggleDiagnostics(),
     },
+    {
+      id: "explorer.toggle",
+      group: "navigation",
+      label: explorerStore.open ? t("commands.hideExplorer") : t("commands.showExplorer"),
+      run: () => explorerStore.toggle(),
+    },
   ];
+
+  if (appConfigStore.gitEnabled) {
+    commands.push({
+      id: "git.toggle",
+      group: "git",
+      label: gitStore.open ? t("commands.hideGit") : t("commands.showGit"),
+      run: () => gitStore.toggle(),
+    });
+    // The rest only makes sense in a repository, with nothing else running.
+    const repo = gitStore.snapshot;
+    if (repo && !gitStore.running) {
+      const root = repo.root;
+      commands.push(
+        { id: "git.commit", group: "git", label: t("commands.gitCommit"), run: () => gitStore.focusCommit() },
+        { id: "git.fetch", group: "git", label: t("commands.gitFetch"), run: () => void gitStore.run({ kind: "fetch" }) },
+        { id: "git.pull", group: "git", label: t("commands.gitPull"), run: () => void gitStore.run({ kind: "pull" }) },
+        { id: "git.push", group: "git", label: t("commands.gitPush"), run: () => void gitStore.run({ kind: "push" }) },
+        { id: "git.sync", group: "git", label: t("commands.gitSync"), run: () => void gitStore.run({ kind: "sync" }) },
+        {
+          id: "git.graph",
+          group: "git",
+          label: t("commands.gitGraph"),
+          run: () => workspaceStore.openGitGraph(root, t("git.graph.tab", { name: fileName(root) })),
+        },
+      );
+    }
+  }
 
   // Extensions and agents are Modo IA's: only listed with it on.
   if (appConfigStore.aiModeEnabled) {
@@ -82,8 +119,14 @@ export function buildCommands(): Command[] {
       {
         id: "agents.toggle",
         group: "agents",
-        label: agentsStore.open ? t("commands.hideAgents") : t("commands.showAgents"),
-        run: () => agentsStore.toggle(),
+        label: sectionOpen("local") ? t("commands.hideAgents") : t("commands.showAgents"),
+        run: () => agentsStore.toggleSection("local"),
+      },
+      {
+        id: "agents.toggleOrchestration",
+        group: "agents",
+        label: sectionOpen("orchestration") ? t("commands.hideOrchestration") : t("commands.showOrchestration"),
+        run: () => agentsStore.toggleSection("orchestration"),
       },
       {
         id: "agents.new",

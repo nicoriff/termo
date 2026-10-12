@@ -34,8 +34,12 @@ export interface ShortcutsConfig {
   new_window_other: string | null;
   toggle_explorer_mac: string | null;
   toggle_explorer_other: string | null;
+  toggle_git_mac: string | null;
+  toggle_git_other: string | null;
   toggle_agents_mac: string | null;
   toggle_agents_other: string | null;
+  toggle_orchestration_mac: string | null;
+  toggle_orchestration_other: string | null;
   cycle_tab_mac: string | null;
   cycle_tab_other: string | null;
   zoom_tile_mac: string | null;
@@ -124,6 +128,16 @@ export interface AppConfig {
   agent_install_dirs?: Record<string, string>;
   agent_clis_known?: Record<string, string>;
   tabs_fill_width: boolean;
+  /** Everything git (see src-tauri/src/git). Absent in configs from before it. */
+  git_enabled?: boolean;
+  git_in_activity_bar?: boolean;
+  git_status_bar?: boolean;
+  git_status_branch?: boolean;
+  git_status_sync?: boolean;
+  git_status_changes?: boolean;
+  git_status_pr?: boolean;
+  git_pr_enabled?: boolean;
+  git_auto_fetch_minutes?: number;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;

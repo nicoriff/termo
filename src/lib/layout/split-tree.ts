@@ -32,6 +32,23 @@ export interface SessionTab {
   /** Set on a tab that shows an orchestration (see OrchestrationView), or
    * with `console`, everything its agents did (see OrchestrationConsole). */
   orchestrationView?: { orchestrationId: string; console?: boolean };
+  /** Set on a tab that shows what changed in a file (see DiffView). */
+  diff?: DiffTarget;
+  /** Set on a tab that shows a repository's history (see GitGraphView). */
+  gitGraph?: { root: string };
+}
+
+/** Two versions of a file of a repository. `from` and `to` are revisions:
+ * a commit, "HEAD", or "" for the index. A null `from` is nothing at all (the
+ * file is new), and a null `to` is the file on disk. */
+export interface DiffTarget {
+  root: string;
+  /** Relative to the repository, with forward slashes. */
+  path: string;
+  from: string | null;
+  to: string | null;
+  /** Where the file was at `from`, when it was renamed since. */
+  fromPath?: string;
 }
 
 export function isFileTab(session: SessionTab): session is SessionTab & { filePath: string } {
@@ -45,7 +62,9 @@ export function isConsoleTab(session: SessionTab): boolean {
     session.filePath === undefined &&
     session.agentRun === undefined &&
     session.projectView === undefined &&
-    session.orchestrationView === undefined
+    session.orchestrationView === undefined &&
+    session.diff === undefined &&
+    session.gitGraph === undefined
   );
 }
 
@@ -63,6 +82,14 @@ export function makeOrchestrationSession(title: string, orchestrationId: string,
     title,
     orchestrationView: console ? { orchestrationId, console } : { orchestrationId },
   };
+}
+
+export function makeDiffSession(diff: DiffTarget): SessionTab {
+  return { id: crypto.randomUUID(), title: fileName(diff.path), diff };
+}
+
+export function makeGitGraphSession(title: string, root: string): SessionTab {
+  return { id: crypto.randomUUID(), title, gitGraph: { root } };
 }
 
 /** A file's name, which titles its tab. */

@@ -1,5 +1,25 @@
 [
   {
+    "version": "0.21.0",
+    "date": "2026-10-12",
+    "es": [
+      "**Git, sin pasar por la consola**: un panel nuevo en la barra vertical (o ⌘⇧S / Ctrl+Shift+S) muestra el repositorio de la pestaña activa: la rama y cuántos commits tiene por delante y por detrás de su remoto y de la rama base, los archivos cambiados para preparar o descartar uno por uno, y el commit, push, pull, fetch, stash y cambio de rama a un clic. Reconoce dónde está alojado (GitHub, GitLab, Bitbucket, Azure DevOps, Gitea) y lo muestra con su ícono.",
+      "**Pull request de la rama**: el panel muestra su estado, revisión, checks, etiquetas y revisores, y permite editar el título, la descripción, la rama base y pasarlo de borrador a listo, o crear uno nuevo. Usa la sesión que ya tengas en gh (GitHub) o glab (GitLab).",
+      "**Grafo de commits y diff**: el historial se ve como un grafo de ramas, con lo que falta subir y bajar marcado, en el panel y completo en una pestaña propia con el detalle de cada commit. Al hacer clic en un archivo cambiado se abre su diff en una pestaña.",
+      "**El repositorio en la barra de estado**: rama, commits por subir y bajar, archivos con cambios y número de pull request; al hacer clic se despliegan las acciones. Qué se muestra, el fetch automático y todo lo demás se configura en Preferencias → Git.",
+      "**El explorador de archivos es un panel**: dejó de flotar sobre cada grupo de pestañas y ahora se acopla al borde izquierdo de la ventana, como Agentes, con su botón en la barra vertical (o ⌘⇧B / Ctrl+Shift+B). Muestra el proyecto de la pestaña que tiene el foco y cambia solo al pasar a otra. Se le puede cambiar el ancho arrastrando el borde.",
+      "**Un atajo por panel**: Agentes de orquestación tiene el suyo (⌘⇧R / Ctrl+Shift+R), y el de Agentes (⌘⇧G / Ctrl+Shift+G) ahora abre o cierra Agentes locales. Junto con el del explorador, los tres se cambian en Preferencias → Atajos, y cada panel también se muestra u oculta desde la paleta de comandos."
+    ],
+    "en": [
+      "**Git, without going through the console**: a new panel in the vertical bar (or ⌘⇧S / Ctrl+Shift+S) shows the repository of the active tab: the branch and how many commits it is ahead of and behind its remote and the base branch, the changed files to stage or discard one by one, and commit, push, pull, fetch, stash and switching branch a click away. It recognizes where it's hosted (GitHub, GitLab, Bitbucket, Azure DevOps, Gitea) and shows it with its icon.",
+      "**The branch's pull request**: the panel shows its state, review, checks, labels and reviewers, and lets you edit the title, the description, the base branch and take it from draft to ready, or open a new one. It uses the session you already have in gh (GitHub) or glab (GitLab).",
+      "**Commit graph and diff**: the history shows as a graph of branches, with what's still to push and pull marked, in the panel and in full in a tab of its own with each commit's details. Clicking a changed file opens its diff in a tab.",
+      "**The repository on the status bar**: branch, commits to push and pull, files with changes and the pull request's number; clicking it opens the actions. What it shows, fetching on its own and everything else is set in Preferences → Git.",
+      "**The file explorer is a panel**: it no longer floats over each group of tabs and now docks at the window's left edge, like Agents, with its own button in the vertical bar (or ⌘⇧B / Ctrl+Shift+B). It shows the project of the tab in focus and follows along when you move to another. Drag its edge to change the width.",
+      "**A shortcut per panel**: Orchestration agents has its own (⌘⇧R / Ctrl+Shift+R), and the Agents one (⌘⇧G / Ctrl+Shift+G) now opens or closes Local agents. Along with the explorer's, all three can be changed in Preferences → Shortcuts, and each panel can also be shown or hidden from the command palette."
+    ]
+  },
+  {
     "version": "0.20.1",
     "date": "2026-10-12",
     "es": [
