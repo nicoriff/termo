@@ -9,6 +9,7 @@
   import { companionLastExchange } from "$lib/core/companion-client";
   import { collectSessions } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { tabAgentSessions } from "$lib/ai-mode/tab-sessions.svelte";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { aiEngine } from "$lib/agents/ai-engine.svelte";
@@ -34,9 +35,12 @@
     return agentSession?.cwd ?? tabCwd.byTab[tabId] ?? opened ?? null;
   });
 
+  /** The agent in the console, as Modo IA sees it when the dialog opens. */
+  const running = tabId ? (aiStatusStore.byId[tabId]?.tool ?? null) : null;
+
   /** Whose CLI answers: the one picked in Preferences when it's installed,
-   * else the first that is. Null when none is. */
-  const engine = $derived(quickAskEngine(appConfigStore.quickAskEngine, aiEngine.installed));
+   * else the agent running in this console. Null when there's none. */
+  const engine = $derived(quickAskEngine(appConfigStore.quickAskEngine, aiEngine.installed, running));
   /** The model it's asked for, where one is; otherwise the CLI's own pick. */
   const askedModel = $derived(engine ? quickAskModel(engine) : null);
 

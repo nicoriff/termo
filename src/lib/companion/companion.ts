@@ -290,16 +290,24 @@ export function nudgeFor(
 }
 
 /** Whose CLI answers a quick question: the one picked in Preferences when
- * it's installed, else the first installed. Null when none is. */
-export function quickAskEngine(picked: string, installed: readonly CompanionTool[]): CompanionTool | null {
-  return installed.find((engine) => engine === picked) ?? installed[0] ?? null;
+ * it's installed; otherwise the agent `running` in the console it's asked
+ * from, which is there to answer for sure; and failing both, the first
+ * installed. Null when there's none. */
+export function quickAskEngine(
+  picked: string,
+  installed: readonly CompanionTool[],
+  running: CompanionTool | null = null,
+): CompanionTool | null {
+  return installed.find((engine) => engine === picked) ?? running ?? installed[0] ?? null;
 }
 
 /** The model a quick question asks `engine` for by name: the small one,
  * where its CLI lets one be named (see src-tauri/src/companion/quick.rs).
  * Null where it's left to the CLI's own default. */
 export function quickAskModel(engine: CompanionTool): string | null {
-  return engine === "claude" ? "Haiku" : null;
+  if (engine === "claude") return "Haiku";
+  if (engine === "gemini") return "Flash-Lite";
+  return null;
 }
 
 /** Whether a console's last exchange can go along with a quick question:

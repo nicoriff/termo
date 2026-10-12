@@ -1883,8 +1883,9 @@ export const en: Messages = {
       quickHint:
         "{shortcut}, the command palette or the tab at the bottom right of a console with an agent in it opens a box for a one-off question that doesn't go into the agent's conversation: a small model answers it, in that console's folder and unable to change anything. It's another session: it doesn't know what you said to the agent, and the agent doesn't learn the answer unless you paste it. Each question has a small cost.",
       quickEngine: "Who answers",
-      quickEngineAny: "The first one installed",
-      quickEngineHint: "If the one you pick isn't installed, the first that is answers. On Claude Code its smallest model is used.",
+      quickEngineAny: "The console's agent",
+      quickEngineHint:
+        "By default the agent running in the console answers, which is installed for sure. If you pick another and it isn't installed, the console's agent answers too. Its smallest model is used where the agent lets one be picked (Claude Code: Haiku; Gemini CLI: Flash-Lite); on the others, its default model.",
       quickWithExchange: "Send the last exchange along by default",
       quickWithExchangeHint:
         "Sends your last message to the agent and its answer along with the question, to ask about them. It can be changed for each question. Only in Claude Code consoles for now.",

@@ -124,8 +124,13 @@ pub fn ask(scratch: &Path, request: &QuickRequest, on_step: &dyn Fn(Step)) -> Re
     if folder.is_none() {
         std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
     }
-    // The small model is the point of asking here, where one can be named.
-    let model = if request.engine == Engine::Claude { "haiku" } else { "" };
+    // The small model is the point of asking here, where one can be named:
+    // the CLI's own alias for it, which follows its releases.
+    let model = match request.engine {
+        Engine::Claude => "haiku",
+        Engine::Gemini => "flash-lite",
+        _ => "",
+    };
     let ask = Ask { engine: request.engine, dir: folder.unwrap_or(scratch), model, read_files: folder.is_some(), timeout: TIMEOUT };
     let answer = ask_streaming(&ask, prompt(request, folder.is_some()), &schema(), on_step)?;
     let text = answer.value.get("answer").and_then(|answer| answer.as_str()).unwrap_or("").trim().to_string();
