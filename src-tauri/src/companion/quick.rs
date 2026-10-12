@@ -66,6 +66,8 @@ pub struct QuickAnswer {
     pub answer: String,
     /// What asking cost, as the CLI reports it.
     pub cost_usd: Option<f64>,
+    /// The model that answered, where the CLI says.
+    pub model: Option<String>,
 }
 
 fn schema() -> serde_json::Value {
@@ -130,7 +132,7 @@ pub fn ask(scratch: &Path, request: &QuickRequest, on_step: &dyn Fn(Step)) -> Re
     if text.is_empty() {
         return Err("empty answer".into());
     }
-    Ok(QuickAnswer { answer: text, cost_usd: answer.cost_usd })
+    Ok(QuickAnswer { answer: text, cost_usd: answer.cost_usd, model: answer.model })
 }
 
 #[cfg(test)]

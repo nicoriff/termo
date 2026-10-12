@@ -216,6 +216,8 @@ pub struct Answer {
     pub value: serde_json::Value,
     /// What the answer cost, as the CLI reports it.
     pub cost_usd: Option<f64>,
+    /// The model that answered, where the CLI says: Claude Code's only.
+    pub model: Option<String>,
 }
 
 /// A step of an answer being worked out, as it happens: for showing
@@ -276,6 +278,20 @@ pub fn parse_cost(stdout: &str) -> Option<f64> {
     value.get("total_cost_usd").and_then(|cost| cost.as_f64())
 }
 
+/// The model behind Claude Code's `stream-json` output: the one its last
+/// message came from, which is the one that wrote the answer.
+pub fn parse_model(stdout: &str) -> Option<String> {
+    stdout.lines().rev().find_map(|line| {
+        let value: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+        if value.get("type").and_then(|kind| kind.as_str()) != Some("assistant") {
+            return None;
+        }
+        let model = value.pointer("/message/model")?.as_str()?;
+        // What Claude Code answers itself with when the API fails.
+        (model != "<synthetic>").then(|| model.to_string())
+    })
+}
+
 pub fn ask_with(ask: &Ask, text: String, schema: &serde_json::Value) -> Result<Answer, String> {
     ask_streaming(ask, text, schema, &|_| {})
 }
@@ -300,7 +316,7 @@ pub fn ask_streaming(ask: &Ask, text: String, schema: &serde_json::Value, on_ste
             (before, now) => before.or(now),
         };
         match json_in(&said.text, schema) {
-            Ok(value) => return Ok(Answer { value, cost_usd: cost }),
+            Ok(value) => return Ok(Answer { value, cost_usd: cost, model: None }),
             Err(why) => problem = why,
         }
     }
@@ -643,7 +659,7 @@ fn ask_claude(ask: &Ask, text: String, schema: &serde_json::Value, on_step: &dyn
         take(line, &mut output);
     }
     let result = result_line(&output).ok_or_else(|| "no result".to_string())?;
-    Ok(Answer { value: parse_structured(result)?, cost_usd: parse_cost(result) })
+    Ok(Answer { value: parse_structured(result)?, cost_usd: parse_cost(result), model: parse_model(&output) })
 }
 
 #[cfg(test)]
@@ -660,6 +676,20 @@ mod tests {
         assert!(json_in(r#"{"task":"x"}"#, &schema).unwrap_err().contains("\"name\""));
         // A list isn't an answer, though it's JSON.
         assert!(json_in("[1, 2]", &schema).is_err());
+    }
+
+    #[test]
+    fn the_model_that_answered_is_the_last_messages() {
+        let output = [
+            r#"{"type":"system","subtype":"init","model":"claude-opus-5-5"}"#,
+            r#"{"type":"assistant","message":{"model":"claude-haiku-5-5-20260801","content":[]}}"#,
+            r#"{"type":"assistant","message":{"model":"<synthetic>","content":[]}}"#,
+            r#"{"type":"result","total_cost_usd":0.002}"#,
+            "not json",
+        ]
+        .join("\n");
+        assert_eq!(parse_model(&output).as_deref(), Some("claude-haiku-5-5-20260801"));
+        assert_eq!(parse_model(r#"{"type":"result"}"#), None);
     }
 
     #[test]

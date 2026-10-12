@@ -295,6 +295,13 @@ export function quickAskEngine(picked: string, installed: readonly CompanionTool
   return installed.find((engine) => engine === picked) ?? installed[0] ?? null;
 }
 
+/** The model a quick question asks `engine` for by name: the small one,
+ * where its CLI lets one be named (see src-tauri/src/companion/quick.rs).
+ * Null where it's left to the CLI's own default. */
+export function quickAskModel(engine: CompanionTool): string | null {
+  return engine === "claude" ? "Haiku" : null;
+}
+
 /** Whether a console's last exchange can go along with a quick question:
  * only where the agent's session files are read for it, which for now is
  * Claude Code's. */

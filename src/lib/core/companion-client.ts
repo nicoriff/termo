@@ -181,6 +181,8 @@ export interface QuickAnswer {
   answer: string;
   /** What asking cost, as the CLI reports it. */
   costUsd: number | null;
+  /** The model that answered, where the CLI says: Claude Code's only. */
+  model: string | null;
 }
 
 /** A step of a quick question being answered: the `companion-quick-step`

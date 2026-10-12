@@ -16,8 +16,9 @@ export interface QuickEntry {
   /** The CLI's own words for why it failed. */
   error: string | null;
   costUsd: number | null;
-  /** Whose CLI answered. */
+  /** Whose CLI answered, and on which model when it says. */
   engine: CompanionTool;
+  model: string | null;
 }
 
 /**
@@ -52,7 +53,7 @@ class QuickAskStore {
     if (this.asking) return;
     const id = crypto.randomUUID();
     const history = this.entries.flatMap((entry) => (entry.answer ? [{ question: entry.question, answer: entry.answer }] : []));
-    this.entries = [...this.entries, { id, question, answer: null, error: null, costUsd: null, engine }];
+    this.entries = [...this.entries, { id, question, answer: null, error: null, costUsd: null, engine, model: null }];
     this.asking = id;
     this.steps = [];
     const settle = (change: Partial<QuickEntry>) => {
@@ -60,7 +61,7 @@ class QuickAskStore {
     };
     try {
       const answered = await companionQuickAsk(id, { engine, cwd, question, history, exchange });
-      settle({ answer: answered.answer, costUsd: answered.costUsd });
+      settle({ answer: answered.answer, costUsd: answered.costUsd, model: answered.model });
     } catch (reason) {
       settle({ error: String(reason) });
     } finally {

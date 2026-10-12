@@ -122,7 +122,9 @@ export const es = {
     quick: {
       title: "Pregunta rápida",
       open: "Pregunta rápida...",
-      answers: "Responde {engine}",
+      answers: "Responde {engine} · {model}",
+      defaultModel: "su modelo por defecto",
+      intro: "Una pregunta suelta, aparte de la conversación del agente: no la carga ni la conoce. La respuesta podés copiarla o pegarla en la consola.",
       noEngine: "No hay ningún agente instalado para responder.",
       clear: "Empezar de nuevo",
       placeholder: "Preguntá algo suelto… (Enter envía, Shift+Enter salta de línea)",
