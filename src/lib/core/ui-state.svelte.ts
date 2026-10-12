@@ -3,6 +3,7 @@ import type { SavedLayout } from "./layouts-client";
 import type { LaunchTarget } from "$lib/agent-launch/launch-target";
 import type { AgentSpec, Project } from "./agents-client";
 import type { ChangelogEntry } from "$lib/app/release-notes";
+import type { ToolId } from "$lib/ai-mode/pattern-table";
 import { appConfigStore } from "./app-config.svelte";
 
 class UiState {
@@ -56,6 +57,9 @@ class UiState {
   companionOpen = $state(false);
   /** The quick question popup: an overlay, since it owns a text box. */
   quickAskOpen = $state(false);
+  /** The agents' CLIs a change of Node.js left behind, while the dialog that
+   * offers to put them back is up (see MissingAgentsDialog). */
+  missingAgents = $state<ToolId[] | null>(null);
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
@@ -89,6 +93,7 @@ class UiState {
       this.orchestrationDialog ||
       this.marketplaceOpen ||
       this.quickAskOpen ||
+      this.missingAgents !== null ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
@@ -295,6 +300,15 @@ class UiState {
       this.companionOpen = true;
       this.diagnosticsOpen = false;
     }
+  }
+
+  openMissingAgents(tools: ToolId[]): void {
+    this.missingAgents = tools;
+  }
+
+  closeMissingAgents(): void {
+    this.missingAgents = null;
+    this.refocusTerminals();
   }
 
   openQuickAsk(): void {

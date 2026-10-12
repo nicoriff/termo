@@ -29,6 +29,12 @@ pub async fn install_agent_cli(
         .map_err(|err| err.to_string())?
 }
 
+/// The Node.js on the PATH, or None (see agent_install::node_version).
+#[tauri::command]
+pub async fn node_version() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(agent_install::node_version).await.ok().flatten()
+}
+
 #[tauri::command]
 pub fn cancel_agent_cli_install() {
     agent_install::cancel();

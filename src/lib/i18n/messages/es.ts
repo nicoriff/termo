@@ -413,6 +413,23 @@ export const es = {
     hooksFailed: "No se pudieron configurar los hooks: {error}",
     doneHooks: "Los hooks quedaron configurados.",
     doneSignIn: "Abrí una pestaña de {tool} para iniciar sesión la primera vez.",
+    missing: {
+      title: "Agentes que dejaron de estar disponibles",
+      text: "Estos agentes estaban instalados y ya no aparecen desde que cambió la versión de Node.js (ahora {node}). npm guarda aparte lo instalado con cada versión, así que quedaron en la anterior.",
+      textNoVersion:
+        "Estos agentes estaban instalados y ya no aparecen desde que cambió la versión de Node.js. npm guarda aparte lo instalado con cada versión, así que quedaron en la anterior.",
+      hint: "Reinstalarlos los vuelve a bajar con npm en la versión actual. Tus sesiones y tu configuración de cada agente no se tocan.",
+      reinstall: "Reinstalar",
+      later: "Ahora no",
+      forget: "No volver a avisar",
+      retry: "Reintentar los que faltan",
+      waiting: "En espera",
+      installing: "Instalando…",
+      done: "Instalado",
+      failed: "No se pudo instalar",
+      allDone: "Quedaron todos instalados.",
+      someLeft: "Algunos no quedaron instalados. Podés reintentar ahora, o Termo vuelve a preguntar la próxima vez que abra.",
+    },
   },
   agentLaunch: {
     starting: "Iniciando {tool}…",

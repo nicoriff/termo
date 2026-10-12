@@ -229,6 +229,7 @@ pub fn run() {
             commands::marketplace_commands::agent_cli_install_info,
             commands::marketplace_commands::install_agent_cli,
             commands::marketplace_commands::cancel_agent_cli_install,
+            commands::marketplace_commands::node_version,
             commands::marketplace_commands::list_catalog,
             commands::marketplace_commands::install_item,
             commands::marketplace_commands::uninstall_item,

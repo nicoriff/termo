@@ -414,6 +414,23 @@ export const en: Messages = {
     hooksFailed: "Couldn't set up the hooks: {error}",
     doneHooks: "The hooks are set up.",
     doneSignIn: "Open a {tool} tab to sign in the first time.",
+    missing: {
+      title: "Agents that are no longer available",
+      text: "These agents were installed and haven't shown up since the version of Node.js changed (now {node}). npm keeps what's installed with each version apart, so they stayed with the previous one.",
+      textNoVersion:
+        "These agents were installed and haven't shown up since the version of Node.js changed. npm keeps what's installed with each version apart, so they stayed with the previous one.",
+      hint: "Reinstalling downloads them again with npm under the current version. Your sessions and each agent's settings are left alone.",
+      reinstall: "Reinstall",
+      later: "Not now",
+      forget: "Don't ask again",
+      retry: "Retry the ones left",
+      waiting: "Waiting",
+      installing: "Installing…",
+      done: "Installed",
+      failed: "Couldn't install",
+      allDone: "They're all installed.",
+      someLeft: "Some weren't installed. You can retry now, or Termo asks again the next time it opens.",
+    },
   },
   agentLaunch: {
     starting: "Starting {tool}…",
