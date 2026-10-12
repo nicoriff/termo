@@ -272,18 +272,17 @@
     position: relative;
   }
 
-  /* The frame, in the theme's accent like the quick question's dialog, and a
-     soft glow of it just inside. Drawn over the content rather than as a
-     border of the box, so nothing in the window moves for it. */
+  /* The frame: the theme's own border color, lifted a touch toward the text
+     so the edge reads without standing out from the window. Drawn over the
+     content rather than as a border of the box, so nothing moves for it. */
   .window-chrome::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: 1000;
     pointer-events: none;
-    border: 1px solid color-mix(in srgb, var(--pane-active-border, #3a6df0) 70%, var(--tabbar-border, #2a2a2a));
+    border: 1px solid color-mix(in srgb, var(--tabbar-border, #2a2a2a) 82%, var(--titlebar-fg, #d4d4d4));
     border-radius: 10px;
-    box-shadow: inset 0 0 14px color-mix(in srgb, var(--pane-active-border, #3a6df0) 14%, transparent);
   }
 
   /* On Windows the native rounded window region (window_shape.rs) cuts a
