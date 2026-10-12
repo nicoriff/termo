@@ -57,9 +57,16 @@ export interface AgentSpec {
   deploy: { github: { repo: string; repoPath: string; workflowFile: string; deployedAt: number } | null };
   /** The project it belongs to; empty: none. */
   projectId: string;
+  /** What it's there for in the Git panel's code reviews; missing in an
+   * agent saved before there were roles, which has none. */
+  gitRole?: AgentGitRole;
   createdAt: number;
   updatedAt: number;
 }
+
+/** An agent made to review changes, or to fix what a review found: only
+ * those are offered for it (see src-tauri/src/git/review.rs). */
+export type AgentGitRole = "none" | "reviewer" | "fixer";
 
 export type AfterOutcome = "success" | "failure" | "any";
 

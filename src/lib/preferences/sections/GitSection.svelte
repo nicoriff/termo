@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { appConfigStore, GIT_STATUS_PARTS } from "$lib/core/app-config.svelte";
+  import {
+    appConfigStore,
+    GIT_STATUS_PARTS,
+    type GitReviewBeforePush,
+    type GitReviewDefaultScope,
+    type GitReviewSeverity,
+  } from "$lib/core/app-config.svelte";
+  import { listAgents, listProjects, type AgentSpec } from "$lib/core/agents-client";
   import { gitTools, type GitTool, type GitTools } from "$lib/core/git-client";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
@@ -18,10 +25,50 @@
   /** What's installed of what all this leans on; null while it's asked. */
   let tools = $state<GitTools | null>(null);
 
+  /** The user's own agents, to pick who reviews and who fixes: of them, only
+   * the ones made for it in the wizard are offered. The ones an orchestration
+   * made for its team never are: they were written for their task in it. */
+  let agents = $state<AgentSpec[]>([]);
+
+  function loadAgents() {
+    void Promise.all([listAgents(), listProjects()])
+      .then(([list, projects]) => {
+        const teams = new Set(projects.filter((project) => project.orchestrationId).map((project) => project.id));
+        agents = list.filter((agent) => !teams.has(agent.projectId));
+      })
+      .catch(() => {});
+  }
+
   // This window is preloaded once and reused: asked again on every open.
   onMount(() => {
     void gitTools().then((found) => (tools = found));
+    loadAgents();
   });
+
+  /** Reviews need Git, themselves, and Modo IA. */
+  const reviewOff = $derived(off || !appConfigStore.gitReviewEnabled || !appConfigStore.aiModeEnabled);
+  const agentLabel = (agent: AgentSpec) => `${agent.icon} ${agent.name}`.trim();
+  const reviewerOptions = $derived([
+    { value: "", label: t("preferences.git.review.builtInNone") },
+    ...agents.filter((agent) => agent.gitRole === "reviewer").map((agent) => ({ value: agent.id, label: agentLabel(agent) })),
+  ]);
+  /** A fixer has to be able to change files, too. */
+  const fixerOptions = $derived([
+    { value: "", label: t("preferences.git.review.fixerNone") },
+    ...agents
+      .filter((agent) => agent.gitRole === "fixer" && agent.autonomy !== "read")
+      .map((agent) => ({ value: agent.id, label: agentLabel(agent) })),
+  ]);
+  const scopeOptions = $derived([
+    { value: "changes", label: t("git.review.scope.changes") },
+    { value: "branch", label: t("git.review.scope.branch") },
+  ]);
+  const severityOptions = $derived(
+    (["suggestion", "warning", "serious"] as const).map((severity) => ({ value: severity, label: t(`git.review.severity.${severity}`) })),
+  );
+  const timeoutOptions = $derived(
+    [5, 10, 20, 30, 60].map((minutes) => ({ value: String(minutes), label: t("preferences.git.review.timeoutMinutes", { n: String(minutes) }) })),
+  );
 
   const TOOLS = [
     { id: "git", name: "git", use: "preferences.git.tools.gitUse" },
@@ -108,6 +155,99 @@
   <p class="setting-hint">{t("preferences.git.autoFetchHint")}</p>
 </section>
 
+<section class:off>
+  <h3>{t("preferences.git.review.title")}</h3>
+  <label class="row toggle-row">
+    <span>{t("preferences.git.review.enabled")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.gitReviewEnabled}
+      disabled={off}
+      onchange={(e) => appConfigStore.setGitReview({ enabled: e.currentTarget.checked })}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.git.review.enabledHint")}</p>
+  <div class="row spaced">
+    <span>{t("preferences.git.review.reviewer")}</span>
+    <SettingDropdown
+      options={reviewerOptions}
+      value={reviewerOptions.some((option) => option.value === appConfigStore.gitReviewAgentId) ? appConfigStore.gitReviewAgentId : ""}
+      disabled={reviewOff}
+      onopen={loadAgents}
+      onpick={(value) => appConfigStore.setGitReview({ agentId: value })}
+    />
+  </div>
+  <p class="setting-hint">{t("preferences.git.review.reviewerHint")}</p>
+  <div class="row spaced">
+    <span>{t("preferences.git.review.fixer")}</span>
+    <SettingDropdown
+      options={fixerOptions}
+      value={fixerOptions.some((option) => option.value === appConfigStore.gitReviewFixAgentId) ? appConfigStore.gitReviewFixAgentId : ""}
+      disabled={reviewOff}
+      onopen={loadAgents}
+      onpick={(value) => appConfigStore.setGitReview({ fixAgentId: value })}
+    />
+  </div>
+  <p class="setting-hint">{t("preferences.git.review.fixerHint")}</p>
+  <div class="row spaced">
+    <span>{t("preferences.git.review.scope")}</span>
+    <SettingDropdown
+      options={scopeOptions}
+      value={appConfigStore.gitReviewScope}
+      disabled={reviewOff}
+      onpick={(value) => appConfigStore.setGitReview({ scope: value as GitReviewDefaultScope })}
+    />
+  </div>
+  <div class="row spaced">
+    <span>{t("preferences.git.review.minSeverity")}</span>
+    <SettingDropdown
+      options={severityOptions}
+      value={appConfigStore.gitReviewMinSeverity}
+      disabled={reviewOff}
+      onpick={(value) => appConfigStore.setGitReview({ minSeverity: value as GitReviewSeverity })}
+    />
+  </div>
+  <div class="row spaced">
+    <span>{t("preferences.git.review.timeout")}</span>
+    <SettingDropdown
+      options={timeoutOptions}
+      value={String(appConfigStore.gitReviewTimeoutMin)}
+      disabled={reviewOff}
+      onpick={(value) => appConfigStore.setGitReview({ timeoutMin: Number(value) })}
+    />
+  </div>
+  <label class="row toggle-row spaced">
+    <span>{t("preferences.git.review.beforePush")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.gitReviewBeforePush === "ask"}
+      disabled={reviewOff}
+      onchange={(e) => appConfigStore.setGitReview({ beforePush: (e.currentTarget.checked ? "ask" : "off") satisfies GitReviewBeforePush })}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.git.review.beforePushHint")}</p>
+  <label class="row toggle-row spaced">
+    <span>{t("preferences.git.review.onPrCreate")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.gitReviewOnPrCreate}
+      disabled={reviewOff || !appConfigStore.gitPrEnabled}
+      onchange={(e) => appConfigStore.setGitReview({ onPrCreate: e.currentTarget.checked })}
+    />
+  </label>
+  <label class="field spaced">
+    <span>{t("preferences.git.review.instructions")}</span>
+    <textarea
+      rows="3"
+      placeholder={t("preferences.git.review.instructionsPlaceholder")}
+      value={appConfigStore.gitReviewInstructions}
+      disabled={reviewOff}
+      onchange={(e) => appConfigStore.setGitReview({ instructions: e.currentTarget.value })}
+    ></textarea>
+  </label>
+  <p class="setting-hint">{t("preferences.git.review.instructionsHint")}</p>
+</section>
+
 <section>
   <h3>{t("preferences.git.tools.title")}</h3>
   {#each TOOLS as tool (tool.id)}
@@ -155,6 +295,34 @@
   .row.sub {
     margin-top: 7px;
     padding-left: 14px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .field.spaced {
+    margin-top: 12px;
+  }
+
+  .field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 5px 7px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 4px;
+    background: var(--terminal-bg, rgba(0, 0, 0, 0.2));
+    color: inherit;
+    font: inherit;
+    resize: vertical;
+  }
+
+  .field textarea:focus {
+    outline: none;
+    border-color: var(--pane-active-border, #3a6df0);
   }
 
   .toggle-row {

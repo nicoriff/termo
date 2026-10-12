@@ -144,6 +144,15 @@
     if (spec.model && list && !list.some((model) => model.id === spec.model)) spec.model = "";
   }
 
+  const GIT_ROLES = ["none", "reviewer", "fixer"] as const;
+
+  /** What the agent is for in the Git panel's reviews. One that fixes has
+   * to be able to change files, so picking that gives it the least that can. */
+  function chooseGitRole(role: (typeof GIT_ROLES)[number]) {
+    spec.gitRole = role;
+    if (role === "fixer" && spec.autonomy === "read") spec.autonomy = "edit";
+  }
+
   /** The other agents: contacts to choose (step "tools") and ones to
    * follow (step "triggers"). In a team, only its own members; outside,
    * nobody who's in a team. */
@@ -557,6 +566,26 @@
                 <p class="warning">
                   ⚠ {t(risk === "run" ? "agents.wizard.untrustedWarning" : "agents.wizard.leakWarning")}
                 </p>
+              {/if}
+            </section>
+
+            <section class="group">
+              <div class="group-title">{t("agents.wizard.engine.gitRole")}</div>
+              <p class="group-hint">{t("agents.wizard.engine.gitRoleHint")}</p>
+              <div class="chips">
+                {#each GIT_ROLES as role (role)}
+                  <button class="chip" class:selected={(spec.gitRole ?? "none") === role} onclick={() => chooseGitRole(role)}>
+                    {t(`agents.wizard.engine.gitRoles.${role}`)}
+                  </button>
+                {/each}
+              </div>
+              {#if spec.gitRole === "reviewer"}
+                <p class="group-hint">{t("agents.wizard.engine.gitRoleReviewer")}</p>
+              {:else if spec.gitRole === "fixer"}
+                <p class="group-hint">{t("agents.wizard.engine.gitRoleFixer")}</p>
+                {#if spec.autonomy === "read"}
+                  <p class="warning">⚠ {t("agents.wizard.engine.gitRoleFixerNeedsEdit")}</p>
+                {/if}
               {/if}
             </section>
 

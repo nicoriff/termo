@@ -20,6 +20,7 @@ pub mod forge;
 pub mod graph;
 pub mod ops;
 pub mod pr;
+pub mod review;
 pub mod snapshot;
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
@@ -109,6 +110,25 @@ pub fn brings_filters(root: &Path) -> bool {
     config.is_ok_and(|output| defines_filters(&String::from_utf8_lossy(&output.stdout)))
 }
 
+/// Whether a repository's own config (`git config --local --list`) names a
+/// program git would start to look at a change: a filter, an external diff,
+/// or a diff driver's converter. Reading the config never runs one.
+pub fn names_programs(local_config: &str) -> bool {
+    local_config.lines().map(|line| line.split_once('=').map_or(line, |(key, _)| key).trim().to_ascii_lowercase()).any(|key| {
+        key.starts_with("filter.") || key == "diff.external" || (key.starts_with("diff.") && (key.ends_with(".textconv") || key.ends_with(".command")))
+    })
+}
+
+/// Whether an agent that may only look is kept out of `folder`: it's in a
+/// repository whose config names such a program. An agent like that runs
+/// `git diff` and `git status` the way git runs them, programs and all — so
+/// in a folder that came from elsewhere, looking would be running its code.
+pub fn runs_programs_to_look(folder: &Path) -> bool {
+    let Some(root) = repo_root(folder) else { return false };
+    let config = git_command(&root).args(["config", "--local", "--includes", "--list"]).stdin(Stdio::null()).output();
+    config.is_ok_and(|output| names_programs(&String::from_utf8_lossy(&output.stdout)))
+}
+
 /// A commit's id as git prints it: hex, and nothing an option could hide in.
 pub fn is_sha(text: &str) -> bool {
     (4..=64).contains(&text.len()) && text.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -134,6 +154,35 @@ pub fn is_branch_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn programs_the_config_names_for_looking_at_changes_are_spotted() {
+        assert!(names_programs("core.bare=false\nfilter.crypt.clean=git-crypt clean\n"));
+        assert!(names_programs("Diff.External=/tmp/x.sh"));
+        assert!(names_programs("diff.pdf.textconv=pdftotext"));
+        assert!(names_programs("diff.img.command=compare"));
+        // A driver that only names how to find a function's header runs nothing.
+        assert!(!names_programs("diff.rust.xfuncname=^fn\ndiff.renames=true\ndiff.algorithm=histogram\n"));
+        assert!(!names_programs("remote.origin.url=https://x/diff.external.git\n"));
+        assert!(!names_programs(""));
+    }
+
+    #[test]
+    fn a_folder_is_judged_by_the_repository_it_is_in() {
+        let Some(git) = crate::pty::bin_search::find_binary("git") else { return };
+        let base = std::env::temp_dir().join(format!("termo-git-guard-{}", uuid::Uuid::new_v4()));
+        let inside = base.join("src").join("deep");
+        std::fs::create_dir_all(&inside).unwrap();
+        // Not a repository: nothing of git's to run.
+        assert!(!runs_programs_to_look(&inside));
+        let run = |args: &[&str]| assert!(std::process::Command::new(&git).arg("-C").arg(&base).args(args).output().unwrap().status.success());
+        run(&["init", "-q"]);
+        assert!(!runs_programs_to_look(&base) && !runs_programs_to_look(&inside));
+        run(&["config", "diff.external", "anything"]);
+        // From anywhere inside it, not only its top.
+        assert!(runs_programs_to_look(&base) && runs_programs_to_look(&inside));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn filter_drivers_in_the_repositorys_config_are_spotted() {

@@ -120,7 +120,9 @@ pub fn ask(scratch: &Path, request: &QuickRequest, on_step: &dyn Fn(Step)) -> Re
     if request.question.trim().is_empty() {
         return Err("empty question".into());
     }
-    let folder = request.cwd.as_deref().map(Path::new).filter(|folder| folder.is_dir());
+    // A folder whose repository names programs for git to run isn't looked
+    // at (see git::runs_programs_to_look): the question is answered without it.
+    let folder = request.cwd.as_deref().map(Path::new).filter(|folder| folder.is_dir() && !crate::git::runs_programs_to_look(folder));
     if folder.is_none() {
         std::fs::create_dir_all(scratch).map_err(|err| err.to_string())?;
     }
@@ -131,7 +133,7 @@ pub fn ask(scratch: &Path, request: &QuickRequest, on_step: &dyn Fn(Step)) -> Re
         Engine::Gemini => "flash-lite",
         _ => "",
     };
-    let ask = Ask { engine: request.engine, dir: folder.unwrap_or(scratch), model, read_files: folder.is_some(), timeout: TIMEOUT };
+    let ask = Ask { engine: request.engine, dir: folder.unwrap_or(scratch), model, read_files: folder.is_some(), timeout: TIMEOUT, cancel: None };
     let answer = ask_streaming(&ask, prompt(request, folder.is_some()), &schema(), on_step)?;
     let text = answer.value.get("answer").and_then(|answer| answer.as_str()).unwrap_or("").trim().to_string();
     if text.is_empty() {

@@ -103,6 +103,24 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
 export type GitStatusPart = "branch" | "sync" | "changes" | "pr";
 export const GIT_STATUS_PARTS: GitStatusPart[] = ["branch", "sync", "changes", "pr"];
 
+/** What a code review looks at unless told otherwise. */
+export type GitReviewDefaultScope = "changes" | "branch";
+export type GitReviewSeverity = "serious" | "warning" | "suggestion";
+/** Reviewing the branch before a push from Termo. */
+export type GitReviewBeforePush = "off" | "ask";
+
+export interface GitReviewSettings {
+  enabled: boolean;
+  agentId: string;
+  fixAgentId: string;
+  scope: GitReviewDefaultScope;
+  minSeverity: GitReviewSeverity;
+  beforePush: GitReviewBeforePush;
+  onPrCreate: boolean;
+  instructions: string;
+  timeoutMin: number;
+}
+
 interface InitOptions {
   /** MainWindow restores the persisted window size on launch; Preferences
    * opens at its own fixed size and must not fight that. Defaults to true. */
@@ -168,6 +186,18 @@ class AppConfigStore {
   gitPrEnabled = $state(true);
   /** Minutes between fetches made on their own; 0 for never. */
   gitAutoFetchMinutes = $state(0);
+  /** Code reviews by an agent CLI, in the Git panel. */
+  gitReviewEnabled = $state(true);
+  /** The agent of the user's that reviews; empty for the built-in one. */
+  gitReviewAgentId = $state("");
+  /** The agent a finding is handed to to fix; empty for none. */
+  gitReviewFixAgentId = $state("");
+  gitReviewScope = $state<GitReviewDefaultScope>("changes");
+  gitReviewMinSeverity = $state<GitReviewSeverity>("suggestion");
+  gitReviewBeforePush = $state<GitReviewBeforePush>("off");
+  gitReviewOnPrCreate = $state(false);
+  gitReviewInstructions = $state("");
+  gitReviewTimeoutMin = $state(10);
   /** Where an agent's CLI was installed when not npm's own folder, by agent. */
   agentInstallDirs = $state<Record<string, string>>({});
   /** Which Node.js each agent's CLI was last found under (see
@@ -301,6 +331,18 @@ class AppConfigStore {
     };
     this.gitPrEnabled = config.git_pr_enabled ?? true;
     this.gitAutoFetchMinutes = config.git_auto_fetch_minutes ?? 0;
+    this.gitReviewEnabled = config.git_review_enabled ?? true;
+    this.gitReviewAgentId = config.git_review_agent_id ?? "";
+    this.gitReviewFixAgentId = config.git_review_fix_agent_id ?? "";
+    this.gitReviewScope = config.git_review_scope === "branch" ? "branch" : "changes";
+    this.gitReviewMinSeverity =
+      config.git_review_min_severity === "serious" || config.git_review_min_severity === "warning"
+        ? config.git_review_min_severity
+        : "suggestion";
+    this.gitReviewBeforePush = config.git_review_before_push === "ask" ? "ask" : "off";
+    this.gitReviewOnPrCreate = config.git_review_on_pr_create ?? false;
+    this.gitReviewInstructions = config.git_review_instructions ?? "";
+    this.gitReviewTimeoutMin = config.git_review_timeout_min ?? 10;
     this.agentInstallDirs = config.agent_install_dirs ?? {};
     this.agentClisKnown = config.agent_clis_known ?? {};
     this.defaultLayout = config.default_layout;
@@ -509,6 +551,20 @@ class AppConfigStore {
     void this.persist();
   }
 
+  /** One call for every setting of the reviews: they're plain values. */
+  setGitReview(change: Partial<GitReviewSettings>): void {
+    if (change.enabled !== undefined) this.gitReviewEnabled = change.enabled;
+    if (change.agentId !== undefined) this.gitReviewAgentId = change.agentId;
+    if (change.fixAgentId !== undefined) this.gitReviewFixAgentId = change.fixAgentId;
+    if (change.scope !== undefined) this.gitReviewScope = change.scope;
+    if (change.minSeverity !== undefined) this.gitReviewMinSeverity = change.minSeverity;
+    if (change.beforePush !== undefined) this.gitReviewBeforePush = change.beforePush;
+    if (change.onPrCreate !== undefined) this.gitReviewOnPrCreate = change.onPrCreate;
+    if (change.instructions !== undefined) this.gitReviewInstructions = change.instructions.slice(0, 4000);
+    if (change.timeoutMin !== undefined) this.gitReviewTimeoutMin = Math.round(Math.min(60, Math.max(1, change.timeoutMin)));
+    void this.persist();
+  }
+
   setTabsFillWidth(fill: boolean): void {
     this.tabsFillWidth = fill;
     void this.persist();
@@ -625,6 +681,15 @@ class AppConfigStore {
       git_status_pr: this.gitStatusParts.pr,
       git_pr_enabled: this.gitPrEnabled,
       git_auto_fetch_minutes: this.gitAutoFetchMinutes,
+      git_review_enabled: this.gitReviewEnabled,
+      git_review_agent_id: this.gitReviewAgentId,
+      git_review_fix_agent_id: this.gitReviewFixAgentId,
+      git_review_scope: this.gitReviewScope,
+      git_review_min_severity: this.gitReviewMinSeverity,
+      git_review_before_push: this.gitReviewBeforePush,
+      git_review_on_pr_create: this.gitReviewOnPrCreate,
+      git_review_instructions: this.gitReviewInstructions,
+      git_review_timeout_min: this.gitReviewTimeoutMin,
       agent_install_dirs: this.agentInstallDirs,
       agent_clis_known: this.agentClisKnown,
       default_layout: this.defaultLayout,

@@ -541,6 +541,21 @@ pub fn create_call(cli: Cli, new: &NewPr) -> Call {
     }
 }
 
+/// A comment on the branch's request: one for the whole of it, not tied to
+/// a line.
+pub fn comment_call(cli: Cli, body: &str) -> Call {
+    match cli {
+        Cli::Gh => Call { args: strings(&["pr", "comment", "--body-file=-"]), stdin: Some(body.to_string()) },
+        Cli::Glab => Call { args: vec!["mr".into(), "note".into(), format!("--message={body}")], stdin: None },
+    }
+}
+
+/// Leaves `body` as a comment on the branch's request. Blocking.
+pub fn comment(root: &Path, kind: Option<ForgeKind>, body: &str) -> Result<(), String> {
+    let cli = kind.and_then(Cli::for_forge).ok_or_else(|| tr(Msg::PrUnsupported))?;
+    run_calls(cli, root, &[comment_call(cli, body)])
+}
+
 fn run_calls(cli: Cli, root: &Path, calls: &[Call]) -> Result<(), String> {
     for call in calls {
         run_cli(cli, root, &call.args, call.stdin.as_deref()).map_err(|err| match err {
@@ -752,5 +767,17 @@ mod tests {
         let glab = create_call(Cli::Glab, &new);
         assert_eq!(glab.args, ["mr", "create", "--yes", "--title=Git panel", "--description=--draft", "--target-branch=main", "--draft"]);
         assert!(create(Path::new("x"), "topic", Some(ForgeKind::Github), &NewPr::default()).is_err());
+    }
+
+    #[test]
+    fn a_comments_text_is_never_read_as_a_flag() {
+        let gh = comment_call(Cli::Gh, "--web
+second line");
+        assert_eq!(gh.args, ["pr", "comment", "--body-file=-"]);
+        assert_eq!(gh.stdin.as_deref(), Some("--web
+second line"));
+        let glab = comment_call(Cli::Glab, "--web");
+        assert_eq!(glab.args, ["mr", "note", "--message=--web"]);
+        assert!(comment(Path::new("x"), Some(ForgeKind::Bitbucket), "x").is_err());
     }
 }

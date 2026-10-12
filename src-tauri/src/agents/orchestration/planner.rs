@@ -315,7 +315,7 @@ pub fn generate(
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: TIMEOUT };
+    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: TIMEOUT, cancel: None };
     let answer = ask_streaming(&ask, prompt(request, work_dir, &catalog, i18n::current()), &schema(), on_step).map_err(fail)?;
     let draft: PlanDraft = serde_json::from_value(answer.value).map_err(|err| fail(err.to_string()))?;
     let mut orchestration = build(draft, request, work_dir, model, &catalog, uuid::Uuid::new_v4().to_string())
@@ -416,7 +416,7 @@ pub fn clarify(
     if !Path::new(folder).is_dir() {
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
-    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: CLARIFY_TIMEOUT };
+    let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: CLARIFY_TIMEOUT, cancel: None };
     let answer = ask_streaming(&ask, clarify_prompt(request, i18n::current()), &clarify_schema(), on_step).map_err(fail)?;
     #[derive(Deserialize, Default)]
     #[serde(default)]
@@ -552,6 +552,7 @@ pub fn revise(
         model: &orchestration.orchestrator_model,
         read_files: true,
         timeout: TIMEOUT,
+        cancel: None,
     };
     let text = revision_prompt(&orchestration.prompt, plan, instructions, &catalog, i18n::current());
     let answer = ask_streaming(&ask, text, &revision_schema(), on_step).map_err(fail)?;

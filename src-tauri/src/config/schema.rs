@@ -209,6 +209,24 @@ pub struct AppConfig {
     /// Fetching on its own every so many minutes while a repository is in
     /// view; 0 for never.
     pub git_auto_fetch_minutes: u16,
+    /// Code reviews by an agent CLI, in the Git panel (see git/review.rs).
+    pub git_review_enabled: bool,
+    /// The agent of the user's that reviews; empty for the built-in one.
+    pub git_review_agent_id: String,
+    /// The agent of the user's a finding is handed to to fix; empty for none.
+    pub git_review_fix_agent_id: String,
+    /// What a review looks at unless told otherwise: "changes" or "branch".
+    pub git_review_scope: String,
+    /// The least serious finding shown: "serious", "warning" or "suggestion".
+    pub git_review_min_severity: String,
+    /// Reviewing the branch before a push from Termo: "off" or "ask".
+    pub git_review_before_push: String,
+    /// Reviewing the branch when a pull request is opened for it.
+    pub git_review_on_pr_create: bool,
+    /// What every review is asked to mind, in the user's words.
+    pub git_review_instructions: String,
+    /// How long a review may take, in minutes.
+    pub git_review_timeout_min: u16,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -288,6 +306,15 @@ impl Default for AppConfig {
             git_status_pr: true,
             git_pr_enabled: true,
             git_auto_fetch_minutes: 0,
+            git_review_enabled: true,
+            git_review_agent_id: String::new(),
+            git_review_fix_agent_id: String::new(),
+            git_review_scope: "changes".into(),
+            git_review_min_severity: "suggestion".into(),
+            git_review_before_push: "off".into(),
+            git_review_on_pr_create: false,
+            git_review_instructions: String::new(),
+            git_review_timeout_min: 10,
             status_line_wrapped: None,
             last_seen_version: None,
             default_layout: None,
