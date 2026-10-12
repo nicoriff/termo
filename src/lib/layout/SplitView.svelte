@@ -111,7 +111,7 @@
             active={workspaceStore.focusedTileId === loc.tileId &&
               tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
           />
-          <QuickAskTab />
+          <QuickAskTab sessionId={loc.session.id} />
         {/if}
       </div>
     {/if}

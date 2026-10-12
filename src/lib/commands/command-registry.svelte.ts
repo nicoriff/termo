@@ -9,6 +9,7 @@ import { t } from "../i18n/i18n.svelte";
 import { layoutsStore } from "../layout/layouts-store.svelte";
 import { collectSessions, collectTiles } from "../layout/split-tree";
 import { workspaceStore } from "../layout/workspace-store.svelte";
+import { aiStatusStore } from "../ai-mode/ai-status-store.svelte";
 import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { themeStore } from "../theme/theme-store.svelte";
 import { requestAgentLaunch } from "../agent-launch/request-launch";
@@ -99,7 +100,9 @@ export function buildCommands(): Command[] {
         label: uiState.companionOpen ? t("commands.closeCompanion") : t("commands.openCompanion"),
         run: () => uiState.toggleCompanion(),
       });
-      if (appConfigStore.quickAskEnabled) {
+      // Only from a console with an agent in it, like its tab on the edge.
+      const focused = workspaceStore.focusedSessionId;
+      if (appConfigStore.quickAskEnabled && focused && aiStatusStore.byId[focused]?.tool != null) {
         commands.push({
           id: "companion.quickAsk",
           group: "agents",

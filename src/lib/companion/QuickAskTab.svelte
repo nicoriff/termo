@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -7,12 +8,21 @@
 
   const isMac = navigator.platform.toLowerCase().includes("mac");
 
-  const available = $derived(appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.quickAskEnabled);
+  let { sessionId }: { sessionId: string } = $props();
+
+  /** Only on a console with an agent in it: the question is one kept out of
+   * that agent's conversation, and there's none to keep it out of elsewhere. */
+  const available = $derived(
+    appConfigStore.aiModeEnabled &&
+      appConfigStore.companionEnabled &&
+      appConfigStore.quickAskEnabled &&
+      aiStatusStore.byId[sessionId]?.tool != null,
+  );
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("quickAsk"), isMac));
   const label = $derived(t("companion.quick.title"));
 </script>
 
-<!-- A tab on the console's right edge, low down: a sliver until the pointer
+<!-- A tab on an agent console's right edge, low down: a sliver until the pointer
      comes near, then it slides out with its name. The pointerdown is left to
      reach the console's slot, which takes the focus, so the question is asked
      about this console. -->

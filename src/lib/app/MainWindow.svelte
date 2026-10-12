@@ -59,6 +59,12 @@
   /** The quick question is there only with every switch it hangs from on. */
   const quickAskAvailable = $derived(appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.quickAskEnabled);
 
+  /** Asked from a console with an agent in it, and from nowhere else. */
+  function focusedOnAgent(): boolean {
+    const focused = workspaceStore.focusedSessionId;
+    return focused !== null && aiStatusStore.byId[focused]?.tool != null;
+  }
+
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
@@ -194,6 +200,7 @@
     }
     if (
       quickAskAvailable &&
+      focusedOnAgent() &&
       !workspaceStore.overviewOpen &&
       eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("quickAsk"))
     ) {
