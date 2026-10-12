@@ -25,7 +25,13 @@
     aria-label={label}
     onclick={() => uiState.openQuickAsk()}
   >
-    <span class="qa-tab-mark" aria-hidden="true">?</span>
+    <!-- A bolt over a question mark: a quick one. -->
+    <span class="qa-tab-mark" aria-hidden="true">
+      <svg viewBox="0 0 12 12" width="15" height="15">
+        <path d="M7.2 0.8 2.4 6.8h3.2l-0.9 4.4 4.9-6.2H6.3z" fill="currentColor" />
+      </svg>
+      <span>?</span>
+    </span>
     <span class="qa-tab-text">{label}</span>
   </button>
 {/if}
@@ -39,20 +45,21 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
-    /* At rest only the mark's edge shows. */
-    max-width: 14px;
-    padding: 0 8px 0 5px;
+    height: 50px;
+    /* At rest only the mark shows. */
+    max-width: 24px;
+    padding: 0 4px;
     overflow: hidden;
     white-space: nowrap;
     border: 1px solid var(--pane-active-border, #3a6df0);
     border-right: none;
-    border-radius: 14px 0 0 14px;
+    border-radius: 5px 0 0 5px;
     font: inherit;
     font-size: 12px;
     color: #fff;
     background: var(--pane-active-border, #3a6df0);
-    opacity: 0.45;
+    opacity: 0.8;
+    box-shadow: -2px 1px 8px rgba(0, 0, 0, 0.3);
     cursor: pointer;
     transition:
       max-width 180ms ease,
@@ -64,7 +71,7 @@
   .qa-tab:hover,
   .qa-tab:focus-visible {
     max-width: 220px;
-    padding: 0 12px 0 7px;
+    padding: 0 12px 0 6px;
     opacity: 1;
     box-shadow: -4px 2px 14px rgba(0, 0, 0, 0.35);
     outline: none;
@@ -77,7 +84,12 @@
   .qa-tab-mark {
     flex-shrink: 0;
     width: 16px;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    font-size: 14px;
+    line-height: 1;
     font-weight: 700;
   }
 
