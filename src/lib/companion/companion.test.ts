@@ -239,6 +239,13 @@ describe("a quick question", () => {
     expect(quickAskEngine("claude", [])).toBeNull();
   });
 
+  it("is answered by the console's own agent when none is picked", () => {
+    expect(quickAskEngine("", ["claude", "codex"], "codex")).toBe("codex");
+    expect(quickAskEngine("claude", ["claude", "codex"], "codex")).toBe("claude");
+    expect(quickAskEngine("gemini", ["claude"], "grok")).toBe("grok");
+    expect(quickAskEngine("", ["claude"], null)).toBe("claude");
+  });
+
   it("can take the last exchange along only from a Claude Code console", () => {
     expect(sendsExchange("claude")).toBe(true);
     expect(sendsExchange("codex")).toBe(false);

@@ -1884,8 +1884,9 @@ export const es = {
       quickHint:
         "Con {shortcut}, desde la paleta de comandos o con la lengüeta que aparece abajo a la derecha de las consolas con un agente, se abre una caja para hacer una pregunta suelta sin cargarla en la conversación del agente: la responde un modelo chico, en la carpeta de esa consola y sin poder modificar nada. Es otra sesión: no conoce lo que hablaste con el agente, y el agente no se entera de la respuesta salvo que la pegues. Cada pregunta tiene un costo chico.",
       quickEngine: "Quién responde",
-      quickEngineAny: "El primero instalado",
-      quickEngineHint: "Si el que elegís no está instalado, responde el primero que lo esté. En Claude Code se usa su modelo más chico.",
+      quickEngineAny: "El agente de la consola",
+      quickEngineHint:
+        "Por defecto responde el mismo agente que está corriendo en la consola, que seguro está instalado. Si elegís otro y no está instalado, también responde el de la consola. Se usa su modelo más chico donde el agente deja elegirlo (Claude Code: Haiku; Gemini CLI: Flash-Lite); en los demás, su modelo por defecto.",
       quickWithExchange: "Incluir el último intercambio por defecto",
       quickWithExchangeHint:
         "Manda junto con la pregunta tu último mensaje al agente y su respuesta, para preguntar sobre eso. Se puede cambiar en cada pregunta. Por ahora solo en consolas de Claude Code.",
