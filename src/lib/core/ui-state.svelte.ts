@@ -54,6 +54,8 @@ class UiState {
   marketplaceOpen = $state(false);
   diagnosticsOpen = $state(false);
   companionOpen = $state(false);
+  /** The quick question popup: an overlay, since it owns a text box. */
+  quickAskOpen = $state(false);
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
@@ -86,6 +88,7 @@ class UiState {
       this.projectDialog !== null ||
       this.orchestrationDialog ||
       this.marketplaceOpen ||
+      this.quickAskOpen ||
       this.restoreLayoutTarget !== null ||
       this.deleteLayoutTarget !== null ||
       this.quitPrompt !== null
@@ -292,6 +295,16 @@ class UiState {
       this.companionOpen = true;
       this.diagnosticsOpen = false;
     }
+  }
+
+  openQuickAsk(): void {
+    this.quickAskOpen = true;
+  }
+
+  closeQuickAsk(): void {
+    this.quickAskOpen = false;
+    // Its text box took the keyboard from the console; hand it back.
+    this.refocusTerminals();
   }
 
   openCompanion(): void {

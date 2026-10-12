@@ -5,7 +5,6 @@
   import { isMac } from "$lib/core/platform";
   import { rotateConsoleToken, setAgentsInEveryConsole, type ConsoleRegistration } from "$lib/core/agents-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
-  import { NUDGE_KINDS, nudgeTitle } from "$lib/companion/companion";
 
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
 
@@ -54,31 +53,6 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.agents.inActivityBarHint", { shortcut })}</p>
-</section>
-
-<section>
-  <h3>{t("companion.title")}</h3>
-  <label class="toggle-row">
-    <span>{t("preferences.agents.companionNudges")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.companionNudges}
-      onchange={(e) => appConfigStore.setCompanionNudges(e.currentTarget.checked)}
-    />
-  </label>
-  <p class="setting-hint">{t("preferences.agents.companionNudgesHint")}</p>
-  {#if appConfigStore.companionNudges}
-    {#each NUDGE_KINDS as kind (kind)}
-      <label class="toggle-row">
-        <span>{t(nudgeTitle(kind))}</span>
-        <input
-          type="checkbox"
-          checked={!appConfigStore.companionMuted.includes(kind)}
-          onchange={(e) => appConfigStore.setCompanionNotice(kind, e.currentTarget.checked)}
-        />
-      </label>
-    {/each}
-  {/if}
 </section>
 
 <section>

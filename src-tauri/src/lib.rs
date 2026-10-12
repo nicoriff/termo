@@ -159,6 +159,8 @@ pub fn run() {
             commands::companion_commands::companion_overview,
             commands::companion_commands::companion_live,
             commands::companion_commands::companion_advise,
+            commands::companion_commands::companion_quick_ask,
+            commands::companion_commands::companion_last_exchange,
             commands::pty_commands::pty_kill_tree,
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,

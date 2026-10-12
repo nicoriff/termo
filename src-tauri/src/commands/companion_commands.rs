@@ -7,8 +7,9 @@ use serde::Serialize;
 use crate::companion::rules::{self, Finding};
 use crate::companion::sources::{self, SessionFile};
 use crate::companion::summary::{self, SessionSummary};
-use crate::companion::{advice, pricing, SessionUsage};
-use tauri::Manager;
+use crate::agents::draft::Step;
+use crate::companion::{advice, pricing, quick, SessionUsage};
+use tauri::{Emitter, Manager};
 
 /// How many of the latest sessions the panel offers to look at.
 const RECENT: usize = 30;
@@ -54,6 +55,36 @@ pub async fn companion_live(tool: String, session_id: String) -> Result<Option<r
 pub async fn companion_advise(app: tauri::AppHandle, request: advice::AdviceRequest) -> Result<advice::Advice, String> {
     let scratch = app.path().app_data_dir().map_err(|err| err.to_string())?.join("companion").join(".advice");
     off_main(move || advice::advise(&scratch, &request)).await?
+}
+
+/// A step of a quick question being answered, for the popup that asked it.
+#[derive(Serialize, Clone)]
+struct QuickStep {
+    id: String,
+    step: Step,
+}
+
+/// A quick question, answered to one side of the session it came up in (see
+/// companion/quick.rs). `id` names the asking in the `companion-quick-step`
+/// events that tell what the CLI does on the way. The error is the CLI's
+/// own, for the popup to word.
+#[tauri::command]
+pub async fn companion_quick_ask(app: tauri::AppHandle, id: String, request: quick::QuickRequest) -> Result<quick::QuickAnswer, String> {
+    let scratch = app.path().app_data_dir().map_err(|err| err.to_string())?.join("companion").join(".quick");
+    off_main(move || {
+        let on_step = |step: Step| {
+            let _ = app.emit("companion-quick-step", QuickStep { id: id.clone(), step });
+        };
+        quick::ask(&scratch, &request, &on_step)
+    })
+    .await?
+}
+
+/// The last thing asked in a session and what its agent answered, for
+/// sending along with a quick question. None where there's none to read.
+#[tauri::command]
+pub async fn companion_last_exchange(tool: String, session_id: String) -> Result<Option<quick::Exchange>, String> {
+    off_main(move || sources::last_exchange(&tool, &session_id)).await
 }
 
 /// The longest stretch that can be asked for at once.

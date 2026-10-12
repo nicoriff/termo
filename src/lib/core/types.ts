@@ -48,6 +48,8 @@ export interface ShortcutsConfig {
   diagnostics_other: string | null;
   companion_mac: string | null;
   companion_other: string | null;
+  quick_ask_mac: string | null;
+  quick_ask_other: string | null;
   copy_mac: string | null;
   copy_other: string | null;
   paste_mac: string | null;
@@ -108,7 +110,11 @@ export interface AppConfig {
   ai_sound_volume: number;
   ai_dock_badge: boolean;
   agents_in_activity_bar: boolean;
+  companion_enabled?: boolean;
   companion_nudges?: boolean;
+  quick_ask_enabled?: boolean;
+  quick_ask_engine?: string;
+  quick_ask_with_exchange?: boolean;
   companion_muted?: string[];
   agents_from_any_console?: boolean;
   marketplace_source?: string;

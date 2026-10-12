@@ -90,13 +90,24 @@ export function buildCommands(): Command[] {
         label: t("commands.createAgent"),
         run: () => uiState.openAgentWizard(null, true),
       },
-      {
+    );
+    // The Companion and its quick question have switches of their own.
+    if (appConfigStore.companionEnabled) {
+      commands.push({
         id: "companion.open",
         group: "agents",
         label: uiState.companionOpen ? t("commands.closeCompanion") : t("commands.openCompanion"),
         run: () => uiState.toggleCompanion(),
-      },
-    );
+      });
+      if (appConfigStore.quickAskEnabled) {
+        commands.push({
+          id: "companion.quickAsk",
+          group: "agents",
+          label: t("commands.quickAsk"),
+          run: () => uiState.openQuickAsk(),
+        });
+      }
+    }
   }
 
   for (const agent of appConfigStore.aiModeEnabled ? agentsStore.agents : []) {

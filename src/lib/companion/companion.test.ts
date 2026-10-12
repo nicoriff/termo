@@ -9,6 +9,8 @@ import {
   formatUsd,
   nudgeFor,
   projectName,
+  quickAskEngine,
+  sendsExchange,
   sessionCost,
   summarizePeriod,
   tokenShares,
@@ -226,5 +228,20 @@ describe("the notice on the status bar", () => {
     expect(nudgeFor("s", both, 58 * MINUTE, [], seen)?.kind).toBe("contextBloat");
     const later = live({ cacheExpiresAt: 120 * MINUTE, cacheTtlMs: 60 * MINUTE });
     expect(nudgeFor("s", later, 118 * MINUTE, [], seen)?.kind).toBe("cacheExpiring");
+  });
+});
+
+describe("a quick question", () => {
+  it("is answered by the engine picked, when it's installed", () => {
+    expect(quickAskEngine("codex", ["claude", "codex"])).toBe("codex");
+    expect(quickAskEngine("gemini", ["claude", "codex"])).toBe("claude");
+    expect(quickAskEngine("", ["grok"])).toBe("grok");
+    expect(quickAskEngine("claude", [])).toBeNull();
+  });
+
+  it("can take the last exchange along only from a Claude Code console", () => {
+    expect(sendsExchange("claude")).toBe(true);
+    expect(sendsExchange("codex")).toBe(false);
+    expect(sendsExchange(undefined)).toBe(false);
   });
 });
