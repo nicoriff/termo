@@ -123,7 +123,9 @@ export const en: Messages = {
     quick: {
       title: "Quick question",
       open: "Quick question...",
-      answers: "{engine} answers",
+      answers: "{engine} answers · {model}",
+      defaultModel: "its default model",
+      intro: "A one-off question, apart from the agent's conversation: it neither adds to it nor knows it. You can copy the answer or paste it into the console.",
       noEngine: "No agent is installed to answer.",
       clear: "Start over",
       placeholder: "Ask a one-off question… (Enter sends, Shift+Enter for a new line)",
