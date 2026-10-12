@@ -603,6 +603,10 @@ export const en: Messages = {
       aheadOne: "1 commit ahead",
       behind: "{n} behind",
       behindOne: "1 behind",
+      upstream: "Against the remote",
+      upstreamHint: "What there is to push (↑) and to pull (↓) between the branch and the one it tracks on the remote",
+      base: "Against the base branch",
+      baseHint: "What the branch has of its own (↑) and how far the base branch moved since they parted (↓)",
     },
     pr: {
       section: "Pull request",

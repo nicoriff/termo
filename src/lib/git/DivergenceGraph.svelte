@@ -6,7 +6,14 @@
 
   /** Two histories since they parted: the branch in hand and another (what
    * it tracks, or the base branch), each with the commits only it has. */
-  let { ours, theirs, ahead, behind }: { ours: string; theirs: string; ahead: number; behind: number } = $props();
+  let {
+    ours,
+    theirs,
+    ahead,
+    behind,
+    title,
+    hint,
+  }: { ours: string; theirs: string; ahead: number; behind: number; title?: string; hint?: string } = $props();
 
   const level = $derived(ahead === 0 && behind === 0);
   const summary = $derived(
@@ -21,6 +28,9 @@
   );
 </script>
 
+{#if title}
+  <p class="title" title={hint}>{title}</p>
+{/if}
 <div class="divergence" class:level role="img" aria-label={`${ours} / ${theirs}: ${summary}`}>
   <!-- Where they parted, and a line off to each. -->
   <svg class="fork" viewBox="0 0 22 40" aria-hidden="true">
@@ -50,6 +60,15 @@
 <p class="summary">{summary}</p>
 
 <style>
+  .title {
+    margin: 8px 0 0;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+
   .divergence {
     display: flex;
     align-items: stretch;

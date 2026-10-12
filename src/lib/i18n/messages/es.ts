@@ -602,6 +602,10 @@ export const es = {
       aheadOne: "1 commit por delante",
       behind: "{n} por detrás",
       behindOne: "1 por detrás",
+      upstream: "Contra el remoto",
+      upstreamHint: "Lo que falta subir (↑) y bajar (↓) entre la rama y la que sigue en el remoto",
+      base: "Contra la rama base",
+      baseHint: "Lo que la rama tiene de más (↑) y lo que avanzó la rama base desde que se separaron (↓)",
     },
     pr: {
       section: "Pull request",
