@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.20.0",
+    "date": "2026-10-11",
+    "es": [
+      "**Companion**: un panel fijo a la derecha (desde el menú, la paleta o ⌘⇧Y / Ctrl+Shift+Y) que lee las sesiones que tus agentes ya guardan en la computadora y muestra cuánto costaron y por qué: tokens y costo estimado, cómo se reparte el gasto, los turnos más caros y los hábitos que lo encarecen (contexto inflado, caché vencida, un modelo de más para tareas simples, lecturas enormes o repetidas, entre otros), cada uno con qué hacer distinto. Funciona con Claude Code, Codex, Gemini CLI, Copilot CLI y Grok, y todo el análisis es local.",
+      "En el Companion, la vista **Período** suma los últimos 7 o 30 días por agente, modelo y proyecto.",
+      "Cuando un agente termina un turno, el Companion puede avisar en la barra de estado si hay algo para mejorar en esa sesión. No interrumpe ni suena, y elegís sobre qué avisa.",
+      "**Sugerir un prompt mejor**: desde un turno del panel, un agente instalado propone una versión del prompt que gaste menos. Solo se llama cuando lo pedís, y muestra cuánto costó.",
+      "**Pregunta rápida** (apagada por defecto): en una consola con un agente, una lengüeta abajo a la derecha, ⌘⇧H / Ctrl+Shift+H o la paleta abren una caja para hacer una pregunta suelta sin cargarla en la conversación del agente. La responde el mismo agente de esa consola con su modelo más chico donde se puede elegir, en la carpeta de la consola y sin poder modificar nada. La respuesta se puede copiar o pegar en la consola.",
+      "Preferencias → Modo IA tiene una página nueva, **Companion**, para activar o apagar cada una de estas cosas.",
+      "La ventana de Preferencias tiene un borde del color del tema."
+    ],
+    "en": [
+      "**Companion**: a panel docked on the right (from the menu, the palette or ⌘⇧Y / Ctrl+Shift+Y) that reads the sessions your agents already keep on your computer and shows what they cost and why: tokens and estimated cost, how the spending splits, the most expensive turns and the habits that make it cost more (bloated context, expired cache, too large a model for simple tasks, huge or repeated reads, among others), each with what to do differently. It works with Claude Code, Codex, Gemini CLI, Copilot CLI and Grok, and all the analysis is local.",
+      "In the Companion, the **Period** view adds up the last 7 or 30 days by agent, model and project.",
+      "When an agent finishes a turn, the Companion can give notice on the status bar if something in that session could be better. It never interrupts or makes a sound, and you pick what it gives notice of.",
+      "**Suggest a better prompt**: from a turn in the panel, an installed agent proposes a version of the prompt that costs less. It's only called when you ask, and shows what the call cost.",
+      "**Quick question** (off by default): on a console with an agent, a tab at the bottom right, ⌘⇧H / Ctrl+Shift+H or the palette open a box for a one-off question that doesn't go into the agent's conversation. That console's own agent answers it on its smallest model where one can be picked, in the console's folder and unable to change anything. The answer can be copied or pasted into the console.",
+      "Preferences → AI mode has a new page, **Companion**, to turn each of these on or off.",
+      "The Preferences window has a border in the theme's color."
+    ]
+  },
+  {
     "version": "0.19.1",
     "date": "2026-10-11",
     "es": [
