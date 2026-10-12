@@ -122,7 +122,6 @@ export const en: Messages = {
     backToTab: "Back to this tab's session",
     quick: {
       title: "Quick question",
-      open: "Quick question...",
       answers: "{engine} answers · {model}",
       defaultModel: "its default model",
       intro: "A one-off question, apart from the agent's conversation: it neither adds to it nor knows it. You can copy the answer or paste it into the console.",
@@ -1882,7 +1881,7 @@ export const en: Messages = {
         "When an agent finishes a turn, the Companion looks over the session and, if something could be better, says so in a short notice on the status bar. It never interrupts or makes a sound. Below, pick what it gives notice of.",
       quick: "Turn the quick question on",
       quickHint:
-        "{shortcut} opens a box for a one-off question that doesn't go into the agent's conversation: a small model answers it, in that console's folder and unable to change anything. It's another session: it doesn't know what you said to the agent, and the agent doesn't learn the answer unless you paste it. Each question has a small cost.",
+        "{shortcut}, the command palette or the tab at the bottom right of each console opens a box for a one-off question that doesn't go into the agent's conversation: a small model answers it, in that console's folder and unable to change anything. It's another session: it doesn't know what you said to the agent, and the agent doesn't learn the answer unless you paste it. Each question has a small cost.",
       quickEngine: "Who answers",
       quickEngineAny: "The first one installed",
       quickEngineHint: "If the one you pick isn't installed, the first that is answers. On Claude Code its smallest model is used.",

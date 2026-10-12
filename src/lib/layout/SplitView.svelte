@@ -16,6 +16,7 @@
   import ProjectView from "$lib/agents/ProjectView.svelte";
   import OrchestrationView from "$lib/agents/OrchestrationView.svelte";
   import OrchestrationConsole from "$lib/agents/OrchestrationConsole.svelte";
+  import QuickAskTab from "$lib/companion/QuickAskTab.svelte";
   import { fade } from "svelte/transition";
 
   let { node }: { node: SplitNode } = $props();
@@ -110,6 +111,7 @@
             active={workspaceStore.focusedTileId === loc.tileId &&
               tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
           />
+          <QuickAskTab />
         {/if}
       </div>
     {/if}

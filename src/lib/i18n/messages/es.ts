@@ -121,7 +121,6 @@ export const es = {
     backToTab: "Volver a la sesión de esta pestaña",
     quick: {
       title: "Pregunta rápida",
-      open: "Pregunta rápida...",
       answers: "Responde {engine} · {model}",
       defaultModel: "su modelo por defecto",
       intro: "Una pregunta suelta, aparte de la conversación del agente: no la carga ni la conoce. La respuesta podés copiarla o pegarla en la consola.",
@@ -1883,7 +1882,7 @@ export const es = {
         "Cuando un agente termina un turno, el Companion revisa la sesión y, si hay algo para mejorar, lo dice con un aviso corto en la barra de estado. No interrumpe ni suena. Abajo elegís sobre qué avisa.",
       quick: "Activar la pregunta rápida",
       quickHint:
-        "Con {shortcut} se abre una caja para hacer una pregunta suelta sin cargarla en la conversación del agente: la responde un modelo chico, en la carpeta de esa consola y sin poder modificar nada. Es otra sesión: no conoce lo que hablaste con el agente, y el agente no se entera de la respuesta salvo que la pegues. Cada pregunta tiene un costo chico.",
+        "Con {shortcut}, desde la paleta de comandos o con la lengüeta que aparece abajo a la derecha de cada consola, se abre una caja para hacer una pregunta suelta sin cargarla en la conversación del agente: la responde un modelo chico, en la carpeta de esa consola y sin poder modificar nada. Es otra sesión: no conoce lo que hablaste con el agente, y el agente no se entera de la respuesta salvo que la pegues. Cada pregunta tiene un costo chico.",
       quickEngine: "Quién responde",
       quickEngineAny: "El primero instalado",
       quickEngineHint: "Si el que elegís no está instalado, responde el primero que lo esté. En Claude Code se usa su modelo más chico.",
