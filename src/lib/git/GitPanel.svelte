@@ -294,14 +294,28 @@
           </div>
 
           {#if snap.upstream && !snap.upstreamGone}
-            <DivergenceGraph ours={snap.branch ?? "HEAD"} theirs={snap.upstream} ahead={snap.ahead} behind={snap.behind} />
+            <DivergenceGraph
+              title={t("git.divergence.upstream")}
+              hint={t("git.divergence.upstreamHint")}
+              ours={snap.branch ?? "HEAD"}
+              theirs={snap.upstream}
+              ahead={snap.ahead}
+              behind={snap.behind}
+            />
           {:else if snap.upstreamGone}
             <p class="notice warn">{t("git.upstreamGone", { upstream: snap.upstream ?? "" })}</p>
           {:else if snap.branch && snap.remotes.length > 0}
             <p class="notice">{t("git.noUpstream")}</p>
           {/if}
           {#if snap.base}
-            <DivergenceGraph ours={snap.branch ?? "HEAD"} theirs={snap.base.name} ahead={snap.base.ahead} behind={snap.base.behind} />
+            <DivergenceGraph
+              title={t("git.divergence.base")}
+              hint={t("git.divergence.baseHint")}
+              ours={snap.branch ?? "HEAD"}
+              theirs={snap.base.name}
+              ahead={snap.base.ahead}
+              behind={snap.base.behind}
+            />
           {/if}
 
           {#if snap.state}
