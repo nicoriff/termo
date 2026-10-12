@@ -17,6 +17,8 @@
   import UpdateDialog from "./UpdateDialog.svelte";
   import WhatsNewDialog from "./WhatsNewDialog.svelte";
   import { showWhatsNewOnce } from "./whats-new";
+  import MissingAgentsDialog from "$lib/agent-install/MissingAgentsDialog.svelte";
+  import { missingAgents } from "$lib/agent-install/missing-agents-store.svelte";
   import OnboardingWizard from "$lib/onboarding/OnboardingWizard.svelte";
   import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
   import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
@@ -107,7 +109,11 @@
       // when it closes, so quitting halfway brings it back next time.
       if (isFirstWindow()) {
         if (appConfigStore.lastSeenVersion === null) uiState.openOnboarding();
-        else void showWhatsNewOnce();
+        else {
+          void showWhatsNewOnce();
+          // Not on the first run: the setup has its own word on what's installed.
+          void missingAgents.check();
+        }
       }
     })();
 
@@ -379,6 +385,10 @@
     {/if}
     {#if uiState.deleteLayoutTarget}
       <DeleteLayoutDialog />
+    {/if}
+    <!-- After what's new, which says what this version brought. -->
+    {#if uiState.missingAgents && !uiState.whatsNew && !uiState.onboardingOpen}
+      <MissingAgentsDialog />
     {/if}
     {#if uiState.quitPrompt}
       <QuitDialog />

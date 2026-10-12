@@ -180,6 +180,10 @@ pub struct AppConfig {
     /// Where the user installed an agent's CLI when not npm's own folder,
     /// by agent ("grok" → the folder): see marketplace/agent_install.rs.
     pub agent_install_dirs: std::collections::BTreeMap<String, String>,
+    /// Which Node.js each agent's CLI was last found under, by agent
+    /// ("codex" → "v20.20.1"): how the frontend tells one that went missing
+    /// with a change of Node.js (src/lib/agent-install/missing-agents.ts).
+    pub agent_clis_known: std::collections::BTreeMap<String, String>,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
@@ -251,6 +255,7 @@ impl Default for AppConfig {
             agents_from_any_console: false,
             marketplace_source: "official".into(),
             agent_install_dirs: std::collections::BTreeMap::new(),
+            agent_clis_known: std::collections::BTreeMap::new(),
             keep_awake_button: true,
             tabs_fill_width: false,
             status_line_wrapped: None,

@@ -68,6 +68,16 @@ fn npm() -> Option<PathBuf> {
     bin_search::find_binary("npm")
 }
 
+/// The Node.js on the PATH, as it names itself ("v24.21.0"), or None when
+/// there's none. Globally installed packages belong to the one that
+/// installed them, so a change here is what leaves the agents behind.
+pub fn node_version() -> Option<String> {
+    let node = bin_search::find_binary("node")?;
+    let version = agent_cli::run(&node, &["--version"]).ok()?;
+    let version = version.trim();
+    (!version.is_empty() && version.len() <= 40).then(|| version.to_string())
+}
+
 pub fn info(target: AgentTarget) -> InstallInfo {
     let npm = npm();
     let default_dir = npm

@@ -122,6 +122,7 @@ export interface AppConfig {
   /** Where the user installed an agent's CLI when not npm's own folder, by
    * agent. Absent in configs from before Termo could install them. */
   agent_install_dirs?: Record<string, string>;
+  agent_clis_known?: Record<string, string>;
   tabs_fill_width: boolean;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */

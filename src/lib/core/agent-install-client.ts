@@ -31,6 +31,11 @@ export function installAgentCli(tool: ToolId, dir: string | null): Promise<{ pat
   return invoke("install_agent_cli", { tool, dir });
 }
 
+/** The Node.js on the PATH ("v24.21.0"), or null when there's none. */
+export function nodeVersion(): Promise<string | null> {
+  return invoke("node_version");
+}
+
 export function cancelAgentCliInstall(): Promise<void> {
   return invoke("cancel_agent_cli_install");
 }

@@ -149,6 +149,9 @@ class AppConfigStore {
   tabsFillWidth = $state(false);
   /** Where an agent's CLI was installed when not npm's own folder, by agent. */
   agentInstallDirs = $state<Record<string, string>>({});
+  /** Which Node.js each agent's CLI was last found under (see
+   * agent-install/missing-agents.ts). */
+  agentClisKnown = $state<Record<string, string>>({});
   /** Saved layout to open on launch, or null for a single console. */
   defaultLayout = $state<string | null>(null);
   /** Set by the backend when it chains onto the user's Claude Code status
@@ -267,6 +270,7 @@ class AppConfigStore {
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
     this.agentInstallDirs = config.agent_install_dirs ?? {};
+    this.agentClisKnown = config.agent_clis_known ?? {};
     this.defaultLayout = config.default_layout;
     this.statusLineWrapped = config.status_line_wrapped;
     this.lastSeenVersion = config.last_seen_version ?? null;
@@ -426,6 +430,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setAgentClisKnown(known: Record<string, string>): void {
+    this.agentClisKnown = known;
+    void this.persist();
+  }
+
   setKeepAwakeButton(visible: boolean): void {
     this.keepAwakeButton = visible;
     void this.persist();
@@ -546,6 +555,7 @@ class AppConfigStore {
       keep_awake_button: this.keepAwakeButton,
       tabs_fill_width: this.tabsFillWidth,
       agent_install_dirs: this.agentInstallDirs,
+      agent_clis_known: this.agentClisKnown,
       default_layout: this.defaultLayout,
       status_line_wrapped: this.statusLineWrapped,
       last_seen_version: this.lastSeenVersion,
