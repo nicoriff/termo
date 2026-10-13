@@ -1,6 +1,6 @@
-import { sendNotification } from "@tauri-apps/plugin-notification";
 import { onAgentQuestion, onAgentRun, type RunQuestion, type RunRecord } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
+import { notify } from "$lib/core/notification-client";
 import { isPrimaryWindow } from "$lib/core/window-client";
 import { t } from "$lib/i18n/i18n.svelte";
 import { collectSessions } from "$lib/layout/split-tree";
@@ -38,10 +38,12 @@ async function announce(run: RunRecord) {
   if (!(ok ? appConfigStore.aiNotifyFinished : appConfigStore.aiNotifyError)) return;
   if (!(await canNotify())) return;
   const summary = run.summary.replace(/\s+/g, " ").trim();
-  sendNotification({
-    title: t(ok ? "agents.notify.success" : "agents.notify.failed", { name: `${agent.icon} ${agent.name}` }),
-    body: summary.length > MAX_BODY ? `${summary.slice(0, MAX_BODY)}…` : summary,
-  });
+  // Clicked, either notice leads to the run.
+  void notify(
+    t(ok ? "agents.notify.success" : "agents.notify.failed", { name: `${agent.icon} ${agent.name}` }),
+    summary.length > MAX_BODY ? `${summary.slice(0, MAX_BODY)}…` : summary,
+    { kind: "agentRun", agentId: agent.id, runId: run.id, title: agent.name },
+  );
 }
 
 /** A run is waiting on the user: it stands still until it's answered. */
@@ -56,10 +58,11 @@ async function announceQuestion(question: RunQuestion) {
   if (!appConfigStore.aiNotifyAwaiting || watching(question.agentId)) return;
   if (!(await canNotify())) return;
   const text = question.question.replace(/\s+/g, " ").trim();
-  sendNotification({
-    title: t("agents.notify.question", { name: `${agent.icon} ${agent.name}` }),
-    body: text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}…` : text,
-  });
+  void notify(
+    t("agents.notify.question", { name: `${agent.icon} ${agent.name}` }),
+    text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}…` : text,
+    { kind: "agentRun", agentId: agent.id, runId: question.runId, title: agent.name },
+  );
 }
 
 /** Tells the user when an agent that ran on its own is done, and when one

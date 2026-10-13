@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/plugin-notification", () => ({ sendNotification: vi.fn() }));
+vi.mock("$lib/core/notification-client", () => ({ notify: vi.fn() }));
 vi.mock("$lib/core/app-config.svelte", () => ({ appConfigStore: {} }));
 vi.mock("$lib/core/window-client", () => ({ isPrimaryWindow: vi.fn() }));
 vi.mock("$lib/i18n/i18n.svelte", () => ({ t: (key: string) => key }));

@@ -163,6 +163,7 @@ pub fn run() {
             commands::window_commands::open_new_window,
             commands::window_commands::is_primary_window,
             commands::window_commands::report_pending,
+            commands::notification_commands::notify,
             commands::window_commands::set_ui_language,
             commands::window_commands::set_background_blur,
             commands::window_commands::decoration_layout,

@@ -11,6 +11,15 @@
 //! (see agent_sessions.rs). Everything else in the payload is dropped by the
 //! hook, so large payloads (tool results) never touch the file. Lines written
 //! by older builds have only the first three fields and still parse.
+//!
+//! An event with something to tell the user (what it asks permission for,
+//! the last thing the agent said) is preceded by a line of its own,
+//!
+//! `<tool>\tNote\t<text>`
+//!
+//! which is what the notification shows. A line apart rather than one more
+//! field, so a build from before notes skips it as an event it doesn't know
+//! instead of reading it into the cwd.
 
 use serde::Serialize;
 
@@ -34,6 +43,18 @@ pub struct AgentUpdate {
     pub agent_session_id: Option<String>,
     #[serde(rename = "agentCwd")]
     pub agent_cwd: Option<String>,
+    /// What the event has to tell the user, from the note line before it.
+    pub note: Option<String>,
+}
+
+/// The event name of a note line (see the module's docs).
+pub const NOTE: &str = "Note";
+
+/// The text of a note line, if `line` is one.
+pub fn parse_note(line: &str) -> Option<String> {
+    let mut parts = line.trim_end_matches(['\r', '\n']).splitn(3, '\t');
+    let (_tool, event, text) = (parts.next()?, parts.next()?, parts.next()?);
+    (event == NOTE && !text.is_empty()).then(|| text.to_owned())
 }
 
 /// Notification types that mean the agent is blocked on the user: Claude
@@ -78,6 +99,7 @@ pub fn parse_line(line: &str) -> Option<AgentUpdate> {
         status,
         agent_session_id,
         agent_cwd,
+        note: None,
     })
 }
 
@@ -158,6 +180,15 @@ mod tests {
         assert_eq!(update.status, Some(AgentStatus::Finished));
         assert_eq!(update.agent_session_id, None);
         assert_eq!(update.agent_cwd, None);
+    }
+
+    #[test]
+    fn a_note_line_is_told_from_an_event() {
+        assert_eq!(parse_note("claude\tNote\tBash: npm run build").as_deref(), Some("Bash: npm run build"));
+        assert_eq!(parse_note("claude\tNote\t"), None);
+        assert_eq!(parse_note("claude\tStop\t"), None);
+        // And an event's parser, an older build's included, skips it.
+        assert_eq!(status("claude\tNote\tBash: npm run build"), None);
     }
 
     #[test]

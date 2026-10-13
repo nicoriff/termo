@@ -1,11 +1,10 @@
 import { listen } from "@tauri-apps/api/event";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { appConfigStore } from "../core/app-config.svelte";
+import { notify } from "../core/notification-client";
 import { t } from "../i18n/i18n.svelte";
-import { collectSessions } from "../layout/split-tree";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import { getTabId } from "../terminal/pty-registry";
-import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { aiStatusStore, type AiSessionEntry } from "./ai-status-store.svelte";
 import { agentStatusStore, type AgentStatus } from "./agent-status-store.svelte";
 import { TOOL_DISPLAY_NAMES } from "./tool-names";
@@ -26,7 +25,16 @@ interface AgentEventPayload {
   /** The agent's own conversation id, when the hook reported one. */
   agentSessionId?: string | null;
   agentCwd?: string | null;
+  /** What the event has to tell the user: what it asks for, what it said. */
+  note?: string | null;
 }
+
+/** How much of the agent's note goes in the notification. */
+const MAX_BODY = 140;
+
+/** The note of each tab's last hook event, with the status it came with: a
+ * status the screen arrived at later says nothing of what the hook told. */
+const notes = new Map<string, { status: AiSessionStatus | null; note: string }>();
 
 let permission: Promise<boolean> | null = null;
 
@@ -37,10 +45,11 @@ export function canNotify(): Promise<boolean> {
   return permission;
 }
 
-function tabTitle(sessionId: string): string {
-  const root = workspaceStore.root;
-  const session = root ? collectSessions(root).find((loc) => loc.session.id === sessionId)?.session : undefined;
-  return session ? tabTitleStore.titleFor(session.id, session.title) : "";
+/** Under the title: what the agent asks for or said, when its hooks told. */
+function notificationBody(sessionId: string, entry: AiSessionEntry): string {
+  const told = notes.get(sessionId);
+  if (!told || told.status !== entry.status) return "Termo";
+  return `Termo · ${told.note.length > MAX_BODY ? `${told.note.slice(0, MAX_BODY)}…` : told.note}`;
 }
 
 function notificationText(entry: AiSessionEntry, prev: AiSessionEntry | undefined): string | null {
@@ -80,8 +89,14 @@ async function maybeNotify(sessionId: string, entry: AiSessionEntry, prev: AiSes
   playSound(soundFor(entry.tool, entry, prev), appConfigStore.aiSoundVolume);
   const text = notificationText(entry, prev);
   if (!text) return;
+  // Now: the tab's next event brings its own note.
+  const body = notificationBody(sessionId, entry);
   if (!(await canNotify())) return;
-  sendNotification({ title: `${TOOL_DISPLAY_NAMES[entry.tool]}: ${text}`, body: tabTitle(sessionId) });
+  // Clicked, it leads back to this tab.
+  void notify(`${TOOL_DISPLAY_NAMES[entry.tool]}: ${text}`, body, {
+    kind: "session",
+    sessionId,
+  });
 }
 
 /** Feeds hook events into Modo IA and notifies on status transitions.
@@ -98,6 +113,9 @@ export function startAgentAttention(): () => void {
     if (payload.agentSessionId) {
       tabAgentSessions.set(tabId, payload.tool, payload.agentSessionId, payload.agentCwd ?? undefined);
     }
+    // Before the status, whose change is what notifies.
+    if (payload.note) notes.set(tabId, { status: payload.status, note: payload.note });
+    else notes.delete(tabId);
     if (appConfigStore.aiModeEnabled) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
   });
   // Plan usage / context / cost, from Claude Code's status line or from

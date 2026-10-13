@@ -22,7 +22,7 @@ use serde_json::{json, Map, Value};
 use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
-use super::agent_events::{parse_line, AgentUpdate};
+use super::agent_events::{parse_line, parse_note, AgentUpdate, NOTE};
 
 /// First argument that switches the executable into hook mode.
 pub const HOOK_FLAG: &str = "--agent-hook";
@@ -546,19 +546,60 @@ fn append_event(dir: &Path, session: &str, tool: &str, event: &str, input: &str)
     let cwd = string_at("cwd");
 
     let field = |value: &str| value.replace(['\t', '\r', '\n'], " ");
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join(format!("{session}.jsonl")))?;
-    writeln!(
-        file,
-        "{}\t{}\t{}\t{}\t{}",
+    let mut lines = String::new();
+    // What the notification says, on a line of its own before the event's
+    // (see agent_events.rs). Both in one write: the watcher reads them together.
+    if let Some(note) = payload.as_ref().and_then(|payload| note_for(event, payload)) {
+        lines.push_str(&format!("{}\t{}\t{}\n", field(tool), NOTE, note));
+    }
+    lines.push_str(&format!(
+        "{}\t{}\t{}\t{}\t{}\n",
         field(tool),
         field(event),
         field(&detail),
         field(&agent_session_id),
         field(&cwd)
-    )
+    ));
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(format!("{session}.jsonl")))?
+        .write_all(lines.as_bytes())
+}
+
+/// How much of a payload's text is kept for the notification.
+const MAX_NOTE: usize = 200;
+
+/// What an event has to tell the user, in a line: the tool a permission is
+/// asked for and on what, the agent's own notice, the last thing it said, why
+/// it failed. None for the events that only mark the turn going on, and when
+/// the agent's payload doesn't say (each names its fields its own way; the
+/// ones known are tried in turn).
+fn note_for(event: &str, payload: &Value) -> Option<String> {
+    let text = |keys: &[&str]| keys.iter().find_map(|key| payload.get(*key).and_then(Value::as_str)).map(str::to_owned);
+    let note = match event {
+        "PermissionRequest" | "permissionRequest" => {
+            let tool = text(&["tool_name", "toolName"])?;
+            let input = payload.get("tool_input").or_else(|| payload.get("toolInput"));
+            let about = ["command", "file_path", "path", "url", "pattern", "query", "description"]
+                .iter()
+                .find_map(|key| input?.get(*key)?.as_str());
+            match about {
+                Some(about) => format!("{tool}: {about}"),
+                None => tool,
+            }
+        }
+        "Notification" => text(&["message"])?,
+        "Stop" | "AfterAgent" | "agentStop" => text(&["last_assistant_message", "prompt_response"])?,
+        "StopFailure" | "errorOccurred" => text(&["error", "error_message", "message", "reason"])
+            .or_else(|| payload.get("error")?.get("message")?.as_str().map(str::to_owned))?,
+        _ => return None,
+    };
+    // One line of plain text: the agents answer in Markdown.
+    let plain = note.replace("**", "").replace('`', "");
+    let line = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+    let cut: String = line.chars().take(MAX_NOTE).collect();
+    (!cut.is_empty()).then_some(cut)
 }
 
 pub fn forget_session(app: &tauri::AppHandle, id: Uuid) {
@@ -640,8 +681,23 @@ fn read_new_lines(path: &Path, offset: &mut u64) -> Vec<AgentUpdate> {
     let Some(end) = chunk.rfind('\n') else {
         return Vec::new();
     };
-    *offset += (end + 1) as u64;
-    chunk[..=end].lines().filter_map(parse_line).collect()
+    // Nor a note without the event it's about: it waits for it.
+    let last = chunk[..end].rfind('\n').map_or(0, |at| at + 1);
+    let consumed = if parse_note(&chunk[last..end]).is_some() { last } else { end + 1 };
+    *offset += consumed as u64;
+    let mut note = None;
+    let mut updates = Vec::new();
+    for line in chunk[..consumed].lines() {
+        if let Some(text) = parse_note(line) {
+            note = Some(text);
+            continue;
+        }
+        let told = note.take();
+        if let Some(update) = parse_line(line) {
+            updates.push(AgentUpdate { note: told, ..update });
+        }
+    }
+    updates
 }
 
 #[cfg(test)]
@@ -897,6 +953,36 @@ mod tests {
             updates.iter().map(|u| u.status).collect::<Vec<_>>(),
             [Some(AgentStatus::Awaiting), Some(AgentStatus::Finished)]
         );
+    }
+
+    #[test]
+    fn an_event_carries_what_it_has_to_tell_the_user() {
+        let dir = temp_dir();
+        let asks = r#"{"tool_name":"Bash","tool_input":{"command":"npm run build","description":"Build"}}"#;
+        append_event(&dir, "s1", "claude", "PermissionRequest", asks).unwrap();
+        append_event(&dir, "s1", "claude", "PostToolUse", r#"{"tool_name":"Bash"}"#).unwrap();
+        let said = r#"{"last_assistant_message":"**Done**:\n\nthe `build` passes."}"#;
+        append_event(&dir, "s1", "claude", "Stop", said).unwrap();
+        // A note whose event isn't written yet waits for it.
+        fs::OpenOptions::new()
+            .append(true)
+            .open(dir.join("s1.jsonl"))
+            .unwrap()
+            .write_all(b"claude\tNote\tlate\n")
+            .unwrap();
+
+        let mut offset = 0;
+        let updates = read_new_lines(&dir.join("s1.jsonl"), &mut offset);
+        assert_eq!(
+            updates.iter().map(|u| u.note.as_deref()).collect::<Vec<_>>(),
+            [Some("Bash: npm run build"), None, Some("Done: the build passes.")]
+        );
+        assert!(read_new_lines(&dir.join("s1.jsonl"), &mut offset).is_empty());
+        append_event(&dir, "s1", "claude", "StopFailure", "{}").unwrap();
+        let updates = read_new_lines(&dir.join("s1.jsonl"), &mut offset);
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].note.as_deref(), Some("late"));
     }
 
     #[test]

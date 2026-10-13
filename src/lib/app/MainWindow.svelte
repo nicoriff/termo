@@ -59,6 +59,7 @@
   } from "$lib/core/window-client";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { startAgentAttention } from "$lib/ai-mode/attention";
+  import { startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
 
@@ -76,6 +77,7 @@
     let unlisten: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
+    const stopNotificationClicks = startNotificationClicks();
     const stopCompanionNudges = companionNudges.start();
     const stopQuickAsk = quickAskStore.start();
     const stopGit = gitStore.start();
@@ -129,6 +131,7 @@
       unlisten?.();
       stopAgentAttention();
       stopAgentRunAttention();
+      stopNotificationClicks();
       stopCompanionNudges();
       stopQuickAsk();
       stopGit();

@@ -62,6 +62,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Power",
 ] }
 
+# Already in the graph through tauri-plugin-notification, which shows a toast
+# but can't tell when it's clicked (commands/notification_commands.rs).
+tauri-winrt-notification = "0.7"
+
 [target.'cfg(unix)'.dependencies]
 # Already resolved transitively via portable-pty, so declaring it directly
 # for the Modo IA foreground-process lookup (pty/foreground.rs) adds no new

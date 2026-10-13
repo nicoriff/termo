@@ -1,6 +1,6 @@
-import { sendNotification } from "@tauri-apps/plugin-notification";
 import type { Orchestration, OrchestrationStatus, UserQuestion } from "$lib/core/orchestration-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
+import { notify, type NotificationTarget } from "$lib/core/notification-client";
 import { isPrimaryWindow } from "$lib/core/window-client";
 import { t } from "$lib/i18n/i18n.svelte";
 import type { MessageKey } from "$lib/i18n/translate";
@@ -33,15 +33,18 @@ export function newQuestions(before: Orchestration | undefined, after: Orchestra
 }
 
 export async function announceOrchestration(before: Orchestration | undefined, after: Orchestration): Promise<void> {
+  // Clicked, either notice leads to the orchestration.
+  const target: NotificationTarget = { kind: "orchestration", orchestrationId: after.id, title: after.name };
   const asked = newQuestions(before, after);
   if (asked.length > 0) {
     if (!(await isPrimaryWindow().catch(() => true))) return;
     if (!appConfigStore.aiNotifyFinished || !(await canNotify())) return;
     const question = asked[0].question.replace(/\s+/g, " ").trim();
-    sendNotification({
-      title: t("agents.orchestration.notify.question", { agent: asked[0].agent, name: `${after.icon} ${after.name}`.trim() }),
-      body: question.length > MAX_BODY ? `${question.slice(0, MAX_BODY)}…` : question,
-    });
+    void notify(
+      t("agents.orchestration.notify.question", { agent: asked[0].agent, name: `${after.icon} ${after.name}`.trim() }),
+      question.length > MAX_BODY ? `${question.slice(0, MAX_BODY)}…` : question,
+      target,
+    );
     return;
   }
   const title = attentionTitle(before?.status, after.status);
@@ -52,8 +55,9 @@ export async function announceOrchestration(before: Orchestration | undefined, a
   if (!(after.status === "failed" ? appConfigStore.aiNotifyError : appConfigStore.aiNotifyFinished)) return;
   if (!(await canNotify())) return;
   const note = after.note.replace(/\s+/g, " ").trim();
-  sendNotification({
-    title: t(title, { name: `${after.icon} ${after.name}`.trim() }),
-    body: note.length > MAX_BODY ? `${note.slice(0, MAX_BODY)}…` : note,
-  });
+  void notify(
+    t(title, { name: `${after.icon} ${after.name}`.trim() }),
+    note.length > MAX_BODY ? `${note.slice(0, MAX_BODY)}…` : note,
+    target,
+  );
 }
