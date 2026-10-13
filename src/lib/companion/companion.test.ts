@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { Finding, Live, SessionSummary, SessionUsage, Tokens, Turn } from "../core/companion-client";
+import type { Finding, Live, ModelShare, ServerBrief, SessionSummary, SessionUsage, Tokens, Turn } from "../core/companion-client";
 import {
+  dailySpend,
   dearestTurns,
   findingAmount,
   findingParams,
+  foldSlices,
   formatSpan,
   formatTokens,
   formatUsd,
+  modelParts,
   nudgeFor,
   projectName,
   quickAskEngine,
+  roundUp,
   sendsExchange,
   sessionCost,
   summarizePeriod,
@@ -49,6 +53,7 @@ function session(over: Partial<SessionUsage>): SessionUsage {
     subagentTokens: NO_TOKENS,
     subagentCostUsd: null,
     compactions: [],
+    servers: [],
     costUsd: null,
     reportedCostUsd: null,
     coverage: { tokens: true, cache: true, prompts: true, tools: true, subagents: true, priced: true },
@@ -146,10 +151,22 @@ describe("a period", () => {
       costReported: false,
       priced: true,
       models: [],
+      servers: [],
       findings: [],
       ...over,
     };
   }
+
+  const share = (model: string, tokens: number, costUsd: number | null, over: Partial<ModelShare> = {}): ModelShare => ({
+    model,
+    tokens,
+    costUsd,
+    turns: 0,
+    lightTurns: null,
+    lightCostUsd: null,
+    topTier: null,
+    ...over,
+  });
 
   it("adds up its sessions, by agent and by project, dearest first", () => {
     const period = summarizePeriod([
@@ -180,7 +197,91 @@ describe("a period", () => {
   });
 
   it("is empty without sessions", () => {
-    expect(summarizePeriod([])).toEqual({ sessions: 0, tokens: 0, costUsd: 0, unpriced: 0, byTool: [], byProject: [], habits: [] });
+    expect(summarizePeriod([])).toEqual({
+      sessions: 0,
+      tokens: 0,
+      costUsd: 0,
+      unpriced: 0,
+      byTool: [],
+      byModel: [],
+      byProject: [],
+      byServer: [],
+      habits: [],
+    });
+  });
+
+  it("splits each session's cost among its models, and says how many of their messages asked for little", () => {
+    const period = summarizePeriod([
+      // The agent's own figure, subagents and all: twice what its models' requests add up to.
+      summary({
+        costUsd: 8,
+        models: [
+          share("opus", 900, 3, { turns: 10, lightTurns: 4, lightCostUsd: 0.5, topTier: true }),
+          share("haiku", 100, 1, { turns: 2, lightTurns: 2, lightCostUsd: 0.1, topTier: false }),
+        ],
+      }),
+      summary({ costUsd: 2, models: [share("opus", 500, 2, { turns: 5, lightTurns: 1, lightCostUsd: 0.25, topTier: true })] }),
+      // A model without a price: by tokens, of a cost that isn't known.
+      summary({ tool: "gemini", costUsd: null, models: [share("new-model", 700, null, { turns: 3 })] }),
+    ]);
+    expect(period.byModel).toEqual([
+      { key: "opus", sessions: 2, tokens: 1400, costUsd: 8, turns: 15, lightTurns: 5, lightCostUsd: 0.75, topTier: true },
+      { key: "haiku", sessions: 1, tokens: 100, costUsd: 2, turns: 2, lightTurns: 2, lightCostUsd: 0.1, topTier: false },
+      { key: "new-model", sessions: 1, tokens: 700, costUsd: 0, turns: 3, lightTurns: null, lightCostUsd: null, topTier: null },
+    ]);
+    expect(modelParts(summary({ costUsd: 6, models: [share("a", 100, null), share("b", 200, 1)] })).map((part) => part.costUsd)).toEqual([2, 4]);
+  });
+
+  it("draws the dearest few as parts of a ring, and the rest as one", () => {
+    const slices = [5, 3, 0, 2, 1].map((value, index) => ({ key: `k${index}`, label: `n${index}`, value }));
+    expect(foldSlices(slices, 5, "Others").map((slice) => slice.key)).toEqual(["k0", "k1", "k3", "k4"]);
+    expect(foldSlices(slices, 2, "Others")).toEqual([slices[0], slices[1], { key: "", label: "Others", value: 3, rest: true }]);
+  });
+
+  it("puts the servers never called first, with what carrying them cost", () => {
+    const server = (name: string, calls: number, carriedUsd: number | null, contextTokens = 100): ServerBrief => ({
+      name,
+      tools: 3,
+      contextTokens,
+      calls,
+      carriedUsd,
+    });
+    const period = summarizePeriod([
+      summary({ servers: [server("docs", 2, 0.4), server("vercel", 0, 1.5, 2900), server("drive", 0, null)] }),
+      summary({ servers: [server("docs", 0, 0.1), server("vercel", 0, 0.5, 3300)] }),
+    ]);
+    expect(period.byServer).toEqual([
+      { name: "vercel", sessions: 2, usedSessions: 0, calls: 0, contextTokens: 3300, idleUsd: 2 },
+      { name: "drive", sessions: 1, usedSessions: 0, calls: 0, contextTokens: 100, idleUsd: null },
+      // Used in one session; what it cost in the other is all that was idle.
+      { name: "docs", sessions: 2, usedSessions: 1, calls: 2, contextTokens: 100, idleUsd: 0.1 },
+    ]);
+  });
+
+  it("draws each day's spend by model, on a round scale", () => {
+    const at = (day: number, hour = 12) => new Date(2026, 9, day, hour).getTime();
+    const spend = dailySpend(
+      [
+        summary({ endedAt: at(12, 9), costUsd: 30, models: [share("opus", 10, 20), share("haiku", 10, 10)] }),
+        summary({ endedAt: at(12, 1), costUsd: 4, models: [share("sonnet", 10, 4)] }),
+        summary({ endedAt: at(10), costUsd: 7, models: [share("opus", 10, 7)] }),
+        // Worked in before the period began.
+        summary({ endedAt: at(2), costUsd: 99, models: [share("opus", 10, 99)] }),
+      ],
+      3,
+      at(12, 18),
+      ["opus", "haiku"],
+    );
+    expect(spend.unit).toBe("usd");
+    expect(spend.days.map((day) => new Date(day.at).getDate())).toEqual([9, 10, 11, 12]);
+    expect(spend.days.map((day) => day.total)).toEqual([0, 7, 0, 34]);
+    // Opus, Haiku, and every other model together.
+    expect(spend.days[3].parts).toEqual([20, 10, 4]);
+    expect(spend.top).toBe(50);
+
+    const unpriced = dailySpend([summary({ endedAt: at(12), costUsd: null, models: [share("new-model", 700, null)] })], 3, at(12, 18), []);
+    expect([unpriced.unit, unpriced.days[3].parts, unpriced.top]).toEqual(["tokens", [700], 1000]);
+    expect([roundUp(0), roundUp(0.13), roundUp(1), roundUp(101)]).toEqual([1, 0.2, 1, 200]);
   });
 
   it("names a project by its folder", () => {

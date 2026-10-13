@@ -126,6 +126,21 @@ pub struct Coverage {
     pub priced: bool,
 }
 
+/// An MCP server the session had connected: what having it there put in
+/// every request, and whether it was ever called.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerUse {
+    pub name: String,
+    /// The tools of it the agent was told of.
+    pub tools: u32,
+    /// Characters every request carried for it: its instructions and its
+    /// tools' names. Not the tools' own descriptions, which the agent's
+    /// files only keep for the ones it went and loaded.
+    pub context_chars: u64,
+    pub calls: u32,
+}
+
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionUsage {
@@ -142,6 +157,9 @@ pub struct SessionUsage {
     pub subagent_tokens: Tokens,
     pub subagent_cost_usd: Option<f64>,
     pub compactions: Vec<Compaction>,
+    /// The MCP servers it had connected, by name. Empty for the agents whose
+    /// files don't say: only Claude Code's do.
+    pub servers: Vec<ServerUse>,
     /// At API prices; None when a model's price isn't known.
     pub cost_usd: Option<f64>,
     /// The agent's own figure, when it wrote one down.

@@ -206,7 +206,7 @@ fn cache_expired(session: &SessionUsage) -> Option<Finding> {
     )
 }
 
-fn is_trivial(turn: &Turn) -> bool {
+pub(crate) fn is_trivial(turn: &Turn) -> bool {
     !turn.automatic
         && turn.request_count >= 1
         && turn.request_count <= TRIVIAL_REQUESTS

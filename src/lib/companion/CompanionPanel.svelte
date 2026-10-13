@@ -12,8 +12,14 @@
   import type { SessionSummary, Turn } from "$lib/core/companion-client";
   import { aiEngine } from "$lib/agents/ai-engine.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import Donut from "./Donut.svelte";
+  import PeriodChart from "./PeriodChart.svelte";
   import {
+    CHART_SERIES,
+    dailySpend,
     dearestTurns,
+    foldSlices,
+    type Slice,
     FINDING_TEXT,
     findingAmount,
     findingParams,
@@ -30,9 +36,11 @@
 
   /** How many of the costliest turns are listed. */
   const DEAREST = 5;
-  /** How many projects, and how many sessions, the period view lists. */
-  const PROJECTS = 6;
+  /** How many servers and sessions the period view lists. */
+  const SERVERS = 8;
   const SESSIONS = 25;
+  /** About four characters to a token (see src-tauri/src/companion/summary.rs). */
+  const CHARS_PER_TOKEN = 4;
 
   /** One session in detail, or a stretch of days of all of them. */
   let view = $state<"session" | "period">("session");
@@ -69,13 +77,64 @@
   });
 
   const period = $derived(companionStore.overview ? summarizePeriod(companionStore.overview) : null);
-  /** How wide a row's bar is: its share of the period's cost, or of its
-   * tokens when none of it has a cost. */
-  const share = (row: { costUsd: number; tokens: number }) => {
-    if (!period) return 0;
-    const part = period.costUsd > 0 ? row.costUsd / period.costUsd : row.tokens / (period.tokens || 1);
-    return Math.round(part * 100);
-  };
+  /** What the rings are cut by: cost, or tokens when none of the period has
+   * one. */
+  const priced = $derived(period !== null && period.costUsd > 0);
+  const measure = (row: { costUsd: number; tokens: number }) => (priced ? row.costUsd : row.tokens);
+  const amount = (value: number) => (priced ? formatUsd(value) : formatTokens(value));
+  const rowHint = (row: { sessions: number; tokens: number }) =>
+    t("companion.period.rowMeta", { sessions: String(row.sessions), tokens: formatTokens(row.tokens) });
+
+  const modelSlices = $derived.by((): Slice[] => {
+    if (!period) return [];
+    const slices = period.byModel.map((row): Slice => {
+      const slice: Slice = {
+        key: row.key,
+        label: row.key,
+        value: measure(row),
+        hint: `${row.key}\n${t("companion.period.modelMeta", { turns: String(row.turns), tokens: formatTokens(row.tokens) })}`,
+      };
+      // Worth a word only on a model that's more than such messages need.
+      if (!row.topTier || !row.lightTurns || row.turns === 0) return slice;
+      const fit = { light: String(row.lightTurns), turns: String(row.turns) };
+      const said = row.lightCostUsd
+        ? t("companion.period.fitSomeCost", { ...fit, amount: formatUsd(row.lightCostUsd) })
+        : t("companion.period.fitSome", fit);
+      return {
+        ...slice,
+        note: t("companion.period.fitNote", { percent: String(Math.max(1, Math.round((row.lightTurns / row.turns) * 100))) }),
+        noteHint: `${said}\n${t("companion.period.fitHint")}`,
+      };
+    });
+    return foldSlices(slices, CHART_SERIES, t("companion.period.otherModels"));
+  });
+  const toolSlices = $derived(
+    foldSlices(
+      (period?.byTool ?? []).map((row) => ({ key: row.key, label: TOOL_DISPLAY_NAMES[row.key], value: measure(row), hint: rowHint(row) })),
+      CHART_SERIES,
+      t("companion.period.others"),
+    ),
+  );
+  const projectSlices = $derived(
+    foldSlices(
+      (period?.byProject ?? []).map((row) => ({
+        key: row.key ?? "",
+        label: row.key ? projectName(row.key) : t("companion.period.noProject"),
+        value: measure(row),
+        hint: row.key ? `${row.key}\n${rowHint(row)}` : rowHint(row),
+      })),
+      CHART_SERIES,
+      t("companion.period.others"),
+    ),
+  );
+  /** The models the chart tells apart by color: the period's dearest. A
+   * model keeps its color in the ring under the chart. */
+  const chartModels = $derived(period ? period.byModel.slice(0, CHART_SERIES).map((row) => row.key) : []);
+  const spend = $derived(
+    companionStore.overview && period && period.sessions > 0
+      ? dailySpend(companionStore.overview, companionStore.days, Date.now(), chartModels)
+      : null,
+  );
 
   // The period is read when it's first looked at, and then on asking.
   $effect(() => {
@@ -259,38 +318,77 @@
           </p>
         </section>
 
+        {#if modelSlices.length > 0}
+          <section class="list">
+            <h2>{t("companion.period.byModel")}</h2>
+            <div class="card">
+              {#if spend}
+                <span class="label">{t(spend.unit === "usd" ? "companion.period.chartCost" : "companion.period.chartTokens")}</span>
+                <PeriodChart {spend} models={chartModels} />
+              {/if}
+              <Donut label={t("companion.period.byModel")} slices={modelSlices} format={amount} />
+            </div>
+          </section>
+        {/if}
+
         <section class="list">
           <h2>{t("companion.period.byAgent")}</h2>
-          {#each period.byTool as row (row.key)}
-            <div class="row">
-              <div class="row-top">
-                <span class="session-kind"><ConsoleIcon kind={row.key} size={14} /></span>
-                <span class="row-name">{TOOL_DISPLAY_NAMES[row.key]}</span>
-                <span class="value">{row.costUsd > 0 ? formatUsd(row.costUsd) : "—"}</span>
-              </div>
-              <div class="bar thin" aria-hidden="true"><span class="segment plain" style="width:{share(row)}%"></span></div>
-              <p class="meta">
-                {t("companion.period.rowMeta", { sessions: String(row.sessions), tokens: formatTokens(row.tokens) })}
-              </p>
-            </div>
-          {/each}
+          <div class="card">
+            <Donut label={t("companion.period.byAgent")} slices={toolSlices} format={amount} />
+          </div>
         </section>
 
         <section class="list">
           <h2>{t("companion.period.byProject")}</h2>
-          {#each period.byProject.slice(0, PROJECTS) as row (row.key ?? "")}
-            <div class="row">
-              <div class="row-top">
-                <span class="row-name" title={row.key ?? ""}>{row.key ? projectName(row.key) : t("companion.period.noProject")}</span>
-                <span class="value">{row.costUsd > 0 ? formatUsd(row.costUsd) : "—"}</span>
-              </div>
-              <div class="bar thin" aria-hidden="true"><span class="segment plain" style="width:{share(row)}%"></span></div>
-              <p class="meta">
-                {t("companion.period.rowMeta", { sessions: String(row.sessions), tokens: formatTokens(row.tokens) })}
-              </p>
-            </div>
-          {/each}
+          <div class="card">
+            <Donut label={t("companion.period.byProject")} slices={projectSlices} format={amount} />
+          </div>
         </section>
+
+        {#if period.byServer.length > 0}
+          <section class="list">
+            <h2>{t("companion.period.servers")}</h2>
+            {#each period.byServer.slice(0, SERVERS) as row (row.name)}
+              {@const unused = row.usedSessions === 0}
+              <article class="card server" class:unused>
+                <div class="row-top">
+                  <span class="server-name" title={row.name}>{row.name}</span>
+                  {#if unused}<span class="badge warning">{t("companion.period.serverUnused")}</span>{/if}
+                </div>
+                <div class="bar thin" aria-hidden="true">
+                  <span class="segment plain" style="width:{(row.usedSessions / row.sessions) * 100}%"></span>
+                </div>
+                <div class="figures three">
+                  <div class="figure">
+                    <span class="label">{t("companion.period.serverSessions")}</span>
+                    <span class="stat">
+                      {t("companion.period.serverOf", { used: String(row.usedSessions), sessions: String(row.sessions) })}
+                    </span>
+                  </div>
+                  <div class="figure" title={t("companion.period.serverWeightHint")}>
+                    <span class="label">{t("companion.period.serverWeight")}</span>
+                    <span class="stat">{row.contextTokens > 0 ? formatTokens(row.contextTokens) : "—"}</span>
+                  </div>
+                  {#if unused}
+                    <div class="figure" title={t("companion.period.serverIdleHint")}>
+                      <span class="label">{t("companion.period.serverIdle")}</span>
+                      <span class="stat">{row.idleUsd != null && row.idleUsd >= 0.01 ? formatUsd(row.idleUsd) : "—"}</span>
+                    </div>
+                  {:else}
+                    <div class="figure">
+                      <span class="label">{t("companion.period.serverUses")}</span>
+                      <span class="stat">{row.calls}</span>
+                    </div>
+                  {/if}
+                </div>
+              </article>
+            {/each}
+            <p class="meta">
+              {#if period.byServer.some((row) => row.usedSessions === 0)}{t("companion.period.serversTip")}{/if}
+              {t("companion.period.serversNote")}
+            </p>
+          </section>
+        {/if}
 
         <section class="list">
           <h2>{t("companion.period.habits")}</h2>
@@ -424,6 +522,25 @@
         {/each}
       </section>
 
+      {#if session.servers.length > 0}
+        <section class="list">
+          <h2>{t("companion.servers.title")}</h2>
+          <div class="card">
+            {#each session.servers as server (server.name)}
+              <div class="row-top">
+                <span class="row-name" title={server.name}>{server.name}</span>
+                <span class="meta">
+                  {server.calls > 0 ? t("companion.servers.uses", { calls: String(server.calls) }) : t("companion.servers.unused")}
+                  {#if server.contextChars > 0}
+                    · {t("companion.servers.weight", { tokens: formatTokens(server.contextChars / CHARS_PER_TOKEN) })}
+                  {/if}
+                </span>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
       {#if dearest.length > 0}
         <section class="list">
           <h2>{t("companion.turnsTitle")}</h2>
@@ -517,6 +634,47 @@
     --cp-cache-write: #f5a623;
     --cp-cache-read: #5fb878;
     --cp-output: #c586c0;
+    /* The models, by their place in the chart; `other` is all the rest. In
+       this order each one stays apart from its neighbours for the colorblind
+       too. */
+    --cp-s1: #3987e5;
+    --cp-s2: #d95926;
+    --cp-s3: #199e70;
+    --cp-s4: #c98500;
+    --cp-s5: #d55181;
+    --cp-other: #898781;
+    --cp-light: #fab219;
+  }
+
+  /* The same hues, stepped for a light theme's background. */
+  @supports (color: light-dark(#000, #fff)) {
+    .cp-panel {
+      --cp-s1: light-dark(#2a78d6, #3987e5);
+      --cp-s2: light-dark(#eb6834, #d95926);
+      --cp-s3: light-dark(#1baf7a, #199e70);
+      --cp-s4: light-dark(#eda100, #c98500);
+      --cp-s5: light-dark(#e87ba4, #d55181);
+    }
+  }
+
+  .server.unused {
+    border-color: color-mix(in srgb, var(--cp-light) 60%, transparent);
+  }
+
+  .server-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stat {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
 
   .resize-handle {

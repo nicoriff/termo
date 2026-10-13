@@ -10,10 +10,14 @@
 //! - `system` / `compact_boundary`: the conversation was summarized.
 //! - `ai-title` and `cost-state`: the session's name and Claude Code's own
 //!   cost figure, the latter only once it has written one.
+//! - `attachment` lines: what Claude Code adds to the conversation on its
+//!   own. Two of them say which MCP servers are connected: the names of the
+//!   tools the model is told of (`deferred_tools_delta`) and each server's
+//!   instructions (`mcp_instructions_delta`).
 //!
 //! Subagents write their own files, under `<session>/subagents/`.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -21,7 +25,7 @@ use serde_json::Value;
 
 use super::{excerpt, jsonl, millis, modified_millis, SessionFile, Size};
 use crate::companion::quick::Exchange;
-use crate::companion::{pricing, Compaction, Coverage, Request, SessionUsage, Tokens, Turn};
+use crate::companion::{pricing, Compaction, Coverage, Request, ServerUse, SessionUsage, Tokens, Turn};
 
 const TOOL: &str = "claude";
 
@@ -53,6 +57,19 @@ struct Line {
     title: Option<String>,
     #[serde(rename = "totalCostUSD")]
     total_cost: Option<f64>,
+    attachment: Option<Attachment>,
+}
+
+/// Loosely typed: an attachment of another kind can use these names for
+/// something else, and that mustn't cost the line.
+#[derive(Deserialize)]
+struct Attachment {
+    #[serde(rename = "type", default)]
+    kind: String,
+    #[serde(rename = "addedNames")]
+    names: Option<Value>,
+    #[serde(rename = "addedBlocks")]
+    blocks: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -170,20 +187,24 @@ pub fn read(path: &Path) -> Option<SessionUsage> {
         ..Default::default()
     };
     let mut subagents = Subagents::default();
+    let mut servers = Servers::default();
     let mut seen = HashSet::new();
     for line in jsonl::<Line>(path)? {
-        take(&mut session, &mut subagents, &mut seen, line);
+        take(&mut session, &mut subagents, &mut servers, &mut seen, line);
     }
     // Next to the session's file, in a folder of its name.
     let own = path.with_extension("").join("subagents");
     for entry in std::fs::read_dir(own).into_iter().flatten().flatten() {
         let mut seen = HashSet::new();
         for line in jsonl::<Line>(&entry.path()).into_iter().flatten() {
+            // A server only a subagent called was used all the same.
+            servers.called_in(&line);
             if let Some(request) = request_of(&line, &mut seen) {
                 subagents.add(&request);
             }
         }
     }
+    session.servers = servers.finish();
     session.subagent_tokens = subagents.tokens;
     session.subagent_cost_usd = if subagents.unpriced { None } else { Some(subagents.cost) };
     session.finish();
@@ -204,6 +225,91 @@ impl Subagents {
             Some(cost) => self.cost += cost,
             None => self.unpriced = true,
         }
+    }
+}
+
+/// A tool of an MCP server is named `mcp__<server>__<tool>`.
+const MCP_PREFIX: &str = "mcp__";
+
+/// The server a tool belongs to, as its name is written in the tool's.
+fn server_of(tool: &str) -> Option<&str> {
+    tool.strip_prefix(MCP_PREFIX)?.split_once("__").map(|(server, _)| server).filter(|server| !server.is_empty())
+}
+
+/// A server's name the way Claude Code writes it into its tools' names:
+/// "claude.ai Docs" is the `claude_ai_Docs` of `mcp__claude_ai_Docs__read`.
+fn server_key(name: &str) -> String {
+    name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect()
+}
+
+#[derive(Default)]
+struct Server {
+    /// As its instructions call it, where it has any.
+    name: Option<String>,
+    tools: BTreeSet<String>,
+    instruction_chars: u64,
+    calls: u32,
+}
+
+/// The MCP servers a session had, by the name in their tools'. Claude Code
+/// says the same of them again after a compaction, so they're kept by name
+/// and never added up.
+#[derive(Default)]
+struct Servers(BTreeMap<String, Server>);
+
+impl Servers {
+    fn note(&mut self, attachment: &Attachment) {
+        let strings = |value: &Option<Value>| -> Vec<String> {
+            let items = value.as_ref().and_then(Value::as_array).into_iter().flatten();
+            items.map(|item| item.as_str().unwrap_or_default().to_string()).collect()
+        };
+        match attachment.kind.as_str() {
+            "deferred_tools_delta" => {
+                for tool in strings(&attachment.names) {
+                    if let Some(server) = server_of(&tool) {
+                        self.0.entry(server.to_string()).or_default().tools.insert(tool);
+                    }
+                }
+            }
+            "mcp_instructions_delta" => {
+                let blocks = strings(&attachment.blocks);
+                for (index, name) in strings(&attachment.names).into_iter().enumerate() {
+                    if name.is_empty() {
+                        continue;
+                    }
+                    let server = self.0.entry(server_key(&name)).or_default();
+                    let chars = blocks.get(index).map(|block| block.chars().count() as u64).unwrap_or(0);
+                    server.instruction_chars = server.instruction_chars.max(chars);
+                    server.name = Some(name);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Counts the calls an `assistant` line makes to a server's tools.
+    fn called_in(&mut self, line: &Line) {
+        let Some(Content::Blocks(blocks)) = line.message.as_ref().and_then(|message| message.content.as_ref()) else {
+            return;
+        };
+        for block in blocks.iter().filter(|block| block.kind == "tool_use") {
+            if let Some(server) = block.name.as_deref().and_then(server_of) {
+                self.0.entry(server.to_string()).or_default().calls += 1;
+            }
+        }
+    }
+
+    fn finish(self) -> Vec<ServerUse> {
+        self.0
+            .into_iter()
+            .map(|(key, server)| ServerUse {
+                name: server.name.unwrap_or(key),
+                tools: server.tools.len() as u32,
+                // Each name goes on a line of its own.
+                context_chars: server.instruction_chars + server.tools.iter().map(|tool| tool.chars().count() as u64 + 1).sum::<u64>(),
+                calls: server.calls,
+            })
+            .collect()
     }
 }
 
@@ -305,7 +411,7 @@ fn said(line: &Line) -> Said {
     Said::Prompt(text.to_string())
 }
 
-fn take(session: &mut SessionUsage, subagents: &mut Subagents, seen: &mut HashSet<String>, line: Line) {
+fn take(session: &mut SessionUsage, subagents: &mut Subagents, servers: &mut Servers, seen: &mut HashSet<String>, line: Line) {
     let at = line.timestamp.as_deref().map(millis).unwrap_or(0);
     if at > 0 {
         if session.started_at == 0 {
@@ -329,8 +435,14 @@ fn take(session: &mut SessionUsage, subagents: &mut Subagents, seen: &mut HashSe
                 });
             }
         }
+        "attachment" => {
+            if let Some(attachment) = &line.attachment {
+                servers.note(attachment);
+            }
+        }
         // Older versions logged subagents in the session's own file.
         "assistant" if line.sidechain => {
+            servers.called_in(&line);
             if let Some(request) = request_of(&line, seen) {
                 subagents.add(&request);
             }
@@ -340,6 +452,7 @@ fn take(session: &mut SessionUsage, subagents: &mut Subagents, seen: &mut HashSe
                 // A resumed session picks up without a prompt of its own.
                 session.turns.push(Turn { at, automatic: true, ..Default::default() });
             }
+            servers.called_in(&line);
             let request = request_of(&line, seen);
             let turn = session.turns.last_mut().expect("just made sure of one");
             if let Some(effort) = line.effort.as_ref().and_then(Value::as_str) {
@@ -501,6 +614,44 @@ mod tests {
         assert_eq!(session.subagent_cost_usd, Some(0.1));
         assert_eq!(session.tokens.input, 1_000_100);
         assert_eq!(session.turns.len(), 1);
+    }
+
+    #[test]
+    fn the_servers_connected_are_told_from_the_ones_called() {
+        let said = |id: &str, blocks: Value| assistant(id, "2026-10-01T10:00:05Z", "claude-opus-5-5", usage(1, 0, 0, 1), blocks);
+        let tools = json!({ "type": "attachment", "attachment": { "type": "deferred_tools_delta",
+            "addedNames": ["WebFetch", "mcp__claude_ai_Docs__read", "mcp__claude_ai_Docs__update", "mcp__plugin_vercel_vercel__deploy"] } });
+        let (dir, path) = session_file(&[
+            tools.clone(),
+            json!({ "type": "attachment", "attachment": { "type": "mcp_instructions_delta",
+                "addedNames": ["claude.ai Docs"], "addedBlocks": ["## Docs\nUse them."] } }),
+            // Another kind of attachment, using a name of theirs for something else.
+            json!({ "type": "attachment", "attachment": { "type": "agent_listing_delta", "addedNames": "none" } }),
+            json!({ "type": "user", "timestamp": "2026-10-01T10:00:00Z", "message": { "role": "user", "content": "write it up" } }),
+            said("m1", json!([{ "type": "tool_use", "name": "mcp__claude_ai_Docs__read", "input": {} }])),
+            said("m2", json!([{ "type": "tool_use", "name": "mcp__github__list_issues", "input": {} }])),
+            // Said again after a compaction: the same tools, not more of them.
+            tools,
+        ]);
+        let subagents = dir.join("abc-123").join("subagents");
+        std::fs::create_dir_all(&subagents).unwrap();
+        let line = said("s1", json!([{ "type": "tool_use", "name": "mcp__claude_ai_Docs__update", "input": {} }]));
+        std::fs::write(subagents.join("agent-a.jsonl"), line.to_string()).unwrap();
+        let session = read(&path).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+
+        let server = |name: &str, tools, context_chars, calls| ServerUse { name: name.into(), tools, context_chars, calls };
+        assert_eq!(
+            session.servers,
+            [
+                // Its instructions (17) and the names of its two tools, a line each.
+                server("claude.ai Docs", 2, 17 + 26 + 28, 2),
+                // Called without ever being announced: nothing is known of its weight.
+                server("github", 0, 0, 1),
+                server("plugin_vercel_vercel", 1, 34, 0),
+            ]
+        );
+        assert_eq!(session.turns[0].tool_calls, 2);
     }
 
     #[test]

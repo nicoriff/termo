@@ -54,6 +54,18 @@ export interface Coverage {
 
 export type CompanionTool = "claude" | "codex" | "gemini" | "copilot" | "grok";
 
+/** An MCP server a session had connected: what having it there put in every
+ * request, and whether it was ever called. */
+export interface ServerUse {
+  name: string;
+  /** The tools of it the agent was told of. */
+  tools: number;
+  /** Characters every request carried for it: its instructions and its
+   * tools' names. */
+  contextChars: number;
+  calls: number;
+}
+
 export interface SessionUsage {
   tool: CompanionTool;
   sessionId: string;
@@ -67,6 +79,8 @@ export interface SessionUsage {
   subagentTokens: Tokens;
   subagentCostUsd: number | null;
   compactions: Compaction[];
+  /** Empty for the agents whose files don't say: only Claude Code's do. */
+  servers: ServerUse[];
   costUsd: number | null;
   /** The agent's own figure, when it wrote one down. */
   reportedCostUsd: number | null;
@@ -209,6 +223,26 @@ export interface ModelShare {
   model: string;
   tokens: number;
   costUsd: number | null;
+  /** The prompts the user typed that it did most of the answering of. */
+  turns: number;
+  /** Of those, the ones that asked for little, and what they cost; null
+   * where the agent's files don't say enough to tell. */
+  lightTurns: number | null;
+  lightCostUsd: number | null;
+  /** One of the dear ones; null when its price isn't known. */
+  topTier: boolean | null;
+}
+
+/** An MCP server a session had connected, in brief. */
+export interface ServerBrief {
+  name: string;
+  tools: number;
+  /** What it added to every request, roughly. */
+  contextTokens: number;
+  calls: number;
+  /** What carrying that through the session came to; null when a model's
+   * price isn't known. */
+  carriedUsd: number | null;
 }
 
 export interface FindingBrief {
@@ -234,6 +268,7 @@ export interface SessionSummary {
   /** Billed by token at all (see Coverage.priced). */
   priced: boolean;
   models: ModelShare[];
+  servers: ServerBrief[];
   findings: FindingBrief[];
 }
 

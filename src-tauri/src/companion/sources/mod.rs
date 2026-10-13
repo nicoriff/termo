@@ -189,6 +189,9 @@ mod tests {
                 if let Some(turn) = session.turns.iter().find(|turn| !turn.automatic) {
                     println!("  first: {} chars, {} requests, {} tools, model {:?}", turn.prompt_chars, turn.request_count, turn.tool_calls, turn.model);
                 }
+                for server in &session.servers {
+                    println!("  server {:?}: {} tools, {} chars a request, {} calls", server.name, server.tools, server.context_chars, server.calls);
+                }
                 for finding in crate::companion::rules::findings(&session) {
                     println!("  {:?} {:?} on {} turns, wasted {:?}: {:?}", finding.severity, finding.kind, finding.turns.len(), finding.wasted_usd, finding.numbers);
                 }

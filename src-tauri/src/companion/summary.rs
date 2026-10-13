@@ -14,13 +14,17 @@ use serde::{Deserialize, Serialize};
 
 use super::rules::{self, FindingKind, Severity};
 use super::sources::{self, SessionFile};
-use super::{SessionUsage, Tokens};
+use super::{pricing, Request, SessionUsage, Tokens};
 
 /// Bumped when what a summary holds, or how it's worked out, changes: the
 /// ones kept under another number are made again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 const FILE: &str = "summaries.json";
+
+/// About four characters of English to a token: near enough to weigh what a
+/// server's text adds to a request.
+const CHARS_PER_TOKEN: u64 = 4;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +32,30 @@ pub struct ModelShare {
     pub model: String,
     pub tokens: u64,
     pub cost_usd: Option<f64>,
+    /// The prompts the user typed that it did most of the answering of.
+    pub turns: u32,
+    /// Of those, the ones that asked for little (see `rules::is_trivial`),
+    /// and what they cost. None where the agent's files don't say enough to
+    /// tell.
+    pub light_turns: Option<u32>,
+    pub light_cost_usd: Option<f64>,
+    /// One of the dear ones: more than a turn that asks for little needs.
+    /// None when its price isn't known.
+    pub top_tier: Option<bool>,
+}
+
+/// An MCP server a session had connected (see `ServerUse`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerBrief {
+    pub name: String,
+    pub tools: u32,
+    /// What it added to every request, roughly.
+    pub context_tokens: u64,
+    pub calls: u32,
+    /// What carrying that through the whole session came to, read from the
+    /// cache each time. None when a model's price isn't known.
+    pub carried_usd: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -56,23 +84,56 @@ pub struct SessionSummary {
     /// Billed by token at all (see `Coverage::priced`).
     pub priced: bool,
     pub models: Vec<ModelShare>,
+    pub servers: Vec<ServerBrief>,
     pub findings: Vec<FindingBrief>,
 }
 
 pub fn summarize(session: &SessionUsage) -> SessionSummary {
+    // A turn can only be called light where its prompt and its tokens are known.
+    let judged = session.coverage.tokens && session.coverage.prompts;
     let mut models: Vec<ModelShare> = Vec::new();
     for request in session.turns.iter().flat_map(|turn| &turn.requests) {
-        let priced = if session.coverage.priced { super::pricing::cost(request) } else { None };
+        let priced = if session.coverage.priced { pricing::cost(request) } else { None };
         let cost = request.reported_cost_usd.or(priced);
         match models.iter_mut().find(|share| share.model == request.model) {
             Some(share) => {
                 share.tokens += request.tokens.total();
                 share.cost_usd = share.cost_usd.zip(cost).map(|(sum, cost)| sum + cost);
             }
-            None => models.push(ModelShare { model: request.model.clone(), tokens: request.tokens.total(), cost_usd: cost }),
+            None => models.push(ModelShare {
+                model: request.model.clone(),
+                tokens: request.tokens.total(),
+                cost_usd: cost,
+                turns: 0,
+                light_turns: judged.then_some(0),
+                light_cost_usd: judged.then_some(0.0),
+                top_tier: pricing::is_top_tier(&request.model),
+            }),
+        }
+    }
+    for turn in session.turns.iter().filter(|turn| !turn.automatic) {
+        let Some(share) = turn.model.as_deref().and_then(|model| models.iter_mut().find(|share| share.model == model)) else {
+            continue;
+        };
+        share.turns += 1;
+        if judged && rules::is_trivial(turn) {
+            share.light_turns = share.light_turns.map(|turns| turns + 1);
+            share.light_cost_usd = share.light_cost_usd.zip(turn.cost_usd).map(|(sum, cost)| sum + cost);
         }
     }
     models.sort_by_key(|share| std::cmp::Reverse(share.tokens));
+    let servers = session
+        .servers
+        .iter()
+        .map(|server| {
+            let context_tokens = server.context_chars / CHARS_PER_TOKEN;
+            let carried = session.turns.iter().flat_map(|turn| &turn.requests).map(|request| {
+                let read = Request { tokens: Tokens { cache_read: context_tokens, ..Default::default() }, ..request.clone() };
+                if session.coverage.priced { pricing::cost(&read) } else { None }
+            });
+            ServerBrief { name: server.name.clone(), tools: server.tools, context_tokens, calls: server.calls, carried_usd: carried.sum() }
+        })
+        .collect();
     SessionSummary {
         tool: session.tool.clone(),
         session_id: session.session_id.clone(),
@@ -86,6 +147,7 @@ pub fn summarize(session: &SessionUsage) -> SessionSummary {
         cost_reported: session.reported_cost_usd.is_some(),
         priced: session.coverage.priced,
         models,
+        servers,
         findings: rules::findings(session)
             .into_iter()
             .map(|finding| FindingBrief { kind: finding.kind, severity: finding.severity, wasted_usd: finding.wasted_usd })
@@ -174,7 +236,7 @@ fn overview_of(store_file: &Path, files: Vec<SessionFile>, read: impl Fn(&Sessio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::companion::{Coverage, Request, Turn};
+    use crate::companion::{Coverage, ServerUse, Turn};
     use std::cell::Cell;
 
     fn session(id: &str, input: u64) -> SessionUsage {
@@ -208,6 +270,42 @@ mod tests {
         // 65,000 tokens and more in a first request is a heavy start.
         assert_eq!(summary.findings.len(), 1);
         assert_eq!(summary.findings[0].kind, FindingKind::HeavyBaseline);
+    }
+
+    #[test]
+    fn a_summary_tells_the_turns_that_asked_for_little_and_what_a_server_weighed() {
+        let request = |output| Request {
+            model: "claude-opus-5-5".into(),
+            tokens: Tokens { cache_read: 1_000_000, output, ..Default::default() },
+            ..Default::default()
+        };
+        let mut session = SessionUsage {
+            tool: "claude".into(),
+            coverage: Coverage { tokens: true, cache: true, prompts: true, tools: true, subagents: true, priced: true },
+            turns: vec![
+                Turn { prompt_chars: 40, requests: vec![request(100)], ..Default::default() },
+                Turn { prompt_chars: 900, tool_calls: 6, requests: vec![request(4_000)], ..Default::default() },
+                // A background task's turn is nobody's prompt.
+                Turn { automatic: true, requests: vec![request(10)], ..Default::default() },
+            ],
+            servers: vec![ServerUse { name: "vercel".into(), tools: 3, context_chars: 4_000, calls: 0 }],
+            ..Default::default()
+        };
+        session.finish();
+        let summary = summarize(&session);
+        let opus = &summary.models[0];
+        assert_eq!((opus.turns, opus.light_turns, opus.top_tier), (2, Some(1), Some(true)));
+        // A million tokens read from the cache and a hundred written back.
+        assert!((opus.light_cost_usd.unwrap() - 0.202).abs() < 1e-9);
+        // A thousand tokens, read from the cache by each of three requests.
+        let server = &summary.servers[0];
+        assert_eq!((server.name.as_str(), server.context_tokens, server.calls), ("vercel", 1_000, 0));
+        assert!((server.carried_usd.unwrap() - 0.0006).abs() < 1e-9);
+
+        // Without the prompts, nothing says which turns asked for little.
+        session.coverage.prompts = false;
+        let unjudged = summarize(&session);
+        assert_eq!((unjudged.models[0].turns, unjudged.models[0].light_turns, unjudged.models[0].light_cost_usd), (2, None, None));
     }
 
     #[test]

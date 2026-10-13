@@ -4,11 +4,17 @@
     "date": "2026-10-12",
     "es": [
       "**Las notificaciones llevan a algún lado** (Windows): al hacer clic en una, Termo pasa al frente en la pestaña que pedía atención, o en la ejecución del agente o la orquestación que avisó.",
-      "**Avisos que dicen de qué se trata**: la notificación de un agente en una consola muestra lo que pide (la herramienta y el comando o archivo) o lo último que dijo al terminar, en vez del título de la pestaña."
+      "**Avisos que dicen de qué se trata**: la notificación de un agente en una consola muestra lo que pide (la herramienta y el comando o archivo) o lo último que dijo al terminar, en vez del título de la pestaña.",
+      "El Companion pasa a llamarse **AI Companion**, en el menú ≡, la paleta de comandos y Preferencias.",
+      "**Período, por modelo**: un gráfico de lo que costó cada día, con cada modelo en su color, y debajo cuánto se llevó cada uno. En los modelos de gama alta, cuántos de sus mensajes pedían poco y cuánto costaron.",
+      "**Servidores MCP sin usar**: el AI Companion muestra en cuántas sesiones se usó cada servidor MCP conectado, cuánto suma a cada llamada al modelo y cuánto costó llevar los que no se usaron nunca. Por ahora, solo de las sesiones de Claude Code."
     ],
     "en": [
       "**Notifications lead somewhere** (Windows): clicking one brings Termo forward on the tab that needed attention, or on the agent's run or the orchestration that sent it.",
-      "**Notices that say what they're about**: the notification of an agent in a console shows what it asks for (the tool and the command or file) or the last thing it said when it finished, instead of the tab's title."
+      "**Notices that say what they're about**: the notification of an agent in a console shows what it asks for (the tool and the command or file) or the last thing it said when it finished, instead of the tab's title.",
+      "The Companion is now called **AI Companion**, in the ≡ menu, the command palette and Preferences.",
+      "**Period, by model**: a chart of what each day cost, with each model in its own color, and under it what each one came to. For top-tier models, how many of their messages asked for little and what those cost.",
+      "**Unused MCP servers**: the AI Companion shows in how many sessions each connected MCP server was used, what it adds to every call to the model, and what carrying the ones never used cost. For now, from Claude Code's sessions only."
     ]
   },
   {
