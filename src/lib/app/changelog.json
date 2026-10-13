@@ -7,14 +7,18 @@
       "**Avisos que dicen de qué se trata**: la notificación de un agente en una consola muestra lo que pide (la herramienta y el comando o archivo) o lo último que dijo al terminar, en vez del título de la pestaña.",
       "El Companion pasa a llamarse **AI Companion**, en el menú ≡, la paleta de comandos y Preferencias.",
       "**Período, por modelo**: un gráfico de lo que costó cada día, con cada modelo en su color, y debajo cuánto se llevó cada uno. En los modelos de gama alta, cuántos de sus mensajes pedían poco y cuánto costaron.",
-      "**Servidores MCP sin usar**: el AI Companion muestra en cuántas sesiones se usó cada servidor MCP conectado, cuánto suma a cada llamada al modelo y cuánto costó llevar los que no se usaron nunca. Por ahora, solo de las sesiones de Claude Code."
+      "**Servidores MCP sin usar**: el AI Companion muestra en cuántas sesiones se usó cada servidor MCP conectado, cuánto suma a cada llamada al modelo y cuánto costó llevar los que no se usaron nunca. Por ahora, solo de las sesiones de Claude Code.",
+      "**Más sonidos para elegir**: doce sonidos nuevos para los avisos de cada agente (Ping, Cristal, Kalimba, Cucú, Silbido, Fanfarria, Burbujas, Gong, Moneda, Grillo, Cajita de música y Caja china), en la sección de cada uno en Preferencias.",
+      "**Once temas nuevos**: seis oscuros (Everforest Dark, GitHub Dark, Kanagawa, Monokai, Night Owl y Rosé Pine) y cinco claros (Catppuccin Latte, GitHub Light, Gruvbox Light, One Light y Rosé Pine Dawn), en Preferencias → Apariencia. Ahora se eligen de una lista plegable que muestra el tema en uso, con claros y oscuros juntos."
     ],
     "en": [
       "**Notifications lead somewhere** (Windows): clicking one brings Termo forward on the tab that needed attention, or on the agent's run or the orchestration that sent it.",
       "**Notices that say what they're about**: the notification of an agent in a console shows what it asks for (the tool and the command or file) or the last thing it said when it finished, instead of the tab's title.",
       "The Companion is now called **AI Companion**, in the ≡ menu, the command palette and Preferences.",
       "**Period, by model**: a chart of what each day cost, with each model in its own color, and under it what each one came to. For top-tier models, how many of their messages asked for little and what those cost.",
-      "**Unused MCP servers**: the AI Companion shows in how many sessions each connected MCP server was used, what it adds to every call to the model, and what carrying the ones never used cost. For now, from Claude Code's sessions only."
+      "**Unused MCP servers**: the AI Companion shows in how many sessions each connected MCP server was used, what it adds to every call to the model, and what carrying the ones never used cost. For now, from Claude Code's sessions only.",
+      "**More sounds to pick from**: twelve new sounds for each agent's notices (Ping, Glass, Kalimba, Cuckoo, Whistle, Fanfare, Bubbles, Gong, Coin, Cricket, Music box and Woodblock), in each one's section in Preferences.",
+      "**Eleven new themes**: six dark (Everforest Dark, GitHub Dark, Kanagawa, Monokai, Night Owl and Rosé Pine) and five light (Catppuccin Latte, GitHub Light, Gruvbox Light, One Light and Rosé Pine Dawn), in Preferences → Appearance. They're now picked from a folding list that shows the theme in use, light and dark together."
     ]
   },
   {

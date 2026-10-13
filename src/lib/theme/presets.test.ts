@@ -4,7 +4,15 @@ import { BUNDLED_THEMES } from "./presets";
 import { isDarkColor } from "./theme-loader";
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const LIGHT_THEMES = new Set(["Light", "Solarized Light"]);
+const LIGHT_THEMES = new Set([
+  "Light",
+  "Catppuccin Latte",
+  "GitHub Light",
+  "Gruvbox Light",
+  "One Light",
+  "Rosé Pine Dawn",
+  "Solarized Light",
+]);
 
 describe("bundled themes", () => {
   it("have unique names, since a theme is saved and picked by name", () => {

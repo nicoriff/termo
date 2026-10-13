@@ -24,6 +24,18 @@ export const SOUND_IDS = [
   "knock",
   "harp",
   "sonar",
+  "ping",
+  "glass",
+  "kalimba",
+  "cuckoo",
+  "whistle",
+  "fanfare",
+  "bubbles",
+  "gong",
+  "coin",
+  "cricket",
+  "musicbox",
+  "woodblock",
 ] as const;
 export type SoundId = (typeof SOUND_IDS)[number];
 /** What a setting holds: a sound, or none at all. */
@@ -128,6 +140,80 @@ export const SOUNDS: Record<SoundId, Note[]> = {
   sonar: [
     { freq: 1175, at: 0, length: 1.0, level: 0.45, attack: 0.004 },
     { freq: 1175, at: 0.5, length: 0.8, level: 0.14, attack: 0.004 },
+  ],
+  // One short, clean high note with a trace of its octave.
+  ping: [
+    { freq: 1568, at: 0, length: 0.5, level: 0.5, attack: 0.003 },
+    { freq: 3136, at: 0, length: 0.2, level: 0.12, attack: 0.003 },
+  ],
+  // A tap on a wine glass: high inharmonic partials, gone quickly.
+  glass: [
+    { freq: 2093, at: 0, length: 0.6, level: 0.35, attack: 0.002 },
+    { freq: 3520, at: 0, length: 0.4, level: 0.18, attack: 0.002 },
+    { freq: 5274, at: 0, length: 0.25, level: 0.08, attack: 0.002 },
+  ],
+  // Two plucked tines a fourth apart, each with the click of its overtone.
+  kalimba: [
+    { freq: 659.3, at: 0, length: 0.5, level: 0.5, attack: 0.003 },
+    { freq: 1977.9, at: 0, length: 0.08, level: 0.15, attack: 0.002 },
+    { freq: 880, at: 0.16, length: 0.7, level: 0.5, attack: 0.003 },
+    { freq: 2640, at: 0.16, length: 0.08, level: 0.15, attack: 0.002 },
+  ],
+  // The clock's bird: a falling minor third, breathy rather than struck.
+  cuckoo: [
+    { freq: 784, at: 0, length: 0.22, level: 0.5, attack: 0.02 },
+    { freq: 659.3, at: 0.26, length: 0.4, level: 0.5, attack: 0.02 },
+  ],
+  // A whistle that slides up and holds the top note.
+  whistle: [
+    { freq: 1200, to: 2000, at: 0, length: 0.22, level: 0.4, attack: 0.04 },
+    { freq: 2000, at: 0.24, length: 0.3, level: 0.4, attack: 0.03 },
+  ],
+  // A brass call: two short notes and a long one a fourth up. Sawtooth waves
+  // are the loudest of all, hence the low level.
+  fanfare: [
+    { freq: 392, at: 0, length: 0.12, wave: "sawtooth", level: 0.16, attack: 0.01 },
+    { freq: 392, at: 0.13, length: 0.12, wave: "sawtooth", level: 0.16, attack: 0.01 },
+    { freq: 523.3, at: 0.26, length: 0.5, wave: "sawtooth", level: 0.16, attack: 0.01 },
+  ],
+  // Three bubbles rising, each a little higher than the last.
+  bubbles: [
+    { freq: 400, to: 900, at: 0, length: 0.08, level: 0.5, attack: 0.003 },
+    { freq: 550, to: 1200, at: 0.1, length: 0.08, level: 0.5, attack: 0.003 },
+    { freq: 750, to: 1600, at: 0.2, length: 0.1, level: 0.5, attack: 0.003 },
+  ],
+  // A gong: low and long, its inharmonic partials fading one after another.
+  gong: [
+    { freq: 147, at: 0, length: 2.4, level: 0.5, attack: 0.02 },
+    { freq: 219, at: 0, length: 1.8, level: 0.25, attack: 0.02 },
+    { freq: 351, at: 0, length: 1.2, level: 0.15, attack: 0.02 },
+    { freq: 554, at: 0, length: 0.6, level: 0.08, attack: 0.02 },
+  ],
+  // The arcade coin: a short square note and a held one a fourth above.
+  coin: [
+    { freq: 987.8, at: 0, length: 0.08, wave: "square", level: 0.16, attack: 0.002 },
+    { freq: 1318.5, at: 0.08, length: 0.45, wave: "square", level: 0.16, attack: 0.002 },
+  ],
+  // A cricket: two bursts of three very high, very short chirps.
+  cricket: [
+    { freq: 4000, at: 0, length: 0.03, level: 0.3, attack: 0.004 },
+    { freq: 4000, at: 0.05, length: 0.03, level: 0.3, attack: 0.004 },
+    { freq: 4000, at: 0.1, length: 0.03, level: 0.3, attack: 0.004 },
+    { freq: 4000, at: 0.3, length: 0.03, level: 0.3, attack: 0.004 },
+    { freq: 4000, at: 0.35, length: 0.03, level: 0.3, attack: 0.004 },
+    { freq: 4000, at: 0.4, length: 0.03, level: 0.3, attack: 0.004 },
+  ],
+  // A music box: a high broken chord that comes down and jumps back up.
+  musicbox: [
+    { freq: 1568, at: 0, length: 0.5, level: 0.35, attack: 0.002 },
+    { freq: 1318.5, at: 0.15, length: 0.5, level: 0.35, attack: 0.002 },
+    { freq: 1046.5, at: 0.3, length: 0.5, level: 0.35, attack: 0.002 },
+    { freq: 1568, at: 0.45, length: 0.8, level: 0.35, attack: 0.002 },
+  ],
+  // Tick-tock on a woodblock: two dry taps, the second one lower.
+  woodblock: [
+    { freq: 800, at: 0, length: 0.05, wave: "triangle", level: 0.6, attack: 0.001 },
+    { freq: 600, at: 0.14, length: 0.06, wave: "triangle", level: 0.6, attack: 0.001 },
   ],
 };
 

@@ -2,9 +2,7 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
-  import type { Appearance, Theme } from "$lib/theme/theme-types";
-
-  const appearances: Appearance[] = ["dark", "light"];
+  import type { Theme } from "$lib/theme/theme-types";
 
   /** The swatch under the pointer or the keyboard focus: previewed before
    * it's picked. */
@@ -83,36 +81,42 @@
     <input class="onb-check" type="checkbox" checked={themeStore.syncWithOs} onchange={onSyncChange} />
   </label>
 
-  {#each appearances as appearance}
-    {@const label = t(appearance === "light" ? "preferences.appearance.lightThemes" : "preferences.appearance.darkThemes")}
-    <div class="theme-group" role="group" aria-label={label}>
-      <h3>{label}</h3>
-      <div class="theme-grid">
-        {#each themeStore.themes.filter((theme) => theme.appearance === appearance) as theme (theme.name)}
-          {@const selected = isSelected(theme)}
-          <button
-            class="swatch"
-            class:selected
-            aria-pressed={selected}
-            style="background:{theme.colors.background}; color:{theme.colors.foreground}; --swatch-accent:{theme.ui
-              .accent}"
-            onclick={() => choose(theme)}
-            onpointerenter={() => (hovered = theme)}
-            onpointerleave={() => (hovered = null)}
-            onfocus={() => (hovered = theme)}
-            onblur={() => (hovered = null)}
-          >
-            <span class="swatch-dots">
-              <i style="background:{theme.colors.red}"></i>
-              <i style="background:{theme.colors.green}"></i>
-              <i style="background:{theme.colors.blue}"></i>
-            </span>
-            <span class="swatch-name">{theme.name}</span>
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/each}
+  <div class="theme-grid" role="group" aria-label={t("preferences.appearance.theme")}>
+    {#each themeStore.themes as theme (theme.name)}
+      {@const selected = isSelected(theme)}
+      <button
+        class="swatch"
+        class:selected
+        aria-pressed={selected}
+        title={theme.name}
+        onclick={() => choose(theme)}
+        onpointerenter={() => (hovered = theme)}
+        onpointerleave={() => (hovered = null)}
+        onfocus={() => (hovered = theme)}
+        onblur={() => (hovered = null)}
+      >
+        <span
+          class="swatch-preview"
+          style="background:{theme.colors.background}; --swatch-fg:{theme.colors.foreground}; --swatch-accent:{theme.ui
+            .accent}"
+        >
+          <span class="swatch-line">
+            <i style="background:{theme.colors.green}; width:6px"></i>
+            <i style="background:{theme.colors.foreground}; width:30px"></i>
+          </span>
+          <span class="swatch-line">
+            <i style="background:{theme.colors.blue}; width:18px"></i>
+            <i style="background:{theme.colors.magenta}; width:12px"></i>
+          </span>
+          <span class="swatch-line">
+            <i style="background:{theme.colors.yellow}; width:12px"></i>
+            <i style="background:{theme.colors.red}; width:22px"></i>
+          </span>
+        </span>
+        <span class="swatch-name">{theme.name}</span>
+      </button>
+    {/each}
+  </div>
   <p class="onb-hint">{t("onboarding.appearance.hint")}</p>
 </div>
 
@@ -211,57 +215,63 @@
     opacity: 0.6;
   }
 
-  .theme-group {
-    margin-top: 12px;
-  }
-
-  h3 {
-    margin: 0 0 6px;
-    font-size: 11px;
-    font-weight: 500;
-    opacity: 0.7;
-  }
-
+  /* Same previews as Preferences → Appearance: light and dark in one grid,
+     every one the same size, with its name underneath. */
   .theme-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 10px 6px;
+    margin-top: 12px;
   }
 
   .swatch {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
     min-width: 0;
-    padding: 6px 9px;
-    border: 2px solid transparent;
-    border-radius: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
     font: inherit;
-    font-size: 12px;
+    font-size: 11px;
     text-align: left;
     cursor: pointer;
   }
 
-  .swatch.selected {
+  .swatch-preview {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    height: 46px;
+    padding: 0 9px;
+    border: 2px solid color-mix(in srgb, var(--swatch-fg) 18%, transparent);
+    border-radius: 6px;
+  }
+
+  .swatch-line {
+    display: flex;
+    gap: 4px;
+  }
+
+  .swatch-line i {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  .swatch.selected .swatch-preview {
     border-color: var(--swatch-accent);
   }
 
   .swatch:focus-visible {
+    outline: none;
+  }
+
+  .swatch:focus-visible .swatch-preview {
     outline: 2px solid var(--pane-active-border, #3a6df0);
     outline-offset: 2px;
-  }
-
-  .swatch-dots {
-    display: flex;
-    flex-shrink: 0;
-    gap: 3px;
-  }
-
-  .swatch-dots i {
-    display: block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
   }
 
   .swatch-name {
@@ -269,5 +279,11 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    opacity: 0.75;
+  }
+
+  .swatch.selected .swatch-name {
+    opacity: 1;
+    font-weight: 600;
   }
 </style>
