@@ -11,6 +11,10 @@ La app es bilingüe (español / inglés). **Todo texto visible nuevo tiene que e
 
 El idioma se elige en Preferencias → General (Sistema / Español / English) y se guarda en `AppConfig.language`.
 
+## Documentación de usuario
+
+La documentación para usuarios vive en el repo de la web, en `E:\Proyectos\Termo-Web\docs`, solo en inglés (una página por tema, con sus capturas en `docs/images`). Cuando cambia algo visible para el usuario (un nombre de menú, un atajo, una opción de Preferencias, una función nueva), actualizar también su página allá. Los nombres de botones y menús se escriben tal como figuran en `en.ts`.
+
 ## Versión
 
 La versión de la app se define **solo** en `package.json` (semver: `MAYOR.MENOR.PARCHE`). `tauri.conf.json` la lee de ahí (`"version": "../package.json"`) y se muestra en Acerca de. Para subirla:
