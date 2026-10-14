@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::model::{self, Harness, Owned, SPEC_FILE};
-use super::{claude, instructions, json_merge};
+use super::{claude, codex, copilot, gemini, instructions, json_merge};
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -30,8 +30,14 @@ struct JsonTarget {
     desired: fn(&Harness, &Map<String, Value>) -> Owned,
 }
 
-const JSON_TARGETS: &[JsonTarget] =
-    &[JsonTarget { file: claude::FILE, applies: claude::applies, desired: claude::desired }];
+const JSON_TARGETS: &[JsonTarget] = &[
+    JsonTarget { file: claude::FILE, applies: claude::applies, desired: claude::desired },
+    JsonTarget { file: codex::HOOKS_FILE, applies: codex::applies, desired: codex::hooks },
+    JsonTarget { file: gemini::FILE, applies: gemini::applies, desired: gemini::desired },
+];
+
+/// A file that's Termo's alone, named so: written whole, or taken away.
+const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[(codex::RULES_FILE, codex::rules), (copilot::FILE, copilot::hooks)];
 
 fn read(root: &Path, file: &str) -> Option<String> {
     fs::read_to_string(root.join(file)).ok()
@@ -66,6 +72,11 @@ pub fn plan(root: &Path, spec: &Harness) -> anyhow::Result<Vec<FileChange>> {
             managed.insert(target.file.to_string(), added);
         }
         note(target.file, before, after);
+    }
+
+    for (file, render) in OWN_FILES {
+        let before = read(root, file);
+        note(file, before, render(&spec));
     }
 
     let before = read(root, instructions::AGENTS_MD);
@@ -151,7 +162,10 @@ mod tests {
 
         let changes = plan(&root, &spec()).unwrap();
         let paths: Vec<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-        assert_eq!(paths, [claude::FILE, "AGENTS.md", "CLAUDE.md", SPEC_FILE]);
+        assert_eq!(
+            paths,
+            [claude::FILE, codex::HOOKS_FILE, gemini::FILE, copilot::FILE, "AGENTS.md", "CLAUDE.md", SPEC_FILE]
+        );
         apply(&root, &changes).unwrap();
         // Applied: nothing left to do.
         assert!(plan(&root, &model::load(&root).unwrap().unwrap()).unwrap().is_empty());
@@ -164,7 +178,9 @@ mod tests {
         assert_eq!(back, serde_json::from_str::<Value>(settings).unwrap());
         assert_eq!(fs::read_to_string(root.join("CLAUDE.md")).unwrap(), "# Mine\n");
         assert!(!root.join("AGENTS.md").exists());
-        assert!(!root.join(".termo").exists());
+        for folder in [".termo", ".codex", ".gemini", ".github"] {
+            assert!(!root.join(folder).exists(), "{folder} is left");
+        }
         fs::remove_dir_all(&root).unwrap();
     }
 

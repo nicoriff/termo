@@ -18,18 +18,22 @@
     AGENTS,
     CHANGE_KIND_LABEL,
     DECISIONS,
+    NEEDS_TRUST,
+    SUPPORT,
     changeKind,
     commandProblem,
     normalizePattern,
     normalizePrefix,
     pathProblem,
     relativeToRoot,
+    ruleKinds,
+    type Support,
   } from "./harness-model";
   import { HARNESS_WIDTH, harnessStore } from "./harness-store.svelte";
 
   const COLLAPSED_KEY = "termo.harness.collapsedSections";
 
-  type SectionId = "agents" | "paths" | "commands" | "checks" | "instructions";
+  type SectionId = "agents" | "paths" | "commands" | "checks" | "instructions" | "support";
 
   function loadCollapsed(): SectionId[] {
     try {
@@ -47,6 +51,27 @@
   const repoName = $derived(root ? fileName(root) : t("harness.title"));
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleHarness"), isMac));
   const pendingCount = $derived(harnessStore.saved?.pending.length ?? 0);
+  const kinds = $derived(draft ? ruleKinds(draft) : []);
+  const targeted = $derived(draft ? AGENTS.filter((agent) => draft.agents.includes(agent)) : []);
+  const trusting = $derived(targeted.filter((agent) => NEEDS_TRUST.includes(agent)));
+
+  const SUPPORT_MARK: Record<Support, string> = { enforced: "✓", partial: "◐", text: "Aa", none: "–" };
+  const SUPPORT_LABEL = {
+    enforced: "harness.support.enforced",
+    partial: "harness.support.partial",
+    text: "harness.support.text",
+    none: "harness.support.none",
+  } as const;
+  const KIND_LABEL = {
+    noEdit: "harness.support.kinds.noEdit",
+    noRead: "harness.support.kinds.noRead",
+    deny: "harness.support.kinds.deny",
+    ask: "harness.support.kinds.ask",
+    allow: "harness.support.kinds.allow",
+    checks: "harness.support.kinds.checks",
+  } as const;
+  /** Short enough for a column; the full name is its tooltip. */
+  const SHORT_NAME = { claude: "Claude", codex: "Codex", gemini: "Gemini", copilot: "Copilot", grok: "Grok" } as const;
 
   let collapsed = $state<SectionId[]>(loadCollapsed());
   /** The files on review shown open, by path. */
@@ -447,6 +472,58 @@
                 placeholder={t("harness.instructions.placeholder")}
                 onchange={(text) => harnessStore.edit((spec) => (spec.instructions = text))}
               />
+            </div>
+          {/if}
+        </section>
+
+        <!-- Which agent holds which kind of rule by itself, and which only
+             hears of it in AGENTS.md. -->
+        <section>
+          {@render sectionHead("support", t("harness.support.title"), null)}
+          {#if !collapsed.includes("support")}
+            <div class="section-content">
+              <p class="hint">{t("harness.support.hint")}</p>
+              {#if kinds.length === 0 || targeted.length === 0}
+                <p class="hint">{t("harness.support.empty")}</p>
+              {:else}
+                <table class="support-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      {#each targeted as agent (agent)}
+                        <th scope="col" title={TOOL_DISPLAY_NAMES[agent]}>{SHORT_NAME[agent]}</th>
+                      {/each}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each kinds as kind (kind)}
+                      <tr>
+                        <th scope="row">{t(KIND_LABEL[kind])}</th>
+                        {#each targeted as agent (agent)}
+                          {@const support = SUPPORT[agent][kind]}
+                          <td class={support} title={t(SUPPORT_LABEL[support])}>
+                            <span aria-hidden="true">{SUPPORT_MARK[support]}</span>
+                            <span class="visually-hidden">{t(SUPPORT_LABEL[support])}</span>
+                          </td>
+                        {/each}
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+                <p class="legend">
+                  {#each ["enforced", "partial", "text", "none"] as const as support (support)}
+                    <span class="legend-item"><span class="mark {support}">{SUPPORT_MARK[support]}</span> {t(SUPPORT_LABEL[support])}</span>
+                  {/each}
+                </p>
+              {/if}
+              {#if trusting.length > 0}
+                <p class="notice">
+                  {t("harness.support.trust", { agents: trusting.map((agent) => TOOL_DISPLAY_NAMES[agent]).join(", ") })}
+                  {#if trusting.includes("codex")}
+                    {t("harness.support.codexHooks")}
+                  {/if}
+                </p>
+              {/if}
             </div>
           {/if}
         </section>
@@ -907,5 +984,85 @@
 
   .review-diff {
     padding: 2px 10px 8px;
+  }
+
+  .support-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .support-table th,
+  .support-table td {
+    padding: 3px 4px;
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .support-table thead th {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.7;
+    text-align: center;
+  }
+
+  .support-table tbody th {
+    font-weight: normal;
+    text-align: left;
+  }
+
+  .support-table td {
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .enforced {
+    color: #4caf72;
+  }
+
+  .partial {
+    color: #d7a72a;
+  }
+
+  .text {
+    color: var(--pane-active-border, #3a6df0);
+    font-size: 10px;
+  }
+
+  .none {
+    opacity: 0.45;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin: 0;
+    font-size: 10.5px;
+    opacity: 0.8;
+  }
+
+  .legend-item {
+    white-space: nowrap;
+  }
+
+  .mark {
+    font-weight: 700;
+  }
+
+  .notice {
+    margin: 0;
+    padding: 5px 7px;
+    border-radius: 4px;
+    background: rgba(215, 167, 42, 0.16);
+    font-size: 11px;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 </style>

@@ -93,6 +93,37 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, MessageKey> = {
   delete: "harness.review.delete",
 };
 
+/** A kind of rule, as far as which agents can hold it goes. */
+export type RuleKind = "noEdit" | "noRead" | "deny" | "ask" | "allow" | "checks";
+/** enforced: the agent itself refuses or stops; partial: not every case
+ * (Grok's gate, unconfirmed); text: only told in AGENTS.md; none: no effect. */
+export type Support = "enforced" | "partial" | "text" | "none";
+
+export const RULE_KINDS: RuleKind[] = ["noEdit", "noRead", "deny", "ask", "allow", "checks"];
+
+/** What each agent's own project files can hold (see src-tauri/src/harness:
+ * one module per agent). */
+export const SUPPORT: Record<HarnessAgent, Record<RuleKind, Support>> = {
+  claude: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
+  codex: { noEdit: "text", noRead: "text", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
+  gemini: { noEdit: "text", noRead: "text", deny: "enforced", ask: "text", allow: "enforced", checks: "enforced" },
+  copilot: { noEdit: "text", noRead: "text", deny: "text", ask: "text", allow: "none", checks: "enforced" },
+  // Through Claude Code's settings, which it reads too.
+  grok: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "partial" },
+};
+
+/** The kinds of rule the harness has, in a fixed order. */
+export function ruleKinds(spec: HarnessSpec): RuleKind[] {
+  const present = new Set<RuleKind>();
+  for (const rule of spec.paths) present.add(rule.access);
+  for (const rule of spec.commands) present.add(rule.decision);
+  if (spec.checks.some((check) => check.command.trim())) present.add("checks");
+  return RULE_KINDS.filter((kind) => present.has(kind));
+}
+
+/** The agents that only read their repository files once it's trusted. */
+export const NEEDS_TRUST: HarnessAgent[] = ["codex", "gemini", "copilot", "grok"];
+
 export type HarnessStatus = "none" | "draft" | "pending" | "synced";
 
 /** What the header says: edits not applied yet win over files out of step. */

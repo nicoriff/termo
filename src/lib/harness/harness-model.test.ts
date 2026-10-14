@@ -8,6 +8,7 @@ import {
   normalizePrefix,
   pathProblem,
   relativeToRoot,
+  ruleKinds,
   sameSpec,
 } from "./harness-model";
 
@@ -81,6 +82,19 @@ describe("relativeToRoot", () => {
   it("refuses one outside it", () => {
     expect(relativeToRoot("/home/me/repo", "/home/me/repository/x")).toBeNull();
     expect(relativeToRoot("/home/me/repo", "/etc/passwd")).toBeNull();
+  });
+});
+
+describe("ruleKinds", () => {
+  it("lists the kinds present, in order", () => {
+    const kinds = ruleKinds(
+      spec({
+        commands: [{ prefix: "git push", decision: "ask" }],
+        paths: [{ pattern: ".env", access: "noRead" }],
+        checks: [{ command: "  " }],
+      }),
+    );
+    expect(kinds).toEqual(["noRead", "ask"]);
   });
 });
 

@@ -7,6 +7,9 @@
 
 pub mod checks;
 pub mod claude;
+pub mod codex;
+pub mod copilot;
+pub mod gemini;
 pub mod instructions;
 pub mod json_merge;
 pub mod markers;
