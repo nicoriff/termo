@@ -14,20 +14,20 @@ pub fn applies(spec: &Harness) -> bool {
     spec.targets(Agent::Copilot)
 }
 
-/// The hook file, all Termo's; `None` when there are no checks.
+/// The hook file, all Termo's; `None` when there are no checks. Copilot
+/// takes one command per shell; the gate's reads the same in both.
 pub fn hooks(spec: &Harness) -> Option<String> {
-    if !applies(spec) {
+    if !applies(spec) || spec.checks.is_empty() {
         return None;
     }
-    let bash = checks::posix_json(&spec.checks, "decision", "block")?;
-    let powershell = checks::powershell_json(&spec.checks, "decision", "block")?;
+    let command = checks::command(checks::Mode::Json);
     let root = json!({
         "version": 1,
         "hooks": {
             "agentStop": [{
                 "type": "command",
-                "bash": bash,
-                "powershell": powershell,
+                "bash": command,
+                "powershell": command,
                 "timeoutSec": checks::timeout_sec(&spec.checks),
             }],
         },
@@ -46,8 +46,8 @@ mod tests {
         let text = hooks(&spec).unwrap();
         let root: serde_json::Value = serde_json::from_str(&text).unwrap();
         let hook = &root["hooks"]["agentStop"][0];
-        assert!(hook["bash"].as_str().unwrap().contains("( npm test )"));
-        assert!(hook["powershell"].as_str().unwrap().contains("cmd /c 'npm test'"));
+        assert_eq!(hook["bash"], checks::command(checks::Mode::Json));
+        assert_eq!(hook["powershell"], hook["bash"]);
         assert_eq!(hooks(&Harness::default()), None);
     }
 }

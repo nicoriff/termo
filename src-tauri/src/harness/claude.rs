@@ -54,10 +54,14 @@ pub fn desired(spec: &Harness, _current: &Map<String, Value>) -> Owned {
             push(key, json!(value));
         }
     }
-    if let Some(command) = checks::posix_exit_code(&spec.checks) {
+    if !spec.checks.is_empty() {
         push(
             "hooks.Stop",
-            json!({ "hooks": [{ "type": "command", "command": command, "timeout": checks::timeout_sec(&spec.checks) }] }),
+            json!({ "hooks": [{
+                "type": "command",
+                "command": checks::command(checks::Mode::ExitCode),
+                "timeout": checks::timeout_sec(&spec.checks),
+            }] }),
         );
     }
     owned

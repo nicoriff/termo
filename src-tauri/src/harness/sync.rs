@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::model::{self, Harness, Owned, SPEC_FILE};
-use super::{claude, codex, copilot, gemini, instructions, json_merge};
+use super::{checks, claude, codex, copilot, gemini, instructions, json_merge};
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -37,7 +37,11 @@ const JSON_TARGETS: &[JsonTarget] = &[
 ];
 
 /// A file that's Termo's alone, named so: written whole, or taken away.
-const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[(codex::RULES_FILE, codex::rules), (copilot::FILE, copilot::hooks)];
+const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[
+    (codex::RULES_FILE, codex::rules),
+    (copilot::FILE, copilot::hooks),
+    (checks::SCRIPT_FILE, checks::script_for),
+];
 
 fn read(root: &Path, file: &str) -> Option<String> {
     fs::read_to_string(root.join(file)).ok()
@@ -164,7 +168,16 @@ mod tests {
         let paths: Vec<&str> = changes.iter().map(|change| change.path.as_str()).collect();
         assert_eq!(
             paths,
-            [claude::FILE, codex::HOOKS_FILE, gemini::FILE, copilot::FILE, "AGENTS.md", "CLAUDE.md", SPEC_FILE]
+            [
+                claude::FILE,
+                codex::HOOKS_FILE,
+                gemini::FILE,
+                copilot::FILE,
+                checks::SCRIPT_FILE,
+                "AGENTS.md",
+                "CLAUDE.md",
+                SPEC_FILE
+            ]
         );
         apply(&root, &changes).unwrap();
         // Applied: nothing left to do.

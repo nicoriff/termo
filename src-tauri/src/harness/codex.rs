@@ -59,7 +59,8 @@ pub fn rules(spec: &Harness) -> Option<String> {
 
 pub fn hooks(spec: &Harness, _current: &Map<String, Value>) -> Owned {
     let mut owned = Owned::new();
-    if let Some(command) = checks::posix_exit_code(&spec.checks) {
+    if !spec.checks.is_empty() {
+        let command = checks::command(checks::Mode::ExitCode);
         owned.insert(
             "hooks.Stop".into(),
             vec![json!({ "hooks": [{ "type": "command", "command": command, "timeout": checks::timeout_sec(&spec.checks) }] })],
@@ -102,6 +103,6 @@ mod tests {
     fn checks_become_a_stop_hook() {
         let spec = Harness { checks: vec![Check { command: "make test".into(), timeout_sec: None }], ..Harness::default() };
         let owned = hooks(&spec, &Map::new());
-        assert!(owned["hooks.Stop"][0]["hooks"][0]["command"].as_str().unwrap().contains("( make test )"));
+        assert_eq!(owned["hooks.Stop"][0]["hooks"][0]["command"], checks::command(checks::Mode::ExitCode));
     }
 }

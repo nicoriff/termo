@@ -30,7 +30,8 @@ pub fn desired(spec: &Harness, current: &Map<String, Value>) -> Owned {
             Decision::Ask => {}
         }
     }
-    if let Some(command) = checks::posix_exit_code(&spec.checks) {
+    if !spec.checks.is_empty() {
+        let command = checks::command(checks::Mode::ExitCode);
         // Gemini CLI's timeouts are in milliseconds.
         let timeout = u64::from(checks::timeout_sec(&spec.checks)) * 1000;
         push("hooks.AfterAgent", json!({ "hooks": [{ "type": "command", "command": command, "timeout": timeout }] }));
