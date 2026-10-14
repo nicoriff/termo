@@ -167,6 +167,10 @@ pub enum Msg<'a> {
     OrchestrationLastAttempt,
     GitNotFound,
     GitNotARepo,
+    /// (file, parse error)
+    HarnessInvalid(&'a str, &'a str),
+    /// (OS error)
+    HarnessWriteFailed(&'a str),
     /// Another action is still running on the repository.
     GitBusy,
     /// what went wrong
@@ -514,6 +518,11 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (GitNotFound, En) => "git wasn't found on this computer".into(),
         (GitNotARepo, Es) => "Esa carpeta no es un repositorio de git".into(),
         (GitNotARepo, En) => "That folder isn't a git repository".into(),
+
+        (HarnessInvalid(file, error), Es) => format!("No se pudo leer {file}: {error}"),
+        (HarnessInvalid(file, error), En) => format!("Couldn't read {file}: {error}"),
+        (HarnessWriteFailed(error), Es) => format!("No se pudieron escribir los archivos del harness: {error}"),
+        (HarnessWriteFailed(error), En) => format!("Couldn't write the harness files: {error}"),
         (GitBusy, Es) => "Ya hay una acción de git en curso en este repositorio".into(),
         (GitBusy, En) => "A git action is already running on this repository".into(),
         (GitFailed(error), Es) => format!("Git no pudo hacerlo: {error}"),
@@ -696,6 +705,8 @@ mod tests {
             Msg::OrchestrationLastAttempt,
             Msg::GitNotFound,
             Msg::GitNotARepo,
+            Msg::HarnessInvalid(".termo/harness.json", "x"),
+            Msg::HarnessWriteFailed("x"),
             Msg::GitBusy,
             Msg::GitFailed("exit 1"),
             Msg::GitTimedOut,

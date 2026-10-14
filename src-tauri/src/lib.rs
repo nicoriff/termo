@@ -7,6 +7,7 @@ mod companion;
 mod config;
 mod copilot_quota;
 mod git;
+mod harness;
 mod i18n;
 mod keep_awake;
 mod layouts;
@@ -133,6 +134,9 @@ pub fn run() {
             commands::explorer_commands::read_text_file,
             commands::explorer_commands::write_text_file,
             commands::git_commands::git_snapshot,
+            commands::harness_commands::harness_load,
+            commands::harness_commands::harness_preview,
+            commands::harness_commands::harness_apply,
             commands::git_commands::git_blob,
             commands::git_commands::git_branches,
             commands::git_commands::git_graph,
