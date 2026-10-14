@@ -137,6 +137,7 @@ pub fn run() {
             commands::harness_commands::harness_load,
             commands::harness_commands::harness_preview,
             commands::harness_commands::harness_apply,
+            commands::harness_commands::harness_detect_checks,
             commands::git_commands::git_blob,
             commands::git_commands::git_branches,
             commands::git_commands::git_graph,

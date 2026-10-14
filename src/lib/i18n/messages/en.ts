@@ -857,6 +857,7 @@ export const en: Messages = {
       title: "“Done” checks",
       hint: "They run when the agent says it's finished. If one fails, the agent keeps working until it's fixed.",
       placeholder: "npm run check",
+      suggested: "Suggested:",
     },
     instructions: {
       title: "Instructions",
@@ -873,6 +874,25 @@ export const en: Messages = {
       create: "new",
       update: "changes",
       delete: "deleted",
+    },
+    packs: {
+      title: "Packs:",
+      gitDestructive: "Destructive git",
+      publish: "Publishing",
+      install: "Installing dependencies",
+      recursiveDelete: "Recursive deletes",
+    },
+    tester: {
+      title: "Tester",
+      hint: "Type a command to see what each agent would do with it under these rules.",
+      placeholder: "git push --force origin main",
+      matched: "Decided by the rule “{rule}”.",
+      unmatched: "No rule covers it: each agent asks as usual.",
+      deny: "Refuses it",
+      ask: "Asks first",
+      allow: "Runs it without asking",
+      text: "Only by instruction",
+      none: "As usual",
     },
     files: {
       title: "Instruction files",

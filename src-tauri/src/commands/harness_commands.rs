@@ -75,3 +75,10 @@ pub async fn harness_apply(root: String, spec: Harness, adopted: Vec<ExternalEnt
     })
     .await
 }
+
+/// The "done" checks the repository's own files suggest.
+#[tauri::command]
+pub async fn harness_detect_checks(root: String) -> Result<Vec<String>, String> {
+    let root = checked(&root)?;
+    blocking(move || Ok(crate::harness::detect::suggest(&root))).await
+}

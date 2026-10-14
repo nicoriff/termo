@@ -78,6 +78,12 @@ export function harnessPreview(root: string, spec: HarnessSpec, adopted: Externa
   return invoke("harness_preview", { root, spec, adopted });
 }
 
+/** The "done" checks the repository's own files suggest (package.json
+ * scripts, Cargo, a Makefile…). */
+export function harnessDetectChecks(root: string): Promise<string[]> {
+  return invoke("harness_detect_checks", { root });
+}
+
 export function harnessApply(root: string, spec: HarnessSpec, adopted: ExternalEntry[]): Promise<HarnessState> {
   return invoke("harness_apply", { root, spec, adopted });
 }

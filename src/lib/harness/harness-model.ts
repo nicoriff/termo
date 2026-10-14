@@ -1,6 +1,7 @@
 import type { MessageKey } from "$lib/i18n/translate";
 import type {
   CommandDecision,
+  CommandRule,
   ExternalEntry,
   HarnessAgent,
   HarnessFileChange,
@@ -172,6 +173,105 @@ export function ruleKinds(spec: HarnessSpec): RuleKind[] {
 
 /** The agents that only read their repository files once it's trusted. */
 export const NEEDS_TRUST: HarnessAgent[] = ["codex", "gemini", "copilot", "grok"];
+
+/** Ready-made sets of command rules, added in one go. */
+export interface CommandPack {
+  id: "gitDestructive" | "publish" | "install" | "recursiveDelete";
+  label: MessageKey;
+  rules: { prefix: string; decision: CommandDecision }[];
+}
+
+export const COMMAND_PACKS: CommandPack[] = [
+  {
+    id: "gitDestructive",
+    label: "harness.packs.gitDestructive",
+    rules: [
+      { prefix: "git push --force", decision: "deny" },
+      { prefix: "git push -f", decision: "deny" },
+      { prefix: "git reset --hard", decision: "deny" },
+      { prefix: "git clean", decision: "deny" },
+      { prefix: "git branch -D", decision: "ask" },
+      { prefix: "git push", decision: "ask" },
+    ],
+  },
+  {
+    id: "publish",
+    label: "harness.packs.publish",
+    rules: [
+      { prefix: "npm publish", decision: "deny" },
+      { prefix: "pnpm publish", decision: "deny" },
+      { prefix: "yarn publish", decision: "deny" },
+      { prefix: "cargo publish", decision: "deny" },
+      { prefix: "twine upload", decision: "deny" },
+      { prefix: "gh release create", decision: "deny" },
+    ],
+  },
+  {
+    id: "install",
+    label: "harness.packs.install",
+    rules: [
+      { prefix: "npm install", decision: "ask" },
+      { prefix: "pnpm add", decision: "ask" },
+      { prefix: "yarn add", decision: "ask" },
+      { prefix: "pip install", decision: "ask" },
+      { prefix: "cargo add", decision: "ask" },
+    ],
+  },
+  {
+    id: "recursiveDelete",
+    label: "harness.packs.recursiveDelete",
+    rules: [
+      { prefix: "rm -rf", decision: "deny" },
+      { prefix: "rm -r", decision: "deny" },
+      { prefix: "Remove-Item -Recurse", decision: "deny" },
+    ],
+  },
+];
+
+/** Adds a pack's rules; a command the harness already has keeps its own. */
+export function addPack(spec: HarnessSpec, pack: CommandPack): void {
+  const known = new Set(spec.commands.map((rule) => normalizePrefix(rule.prefix)));
+  for (const rule of pack.rules) {
+    if (!known.has(rule.prefix)) spec.commands.push({ ...rule });
+  }
+}
+
+/** Whether every rule of the pack is in the harness already. */
+export function hasPack(spec: HarnessSpec, pack: CommandPack): boolean {
+  const known = new Set(spec.commands.map((rule) => normalizePrefix(rule.prefix)));
+  return pack.rules.every((rule) => known.has(rule.prefix));
+}
+
+/** What an agent does with a command: one of the decisions when it holds
+ * the rule itself, "text" when it's only told, "none" when no rule covers it
+ * (its usual asking). */
+export type Verdict = CommandDecision | "text" | "none";
+
+const STRICTNESS: Record<CommandDecision, number> = { allow: 0, ask: 1, deny: 2 };
+
+/** The rule that decides a command: of those whose words start it, the
+ * strictest, as Claude Code and Codex weigh them. */
+export function matchingRule(spec: HarnessSpec, command: string): CommandRule | null {
+  const words = normalizePrefix(command).split(" ");
+  let best: CommandRule | null = null;
+  for (const rule of spec.commands) {
+    const prefix = normalizePrefix(rule.prefix).split(" ");
+    if (!prefix[0] || prefix.length > words.length || prefix.some((word, index) => word !== words[index])) continue;
+    if (!best || STRICTNESS[rule.decision] > STRICTNESS[best.decision]) best = rule;
+  }
+  return best;
+}
+
+/** What each agent the harness is for does with `command`. */
+export function testCommand(spec: HarnessSpec, command: string): { agent: HarnessAgent; verdict: Verdict }[] {
+  const rule = matchingRule(spec, command);
+  return AGENTS.filter((agent) => spec.agents.includes(agent)).map((agent) => {
+    if (!rule) return { agent, verdict: "none" };
+    const support = SUPPORT[agent][rule.decision];
+    const verdict: Verdict = support === "enforced" || support === "partial" ? rule.decision : support === "text" ? "text" : "none";
+    return { agent, verdict };
+  });
+}
 
 export type HarnessStatus = "none" | "draft" | "pending" | "synced";
 

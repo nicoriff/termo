@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalEntry, HarnessSpec, SuggestedRule } from "$lib/core/harness-client";
 import {
+  addPack,
   addRule,
+  COMMAND_PACKS,
   groupExternal,
+  hasPack,
+  matchingRule,
+  testCommand,
   changeKind,
   commandProblem,
   harnessStatus,
@@ -115,6 +120,41 @@ describe("external rules", () => {
       { prefix: "git push", decision: "ask" },
       { prefix: "rm -rf", decision: "deny" },
     ]);
+  });
+});
+
+describe("command packs", () => {
+  it("adds what's missing and keeps what's there", () => {
+    const target = spec({ commands: [{ prefix: "git push", decision: "deny" }] });
+    const pack = COMMAND_PACKS.find((item) => item.id === "gitDestructive")!;
+    expect(hasPack(target, pack)).toBe(false);
+    addPack(target, pack);
+    expect(hasPack(target, pack)).toBe(true);
+    expect(target.commands.find((rule) => rule.prefix === "git push")?.decision).toBe("deny");
+    expect(target.commands.length).toBe(pack.rules.length);
+  });
+});
+
+describe("testCommand", () => {
+  const rules = spec({
+    agents: ["claude", "codex", "gemini", "copilot"],
+    commands: [
+      { prefix: "git push", decision: "ask" },
+      { prefix: "git push --force", decision: "deny" },
+    ],
+  });
+
+  it("takes the strictest rule whose words start the command", () => {
+    expect(matchingRule(rules, "git push --force origin main")?.decision).toBe("deny");
+    expect(matchingRule(rules, "git  push origin")?.decision).toBe("ask");
+    expect(matchingRule(rules, "git pushx")).toBeNull();
+    expect(matchingRule(rules, "git")).toBeNull();
+  });
+
+  it("says what each agent does", () => {
+    const verdicts = Object.fromEntries(testCommand(rules, "git push origin").map(({ agent, verdict }) => [agent, verdict]));
+    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "text", copilot: "text" });
+    expect(testCommand(rules, "ls").every(({ verdict }) => verdict === "none")).toBe(true);
   });
 });
 

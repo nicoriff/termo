@@ -856,6 +856,7 @@ export const es = {
       title: "Chequeos de «listo»",
       hint: "Se corren cuando el agente dice que terminó. Si alguno falla, el agente sigue trabajando hasta arreglarlo.",
       placeholder: "npm run check",
+      suggested: "Sugeridos:",
     },
     instructions: {
       title: "Instrucciones",
@@ -872,6 +873,25 @@ export const es = {
       create: "nuevo",
       update: "cambia",
       delete: "se borra",
+    },
+    packs: {
+      title: "Paquetes:",
+      gitDestructive: "Git destructivo",
+      publish: "Publicar",
+      install: "Instalar dependencias",
+      recursiveDelete: "Borrado recursivo",
+    },
+    tester: {
+      title: "Probador",
+      hint: "Escribí un comando para ver qué haría cada agente con estas reglas.",
+      placeholder: "git push --force origin main",
+      matched: "Lo decide la regla «{rule}».",
+      unmatched: "Ninguna regla lo cubre: cada agente pregunta como siempre.",
+      deny: "Lo rechaza",
+      ask: "Pide permiso",
+      allow: "Lo corre sin preguntar",
+      text: "Solo por instrucción",
+      none: "Como siempre",
     },
     files: {
       title: "Archivos de instrucciones",

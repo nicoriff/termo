@@ -5,7 +5,7 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import type { CommandDecision, PathAccess } from "$lib/core/harness-client";
+  import { harnessDetectChecks, type CommandDecision, type PathAccess } from "$lib/core/harness-client";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -21,9 +21,14 @@
     DECISIONS,
     NEEDS_TRUST,
     SUPPORT,
+    COMMAND_PACKS,
+    addPack,
     changeKind,
     commandProblem,
     groupExternal,
+    hasPack,
+    matchingRule,
+    testCommand,
     normalizePattern,
     normalizePrefix,
     pathProblem,
@@ -35,7 +40,16 @@
 
   const COLLAPSED_KEY = "termo.harness.collapsedSections";
 
-  type SectionId = "agents" | "paths" | "commands" | "checks" | "instructions" | "files" | "external" | "support";
+  type SectionId =
+    | "agents"
+    | "paths"
+    | "commands"
+    | "checks"
+    | "instructions"
+    | "files"
+    | "external"
+    | "support"
+    | "tester";
 
   function loadCollapsed(): SectionId[] {
     try {
@@ -53,6 +67,36 @@
   const repoName = $derived(root ? fileName(root) : t("harness.title"));
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleHarness"), isMac));
   const pendingCount = $derived(harnessStore.saved?.pending.length ?? 0);
+  let testInput = $state("");
+  /** Checks the repository's files suggest, for the root they were read in. */
+  let detected = $state<{ root: string; checks: string[] } | null>(null);
+  const suggestedChecks = $derived(
+    detected && detected.root === root && draft
+      ? detected.checks.filter((command) => !draft.checks.some((check) => check.command.trim() === command))
+      : [],
+  );
+  const verdicts = $derived(draft && testInput.trim() ? testCommand(draft, testInput) : []);
+  const testRule = $derived(draft && testInput.trim() ? matchingRule(draft, testInput) : null);
+
+  const VERDICT_LABEL = {
+    deny: "harness.tester.deny",
+    ask: "harness.tester.ask",
+    allow: "harness.tester.allow",
+    text: "harness.tester.text",
+    none: "harness.tester.none",
+  } as const;
+
+  // What the repository suggests as checks, read again for each repository.
+  $effect(() => {
+    const current = root;
+    if (!current || detected?.root === current) return;
+    void harnessDetectChecks(current)
+      .then((checks) => {
+        if (root === current) detected = { root: current, checks };
+      })
+      .catch(() => {});
+  });
+
   const externalGroups = $derived(groupExternal(harnessStore.external));
   const instructionFiles = $derived(harnessStore.saved?.instructionFiles ?? []);
   const kinds = $derived(draft ? ruleKinds(draft) : []);
@@ -440,6 +484,20 @@
               {#if commandError}
                 <p class="field-error">{t(commandError)}</p>
               {/if}
+              <div class="chips" role="group" aria-label={t("harness.packs.title")}>
+                <span class="chips-label">{t("harness.packs.title")}</span>
+                {#each COMMAND_PACKS as pack (pack.id)}
+                  {@const added = hasPack(draft, pack)}
+                  <button
+                    class="chip"
+                    disabled={added}
+                    title={pack.rules.map((rule) => `${t(DECISION_LABEL[rule.decision])}: ${rule.prefix}`).join("\n")}
+                    onclick={() => harnessStore.edit((spec) => addPack(spec, pack))}
+                  >
+                    {added ? "✓" : "+"} {t(pack.label)}
+                  </button>
+                {/each}
+              </div>
             </div>
           {/if}
         </section>
@@ -468,6 +526,14 @@
                 />
                 <button type="submit" class="small" disabled={!newCheck.trim()}>{t("harness.add")}</button>
               </form>
+              {#if suggestedChecks.length > 0}
+                <div class="chips" role="group" aria-label={t("harness.checks.suggested")}>
+                  <span class="chips-label">{t("harness.checks.suggested")}</span>
+                  {#each suggestedChecks as command (command)}
+                    <button class="chip mono" onclick={() => harnessStore.edit((spec) => spec.checks.push({ command }))}>+ {command}</button>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/if}
         </section>
@@ -483,6 +549,36 @@
                 placeholder={t("harness.instructions.placeholder")}
                 onchange={(text) => harnessStore.edit((spec) => (spec.instructions = text))}
               />
+            </div>
+          {/if}
+        </section>
+
+        <!-- A command typed in, and what each agent would do with it. -->
+        <section>
+          {@render sectionHead("tester", t("harness.tester.title"), null)}
+          {#if !collapsed.includes("tester")}
+            <div class="section-content">
+              <p class="hint">{t("harness.tester.hint")}</p>
+              <input
+                type="text"
+                class="mono-input"
+                placeholder={t("harness.tester.placeholder")}
+                aria-label={t("harness.tester.placeholder")}
+                bind:value={testInput}
+              />
+              {#if testInput.trim()}
+                <p class="hint">
+                  {testRule ? t("harness.tester.matched", { rule: testRule.prefix }) : t("harness.tester.unmatched")}
+                </p>
+                <ul class="verdicts">
+                  {#each verdicts as { agent, verdict } (agent)}
+                    <li>
+                      <span class="verdict-agent">{TOOL_DISPLAY_NAMES[agent]}</span>
+                      <span class="verdict {verdict}">{t(VERDICT_LABEL[verdict])}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
             </div>
           {/if}
         </section>
@@ -1055,6 +1151,84 @@
 
   .review-diff {
     padding: 2px 10px 8px;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .chips-label {
+    font-size: 10.5px;
+    opacity: 0.6;
+  }
+
+  .chip {
+    padding: 1px 7px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+
+  .chip:hover:not(:disabled) {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .chip.mono,
+  .mono-input {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+
+  .verdicts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .verdicts li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .verdict {
+    font-weight: 600;
+  }
+
+  .verdict.deny {
+    color: #e05a5a;
+  }
+
+  .verdict.ask {
+    color: #d7a72a;
+  }
+
+  .verdict.allow {
+    color: #4caf72;
+  }
+
+  .verdict.text {
+    color: var(--pane-active-border, #3a6df0);
+  }
+
+  .verdict.none {
+    opacity: 0.55;
+    font-weight: normal;
   }
 
   .external-list {
