@@ -31,15 +31,6 @@ fn find(text: &str) -> Option<(usize, usize)> {
     None
 }
 
-/// What's inside the section, without the markers.
-pub fn body(text: &str) -> Option<&str> {
-    let (start, end) = find(text)?;
-    let section = &text[start..end];
-    let inner_start = section.find('\n').map(|at| at + 1).unwrap_or(section.len());
-    let inner_end = section.rfind(END).unwrap_or(section.len());
-    Some(section[inner_start..inner_end.max(inner_start)].trim_end_matches(['\r', '\n']))
-}
-
 /// The file with its section set to `body`, or taken out when `body` is
 /// `None`; `None` back when nothing at all would be left in it. The file
 /// keeps its own line endings.
@@ -80,7 +71,6 @@ mod tests {
         for original in ["# Notes\n\nKeep it short.\n", "# Notes\r\n\r\nKeep it short.\r\n"] {
             let added = replace(Some(original), Some("rule one\nrule two")).unwrap();
             assert!(added.starts_with(original));
-            assert_eq!(body(&added), Some(if original.contains('\r') { "rule one\r\nrule two" } else { "rule one\nrule two" }));
             let removed = replace(Some(&added), None).unwrap();
             assert_eq!(removed, original);
         }

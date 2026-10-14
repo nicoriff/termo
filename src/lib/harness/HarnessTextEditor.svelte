@@ -17,7 +17,15 @@
     onchange,
     placeholder = "",
     label,
-  }: { value: string; onchange: (value: string) => void; placeholder?: string; label: string } = $props();
+    tall = false,
+  }: {
+    value: string;
+    onchange: (value: string) => void;
+    placeholder?: string;
+    label: string;
+    /** A whole file: as much of the panel's height as there is. */
+    tall?: boolean;
+  } = $props();
 
   let container: HTMLDivElement | undefined = $state();
   let view: EditorView | null = null;
@@ -88,7 +96,7 @@
   });
 </script>
 
-<div class="harness-text" bind:this={container}></div>
+<div class="harness-text" class:tall bind:this={container}></div>
 
 <style>
   .harness-text {
@@ -99,6 +107,11 @@
     border-radius: 4px;
     background: var(--terminal-bg, rgba(0, 0, 0, 0.2));
     resize: vertical;
+  }
+
+  .harness-text.tall {
+    min-height: 240px;
+    max-height: calc(100vh - 240px);
   }
 
   .harness-text:focus-within {

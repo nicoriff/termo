@@ -12,6 +12,7 @@
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { fileName } from "$lib/layout/split-tree";
   import HarnessDiff from "./HarnessDiff.svelte";
+  import HarnessFileEditor from "./HarnessFileEditor.svelte";
   import HarnessTextEditor from "./HarnessTextEditor.svelte";
   import {
     ACCESS_LEVELS,
@@ -22,6 +23,7 @@
     SUPPORT,
     changeKind,
     commandProblem,
+    groupExternal,
     normalizePattern,
     normalizePrefix,
     pathProblem,
@@ -33,7 +35,7 @@
 
   const COLLAPSED_KEY = "termo.harness.collapsedSections";
 
-  type SectionId = "agents" | "paths" | "commands" | "checks" | "instructions" | "support";
+  type SectionId = "agents" | "paths" | "commands" | "checks" | "instructions" | "files" | "external" | "support";
 
   function loadCollapsed(): SectionId[] {
     try {
@@ -51,6 +53,8 @@
   const repoName = $derived(root ? fileName(root) : t("harness.title"));
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleHarness"), isMac));
   const pendingCount = $derived(harnessStore.saved?.pending.length ?? 0);
+  const externalGroups = $derived(groupExternal(harnessStore.external));
+  const instructionFiles = $derived(harnessStore.saved?.instructionFiles ?? []);
   const kinds = $derived(draft ? ruleKinds(draft) : []);
   const targeted = $derived(draft ? AGENTS.filter((agent) => draft.agents.includes(agent)) : []);
   const trusting = $derived(targeted.filter((agent) => NEEDS_TRUST.includes(agent)));
@@ -177,6 +181,7 @@
     // Escape inside the instructions' editor is the editor's.
     if ((event.target as HTMLElement | null)?.closest(".cm-editor")) return;
     if (review !== null) harnessStore.cancelReview();
+    else if (harnessStore.editingFile !== null) harnessStore.editFile(null);
     else uiState.refocusTerminals();
   }
 </script>
@@ -235,6 +240,12 @@
       {:else}
         <p class="empty-note">{t("harness.loading")}</p>
       {/if}
+    {:else if harnessStore.editingFile !== null}
+      <div class="harness-body">
+        {#key harnessStore.editingFile}
+          <HarnessFileEditor path={harnessStore.editingFile} />
+        {/key}
+      </div>
     {:else if review !== null}
       <!-- What applying writes, file by file, before it's written. -->
       <div class="harness-body">
@@ -475,6 +486,66 @@
             </div>
           {/if}
         </section>
+
+        <!-- The instruction files already in the repository, edited whole
+             in the panel. -->
+        <section>
+          {@render sectionHead("files", t("harness.files.title"), instructionFiles.length)}
+          {#if !collapsed.includes("files")}
+            <div class="section-content">
+              {#if instructionFiles.length === 0}
+                <p class="hint">{t("harness.files.none")}</p>
+              {:else}
+                <p class="hint">{t("harness.files.hint")}</p>
+                <ul class="rule-list">
+                  {#each instructionFiles as file (file)}
+                    <li class="rule-row">
+                      <code class="rule-text" title={file}>{file}</code>
+                      <button class="small" onclick={() => harnessStore.editFile(file)}>{t("harness.files.edit")}</button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {/if}
+        </section>
+
+        <!-- Rules in the agents' files that Termo didn't write. -->
+        {#if externalGroups.length > 0}
+          <section>
+            {@render sectionHead("external", t("harness.external.title"), externalGroups.length)}
+            {#if !collapsed.includes("external")}
+              <div class="section-content">
+                <p class="hint">{t("harness.external.hint")}</p>
+                <ul class="external-list">
+                  {#each externalGroups as group (group.key)}
+                    <li class="external-row">
+                      <div class="external-text">
+                        {#each group.entries as entry (entry.key + entry.value)}
+                          <code title={`${entry.file} · ${entry.key}`}>{entry.value}</code>
+                        {/each}
+                        {#if group.rule}
+                          <span class="external-rule">
+                            → {group.rule.kind === "path"
+                              ? `${t(ACCESS_LABEL[group.rule.access])}: ${group.rule.pattern}`
+                              : `${t(DECISION_LABEL[group.rule.decision])}: ${group.rule.prefix}`}
+                          </span>
+                        {:else}
+                          <span class="external-rule muted">{t("harness.external.notARule")}</span>
+                        {/if}
+                      </div>
+                      {#if group.rule}
+                        <button class="small" title={t("harness.external.adoptHint")} onclick={() => harnessStore.adopt(group.entries)}>
+                          {t("harness.external.adopt")}
+                        </button>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          </section>
+        {/if}
 
         <!-- Which agent holds which kind of rule by itself, and which only
              hears of it in AGENTS.md. -->
@@ -984,6 +1055,49 @@
 
   .review-diff {
     padding: 2px 10px 8px;
+  }
+
+  .external-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .external-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(128, 128, 128, 0.1);
+  }
+
+  .external-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .external-text code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px;
+  }
+
+  .external-rule {
+    font-size: 10.5px;
+    opacity: 0.8;
+  }
+
+  .external-rule.muted {
+    opacity: 0.5;
   }
 
   .support-table {

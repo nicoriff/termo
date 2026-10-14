@@ -10,6 +10,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::model::{self, Harness, Owned, SPEC_FILE};
+use super::external::ExternalEntry;
 use super::{checks, claude, codex, copilot, gemini, instructions, json_merge};
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -48,9 +49,19 @@ fn read(root: &Path, file: &str) -> Option<String> {
 }
 
 /// Every file that would change for `spec` to hold, as it is and as it
-/// would be. What Termo added before is known from the harness on disk.
-pub fn plan(root: &Path, spec: &Harness) -> anyhow::Result<Vec<FileChange>> {
-    let previous = model::load(root)?.map(|spec| spec.managed).unwrap_or_default();
+/// would be. What Termo added before is known from the harness on disk;
+/// `adopted` are the user's entries taken out with it, their rules now the
+/// harness's (see external.rs).
+pub fn plan(root: &Path, spec: &Harness, adopted: &[ExternalEntry]) -> anyhow::Result<Vec<FileChange>> {
+    let mut previous = model::load(root)?.map(|spec| spec.managed).unwrap_or_default();
+    for entry in adopted {
+        previous
+            .entry(entry.file.clone())
+            .or_default()
+            .entry(entry.key.clone())
+            .or_default()
+            .push(Value::String(entry.value.clone()));
+    }
     let spec = spec.normalized();
     let mut managed = BTreeMap::new();
     let mut changes = Vec::new();
@@ -164,7 +175,7 @@ mod tests {
         fs::write(root.join(claude::FILE), settings).unwrap();
         fs::write(root.join("CLAUDE.md"), "# Mine\n").unwrap();
 
-        let changes = plan(&root, &spec()).unwrap();
+        let changes = plan(&root, &spec(), &[]).unwrap();
         let paths: Vec<&str> = changes.iter().map(|change| change.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -181,11 +192,11 @@ mod tests {
         );
         apply(&root, &changes).unwrap();
         // Applied: nothing left to do.
-        assert!(plan(&root, &model::load(&root).unwrap().unwrap()).unwrap().is_empty());
+        assert!(plan(&root, &model::load(&root).unwrap().unwrap(), &[]).unwrap().is_empty());
         let saved = model::load(&root).unwrap().unwrap();
         assert!(!saved.managed[claude::FILE]["permissions.deny"].contains(&serde_json::json!("Read(./mine)")));
 
-        apply(&root, &plan(&root, &Harness::default()).unwrap()).unwrap();
+        apply(&root, &plan(&root, &Harness::default(), &[]).unwrap()).unwrap();
         // The same settings, reformatted.
         let back: Value = serde_json::from_str(&fs::read_to_string(root.join(claude::FILE)).unwrap()).unwrap();
         assert_eq!(back, serde_json::from_str::<Value>(settings).unwrap());
@@ -198,18 +209,46 @@ mod tests {
     }
 
     #[test]
+    fn an_adopted_entry_makes_way_for_termos() {
+        use crate::harness::external;
+        use crate::harness::model::{CommandRule, Decision};
+        let root = temp_root();
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(root.join(claude::FILE), r#"{ "permissions": { "ask": ["Bash(git push:*)", "WebFetch"] } }"#).unwrap();
+        let found = external::find(&root, &Harness::default());
+        assert_eq!(found.len(), 2);
+        let adopted: Vec<_> = found.into_iter().filter(|entry| entry.rule.is_some()).collect();
+        let spec = Harness {
+            agents: vec![model::Agent::Claude],
+            commands: vec![CommandRule { prefix: "git push".into(), decision: Decision::Ask }],
+            ..Harness::default()
+        };
+        apply(&root, &plan(&root, &spec, &adopted).unwrap()).unwrap();
+        let settings: Value = serde_json::from_str(&fs::read_to_string(root.join(claude::FILE)).unwrap()).unwrap();
+        let ask = settings["permissions"]["ask"].as_array().unwrap();
+        assert!(!ask.contains(&serde_json::json!("Bash(git push:*)")));
+        assert!(ask.contains(&serde_json::json!("WebFetch")));
+        assert!(ask.contains(&serde_json::json!("Bash(git push *)")));
+        // Termo's now, so not external any more; the one it can't read stays.
+        let saved = model::load(&root).unwrap().unwrap();
+        let left: Vec<_> = external::find(&root, &saved).into_iter().map(|entry| entry.value).collect();
+        assert_eq!(left, ["WebFetch"]);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_blank_harness_in_a_bare_repo_writes_nothing() {
         let root = temp_root();
-        assert!(plan(&root, &Harness::default()).unwrap().is_empty());
+        assert!(plan(&root, &Harness::default(), &[]).unwrap().is_empty());
         fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
     fn a_hand_edit_to_a_generated_file_shows_as_out_of_sync() {
         let root = temp_root();
-        apply(&root, &plan(&root, &spec()).unwrap()).unwrap();
+        apply(&root, &plan(&root, &spec(), &[]).unwrap()).unwrap();
         fs::write(root.join(claude::FILE), "{}\n").unwrap();
-        let changes = plan(&root, &model::load(&root).unwrap().unwrap()).unwrap();
+        let changes = plan(&root, &model::load(&root).unwrap().unwrap(), &[]).unwrap();
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].path, claude::FILE);
         fs::remove_dir_all(&root).unwrap();

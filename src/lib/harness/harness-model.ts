@@ -1,10 +1,12 @@
 import type { MessageKey } from "$lib/i18n/translate";
 import type {
   CommandDecision,
+  ExternalEntry,
   HarnessAgent,
   HarnessFileChange,
   HarnessSpec,
   PathAccess,
+  SuggestedRule,
 } from "$lib/core/harness-client";
 
 /** In the order the panel lists them. */
@@ -77,6 +79,53 @@ export function relativeToRoot(root: string, file: string): string | null {
   const fold = /^[a-zA-Z]:/.test(base) ? (path: string) => path.toLowerCase() : (path: string) => path;
   if (!fold(target).startsWith(`${fold(base)}/`)) return null;
   return target.slice(base.length + 1);
+}
+
+/** What identifies the rule an entry reads as: entries for the same rule
+ * (Bash and PowerShell, with and without arguments) go together. */
+export function ruleKey(rule: SuggestedRule): string {
+  return rule.kind === "path"
+    ? `path:${normalizePattern(rule.pattern)}:${rule.access}`
+    : `command:${normalizePrefix(rule.prefix)}:${rule.decision}`;
+}
+
+/** Puts a rule in the harness: a path or a command it has already takes
+ * the rule's level instead (the stricter, for a path). */
+export function addRule(spec: HarnessSpec, rule: SuggestedRule): void {
+  if (rule.kind === "path") {
+    const pattern = normalizePattern(rule.pattern);
+    const known = spec.paths.find((other) => normalizePattern(other.pattern) === pattern);
+    if (!known) spec.paths.push({ pattern, access: rule.access });
+    else if (rule.access === "noRead") known.access = "noRead";
+  } else {
+    const prefix = normalizePrefix(rule.prefix);
+    const known = spec.commands.find((other) => normalizePrefix(other.prefix) === prefix);
+    if (!known) spec.commands.push({ prefix, decision: rule.decision });
+    else known.decision = rule.decision;
+  }
+}
+
+export interface ExternalGroup {
+  key: string;
+  rule: SuggestedRule | null;
+  entries: ExternalEntry[];
+}
+
+/** The external entries, one group per rule; those Termo can't read as a
+ * rule, one group each. */
+export function groupExternal(entries: ExternalEntry[]): ExternalGroup[] {
+  const groups: ExternalGroup[] = [];
+  for (const entry of entries) {
+    const key = entry.rule ? ruleKey(entry.rule) : `raw:${entry.file}:${entry.key}:${entry.value}`;
+    const known = groups.find((group) => group.key === key);
+    if (known) known.entries.push(entry);
+    else groups.push({ key, rule: entry.rule ?? null, entries: [entry] });
+  }
+  return groups;
+}
+
+export function sameEntry(a: ExternalEntry, b: ExternalEntry): boolean {
+  return a.file === b.file && a.key === b.key && a.value === b.value;
 }
 
 export type ChangeKind = "create" | "update" | "delete";

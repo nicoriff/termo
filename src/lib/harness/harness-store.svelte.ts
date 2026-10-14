@@ -4,6 +4,7 @@ import {
   harnessApply,
   harnessLoad,
   harnessPreview,
+  type ExternalEntry,
   type HarnessFileChange,
   type HarnessSpec,
   type HarnessState,
@@ -12,7 +13,7 @@ import { fileTabs } from "$lib/editor/file-tabs.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
-import { copySpec, harnessStatus, sameSpec } from "./harness-model";
+import { addRule, copySpec, harnessStatus, sameEntry, sameSpec } from "./harness-model";
 
 /** Wider than the other side panels: rules and instructions are edited in it. */
 export const HARNESS_WIDTH = { initial: 380, min: 300, max: 760 };
@@ -47,8 +48,14 @@ class HarnessStore {
   /** The changes on review, before they're written; null while editing. */
   review = $state<HarnessFileChange[] | null>(null);
   busy = $state(false);
+  /** The instruction file open in the panel's editor, relative to the root;
+   * null while none is. */
+  editingFile = $state<string | null>(null);
   /** Unapplied edits, by repository: switching tabs doesn't lose them. */
   private drafts = $state<Record<string, HarnessSpec>>({});
+  /** The user's entries adopted in the draft, by repository: taken out of
+   * their files when it's applied. */
+  private adoptions = $state<Record<string, ExternalEntry[]>>({});
 
   /** The folder of the tab in focus. */
   private folder = $derived.by(() => {
@@ -59,7 +66,14 @@ class HarnessStore {
   draft = $derived<HarnessSpec | null>(
     this.root ? (this.drafts[this.root] ?? (this.saved ? this.saved.spec : null)) : null,
   );
-  dirty = $derived(!!this.draft && !!this.saved && !sameSpec(this.draft, this.saved.spec));
+  adopted = $derived<ExternalEntry[]>(this.root ? (this.adoptions[this.root] ?? []) : []);
+  /** The repository's rules that aren't Termo's and aren't adopted yet. */
+  external = $derived(
+    (this.saved?.external ?? []).filter((entry) => !this.adopted.some((other) => sameEntry(other, entry))),
+  );
+  dirty = $derived(
+    !!this.draft && !!this.saved && (!sameSpec(this.draft, this.saved.spec) || this.adopted.length > 0),
+  );
   status = $derived(harnessStatus(this.saved?.exists ?? false, this.dirty, this.saved?.pending.length ?? 0));
 
   /** Starts following the tab in focus while the panel is open. The main
@@ -115,6 +129,7 @@ class HarnessStore {
       this.root = root;
       this.saved = null;
       this.review = null;
+      this.editingFile = null;
       this.error = null;
     }
     if (root) await this.reload();
@@ -151,6 +166,32 @@ class HarnessStore {
     const rest = { ...this.drafts };
     delete rest[root];
     this.drafts = rest;
+    const adoptions = { ...this.adoptions };
+    delete adoptions[root];
+    this.adoptions = adoptions;
+  }
+
+  /** Takes a rule that's in the agents' files into the harness: its entries
+   * go from there when the draft is applied, for Termo's to take their place. */
+  adopt(entries: ExternalEntry[]): void {
+    const root = this.root;
+    const rule = entries[0]?.rule;
+    if (!root || !rule) return;
+    this.edit((spec) => addRule(spec, rule));
+    this.adoptions = { ...this.adoptions, [root]: [...this.adopted, ...entries] };
+  }
+
+  /** Opens an instruction file in the panel's editor. */
+  editFile(path: string | null): void {
+    this.editingFile = path;
+  }
+
+  /** The absolute path of a file relative to the root. */
+  absolute(path: string): string | null {
+    const root = this.root;
+    if (!root) return null;
+    const separator = root.includes("\\") ? "\\" : "/";
+    return `${root}${separator}${path.replaceAll("/", separator)}`;
   }
 
   /** What applying the draft would write, to look at first. The harness on
@@ -161,7 +202,7 @@ class HarnessStore {
     if (!root || !spec || this.busy) return;
     this.busy = true;
     try {
-      const changes = await harnessPreview(root, spec);
+      const changes = await harnessPreview(root, spec, this.adopted);
       if (root === this.root) {
         this.review = changes;
         this.error = null;
@@ -183,7 +224,7 @@ class HarnessStore {
     if (!root || !spec || this.busy) return;
     this.busy = true;
     try {
-      const state = await harnessApply(root, spec);
+      const state = await harnessApply(root, spec, this.adopted);
       if (root !== this.root) return;
       this.saved = state;
       this.review = null;

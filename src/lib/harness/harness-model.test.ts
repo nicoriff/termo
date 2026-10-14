@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { HarnessSpec } from "$lib/core/harness-client";
+import type { ExternalEntry, HarnessSpec, SuggestedRule } from "$lib/core/harness-client";
 import {
+  addRule,
+  groupExternal,
   changeKind,
   commandProblem,
   harnessStatus,
@@ -82,6 +84,37 @@ describe("relativeToRoot", () => {
   it("refuses one outside it", () => {
     expect(relativeToRoot("/home/me/repo", "/home/me/repository/x")).toBeNull();
     expect(relativeToRoot("/home/me/repo", "/etc/passwd")).toBeNull();
+  });
+});
+
+describe("external rules", () => {
+  const entry = (value: string, rule?: SuggestedRule): ExternalEntry => ({
+    file: ".claude/settings.json",
+    key: "permissions.ask",
+    value,
+    rule,
+  });
+
+  it("groups the entries of one rule", () => {
+    const push: SuggestedRule = { kind: "command", prefix: "git push", decision: "ask" };
+    const groups = groupExternal([entry("Bash(git push *)", push), entry("PowerShell(git push)", push), entry("WebFetch")]);
+    expect(groups.map((group) => group.entries.length)).toEqual([2, 1]);
+    expect(groups[1].rule).toBeNull();
+  });
+
+  it("adopting changes a rule the harness already has", () => {
+    const target = spec({
+      paths: [{ pattern: ".env", access: "noEdit" }],
+      commands: [{ prefix: "git push", decision: "deny" }],
+    });
+    addRule(target, { kind: "path", pattern: "./.env", access: "noRead" });
+    addRule(target, { kind: "command", prefix: "git  push", decision: "ask" });
+    addRule(target, { kind: "command", prefix: "rm -rf", decision: "deny" });
+    expect(target.paths).toEqual([{ pattern: ".env", access: "noRead" }]);
+    expect(target.commands).toEqual([
+      { prefix: "git push", decision: "ask" },
+      { prefix: "rm -rf", decision: "deny" },
+    ]);
   });
 });
 

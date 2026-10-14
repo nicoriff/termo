@@ -43,22 +43,41 @@ export interface HarnessFileChange {
   after: string | null;
 }
 
+export type SuggestedRule =
+  | { kind: "path"; pattern: string; access: PathAccess }
+  | { kind: "command"; prefix: string; decision: CommandDecision };
+
+/** A rule in an agent's files that isn't Termo's (see external.rs). */
+export interface ExternalEntry {
+  file: string;
+  /** The list it's in, dotted: `permissions.deny`. */
+  key: string;
+  value: string;
+  /** The harness rule it reads as; absent when it's none Termo writes. */
+  rule?: SuggestedRule;
+}
+
 export interface HarnessState {
   /** The repository has a `.termo/harness.json`. */
   exists: boolean;
   spec: HarnessSpec;
   /** What the files lack to match the harness; empty when in sync. */
   pending: HarnessFileChange[];
+  external: ExternalEntry[];
+  /** The instruction files there are, relative to the root. */
+  instructionFiles: string[];
 }
 
 export function harnessLoad(root: string): Promise<HarnessState> {
   return invoke("harness_load", { root });
 }
 
-export function harnessPreview(root: string, spec: HarnessSpec): Promise<HarnessFileChange[]> {
-  return invoke("harness_preview", { root, spec });
+/** `adopted`: the user's entries whose rules the harness now holds, taken
+ * out of their files for Termo's own. */
+export function harnessPreview(root: string, spec: HarnessSpec, adopted: ExternalEntry[]): Promise<HarnessFileChange[]> {
+  return invoke("harness_preview", { root, spec, adopted });
 }
 
-export function harnessApply(root: string, spec: HarnessSpec): Promise<HarnessState> {
-  return invoke("harness_apply", { root, spec });
+export function harnessApply(root: string, spec: HarnessSpec, adopted: ExternalEntry[]): Promise<HarnessState> {
+  return invoke("harness_apply", { root, spec, adopted });
 }
