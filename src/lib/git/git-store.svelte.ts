@@ -24,6 +24,7 @@ import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelt
 import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
 import { agentsStore } from "$lib/agents/agents-store.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+import { harnessStore } from "$lib/harness/harness-store.svelte";
 import { countChanges } from "./git-summary";
 
 /** How often the repository is looked at again while something shows it:
@@ -241,6 +242,7 @@ class GitStore {
     if (open) {
       agentsStore.setOpen(false);
       explorerStore.open = false;
+      harnessStore.setOpen(false);
     }
     this.open = open;
   }

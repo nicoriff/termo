@@ -29,6 +29,7 @@ export type ShortcutAction =
   | "favoriteTab"
   | "toggleExplorer"
   | "toggleGit"
+  | "toggleHarness"
   | "toggleAgents"
   | "toggleOrchestration"
   | "cycleTab"
@@ -58,6 +59,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "favoriteTab",
   "toggleExplorer",
   "toggleGit",
+  "toggleHarness",
   "toggleAgents",
   "toggleOrchestration",
   "cycleTab",
@@ -90,6 +92,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   favoriteTab: "shortcuts.labels.favoriteTab",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
   toggleGit: "shortcuts.labels.toggleGit",
+  toggleHarness: "shortcuts.labels.toggleHarness",
   toggleAgents: "shortcuts.labels.toggleAgents",
   toggleOrchestration: "shortcuts.labels.toggleOrchestration",
   cycleTab: "shortcuts.labels.cycleTab",
@@ -274,6 +277,8 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   toggleExplorer: { mac: "meta+shift+b", other: "ctrl+shift+b" },
   // S, from source control: G is the agents panel's.
   toggleGit: { mac: "meta+shift+s", other: "ctrl+shift+s" },
+  // W, the first free letter: H is the quick question's, R orchestration's.
+  toggleHarness: { mac: "meta+shift+w", other: "ctrl+shift+w" },
   toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },
   // R, from oRchestration: O is Copilot's.
   toggleOrchestration: { mac: "meta+shift+r", other: "ctrl+shift+r" },

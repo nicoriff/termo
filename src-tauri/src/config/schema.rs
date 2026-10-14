@@ -45,6 +45,8 @@ pub struct ShortcutsConfig {
     pub toggle_explorer_other: Option<String>,
     pub toggle_git_mac: Option<String>,
     pub toggle_git_other: Option<String>,
+    pub toggle_harness_mac: Option<String>,
+    pub toggle_harness_other: Option<String>,
     pub toggle_agents_mac: Option<String>,
     pub toggle_agents_other: Option<String>,
     pub toggle_orchestration_mac: Option<String>,

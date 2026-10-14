@@ -19,6 +19,7 @@ import { newTabOptions } from "../layout/new-tab-options.svelte";
 import { agentsStore, type AgentsSection } from "../agents/agents-store.svelte";
 import { explorerStore } from "../explorer/explorer-store.svelte";
 import { gitStore } from "../git/git-store.svelte";
+import { harnessStore } from "../harness/harness-store.svelte";
 import { gitReviewStore } from "../git/git-review-store.svelte";
 import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
@@ -78,6 +79,12 @@ export function buildCommands(): Command[] {
       group: "navigation",
       label: explorerStore.open ? t("commands.hideExplorer") : t("commands.showExplorer"),
       run: () => explorerStore.toggle(),
+    },
+    {
+      id: "harness.toggle",
+      group: "navigation",
+      label: harnessStore.open ? t("commands.hideHarness") : t("commands.showHarness"),
+      run: () => harnessStore.toggle(),
     },
   ];
 

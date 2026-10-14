@@ -27,6 +27,8 @@
   import { gitStore } from "$lib/git/git-store.svelte";
   import { gitReviewStore } from "$lib/git/git-review-store.svelte";
   import GitPanel from "$lib/git/GitPanel.svelte";
+  import { harnessStore } from "$lib/harness/harness-store.svelte";
+  import HarnessPanel from "$lib/harness/HarnessPanel.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
@@ -81,6 +83,7 @@
     const stopCompanionNudges = companionNudges.start();
     const stopQuickAsk = quickAskStore.start();
     const stopGit = gitStore.start();
+    const stopHarness = harnessStore.start();
     const stopGitReviews = gitReviewStore.start();
     // So the first click on a tile's "+" finds its menu already filled.
     newTabOptions.refresh();
@@ -135,6 +138,7 @@
       stopCompanionNudges();
       stopQuickAsk();
       stopGit();
+      stopHarness();
       stopGitReviews();
     };
   });
@@ -245,6 +249,13 @@
       if (!gitStore.open) uiState.refocusTerminals();
       return;
     }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleHarness"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      harnessStore.toggle();
+      if (!harnessStore.open) uiState.refocusTerminals();
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, section] of [
         ["toggleAgents", "local"],
@@ -345,6 +356,8 @@
       <ExplorerPanel />
     {:else if gitStore.open && appConfigStore.gitEnabled}
       <GitPanel />
+    {:else if harnessStore.open}
+      <HarnessPanel />
     {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
