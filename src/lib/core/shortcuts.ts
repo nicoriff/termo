@@ -21,6 +21,7 @@ import type { MessageKey } from "../i18n/translate";
 export type ShortcutAction =
   | "newWindow"
   | "newTab"
+  | "tabMenu"
   | "newClaude"
   | "newCodex"
   | "newGemini"
@@ -51,6 +52,7 @@ export type ShortcutAction =
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newWindow",
   "newTab",
+  "tabMenu",
   "newClaude",
   "newCodex",
   "newGemini",
@@ -84,6 +86,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newWindow: "shortcuts.labels.newWindow",
   newTab: "shortcuts.labels.newTab",
+  tabMenu: "shortcuts.labels.tabMenu",
   newClaude: "shortcuts.labels.newClaude",
   newCodex: "shortcuts.labels.newCodex",
   newGemini: "shortcuts.labels.newGemini",
@@ -262,6 +265,9 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   // Shift elsewhere: plain Ctrl+N belongs to the shell (next history line).
   newWindow: { mac: "meta+n", other: "ctrl+shift+n" },
   newTab: { mac: "meta+t", other: "ctrl+t" },
+  // T with Shift: the menu of everything a new tab can be (Ctrl+T opens one
+  // like the active tab right away).
+  tabMenu: { mac: "meta+shift+t", other: "ctrl+shift+t" },
   // Not Ctrl+Alt: on Spanish and other layouts that's AltGr, which types @,
   // # and friends.
   newClaude: { mac: "meta+shift+l", other: "ctrl+shift+l" },

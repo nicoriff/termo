@@ -15,6 +15,8 @@ import type { ToolId } from "$lib/ai-mode/pattern-table";
 const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_tab_mac: null,
   new_tab_other: null,
+  tab_menu_mac: null,
+  tab_menu_other: null,
   new_claude_mac: null,
   new_claude_other: null,
   new_codex_mac: null,
@@ -73,6 +75,7 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
 
 const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; other: keyof ShortcutsConfig }> = {
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
+  tabMenu: { mac: "tab_menu_mac", other: "tab_menu_other" },
   newClaude: { mac: "new_claude_mac", other: "new_claude_other" },
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
   newGemini: { mac: "new_gemini_mac", other: "new_gemini_other" },

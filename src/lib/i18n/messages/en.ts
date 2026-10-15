@@ -2204,6 +2204,7 @@ export const en: Messages = {
     labels: {
       newWindow: "New window",
       newTab: "New tab",
+      tabMenu: "New tab menu (more options)",
       newClaude: "New Claude Code tab",
       newCodex: "New Codex tab",
       newGemini: "New Gemini CLI tab",

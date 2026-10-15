@@ -27,6 +27,8 @@ impl Default for WindowConfig {
 pub struct ShortcutsConfig {
     pub new_tab_mac: Option<String>,
     pub new_tab_other: Option<String>,
+    pub tab_menu_mac: Option<String>,
+    pub tab_menu_other: Option<String>,
     pub new_claude_mac: Option<String>,
     pub new_claude_other: Option<String>,
     pub new_codex_mac: Option<String>,

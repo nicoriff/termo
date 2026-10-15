@@ -18,6 +18,8 @@ export interface WindowConfig {
 export interface ShortcutsConfig {
   new_tab_mac: string | null;
   new_tab_other: string | null;
+  tab_menu_mac: string | null;
+  tab_menu_other: string | null;
   new_claude_mac: string | null;
   new_claude_other: string | null;
   new_codex_mac: string | null;

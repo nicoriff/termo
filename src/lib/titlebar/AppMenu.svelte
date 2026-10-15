@@ -18,6 +18,7 @@
   import type { SavedLayout } from "$lib/core/layouts-client";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
+  import { menuKeys } from "$lib/core/menu-keys";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
   import { canRestore, restoreSession } from "$lib/ai-mode/restore-session";
@@ -202,7 +203,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="app-menu-backdrop" onpointerdown={onclose}></div>
 
-<div class="app-menu" style="top:{pos.top}px; left:{pos.left}px" role="menu">
+<div class="app-menu" style="top:{pos.top}px; left:{pos.left}px" role="menu" use:menuKeys={{ close: onclose }}>
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={newWindow}>
     <!-- Two overlapping windows: one more of them. -->
     <svg class="app-menu-icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -434,7 +435,12 @@
 </div>
 
 {#if editOpen}
-  <div class="app-submenu" style="top:{editPos.top}px; left:{editPos.left}px" role="menu">
+  <div
+    class="app-submenu"
+    style="top:{editPos.top}px; left:{editPos.left}px"
+    role="menu"
+    use:menuKeys={{ close: onclose, back: () => (editOpen = false) }}
+  >
     <button class="app-menu-item" role="menuitem" disabled={!canCopy} onclick={() => runEdit(copySelection)}>
       <span class="app-menu-text">{t("edit.copy")}</span>
       <span class="app-menu-hint">{hint("copy")}</span>
@@ -455,7 +461,12 @@
 {/if}
 
 {#if favoritesOpen}
-  <div class="app-submenu" style="top:{favoritesPos.top}px; left:{favoritesPos.left}px" role="menu">
+  <div
+    class="app-submenu"
+    style="top:{favoritesPos.top}px; left:{favoritesPos.left}px"
+    role="menu"
+    use:menuKeys={{ close: onclose, back: () => (favoritesOpen = false) }}
+  >
     {#each favoritesStore.favorites.filter(canRestore) as favorite (favorite.agentSessionId)}
       <button
         class="app-menu-item"
@@ -473,7 +484,12 @@
 {/if}
 
 {#if restoreOpen}
-  <div class="app-submenu" style="top:{restorePos.top}px; left:{restorePos.left}px" role="menu">
+  <div
+    class="app-submenu"
+    style="top:{restorePos.top}px; left:{restorePos.left}px"
+    role="menu"
+    use:menuKeys={{ close: onclose, back: () => (restoreOpen = false) }}
+  >
     {#each layoutsStore.layouts as layout (layout.name)}
       <button class="app-menu-item" role="menuitem" onclick={() => restore(layout)}>
         <span class="app-menu-text">{layout.name}</span>
@@ -557,7 +573,9 @@
   }
 
   .app-menu-item:hover,
-  .app-menu-item.open {
+  .app-menu-item.open,
+  .app-menu-item:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { menuKeys } from "$lib/core/menu-keys";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { gitBranches, type Branch, type GitOp } from "$lib/core/git-client";
@@ -142,7 +143,7 @@
     </button>
 
     {#if open}
-      <div class="git-menu" role="menu" tabindex="-1">
+      <div class="git-menu" role="menu" tabindex="-1" use:menuKeys={{ close, escape: false }}>
         <div class="menu-head">
           <ForgeIcon kind={gitStore.forge?.kind ?? "generic"} size={13} />
           <span class="menu-repo">{gitStore.forge ? `${gitStore.forge.owner}/${gitStore.forge.repo}` : fileName(snap.root)}</span>
@@ -385,7 +386,9 @@
     cursor: pointer;
   }
 
-  .git-menu button:hover:not(:disabled) {
+  .git-menu button:hover:not(:disabled),
+  .git-menu button:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

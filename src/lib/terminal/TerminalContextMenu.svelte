@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { menuKeys } from "$lib/core/menu-keys";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isMac } from "$lib/core/platform";
@@ -52,7 +53,12 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="context-backdrop" onpointerdown={() => uiState.closeTerminalContextMenu()}></div>
 
-<div class="context-menu" style="top:{pos.top}px; left:{pos.left}px" role="menu">
+<div
+  class="context-menu"
+  style="top:{pos.top}px; left:{pos.left}px"
+  role="menu"
+  use:menuKeys={{ close: () => uiState.closeTerminalContextMenu() }}
+>
   <button class="context-item" role="menuitem" disabled={!canCopy} onclick={() => run(copySelection)}>
     <span class="context-text">{t("edit.copy")}</span>
     <span class="context-hint">{hint("copy")}</span>
@@ -115,7 +121,9 @@
     cursor: pointer;
   }
 
-  .context-item:hover:not(:disabled) {
+  .context-item:hover:not(:disabled),
+  .context-item:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

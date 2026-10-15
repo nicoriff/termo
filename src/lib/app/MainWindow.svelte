@@ -249,6 +249,12 @@
       if (!gitStore.open) uiState.refocusTerminals();
       return;
     }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("tabMenu"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      uiState.openTabMenu();
+      return;
+    }
     if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleHarness"))) {
       event.preventDefault();
       event.stopPropagation();

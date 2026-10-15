@@ -72,6 +72,9 @@ class UiState {
    * overlay (the command palette) had it — Terminal.svelte only focuses on its
    * own when the active tab changes, which doesn't happen here. */
   terminalFocusNonce = $state(0);
+  /** Bumped by the shortcut that opens the focused tile's "˅" menu (new
+   * console, agents, recent), which that tile's TileChrome opens. */
+  tabMenuNonce = $state(0);
 
   /** Whether an overlay currently owns the keyboard, so the window-level
    * handlers (tile picker, AI Mode panel) stay out of the way. */
@@ -347,6 +350,10 @@ class UiState {
 
   refocusTerminals(): void {
     this.terminalFocusNonce++;
+  }
+
+  openTabMenu(): void {
+    this.tabMenuNonce++;
   }
 }
 

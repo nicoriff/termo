@@ -2205,6 +2205,7 @@ export const es = {
     labels: {
       newWindow: "Nueva ventana",
       newTab: "Nueva pestaña",
+      tabMenu: "Menú de nueva pestaña (más opciones)",
       newClaude: "Nueva pestaña de Claude Code",
       newCodex: "Nueva pestaña de Codex",
       newGemini: "Nueva pestaña de Gemini CLI",
