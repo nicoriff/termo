@@ -300,6 +300,94 @@ export function testCommand(spec: HarnessSpec, command: string): { agent: Harnes
   });
 }
 
+/** A row of the panel's two lists: what the agents do, and what they don't. */
+export type RowKind = "instruction" | "check" | "allow" | "noEdit" | "noRead" | "deny" | "ask";
+export type RowSide = "do" | "dont";
+
+export const ROW_KINDS: Record<RowSide, RowKind[]> = {
+  do: ["check", "allow", "instruction"],
+  dont: ["noRead", "noEdit", "deny", "ask"],
+};
+
+export interface RuleRow {
+  kind: RowKind;
+  /** The path, the command, or the instruction's text. */
+  subject: string;
+  /** Where it is in its own list (paths, commands, checks, instruction lines). */
+  index: number;
+}
+
+/** The instructions as one item per line, list markers left out. */
+export function instructionItems(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim().replace(/^[-*+]\s+/, ""))
+    .filter(Boolean);
+}
+
+export function joinInstructionItems(items: string[]): string {
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+/** The harness as the two lists, in a fixed order of kinds. */
+export function ruleRows(spec: HarnessSpec): Record<RowSide, RuleRow[]> {
+  const rows: RuleRow[] = [];
+  spec.checks.forEach((check, index) => rows.push({ kind: "check", subject: check.command, index }));
+  spec.commands.forEach((rule, index) => rows.push({ kind: rule.decision, subject: rule.prefix, index }));
+  instructionItems(spec.instructions).forEach((item, index) => rows.push({ kind: "instruction", subject: item, index }));
+  spec.paths.forEach((rule, index) => rows.push({ kind: rule.access, subject: rule.pattern, index }));
+  const side = (kinds: RowKind[]) =>
+    rows.filter((row) => kinds.includes(row.kind)).sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind));
+  return { do: side(ROW_KINDS.do), dont: side(ROW_KINDS.dont) };
+}
+
+export function isPathKind(kind: RowKind): kind is PathAccess {
+  return kind === "noEdit" || kind === "noRead";
+}
+
+export function isCommandKind(kind: RowKind): kind is CommandDecision {
+  return kind === "deny" || kind === "ask" || kind === "allow";
+}
+
+/** Why `subject` can't be added as a row of `kind`; null when it can. */
+export function rowProblem(spec: HarnessSpec, kind: RowKind, subject: string): MessageKey | null {
+  if (isPathKind(kind)) return pathProblem(subject, spec.paths.map((rule) => rule.pattern));
+  if (isCommandKind(kind)) return commandProblem(subject, spec.commands.map((rule) => rule.prefix));
+  const text = subject.trim();
+  if (!text) return "harness.rows.empty";
+  if (kind === "check") {
+    return spec.checks.some((check) => check.command.trim() === text) ? "harness.rows.duplicate" : null;
+  }
+  return instructionItems(spec.instructions).includes(text) ? "harness.rows.duplicate" : null;
+}
+
+export function addRow(spec: HarnessSpec, kind: RowKind, subject: string): void {
+  if (isPathKind(kind)) spec.paths.push({ pattern: normalizePattern(subject), access: kind });
+  else if (isCommandKind(kind)) spec.commands.push({ prefix: normalizePrefix(subject), decision: kind });
+  else if (kind === "check") spec.checks.push({ command: subject.trim() });
+  else spec.instructions = joinInstructionItems([...instructionItems(spec.instructions), subject.trim()]);
+}
+
+export function removeRow(spec: HarnessSpec, row: RuleRow): void {
+  if (isPathKind(row.kind)) spec.paths.splice(row.index, 1);
+  else if (isCommandKind(row.kind)) spec.commands.splice(row.index, 1);
+  else if (row.kind === "check") spec.checks.splice(row.index, 1);
+  else {
+    const items = instructionItems(spec.instructions);
+    items.splice(row.index, 1);
+    spec.instructions = joinInstructionItems(items);
+  }
+}
+
+/** What each agent the harness is for does with a row: the support of its
+ * kind (see SUPPORT); an instruction is only ever read. */
+export function rowSupport(spec: HarnessSpec, kind: RowKind): { agent: HarnessAgent; support: Support }[] {
+  return AGENTS.filter((agent) => spec.agents.includes(agent)).map((agent) => ({
+    agent,
+    support: kind === "instruction" ? "text" : SUPPORT[agent][kind === "check" ? "checks" : kind],
+  }));
+}
+
 export type HarnessStatus = "none" | "draft" | "pending" | "synced";
 
 /** What the header says: edits not applied yet win over files out of step. */

@@ -3,7 +3,14 @@ import type { ExternalEntry, HarnessSpec, ProposedRule, SuggestedRule } from "$l
 import {
   addPack,
   addProposed,
+  addRow,
+  copySpec,
   hasProposed,
+  instructionItems,
+  removeRow,
+  rowProblem,
+  rowSupport,
+  ruleRows,
   addRule,
   COMMAND_PACKS,
   groupExternal,
@@ -122,6 +129,71 @@ describe("external rules", () => {
       { prefix: "git push", decision: "ask" },
       { prefix: "rm -rf", decision: "deny" },
     ]);
+  });
+});
+
+describe("rows", () => {
+  const rules = spec({
+    agents: ["claude", "copilot"],
+    paths: [
+      { pattern: "dist", access: "noEdit" },
+      { pattern: ".env", access: "noRead" },
+    ],
+    commands: [
+      { prefix: "git push", decision: "ask" },
+      { prefix: "npm test", decision: "allow" },
+      { prefix: "rm -rf", decision: "deny" },
+    ],
+    checks: [{ command: "npm run check" }],
+    instructions: "- Use pnpm.\n\n* Keep commits small.\nWrite tests.",
+  });
+
+  it("split into what to do and what not to, kind by kind", () => {
+    const rows = ruleRows(rules);
+    expect(rows.do.map((row) => [row.kind, row.subject])).toEqual([
+      ["check", "npm run check"],
+      ["allow", "npm test"],
+      ["instruction", "Use pnpm."],
+      ["instruction", "Keep commits small."],
+      ["instruction", "Write tests."],
+    ]);
+    expect(rows.dont.map((row) => [row.kind, row.subject])).toEqual([
+      ["noRead", ".env"],
+      ["noEdit", "dist"],
+      ["deny", "rm -rf"],
+      ["ask", "git push"],
+    ]);
+  });
+
+  it("come and go by their kind and index", () => {
+    const target = copySpec(rules);
+    addRow(target, "instruction", " Prefer small PRs. ");
+    addRow(target, "noEdit", "./build/");
+    expect(target.instructions).toBe("- Use pnpm.\n- Keep commits small.\n- Write tests.\n- Prefer small PRs.");
+    expect(target.paths.at(-1)).toEqual({ pattern: "build", access: "noEdit" });
+    const second = ruleRows(target).do.find((row) => row.subject === "Keep commits small.")!;
+    removeRow(target, second);
+    expect(instructionItems(target.instructions)).toEqual(["Use pnpm.", "Write tests.", "Prefer small PRs."]);
+    const push = ruleRows(target).dont.find((row) => row.subject === "git push")!;
+    removeRow(target, push);
+    expect(target.commands.map((rule) => rule.prefix)).toEqual(["npm test", "rm -rf"]);
+  });
+
+  it("refuse duplicates and blanks", () => {
+    expect(rowProblem(rules, "instruction", "Use pnpm.")).toBe("harness.rows.duplicate");
+    expect(rowProblem(rules, "check", "  ")).toBe("harness.rows.empty");
+    expect(rowProblem(rules, "deny", "git  push")).toBe("harness.commands.duplicate");
+    expect(rowProblem(rules, "noRead", "../x")).toBe("harness.paths.outside");
+    expect(rowProblem(rules, "check", "cargo test")).toBeNull();
+  });
+
+  it("say what each agent does with them", () => {
+    expect(rowSupport(rules, "noRead")).toEqual([
+      { agent: "claude", support: "enforced" },
+      { agent: "copilot", support: "text" },
+    ]);
+    expect(rowSupport(rules, "instruction").every(({ support }) => support === "text")).toBe(true);
+    expect(rowSupport(rules, "check").map(({ support }) => support)).toEqual(["enforced", "enforced"]);
   });
 });
 

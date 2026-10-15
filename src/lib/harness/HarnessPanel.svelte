@@ -1,17 +1,10 @@
 <script lang="ts">
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { t } from "$lib/i18n/i18n.svelte";
   import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import {
-    harnessDetectChecks,
-    type CommandDecision,
-    type HarnessFileChange,
-    type PathAccess,
-    type ProposedRule,
-  } from "$lib/core/harness-client";
+  import { harnessDetectChecks, type HarnessFileChange, type ProposedRule } from "$lib/core/harness-client";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -23,52 +16,34 @@
   import { latestThought, stepLine, toolSteps } from "$lib/agents/planning-progress";
   import HarnessDiff from "./HarnessDiff.svelte";
   import HarnessFileEditor from "./HarnessFileEditor.svelte";
-  import HarnessTextEditor from "./HarnessTextEditor.svelte";
+  import HarnessRuleSection from "./HarnessRuleSection.svelte";
   import {
-    ACCESS_LEVELS,
     AGENTS,
     CHANGE_KIND_LABEL,
-    DECISIONS,
-    NEEDS_TRUST,
-    SUPPORT,
     COMMAND_PACKS,
+    NEEDS_TRUST,
     addPack,
     changeKind,
-    commandProblem,
     groupExternal,
     hasPack,
     hasProposed,
     matchingRule,
     testCommand,
-    normalizePattern,
-    normalizePrefix,
-    pathProblem,
-    relativeToRoot,
-    ruleKinds,
-    type Support,
   } from "./harness-model";
   import { HARNESS_WIDTH, harnessStore } from "./harness-store.svelte";
 
-  const COLLAPSED_KEY = "termo.harness.collapsedSections";
+  const COLLAPSED_KEY = "termo.harness.collapsed";
 
-  type SectionId =
-    | "assist"
-    | "agents"
-    | "paths"
-    | "commands"
-    | "checks"
-    | "instructions"
-    | "files"
-    | "external"
-    | "support"
-    | "tester";
+  /** The sections below the two lists, folded until they're wanted. */
+  type SectionId = "assist" | "agents" | "tester" | "files" | "external";
+  const FOLDED: SectionId[] = ["assist", "agents", "tester", "files", "external"];
 
   function loadCollapsed(): SectionId[] {
     try {
-      const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
-      return Array.isArray(saved) ? saved : [];
+      const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "null");
+      return Array.isArray(saved) ? saved : FOLDED;
     } catch {
-      return [];
+      return FOLDED;
     }
   }
 
@@ -91,6 +66,13 @@
     const timer = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(timer);
   });
+
+  const ACCESS_LABEL = { noEdit: "harness.paths.noEdit", noRead: "harness.paths.noRead" } as const;
+  const DECISION_LABEL = {
+    deny: "harness.commands.deny",
+    ask: "harness.commands.ask",
+    allow: "harness.commands.allow",
+  } as const;
 
   /** What a proposal is, in a word or two. */
   function proposalLabel(rule: ProposedRule): string {
@@ -131,57 +113,12 @@
 
   const externalGroups = $derived(groupExternal(harnessStore.external));
   const instructionFiles = $derived(harnessStore.saved?.instructionFiles ?? []);
-  const kinds = $derived(draft ? ruleKinds(draft) : []);
   const targeted = $derived(draft ? AGENTS.filter((agent) => draft.agents.includes(agent)) : []);
   const trusting = $derived(targeted.filter((agent) => NEEDS_TRUST.includes(agent)));
-
-  const SUPPORT_MARK: Record<Support, string> = { enforced: "✓", partial: "◐", text: "Aa", none: "–" };
-  const SUPPORT_LABEL = {
-    enforced: "harness.support.enforced",
-    partial: "harness.support.partial",
-    text: "harness.support.text",
-    none: "harness.support.none",
-  } as const;
-  const KIND_LABEL = {
-    noEdit: "harness.support.kinds.noEdit",
-    noRead: "harness.support.kinds.noRead",
-    deny: "harness.support.kinds.deny",
-    ask: "harness.support.kinds.ask",
-    allow: "harness.support.kinds.allow",
-    checks: "harness.support.kinds.checks",
-  } as const;
-  /** Short enough for a column; the full name is its tooltip. */
-  const SHORT_NAME = { claude: "Claude", codex: "Codex", gemini: "Gemini", copilot: "Copilot", grok: "Grok" } as const;
 
   let collapsed = $state<SectionId[]>(loadCollapsed());
   /** The files on review shown open, by path. */
   let expanded = $state<string[]>([]);
-
-  let newPath = $state("");
-  let newAccess = $state<PathAccess>("noEdit");
-  let pathNote = $state<string | null>(null);
-  let newCommand = $state("");
-  let newDecision = $state<CommandDecision>("deny");
-  let newCheck = $state("");
-
-  const pathError = $derived(
-    draft && newPath.trim() ? pathProblem(newPath, draft.paths.map((rule) => rule.pattern)) : null,
-  );
-  const commandError = $derived(
-    draft && newCommand.trim() ? commandProblem(newCommand, draft.commands.map((rule) => rule.prefix)) : null,
-  );
-
-  const ACCESS_LABEL = { noEdit: "harness.paths.noEdit", noRead: "harness.paths.noRead" } as const;
-  const DECISION_LABEL = {
-    deny: "harness.commands.deny",
-    ask: "harness.commands.ask",
-    allow: "harness.commands.allow",
-  } as const;
-  const DECISION_HINT = {
-    deny: "harness.commands.denyHint",
-    ask: "harness.commands.askHint",
-    allow: "harness.commands.allowHint",
-  } as const;
 
   function toggleSection(id: SectionId) {
     collapsed = collapsed.includes(id) ? collapsed.filter((other) => other !== id) : [...collapsed, id];
@@ -203,46 +140,6 @@
     });
   }
 
-  function addPath(event: SubmitEvent) {
-    event.preventDefault();
-    if (!newPath.trim() || pathError) return;
-    const pattern = normalizePattern(newPath);
-    const access = newAccess;
-    harnessStore.edit((spec) => spec.paths.push({ pattern, access }));
-    newPath = "";
-    pathNote = null;
-  }
-
-  async function browse() {
-    if (!root) return;
-    const picked = await openDialog({ defaultPath: root, multiple: false, directory: false });
-    if (typeof picked !== "string") return;
-    const relative = relativeToRoot(root, picked);
-    if (relative === null) {
-      pathNote = t("harness.paths.outside");
-      return;
-    }
-    pathNote = null;
-    newPath = relative;
-  }
-
-  function addCommand(event: SubmitEvent) {
-    event.preventDefault();
-    if (!newCommand.trim() || commandError) return;
-    const prefix = normalizePrefix(newCommand);
-    const decision = newDecision;
-    harnessStore.edit((spec) => spec.commands.push({ prefix, decision }));
-    newCommand = "";
-  }
-
-  function addCheck(event: SubmitEvent) {
-    event.preventDefault();
-    const command = newCheck.trim();
-    if (!command || draft?.checks.some((check) => check.command.trim() === command)) return;
-    harnessStore.edit((spec) => spec.checks.push({ command }));
-    newCheck = "";
-  }
-
   function toggleFile(path: string) {
     expanded = expanded.includes(path) ? expanded.filter((other) => other !== path) : [...expanded, path];
   }
@@ -254,7 +151,7 @@
 
   function onKeydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
-    // Escape inside the instructions' editor is the editor's.
+    // Escape inside an editor is the editor's.
     if ((event.target as HTMLElement | null)?.closest(".cm-editor")) return;
     if (review !== null) harnessStore.cancelReview();
     else if (harnessStore.editingFile !== null) harnessStore.editFile(null);
@@ -296,11 +193,6 @@
   </ul>
 {/snippet}
 
-{#snippet removeButton(label: string, onclick: () => void)}
-  <button class="icon-button remove" title={label} aria-label={label} {onclick}>
-    <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.1" /></svg>
-  </button>
-{/snippet}
 
 <aside
   class="harness-panel"
@@ -427,10 +319,47 @@
           {/if}
         </section>
 
+        <!-- The rules, as two plain lists: what the agents do, and what
+             they don't. -->
+        <HarnessRuleSection side="do" spec={draft} {root}>
+          {#snippet footer()}
+            {#if suggestedChecks.length > 0}
+              <div class="chips" role="group" aria-label={t("harness.checks.suggested")}>
+                <span class="chips-label">{t("harness.checks.suggested")}</span>
+                {#each suggestedChecks as command (command)}
+                  <button class="chip mono" onclick={() => harnessStore.edit((spec) => spec.checks.push({ command }))}>+ {command}</button>
+                {/each}
+              </div>
+            {/if}
+          {/snippet}
+        </HarnessRuleSection>
+
+        <HarnessRuleSection side="dont" spec={draft} {root}>
+          {#snippet footer()}
+            <div class="chips" role="group" aria-label={t("harness.packs.title")}>
+              <span class="chips-label">{t("harness.packs.title")}</span>
+              {#each COMMAND_PACKS as pack (pack.id)}
+                {@const added = hasPack(draft, pack)}
+                <button
+                  class="chip"
+                  disabled={added}
+                  title={pack.rules.map((rule) => `${t(DECISION_LABEL[rule.decision])}: ${rule.prefix}`).join("\n")}
+                  onclick={() => harnessStore.edit((spec) => addPack(spec, pack))}
+                >
+                  {added ? "✓" : "+"} {t(pack.label)}
+                </button>
+              {/each}
+            </div>
+          {/snippet}
+        </HarnessRuleSection>
+
+        <!-- The rest, folded away until wanted. -->
+        <p class="more-title">{t("harness.more")}</p>
+
         <!-- An agent that looks at the repository: rules it proposes, and
              the instruction files unified. -->
         <section>
-          {@render sectionHead("assist", t("harness.assist.title"), proposals?.items.length ?? null)}
+          {@render sectionHead("assist", t("harness.assist.title"), proposals && proposals.root === root ? proposals.items.length : null)}
           {#if !collapsed.includes("assist")}
             <div class="section-content">
               <p class="hint">{t("harness.assist.hint")}</p>
@@ -485,7 +414,7 @@
                 {:else}
                   <ul class="proposal-list">
                     {#each proposals.items as proposal, index (index)}
-                      {@const already = draft ? hasProposed(draft, proposal.rule) : false}
+                      {@const already = hasProposed(draft, proposal.rule)}
                       <li class="proposal">
                         <div class="proposal-rule">
                           <span class="proposal-kind {proposal.rule.kind === 'command' ? proposal.rule.decision : proposal.rule.kind}">
@@ -542,175 +471,14 @@
                   <span>{TOOL_DISPLAY_NAMES[agent]}</span>
                 </label>
               {/each}
-            </div>
-          {/if}
-        </section>
-
-        <section>
-          {@render sectionHead("paths", t("harness.paths.title"), draft.paths.length)}
-          {#if !collapsed.includes("paths")}
-            <div class="section-content">
-              <p class="hint">{t("harness.paths.hint")}</p>
-              {#if draft.paths.length > 0}
-                <ul class="rule-list">
-                  {#each draft.paths as rule, index (rule.pattern)}
-                    <li class="rule-row">
-                      <code class="rule-text" title={rule.pattern}>{rule.pattern}</code>
-                      <select
-                        aria-label={t("harness.paths.access")}
-                        value={rule.access}
-                        onchange={(event) => {
-                          const access = event.currentTarget.value as PathAccess;
-                          harnessStore.edit((spec) => (spec.paths[index].access = access));
-                        }}
-                      >
-                        {#each ACCESS_LEVELS as level (level)}
-                          <option value={level}>{t(ACCESS_LABEL[level])}</option>
-                        {/each}
-                      </select>
-                      {@render removeButton(t("harness.remove"), () => harnessStore.edit((spec) => spec.paths.splice(index, 1)))}
-                    </li>
-                  {/each}
-                </ul>
+              {#if trusting.length > 0}
+                <p class="notice">
+                  {t("harness.support.trust", { agents: trusting.map((agent) => TOOL_DISPLAY_NAMES[agent]).join(", ") })}
+                  {#if trusting.includes("codex")}
+                    {t("harness.support.codexHooks")}
+                  {/if}
+                </p>
               {/if}
-              <form class="add-form" onsubmit={addPath}>
-                <input
-                  type="text"
-                  placeholder={t("harness.paths.placeholder")}
-                  aria-label={t("harness.paths.placeholder")}
-                  bind:value={newPath}
-                  oninput={() => (pathNote = null)}
-                />
-                <select aria-label={t("harness.paths.access")} bind:value={newAccess}>
-                  {#each ACCESS_LEVELS as level (level)}
-                    <option value={level}>{t(ACCESS_LABEL[level])}</option>
-                  {/each}
-                </select>
-                <button type="button" class="small" title={t("harness.paths.browse")} onclick={() => void browse()}>…</button>
-                <button type="submit" class="small" disabled={!newPath.trim() || !!pathError}>{t("harness.add")}</button>
-              </form>
-              {#if pathError || pathNote}
-                <p class="field-error">{pathNote ?? (pathError ? t(pathError) : "")}</p>
-              {/if}
-            </div>
-          {/if}
-        </section>
-
-        <section>
-          {@render sectionHead("commands", t("harness.commands.title"), draft.commands.length)}
-          {#if !collapsed.includes("commands")}
-            <div class="section-content">
-              <p class="hint">{t("harness.commands.hint")}</p>
-              {#each DECISIONS as decision (decision)}
-                {@const rules = draft.commands.map((rule, index) => ({ rule, index })).filter(({ rule }) => rule.decision === decision)}
-                {#if rules.length > 0}
-                  <div class="decision-group">
-                    <span class="decision-title {decision}" title={t(DECISION_HINT[decision])}>{t(DECISION_LABEL[decision])}</span>
-                    <ul class="rule-list">
-                      {#each rules as { rule, index } (rule.prefix)}
-                        <li class="rule-row">
-                          <code class="rule-text" title={rule.prefix}>{rule.prefix}</code>
-                          <select
-                            aria-label={t("harness.commands.decision")}
-                            value={rule.decision}
-                            onchange={(event) => {
-                              const next = event.currentTarget.value as CommandDecision;
-                              harnessStore.edit((spec) => (spec.commands[index].decision = next));
-                            }}
-                          >
-                            {#each DECISIONS as option (option)}
-                              <option value={option}>{t(DECISION_LABEL[option])}</option>
-                            {/each}
-                          </select>
-                          {@render removeButton(t("harness.remove"), () => harnessStore.edit((spec) => spec.commands.splice(index, 1)))}
-                        </li>
-                      {/each}
-                    </ul>
-                  </div>
-                {/if}
-              {/each}
-              <form class="add-form" onsubmit={addCommand}>
-                <input
-                  type="text"
-                  placeholder={t("harness.commands.placeholder")}
-                  aria-label={t("harness.commands.placeholder")}
-                  bind:value={newCommand}
-                />
-                <select aria-label={t("harness.commands.decision")} bind:value={newDecision}>
-                  {#each DECISIONS as option (option)}
-                    <option value={option}>{t(DECISION_LABEL[option])}</option>
-                  {/each}
-                </select>
-                <button type="submit" class="small" disabled={!newCommand.trim() || !!commandError}>{t("harness.add")}</button>
-              </form>
-              {#if commandError}
-                <p class="field-error">{t(commandError)}</p>
-              {/if}
-              <div class="chips" role="group" aria-label={t("harness.packs.title")}>
-                <span class="chips-label">{t("harness.packs.title")}</span>
-                {#each COMMAND_PACKS as pack (pack.id)}
-                  {@const added = hasPack(draft, pack)}
-                  <button
-                    class="chip"
-                    disabled={added}
-                    title={pack.rules.map((rule) => `${t(DECISION_LABEL[rule.decision])}: ${rule.prefix}`).join("\n")}
-                    onclick={() => harnessStore.edit((spec) => addPack(spec, pack))}
-                  >
-                    {added ? "✓" : "+"} {t(pack.label)}
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </section>
-
-        <section>
-          {@render sectionHead("checks", t("harness.checks.title"), draft.checks.length)}
-          {#if !collapsed.includes("checks")}
-            <div class="section-content">
-              <p class="hint">{t("harness.checks.hint")}</p>
-              {#if draft.checks.length > 0}
-                <ul class="rule-list">
-                  {#each draft.checks as check, index (check.command)}
-                    <li class="rule-row">
-                      <code class="rule-text" title={check.command}>{check.command}</code>
-                      {@render removeButton(t("harness.remove"), () => harnessStore.edit((spec) => spec.checks.splice(index, 1)))}
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-              <form class="add-form" onsubmit={addCheck}>
-                <input
-                  type="text"
-                  placeholder={t("harness.checks.placeholder")}
-                  aria-label={t("harness.checks.placeholder")}
-                  bind:value={newCheck}
-                />
-                <button type="submit" class="small" disabled={!newCheck.trim()}>{t("harness.add")}</button>
-              </form>
-              {#if suggestedChecks.length > 0}
-                <div class="chips" role="group" aria-label={t("harness.checks.suggested")}>
-                  <span class="chips-label">{t("harness.checks.suggested")}</span>
-                  {#each suggestedChecks as command (command)}
-                    <button class="chip mono" onclick={() => harnessStore.edit((spec) => spec.checks.push({ command }))}>+ {command}</button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </section>
-
-        <section>
-          {@render sectionHead("instructions", t("harness.instructions.title"), null)}
-          {#if !collapsed.includes("instructions")}
-            <div class="section-content">
-              <p class="hint">{t("harness.instructions.hint")}</p>
-              <HarnessTextEditor
-                value={draft.instructions}
-                label={t("harness.instructions.title")}
-                placeholder={t("harness.instructions.placeholder")}
-                onchange={(text) => harnessStore.edit((spec) => (spec.instructions = text))}
-              />
             </div>
           {/if}
         </section>
@@ -755,10 +523,10 @@
                 <p class="hint">{t("harness.files.none")}</p>
               {:else}
                 <p class="hint">{t("harness.files.hint")}</p>
-                <ul class="rule-list">
+                <ul class="file-list">
                   {#each instructionFiles as file (file)}
-                    <li class="rule-row">
-                      <code class="rule-text" title={file}>{file}</code>
+                    <li class="file-row">
+                      <code title={file}>{file}</code>
                       <button class="small" onclick={() => harnessStore.editFile(file)}>{t("harness.files.edit")}</button>
                     </li>
                   {/each}
@@ -804,58 +572,6 @@
             {/if}
           </section>
         {/if}
-
-        <!-- Which agent holds which kind of rule by itself, and which only
-             hears of it in AGENTS.md. -->
-        <section>
-          {@render sectionHead("support", t("harness.support.title"), null)}
-          {#if !collapsed.includes("support")}
-            <div class="section-content">
-              <p class="hint">{t("harness.support.hint")}</p>
-              {#if kinds.length === 0 || targeted.length === 0}
-                <p class="hint">{t("harness.support.empty")}</p>
-              {:else}
-                <table class="support-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      {#each targeted as agent (agent)}
-                        <th scope="col" title={TOOL_DISPLAY_NAMES[agent]}>{SHORT_NAME[agent]}</th>
-                      {/each}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each kinds as kind (kind)}
-                      <tr>
-                        <th scope="row">{t(KIND_LABEL[kind])}</th>
-                        {#each targeted as agent (agent)}
-                          {@const support = SUPPORT[agent][kind]}
-                          <td class={support} title={t(SUPPORT_LABEL[support])}>
-                            <span aria-hidden="true">{SUPPORT_MARK[support]}</span>
-                            <span class="visually-hidden">{t(SUPPORT_LABEL[support])}</span>
-                          </td>
-                        {/each}
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-                <p class="legend">
-                  {#each ["enforced", "partial", "text", "none"] as const as support (support)}
-                    <span class="legend-item"><span class="mark {support}">{SUPPORT_MARK[support]}</span> {t(SUPPORT_LABEL[support])}</span>
-                  {/each}
-                </p>
-              {/if}
-              {#if trusting.length > 0}
-                <p class="notice">
-                  {t("harness.support.trust", { agents: trusting.map((agent) => TOOL_DISPLAY_NAMES[agent]).join(", ") })}
-                  {#if trusting.includes("codex")}
-                    {t("harness.support.codexHooks")}
-                  {/if}
-                </p>
-              {/if}
-            </div>
-          {/if}
-        </section>
       </div>
     {/if}
   </div>
@@ -937,11 +653,6 @@
   .icon-button svg {
     width: 12px;
     height: 12px;
-  }
-
-  .icon-button.remove svg {
-    width: 9px;
-    height: 9px;
   }
 
   .icon-button:hover {
@@ -1103,71 +814,7 @@
     list-style: none;
   }
 
-  .rule-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .rule-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 24px;
-    padding: 0 0 0 6px;
-    border-radius: 4px;
-  }
-
-  .rule-row:hover {
-    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.05));
-  }
-
-  .rule-text {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: 11px;
-  }
-
-  .decision-group {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .decision-title {
-    font-size: 10.5px;
-    font-weight: 600;
-    opacity: 0.75;
-  }
-
-  .decision-title.deny {
-    color: #e05a5a;
-  }
-
-  .decision-title.ask {
-    color: #d7a72a;
-  }
-
-  .decision-title.allow {
-    color: #4caf72;
-  }
-
-  .add-form {
-    display: flex;
-    gap: 4px;
-  }
-
-  .add-form input {
-    flex: 1;
-    min-width: 0;
-  }
-
-  input[type="text"],
-  select {
+  input[type="text"] {
     box-sizing: border-box;
     padding: 3px 6px;
     border: 1px solid var(--tabbar-border, #2a2a2a);
@@ -1178,16 +825,9 @@
     font-size: 11.5px;
   }
 
-  input[type="text"]:focus,
-  select:focus {
+  input[type="text"]:focus {
     outline: none;
     border-color: var(--pane-active-border, #3a6df0);
-  }
-
-  .field-error {
-    margin: 0;
-    font-size: 11px;
-    color: #e05a5a;
   }
 
   .small {
@@ -1561,6 +1201,46 @@
     font-weight: normal;
   }
 
+  .more-title {
+    margin: 14px 10px 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.45;
+  }
+
+  .harness-body > .more-title + section {
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+  }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding-left: 6px;
+  }
+
+  .file-row code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+  }
+
   .external-list {
     display: flex;
     flex-direction: column;
@@ -1604,43 +1284,6 @@
     opacity: 0.5;
   }
 
-  .support-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-  }
-
-  .support-table th,
-  .support-table td {
-    padding: 3px 4px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-  }
-
-  .support-table thead th {
-    font-size: 10px;
-    font-weight: 600;
-    opacity: 0.7;
-    text-align: center;
-  }
-
-  .support-table tbody th {
-    font-weight: normal;
-    text-align: left;
-  }
-
-  .support-table td {
-    text-align: center;
-    font-weight: 700;
-  }
-
-  .enforced {
-    color: #4caf72;
-  }
-
-  .partial {
-    color: #d7a72a;
-  }
-
   .text {
     color: var(--pane-active-border, #3a6df0);
     font-size: 10px;
@@ -1650,37 +1293,11 @@
     opacity: 0.45;
   }
 
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-    margin: 0;
-    font-size: 10.5px;
-    opacity: 0.8;
-  }
-
-  .legend-item {
-    white-space: nowrap;
-  }
-
-  .mark {
-    font-weight: 700;
-  }
-
   .notice {
     margin: 0;
     padding: 5px 7px;
     border-radius: 4px;
     background: rgba(215, 167, 42, 0.16);
     font-size: 11px;
-  }
-
-  .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
   }
 </style>
