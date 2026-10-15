@@ -1,6 +1,8 @@
-//! The client side of an Agent Client Protocol session, for the one engine
-//! that runs through it: Grok (`grok agent stdio`). Its headless `-p` mode
-//! takes no MCP servers for a run; a session opened over ACP does.
+//! The client side of an Agent Client Protocol session, for the engines that
+//! run through it: Grok (`grok agent stdio`) and Gemini CLI (`gemini --acp`).
+//! Their headless modes take no MCP servers for a run (Gemini CLI's, only
+//! from a settings file it won't read from a folder the user owns); a
+//! session opened over ACP does.
 //!
 //! Where the other CLIs take a prompt on stdin and print events, this is a
 //! conversation in JSON-RPC, one message per line: Termo opens the session,
@@ -103,6 +105,8 @@ impl Driver {
         // reports the error).
         let Some(result) = message.get("result") else { return Step { send: Vec::new(), done: true } };
         match id {
+            // Gemini CLI: the login its settings already name.
+            INITIALIZE if !self.run.sign_in => self.send(self.new_session()),
             INITIALIZE => {
                 // Its saved login when it has one, as `grok login` leaves it.
                 let methods: Vec<&str> = result
@@ -204,6 +208,7 @@ mod tests {
             mcp_servers: vec![json!({ "type": "http", "name": "termo", "url": "http://127.0.0.1:1/mcp", "headers": [] })],
             autonomy,
             web,
+            sign_in: true,
         };
         Driver::new(run, "C:/repo".into())
     }
@@ -253,6 +258,7 @@ mod tests {
             mcp_servers: Vec::new(),
             autonomy: Autonomy::Read,
             web: false,
+            sign_in: true,
         };
         let mut child = Command::new(&bin)
             .args(["agent", "--no-leader", "stdio"])
@@ -354,6 +360,16 @@ mod tests {
     fn a_login_it_has_no_method_for_goes_straight_to_the_session() {
         let mut driver = driver(Autonomy::Read, false);
         assert_eq!(sent(&driver.line(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#))["method"], "session/new");
+    }
+
+    /// Gemini CLI offers a Google login first even to whoever uses a key:
+    /// it isn't asked to log in at all, and keeps the login it has.
+    #[test]
+    fn without_sign_in_the_methods_offered_are_left_alone() {
+        let mut driver = driver(Autonomy::Read, false);
+        driver.run.sign_in = false;
+        let offered = r#"{"jsonrpc":"2.0","id":1,"result":{"authMethods":[{"id":"oauth-personal"},{"id":"gemini-api-key"}]}}"#;
+        assert_eq!(sent(&driver.line(offered))["method"], "session/new");
     }
 
     #[test]

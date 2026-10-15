@@ -449,17 +449,13 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
         args.push(file.display().to_string());
         files.push(file);
     }
-    if let (Engine::Gemini, Some(settings)) = (ask.engine, &invocation.settings) {
-        // Its settings for the run, on top of the system's (see runner.rs).
-        let file = scratch.join(format!("termo-gemini-{id}.json"));
-        super::console_bridge::write_private(&file, &super::gemini_system::with_system(settings)).map_err(|err| err.to_string())?;
-        cmd.env("GEMINI_CLI_SYSTEM_SETTINGS_PATH", &file);
+    if let (Engine::Gemini, Some(policy)) = (ask.engine, &invocation.settings) {
+        // The web tools left out (see runner.rs).
+        let file = scratch.join(format!("termo-gemini-{id}.toml"));
+        std::fs::write(&file, policy).map_err(|err| err.to_string())?;
+        args.push("--policy".into());
+        args.push(file.display().to_string());
         files.push(file);
-    }
-    if ask.engine == Engine::Gemini {
-        // Headless, Gemini CLI refuses a folder it hasn't been told to trust.
-        // This one only looks, and the folder is the one the user picked.
-        cmd.env("GEMINI_CLI_TRUST_WORKSPACE", "true");
     }
     cmd.args(&args)
         .current_dir(ask.dir)
@@ -492,7 +488,7 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
             return Err(err.to_string());
         }
     };
-    // Grok's is a conversation (see acp.rs): its input stays open until the
+    // Grok's and Gemini CLI's are a conversation (see acp.rs): its input stays open until the
     // turn is over. The others take the prompt and are left to it.
     let mut conversation = None;
     if let Some(mut stdin) = child.stdin.take() {
