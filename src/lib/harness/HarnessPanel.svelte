@@ -5,12 +5,22 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { harnessDetectChecks, type CommandDecision, type PathAccess } from "$lib/core/harness-client";
+  import {
+    harnessDetectChecks,
+    type CommandDecision,
+    type HarnessFileChange,
+    type PathAccess,
+    type ProposedRule,
+  } from "$lib/core/harness-client";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { fileName } from "$lib/layout/split-tree";
+  import { formatDuration } from "$lib/agents/agent-spec";
+  import AiEnginePicker from "$lib/agents/AiEnginePicker.svelte";
+  import { aiEngine } from "$lib/agents/ai-engine.svelte";
+  import { latestThought, stepLine, toolSteps } from "$lib/agents/planning-progress";
   import HarnessDiff from "./HarnessDiff.svelte";
   import HarnessFileEditor from "./HarnessFileEditor.svelte";
   import HarnessTextEditor from "./HarnessTextEditor.svelte";
@@ -27,6 +37,7 @@
     commandProblem,
     groupExternal,
     hasPack,
+    hasProposed,
     matchingRule,
     testCommand,
     normalizePattern,
@@ -41,6 +52,7 @@
   const COLLAPSED_KEY = "termo.harness.collapsedSections";
 
   type SectionId =
+    | "assist"
     | "agents"
     | "paths"
     | "commands"
@@ -67,6 +79,26 @@
   const repoName = $derived(root ? fileName(root) : t("harness.title"));
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleHarness"), isMac));
   const pendingCount = $derived(harnessStore.saved?.pending.length ?? 0);
+  const assist = $derived(harnessStore.assist);
+  const proposals = $derived(harnessStore.proposals);
+  const unified = $derived(harnessStore.unified);
+  let now = $state(Date.now());
+
+  // The time an agent has been at it, by the second while one is.
+  $effect(() => {
+    if (!assist) return;
+    now = Date.now();
+    const timer = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(timer);
+  });
+
+  /** What a proposal is, in a word or two. */
+  function proposalLabel(rule: ProposedRule): string {
+    if (rule.kind === "path") return t(ACCESS_LABEL[rule.access]);
+    if (rule.kind === "command") return t(DECISION_LABEL[rule.decision]);
+    return t("harness.assist.check");
+  }
+
   let testInput = $state("");
   /** Checks the repository's files suggest, for the root they were read in. */
   let detected = $state<{ root: string; checks: string[] } | null>(null);
@@ -242,6 +274,28 @@
   </button>
 {/snippet}
 
+{#snippet changeList(changes: HarnessFileChange[])}
+  <ul class="review-list">
+    {#each changes as change (change.path)}
+      {@const kind = changeKind(change)}
+      <li>
+        <button class="review-file" aria-expanded={expanded.includes(change.path)} onclick={() => toggleFile(change.path)}>
+          <svg class="chevron" class:open={expanded.includes(change.path)} viewBox="0 0 6 10" aria-hidden="true">
+            <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+          </svg>
+          <span class="review-path">{change.path}</span>
+          <span class="review-kind {kind}">{t(CHANGE_KIND_LABEL[kind])}</span>
+        </button>
+        {#if expanded.includes(change.path)}
+          <div class="review-diff">
+            <HarnessDiff path={change.path} before={change.before} after={change.after} />
+          </div>
+        {/if}
+      </li>
+    {/each}
+  </ul>
+{/snippet}
+
 {#snippet removeButton(label: string, onclick: () => void)}
   <button class="icon-button remove" title={label} aria-label={label} {onclick}>
     <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.1" /></svg>
@@ -290,6 +344,32 @@
           <HarnessFileEditor path={harnessStore.editingFile} />
         {/key}
       </div>
+    {:else if unified && unified.root === root}
+      <!-- The instruction files as an agent unified them, before they're written. -->
+      <div class="harness-body">
+        <div class="review-head">
+          <button class="link" onclick={() => harnessStore.closeUnified()}>← {t("harness.review.back")}</button>
+          <span class="review-title">{t("harness.assist.unifyTitle")}</span>
+        </div>
+        {#if unified.summary}
+          <p class="section-note summary">{unified.summary}</p>
+        {/if}
+        {#if unified.changes.length === 0}
+          <p class="section-note">{t("harness.assist.unifyNothing")}</p>
+        {:else}
+          <p class="section-note">{t("harness.assist.unifyIntro", { n: String(unified.changes.length) })}</p>
+          {@render changeList(unified.changes)}
+        {/if}
+        {#if harnessStore.assistError}
+          <div class="error-box padded"><pre>{harnessStore.assistError}</pre></div>
+        {/if}
+        <div class="review-actions">
+          <button class="small" onclick={() => harnessStore.closeUnified()}>{t("harness.assist.discard")}</button>
+          <button class="small primary" disabled={busy || unified.changes.length === 0} onclick={() => void harnessStore.applyUnified()}>
+            {busy ? t("harness.review.applying") : t("harness.review.apply")}
+          </button>
+        </div>
+      </div>
     {:else if review !== null}
       <!-- What applying writes, file by file, before it's written. -->
       <div class="harness-body">
@@ -301,25 +381,7 @@
           <p class="section-note">{t("harness.review.nothing")}</p>
         {:else}
           <p class="section-note">{t("harness.review.intro", { n: String(review.length) })}</p>
-          <ul class="review-list">
-            {#each review as change (change.path)}
-              {@const kind = changeKind(change)}
-              <li>
-                <button class="review-file" aria-expanded={expanded.includes(change.path)} onclick={() => toggleFile(change.path)}>
-                  <svg class="chevron" class:open={expanded.includes(change.path)} viewBox="0 0 6 10" aria-hidden="true">
-                    <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
-                  </svg>
-                  <span class="review-path">{change.path}</span>
-                  <span class="review-kind {kind}">{t(CHANGE_KIND_LABEL[kind])}</span>
-                </button>
-                {#if expanded.includes(change.path)}
-                  <div class="review-diff">
-                    <HarnessDiff path={change.path} before={change.before} after={change.after} />
-                  </div>
-                {/if}
-              </li>
-            {/each}
-          </ul>
+          {@render changeList(review)}
         {/if}
         {#if harnessStore.error}
           <div class="error-box padded"><pre>{harnessStore.error}</pre></div>
@@ -362,6 +424,106 @@
           {/if}
           {#if harnessStore.error}
             <div class="error-box"><pre>{harnessStore.error}</pre></div>
+          {/if}
+        </section>
+
+        <!-- An agent that looks at the repository: rules it proposes, and
+             the instruction files unified. -->
+        <section>
+          {@render sectionHead("assist", t("harness.assist.title"), proposals?.items.length ?? null)}
+          {#if !collapsed.includes("assist")}
+            <div class="section-content">
+              <p class="hint">{t("harness.assist.hint")}</p>
+              {#if assist && assist.root === root}
+                {@const thought = latestThought(assist.steps, 200)}
+                <div class="working" aria-live="polite">
+                  <div class="working-line">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span class="working-title">
+                      {t(assist.kind === "propose" ? "harness.assist.proposing" : "harness.assist.unifying")}
+                    </span>
+                    <span class="elapsed">{formatDuration(Math.max(0, now - assist.startedAt))}</span>
+                    <button class="small" onclick={() => harnessStore.cancelAssist()}>{t("harness.assist.cancel")}</button>
+                  </div>
+                  {#if thought}
+                    <p class="thought">{thought}</p>
+                  {/if}
+                  {#each toolSteps(assist.steps, 4) as step, index (index)}
+                    {@const line = stepLine(step, t)}
+                    <p class="step"><span aria-hidden="true">{line.icon}</span> {line.text}</p>
+                  {/each}
+                </div>
+              {:else if aiEngine.value}
+                <div class="engine-row">
+                  <AiEnginePicker id="harness-engine" />
+                </div>
+                <div class="assist-actions">
+                  <button class="small primary" disabled={!!assist} title={t("harness.assist.proposeHint")} onclick={() => void harnessStore.propose(aiEngine.value!)}>
+                    {t("harness.assist.propose")}
+                  </button>
+                  <button
+                    class="small"
+                    disabled={!!assist || instructionFiles.length < 2}
+                    title={instructionFiles.length < 2 ? t("harness.assist.unifyNeedsTwo") : t("harness.assist.unifyHint")}
+                    onclick={() => void harnessStore.unify(aiEngine.value!)}
+                  >
+                    {t("harness.assist.unify")}
+                  </button>
+                </div>
+              {:else}
+                <p class="hint">{t("harness.assist.noEngine")}</p>
+              {/if}
+              {#if harnessStore.assistError && !unified}
+                <div class="error-box"><pre>{harnessStore.assistError}</pre></div>
+              {/if}
+              {#if proposals && proposals.root === root}
+                {#if proposals.summary}
+                  <p class="summary">{proposals.summary}</p>
+                {/if}
+                {#if proposals.items.length === 0}
+                  <p class="hint">{t("harness.assist.noProposals")}</p>
+                {:else}
+                  <ul class="proposal-list">
+                    {#each proposals.items as proposal, index (index)}
+                      {@const already = draft ? hasProposed(draft, proposal.rule) : false}
+                      <li class="proposal">
+                        <div class="proposal-rule">
+                          <span class="proposal-kind {proposal.rule.kind === 'command' ? proposal.rule.decision : proposal.rule.kind}">
+                            {proposalLabel(proposal.rule)}
+                          </span>
+                          <code>{proposal.rule.kind === "path" ? proposal.rule.pattern : proposal.rule.kind === "command" ? proposal.rule.prefix : proposal.rule.command}</code>
+                        </div>
+                        {#if proposal.reason}
+                          <p class="proposal-reason">{proposal.reason}</p>
+                        {/if}
+                        {#if proposal.source}
+                          <p class="proposal-source" title={proposal.source.file}>
+                            {t("harness.assist.from", { file: proposal.source.file })} <q>{proposal.source.quote}</q>
+                          </p>
+                        {/if}
+                        <div class="proposal-actions">
+                          <button class="small" onclick={() => harnessStore.dismissProposal(proposal)}>{t("harness.assist.dismiss")}</button>
+                          <button class="small primary" disabled={already} onclick={() => harnessStore.acceptProposal(proposal)}>
+                            {already ? t("harness.assist.added") : t("harness.add")}
+                          </button>
+                        </div>
+                      </li>
+                    {/each}
+                  </ul>
+                  <div class="assist-actions end">
+                    <button class="link" onclick={() => harnessStore.clearProposals()}>{t("harness.assist.dismissAll")}</button>
+                    <button
+                      class="small"
+                      onclick={() => {
+                        for (const proposal of [...(proposals?.items ?? [])]) harnessStore.acceptProposal(proposal);
+                      }}
+                    >
+                      {t("harness.assist.addAll")}
+                    </button>
+                  </div>
+                {/if}
+              {/if}
+            </div>
           {/if}
         </section>
 
@@ -1151,6 +1313,174 @@
 
   .review-diff {
     padding: 2px 10px 8px;
+  }
+
+  .engine-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .engine-row :global(.ai-engine-note) {
+    margin: 0;
+    font-size: 10.5px;
+    opacity: 0.6;
+  }
+
+  .assist-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .assist-actions.end {
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .working {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 7px;
+    border-radius: 4px;
+    background: rgba(58, 109, 240, 0.12);
+  }
+
+  .working-line {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .working-title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+  }
+
+  .elapsed {
+    font-size: 10.5px;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .spinner {
+    flex-shrink: 0;
+    width: 11px;
+    height: 11px;
+    border: 2px solid var(--pane-active-border, #3a6df0);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: harness-spin 0.8s linear infinite;
+  }
+
+  @keyframes harness-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .thought,
+  .step {
+    margin: 0;
+    font-size: 10.5px;
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .thought {
+    white-space: normal;
+    font-style: italic;
+  }
+
+  .summary {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .section-note.summary {
+    opacity: 0.85;
+  }
+
+  .proposal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 7px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 5px;
+  }
+
+  .proposal-rule {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .proposal-rule code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .proposal-kind {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+  }
+
+  .proposal-kind.deny,
+  .proposal-kind.path {
+    color: #e05a5a;
+  }
+
+  .proposal-kind.ask {
+    color: #d7a72a;
+  }
+
+  .proposal-kind.allow,
+  .proposal-kind.check {
+    color: #4caf72;
+  }
+
+  .proposal-reason,
+  .proposal-source {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .proposal-source {
+    opacity: 0.6;
+  }
+
+  .proposal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
   }
 
   .chips {

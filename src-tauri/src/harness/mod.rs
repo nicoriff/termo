@@ -5,6 +5,7 @@
 //! Those files are committed with the repository, so the rules hold for
 //! anyone opening an agent there, with Termo or without.
 
+pub mod assist;
 pub mod checks;
 pub mod claude;
 pub mod codex;

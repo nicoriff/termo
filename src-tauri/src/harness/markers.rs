@@ -31,6 +31,17 @@ fn find(text: &str) -> Option<(usize, usize)> {
     None
 }
 
+/// What's inside the section, without the markers; `None` without one.
+pub fn body(text: &str) -> Option<String> {
+    let (start, end) = find(text)?;
+    let section = text[start..end].replace("\r\n", "\n");
+    let mut lines: Vec<&str> = section.lines().collect();
+    // The two marker lines.
+    lines.remove(0);
+    lines.pop();
+    Some(lines.join("\n"))
+}
+
 /// The file with its section set to `body`, or taken out when `body` is
 /// `None`; `None` back when nothing at all would be left in it. The file
 /// keeps its own line endings.
@@ -74,6 +85,13 @@ mod tests {
             let removed = replace(Some(&added), None).unwrap();
             assert_eq!(removed, original);
         }
+    }
+
+    #[test]
+    fn the_body_reads_back_what_was_put_in() {
+        let added = replace(Some("# Notes\r\n"), Some("one\ntwo")).unwrap();
+        assert_eq!(body(&added).as_deref(), Some("one\ntwo"));
+        assert_eq!(body("no section here"), None);
     }
 
     #[test]

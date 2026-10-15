@@ -1,4 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { AgentEngine } from "./agents-client";
+import type { PlanStep } from "./orchestration-client";
 
 /** See src-tauri/src/harness and src-tauri/src/commands/harness_commands.rs. */
 export type HarnessAgent = "claude" | "codex" | "gemini" | "copilot" | "grok";
@@ -86,4 +89,57 @@ export function harnessDetectChecks(root: string): Promise<string[]> {
 
 export function harnessApply(root: string, spec: HarnessSpec, adopted: ExternalEntry[]): Promise<HarnessState> {
   return invoke("harness_apply", { root, spec, adopted });
+}
+
+/** A rule an agent proposes (see src-tauri/src/harness/assist.rs). */
+export type ProposedRule =
+  | { kind: "path"; pattern: string; access: PathAccess }
+  | { kind: "command"; prefix: string; decision: CommandDecision }
+  | { kind: "check"; command: string };
+
+export interface Proposal {
+  rule: ProposedRule;
+  reason: string;
+  /** Where it came from, when it was a sentence in an instruction file. */
+  source?: { file: string; quote: string };
+}
+
+export interface Proposals {
+  summary: string;
+  proposals: Proposal[];
+}
+
+export interface Unified {
+  summary: string;
+  changes: HarnessFileChange[];
+}
+
+export interface HarnessStepEvent {
+  root: string;
+  step: PlanStep;
+}
+
+/** Rules an agent proposes, beyond the ones `spec` has. It costs a model's
+ * answer; what the agent does on the way comes through onHarnessStep. */
+export function harnessPropose(root: string, engine: AgentEngine, spec: HarnessSpec): Promise<Proposals> {
+  return invoke("harness_propose", { root, engine, spec });
+}
+
+/** The instruction files unified by an agent, as changes to review. */
+export function harnessUnify(root: string, engine: AgentEngine): Promise<Unified> {
+  return invoke("harness_unify", { root, engine });
+}
+
+export function harnessAssistCancel(root: string): Promise<void> {
+  return invoke("harness_assist_cancel", { root });
+}
+
+/** Writes reviewed changes to the instruction files; fails when one changed
+ * since they were worked out. */
+export function harnessWriteInstructions(root: string, changes: HarnessFileChange[]): Promise<HarnessState> {
+  return invoke("harness_write_instructions", { root, changes });
+}
+
+export function onHarnessStep(handler: (event: HarnessStepEvent) => void): Promise<UnlistenFn> {
+  return listen<HarnessStepEvent>("harness-step", (event) => handler(event.payload));
 }

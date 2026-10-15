@@ -4,12 +4,17 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use tauri::{Emitter, Manager};
 
+use crate::agents::draft::Step;
+use crate::agents::spec::Engine;
+use crate::harness::assist::{self, Proposals};
 use crate::harness::external::{self, ExternalEntry};
 use crate::harness::instructions;
 use crate::harness::model::{self, Harness};
 use crate::harness::sync::{self, FileChange};
 use crate::i18n::{tr, Msg};
+use crate::state::AppState;
 
 fn checked(root: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(root);
@@ -19,10 +24,6 @@ fn checked(root: &str) -> Result<PathBuf, String> {
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(work).await.map_err(|err| err.to_string())?
 }
-
-/// The instruction files the agents read, as the panel lists them.
-const INSTRUCTION_FILES: [&str; 4] =
-    [instructions::AGENTS_MD, instructions::CLAUDE_MD, "GEMINI.md", ".github/copilot-instructions.md"];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,7 +47,7 @@ fn state(root: &Path) -> Result<HarnessState, String> {
     let pending = if exists { sync::plan(root, &spec, &[]).map_err(|err| err.to_string())? } else { Vec::new() };
     let external = external::find(root, &spec);
     let instruction_files =
-        INSTRUCTION_FILES.iter().filter(|file| root.join(file).is_file()).map(|file| file.to_string()).collect();
+        instructions::FILES.iter().filter(|file| root.join(file).is_file()).map(|file| file.to_string()).collect();
     Ok(HarnessState { exists, spec, pending, external, instruction_files })
 }
 
@@ -81,4 +82,61 @@ pub async fn harness_apply(root: String, spec: Harness, adopted: Vec<ExternalEnt
 pub async fn harness_detect_checks(root: String) -> Result<Vec<String>, String> {
     let root = checked(&root)?;
     blocking(move || Ok(crate::harness::detect::suggest(&root))).await
+}
+
+/// A step of what an agent does for the panel, as it happens.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct HarnessStep {
+    root: String,
+    step: Step,
+}
+
+fn step_emitter(app: tauri::AppHandle, root: String) -> impl Fn(Step) {
+    move |step: Step| {
+        let _ = app.emit("harness-step", HarnessStep { root: root.clone(), step });
+    }
+}
+
+/// Rules an agent proposes for the repository, beyond the ones `spec` has.
+/// What it does on the way comes as `harness-step` events.
+#[tauri::command]
+pub async fn harness_propose(app: tauri::AppHandle, root: String, engine: Engine, spec: Harness) -> Result<Proposals, String> {
+    let path = checked(&root)?;
+    let asks = app.state::<AppState>().harness_asks.clone();
+    let on_step = step_emitter(app.clone(), root);
+    blocking(move || assist::propose(&asks, engine, &path, &spec.normalized(), &on_step)).await
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unified {
+    summary: String,
+    changes: Vec<FileChange>,
+}
+
+/// The instruction files unified by an agent, as changes to review.
+#[tauri::command]
+pub async fn harness_unify(app: tauri::AppHandle, root: String, engine: Engine) -> Result<Unified, String> {
+    let path = checked(&root)?;
+    let asks = app.state::<AppState>().harness_asks.clone();
+    let on_step = step_emitter(app.clone(), root);
+    blocking(move || assist::unify(&asks, engine, &path, &on_step).map(|(summary, changes)| Unified { summary, changes })).await
+}
+
+#[tauri::command]
+pub fn harness_assist_cancel(state: tauri::State<'_, AppState>, root: String) {
+    state.harness_asks.cancel(&root);
+}
+
+/// Writes reviewed changes to the instruction files, and answers with the
+/// state after.
+#[tauri::command]
+pub async fn harness_write_instructions(root: String, changes: Vec<FileChange>) -> Result<HarnessState, String> {
+    let path = checked(&root)?;
+    blocking(move || {
+        assist::write_instructions(&path, &changes)?;
+        state(&path)
+    })
+    .await
 }

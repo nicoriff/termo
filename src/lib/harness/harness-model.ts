@@ -7,6 +7,7 @@ import type {
   HarnessFileChange,
   HarnessSpec,
   PathAccess,
+  ProposedRule,
   SuggestedRule,
 } from "$lib/core/harness-client";
 
@@ -103,6 +104,32 @@ export function addRule(spec: HarnessSpec, rule: SuggestedRule): void {
     const known = spec.commands.find((other) => normalizePrefix(other.prefix) === prefix);
     if (!known) spec.commands.push({ prefix, decision: rule.decision });
     else known.decision = rule.decision;
+  }
+}
+
+/** Puts a rule an agent proposed in the harness. */
+export function addProposed(spec: HarnessSpec, rule: ProposedRule): void {
+  if (rule.kind !== "check") {
+    addRule(spec, rule);
+    return;
+  }
+  const command = rule.command.trim();
+  if (command && !spec.checks.some((check) => check.command.trim() === command)) spec.checks.push({ command });
+}
+
+/** Whether the harness has that rule already, as proposed. */
+export function hasProposed(spec: HarnessSpec, rule: ProposedRule): boolean {
+  switch (rule.kind) {
+    case "path": {
+      const pattern = normalizePattern(rule.pattern);
+      return spec.paths.some((other) => normalizePattern(other.pattern) === pattern && other.access === rule.access);
+    }
+    case "command": {
+      const prefix = normalizePrefix(rule.prefix);
+      return spec.commands.some((other) => normalizePrefix(other.prefix) === prefix && other.decision === rule.decision);
+    }
+    case "check":
+      return spec.checks.some((check) => check.command.trim() === rule.command.trim());
   }
 }
 

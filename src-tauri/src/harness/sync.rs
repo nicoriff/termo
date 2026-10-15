@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::model::{self, Harness, Owned, SPEC_FILE};
 use super::external::ExternalEntry;
 use super::{checks, claude, codex, copilot, gemini, instructions, json_merge};
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileChange {
     /// Relative to the root, with forward slashes.

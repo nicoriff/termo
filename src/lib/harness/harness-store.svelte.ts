@@ -1,19 +1,40 @@
 import { agentsStore } from "$lib/agents/agents-store.svelte";
 import { explorerRoot } from "$lib/core/explorer-client";
+import type { AgentEngine } from "$lib/core/agents-client";
 import {
   harnessApply,
+  harnessAssistCancel,
   harnessLoad,
   harnessPreview,
+  harnessPropose,
+  harnessUnify,
+  harnessWriteInstructions,
+  onHarnessStep,
   type ExternalEntry,
   type HarnessFileChange,
   type HarnessSpec,
   type HarnessState,
+  type Proposal,
 } from "$lib/core/harness-client";
+import type { PlanStep } from "$lib/core/orchestration-client";
 import { fileTabs } from "$lib/editor/file-tabs.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
-import { addRule, copySpec, harnessStatus, sameEntry, sameSpec } from "./harness-model";
+import { addProposed, addRule, copySpec, harnessStatus, sameEntry, sameSpec } from "./harness-model";
+
+/** How many of an agent's steps are kept to show. */
+const MAX_STEPS = 40;
+
+export type AssistKind = "propose" | "unify";
+
+/** An agent working for the panel. */
+export interface AssistRun {
+  root: string;
+  kind: AssistKind;
+  startedAt: number;
+  steps: PlanStep[];
+}
 
 /** Wider than the other side panels: rules and instructions are edited in it. */
 export const HARNESS_WIDTH = { initial: 380, min: 300, max: 760 };
@@ -51,6 +72,14 @@ class HarnessStore {
   /** The instruction file open in the panel's editor, relative to the root;
    * null while none is. */
   editingFile = $state<string | null>(null);
+  /** The agent working for the panel, if one is. */
+  assist = $state<AssistRun | null>(null);
+  /** What the last proposing found, for the repository it looked at. */
+  proposals = $state<{ root: string; summary: string; items: Proposal[] } | null>(null);
+  /** The instruction files as unifying left them, on review. */
+  unified = $state<{ root: string; summary: string; changes: HarnessFileChange[] } | null>(null);
+  /** Why the last agent's work failed; null when it didn't. */
+  assistError = $state<string | null>(null);
   /** Unapplied edits, by repository: switching tabs doesn't lose them. */
   private drafts = $state<Record<string, HarnessSpec>>({});
   /** The user's entries adopted in the draft, by repository: taken out of
@@ -79,6 +108,24 @@ class HarnessStore {
   /** Starts following the tab in focus while the panel is open. The main
    * window calls it once; returns what stops it. */
   start(): () => void {
+    let unlisten: (() => void) | null = null;
+    let stopped = false;
+    void onHarnessStep((event) => {
+      if (!this.assist || this.assist.root !== event.root) return;
+      this.assist = { ...this.assist, steps: [...this.assist.steps, event.step].slice(-MAX_STEPS) };
+    }).then((stop) => {
+      if (stopped) stop();
+      else unlisten = stop;
+    });
+    const stopEffects = this.follow$();
+    return () => {
+      stopped = true;
+      unlisten?.();
+      stopEffects();
+    };
+  }
+
+  private follow$(): () => void {
     return $effect.root(() => {
       $effect(() => {
         if (!this.open) return;
@@ -179,6 +226,84 @@ class HarnessStore {
     if (!root || !rule) return;
     this.edit((spec) => addRule(spec, rule));
     this.adoptions = { ...this.adoptions, [root]: [...this.adopted, ...entries] };
+  }
+
+  /** Asks an agent for rules this repository should have. They come back
+   * as proposals to add to the draft one by one. */
+  async propose(engine: AgentEngine): Promise<void> {
+    const root = this.root;
+    const spec = this.draft;
+    if (!root || !spec || this.assist) return;
+    this.assist = { root, kind: "propose", startedAt: Date.now(), steps: [] };
+    this.assistError = null;
+    try {
+      const answer = await harnessPropose(root, engine, spec);
+      this.proposals = { root, summary: answer.summary, items: answer.proposals };
+    } catch (reason) {
+      this.assistError = String(reason);
+    } finally {
+      this.assist = null;
+    }
+  }
+
+  /** Asks an agent to unify the instruction files; the result is shown as
+   * changes to review before anything is written. */
+  async unify(engine: AgentEngine): Promise<void> {
+    const root = this.root;
+    if (!root || this.assist) return;
+    this.assist = { root, kind: "unify", startedAt: Date.now(), steps: [] };
+    this.assistError = null;
+    try {
+      const answer = await harnessUnify(root, engine);
+      this.unified = { root, summary: answer.summary, changes: answer.changes };
+      this.editingFile = null;
+      this.review = null;
+    } catch (reason) {
+      this.assistError = String(reason);
+    } finally {
+      this.assist = null;
+    }
+  }
+
+  cancelAssist(): void {
+    if (this.assist) void harnessAssistCancel(this.assist.root);
+  }
+
+  /** Adds a proposal to the draft and takes it off the list. */
+  acceptProposal(proposal: Proposal): void {
+    this.edit((spec) => addProposed(spec, proposal.rule));
+    this.dismissProposal(proposal);
+  }
+
+  dismissProposal(proposal: Proposal): void {
+    if (!this.proposals) return;
+    const items = this.proposals.items.filter((item) => item !== proposal);
+    this.proposals = items.length > 0 || this.proposals.summary ? { ...this.proposals, items } : null;
+  }
+
+  clearProposals(): void {
+    this.proposals = null;
+  }
+
+  closeUnified(): void {
+    this.unified = null;
+  }
+
+  /** Writes the unified instruction files. */
+  async applyUnified(): Promise<void> {
+    const unified = this.unified;
+    if (!unified || this.busy) return;
+    this.busy = true;
+    try {
+      const state = await harnessWriteInstructions(unified.root, unified.changes);
+      if (unified.root === this.root) this.saved = state;
+      this.unified = null;
+      this.assistError = null;
+    } catch (reason) {
+      this.assistError = String(reason);
+    } finally {
+      this.busy = false;
+    }
   }
 
   /** Opens an instruction file in the panel's editor. */

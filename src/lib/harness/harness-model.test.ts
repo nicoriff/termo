@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ExternalEntry, HarnessSpec, SuggestedRule } from "$lib/core/harness-client";
+import type { ExternalEntry, HarnessSpec, ProposedRule, SuggestedRule } from "$lib/core/harness-client";
 import {
   addPack,
+  addProposed,
+  hasProposed,
   addRule,
   COMMAND_PACKS,
   groupExternal,
@@ -120,6 +122,22 @@ describe("external rules", () => {
       { prefix: "git push", decision: "ask" },
       { prefix: "rm -rf", decision: "deny" },
     ]);
+  });
+});
+
+describe("proposals", () => {
+  it("go into the draft once, and say when they're in", () => {
+    const target = spec();
+    const check: ProposedRule = { kind: "check", command: " npm test " };
+    const path: ProposedRule = { kind: "path", pattern: "./dist/", access: "noEdit" };
+    expect(hasProposed(target, path)).toBe(false);
+    addProposed(target, check);
+    addProposed(target, check);
+    addProposed(target, path);
+    expect(target.checks).toEqual([{ command: "npm test" }]);
+    expect(target.paths).toEqual([{ pattern: "dist", access: "noEdit" }]);
+    expect(hasProposed(target, path)).toBe(true);
+    expect(hasProposed(target, check)).toBe(true);
   });
 });
 
