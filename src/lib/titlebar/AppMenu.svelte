@@ -17,6 +17,7 @@
   import { layoutHasSessions } from "$lib/layout/layout-snapshot";
   import type { SavedLayout } from "$lib/core/layouts-client";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
+  import { harnessStore } from "$lib/harness/harness-store.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
   import { canRestore, restoreSession } from "$lib/ai-mode/restore-session";
@@ -163,6 +164,11 @@
   function showAgents() {
     onclose();
     agentsStore.setOpen(true);
+  }
+
+  function showHarness() {
+    onclose();
+    harnessStore.setOpen(true);
   }
 
   /** Asks first: restoring closes every console that's open. */
@@ -369,6 +375,16 @@
   </button>
   {/if}
   {/if}
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showHarness}>
+    <!-- Guardrails, as on the panels bar: the rules the agents work under. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M1.5 10.5L4 1.5M10.5 10.5L8 1.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
+      <path d="M6 9.5V4M4.6 5.4L6 4l1.4 1.4" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <span class="app-menu-text">{t("harness.title")}</span>
+    <span class="app-menu-hint">{hint("toggleHarness")}</span>
+  </button>
 
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showDiagnostics}>
     <!-- A pulse line: the usual mark for a live reading. -->

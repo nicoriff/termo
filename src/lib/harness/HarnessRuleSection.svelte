@@ -4,6 +4,7 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import type { HarnessSpec } from "$lib/core/harness-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import HarnessInfo from "./HarnessInfo.svelte";
   import {
     ROW_KINDS,
@@ -211,11 +212,16 @@
   {#if adding}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <form class="add-form" onsubmit={submit} onkeydown={onFormKeydown}>
-      <select aria-label={t("harness.rows.kind")} bind:value={kind} onchange={() => (note = null)}>
-        {#each kinds as option (option)}
-          <option value={option}>{t(KIND_NAME[option])}</option>
-        {/each}
-      </select>
+      <SettingDropdown
+        label={t("harness.rows.kind")}
+        width="100%"
+        options={kinds.map((option) => ({ value: option, label: t(KIND_NAME[option]) }))}
+        value={kind}
+        onpick={(next) => {
+          kind = next as RowKind;
+          note = null;
+        }}
+      />
       <div class="add-line">
         <input
           bind:this={input}
@@ -457,8 +463,7 @@
     gap: 6px;
   }
 
-  input[type="text"],
-  select {
+  input[type="text"] {
     box-sizing: border-box;
     padding: 4px 6px;
     border: 1px solid var(--tabbar-border, #2a2a2a);
@@ -473,8 +478,7 @@
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
 
-  input[type="text"]:focus,
-  select:focus {
+  input[type="text"]:focus {
     outline: none;
     border-color: var(--pane-active-border, #3a6df0);
   }

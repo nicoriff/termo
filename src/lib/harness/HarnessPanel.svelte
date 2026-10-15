@@ -205,8 +205,8 @@
   <div class="harness-inner" onkeydown={onKeydown}>
     <header class="harness-header">
       <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-        <path d="M8.6 12.2l2.4 2.4 4.4-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M3.5 20.5L8.5 3.5M20.5 20.5L15.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        <path d="M12 19V8.5M9.4 11.1L12 8.5l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div class="header-text">
         <span class="header-name" title={root ?? ""}>{repoName}</span>
