@@ -2,7 +2,8 @@
 //! rules in a policy file of Termo's own, `.gemini/termo-harness.toml`, which
 //! `.gemini/settings.json` names in `policyPaths`; the checks as an
 //! `AfterAgent` hook there, and AGENTS.md among the files it reads for
-//! context. It has no rule for paths: those reach it as text.
+//! context. Protected paths go in the policy file too, as rules on its file
+//! tools: a shell command can still reach them, as with Claude Code.
 //!
 //! Not `tools.exclude` and `tools.allowed`: Gemini CLI 0.63 turns an entry
 //! like `run_shell_command(rm -rf)` there into a rule for a tool by that very
@@ -15,7 +16,7 @@ use serde_json::{json, Map, Value};
 
 use super::checks;
 use super::instructions;
-use super::model::{Agent, Decision, Harness, Owned};
+use super::model::{Access, Agent, Decision, Harness, Owned};
 
 pub const FILE: &str = ".gemini/settings.json";
 pub const POLICY_FILE: &str = ".gemini/termo-harness.toml";
@@ -39,12 +40,79 @@ fn rule(decision: Decision) -> (&'static str, u32, &'static str) {
     }
 }
 
-/// The policy file, all Termo's; `None` when there's no command rule.
+/// Gemini CLI's tools that write a file, and those that read one, each
+/// taking it in `file_path` (`read_many_files` and `grep_search`, among
+/// what they're given).
+const EDIT_TOOLS: &[&str] = &["write_file", "replace"];
+const READ_TOOLS: &[&str] = &["read_file", "read_many_files", "grep_search"];
+
+/// A path pattern (`.env`, `src/gen/**`) as a regex over a tool call's
+/// arguments, which a policy sees as JSON: a string that ends in the
+/// pattern, after a folder separator (`/`, or `\` written `\\`) or nothing.
+/// So `.env` is that name in any folder, and `src/gen/**` that folder
+/// wherever the call names it from, absolute or relative.
+///
+/// No group is ever followed by a quantifier: Gemini CLI refuses any such
+/// pattern as a possible ReDoS (and the whole file with it). Optional parts
+/// are alternatives instead.
+pub fn path_regex(pattern: &str) -> String {
+    const SEP: &str = r"(?:/|\\\\)";
+    const PART: &str = r#"[^"/\\]"#;
+    // Anywhere already: a leading `**/` adds nothing.
+    let mut rest = pattern.trim_start_matches('/');
+    while let Some(after) = rest.strip_prefix("**/") {
+        rest = after;
+    }
+    let mut body = String::new();
+    let mut closed = false;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix("/**/") {
+            // One separator, or a run of folders between two.
+            body.push_str(&format!(r#"(?:/|\\\\|{SEP}[^"]*{SEP})"#));
+            rest = after;
+        } else if rest == "/**" {
+            // The folder itself, or anything in it.
+            body.push_str(&format!(r#"(?:"|{SEP}[^"]*")"#));
+            closed = true;
+            rest = "";
+        } else if let Some(after) = rest.strip_prefix("**") {
+            body.push_str(r#"[^"]*"#);
+            rest = after;
+        } else {
+            let c = rest.chars().next().expect("not empty");
+            match c {
+                '*' => body.push_str(&format!("{PART}*")),
+                '?' => body.push_str(PART),
+                '/' => body.push_str(SEP),
+                c if r"\.+()[]{}|^$".contains(c) => {
+                    body.push('\\');
+                    body.push(c);
+                }
+                c => body.push(c),
+            }
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    // Right after the string opens, or after a separator.
+    format!(r#"(?:"|/|\\\\){body}{}"#, if closed { "" } else { "\"" })
+}
+
+/// The policy file, all Termo's; `None` when there's no rule for it.
 pub fn policy(spec: &Harness) -> Option<String> {
-    if !applies(spec) || spec.commands.is_empty() {
+    if !applies(spec) || (spec.commands.is_empty() && spec.paths.is_empty()) {
         return None;
     }
     let mut out = format!("{HEADER}\n");
+    for path in &spec.paths {
+        let tools: Vec<&str> =
+            if path.access == Access::NoRead { [EDIT_TOOLS, READ_TOOLS].concat() } else { EDIT_TOOLS.to_vec() };
+        let tools = tools.iter().map(|tool| format!("\"{tool}\"")).collect::<Vec<_>>().join(", ");
+        // TOML takes JSON's string literals as they are.
+        let pattern = serde_json::to_string(&path_regex(&path.pattern)).unwrap_or_default();
+        out.push_str(&format!(
+            "\n[[rule]]\ntoolName = [{tools}]\nargsPattern = {pattern}\ndecision = \"deny\"\npriority = 300\ndenyMessage = \"Protected by this repository's harness.\"\n"
+        ));
+    }
     for command in &spec.commands {
         let (decision, priority, modes) = rule(command.decision);
         // TOML takes JSON's string literals as they are.
@@ -93,7 +161,7 @@ pub fn desired(spec: &Harness, current: &Map<String, Value>) -> Owned {
 mod tests {
     use super::*;
     use crate::harness::json_merge;
-    use crate::harness::model::{Check, CommandRule};
+    use crate::harness::model::{Check, CommandRule, PathRule};
 
     fn spec() -> Harness {
         Harness {
@@ -145,6 +213,54 @@ mod tests {
         assert!(!desired(&checks_only, &Map::new()).contains_key("policyPaths"));
         let not_for_gemini = Harness { agents: vec![Agent::Claude], ..spec() };
         assert_eq!(policy(&not_for_gemini), None);
+    }
+
+    #[test]
+    fn path_patterns_as_regexes_over_the_arguments() {
+        let sep = r"(?:/|\\\\)";
+        let start = r#"(?:"|/|\\\\)"#;
+        assert_eq!(path_regex(".env"), format!(r#"{start}\.env""#));
+        assert_eq!(path_regex("src/gen/**"), format!(r#"{start}src{sep}gen(?:"|{sep}[^"]*")"#));
+        assert_eq!(path_regex("**/*.pem"), format!(r#"{start}[^"/\\]*\.pem""#));
+        assert_eq!(path_regex("a/**/b"), format!(r#"{start}a(?:/|\\\\|{sep}[^"]*{sep})b""#));
+        assert_eq!(path_regex("/a+b?"), format!(r#"{start}a\+b[^"/\\]""#));
+    }
+
+    /// Gemini CLI's own test for a pattern it would refuse: a group, then a
+    /// quantifier, after a group with one inside.
+    #[test]
+    fn no_pattern_has_a_quantified_group() {
+        for pattern in [".env", "src/gen/**", "**/*.pem", "a/**/b/**", "x?y*z**w"] {
+            let regex = path_regex(pattern);
+            let groups_closed: Vec<usize> = regex.match_indices(')').map(|(at, _)| at).collect();
+            for at in groups_closed {
+                let next = regex[at + 1..].chars().next();
+                assert!(!matches!(next, Some('*' | '+' | '?' | '{')), "{pattern}: {regex}");
+            }
+        }
+    }
+
+    #[test]
+    fn protected_paths_are_rules_on_its_file_tools() {
+        let spec = Harness {
+            paths: vec![
+                PathRule { pattern: ".env".into(), access: Access::NoRead },
+                PathRule { pattern: "src/gen/**".into(), access: Access::NoEdit },
+            ],
+            ..Harness::default()
+        };
+        let text = policy(&spec).unwrap();
+        let rules: Vec<&str> = text.split("[[rule]]").skip(1).collect();
+        assert_eq!(rules.len(), 2);
+        assert!(rules[0].contains(
+            r#"toolName = ["write_file", "replace", "read_file", "read_many_files", "grep_search"]"#
+        ));
+        // The regex, in a TOML string: every backslash doubled.
+        assert!(rules[0].contains(r#"argsPattern = "(?:\"|/|\\\\\\\\)\\.env\"""#), "{}", rules[0]);
+        assert!(rules[1].contains(r#"toolName = ["write_file", "replace"]"#));
+        assert!(rules.iter().all(|rule| rule.contains("decision = \"deny\"\npriority = 300")));
+        // Paths alone are reason enough for the file.
+        assert_eq!(desired(&spec, &Map::new())["policyPaths"], vec![json!(POLICY_FILE)]);
     }
 
     #[test]

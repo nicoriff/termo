@@ -184,6 +184,7 @@ mod tests {
                 claude::FILE,
                 codex::HOOKS_FILE,
                 gemini::FILE,
+                gemini::POLICY_FILE,
                 copilot::FILE,
                 checks::SCRIPT_FILE,
                 "AGENTS.md",
