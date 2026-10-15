@@ -172,12 +172,63 @@ pub fn events_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 }
 
 fn hook_command(exe: &Path, tool: AgentTool, event: &str) -> String {
-    format!(
-        "{}{} {HOOK_FLAG} {} {event}",
-        call_prefix(tool),
-        quote_executable(exe),
-        tool.name()
-    )
+    let args = format!("{HOOK_FLAG} {} {event}", tool.name());
+    match bare_executable(exe) {
+        Some(path) => format!("{path} {args}"),
+        None => format!("{}{} {args}", call_prefix(tool), quote_executable(exe)),
+    }
+}
+
+/// Characters that mean the same, unquoted, to bash, sh and PowerShell.
+fn is_shell_neutral(path: &str) -> bool {
+    !path.is_empty() && path.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | ':' | '~'))
+}
+
+/// The executable's path as a bare word every shell runs alike, so the
+/// hook works whichever shell the agent picks: Claude Code takes Git Bash on
+/// Windows but PowerShell when it can't find it, and there a quoted path
+/// followed by arguments is a syntax error — the hook fails, and Claude Code
+/// took that as refusing every tool. A path with spaces (Program Files)
+/// goes by its 8.3 short name. `None` when there's no such word; the quoted
+/// path, for the shell each tool usually runs, is left.
+#[cfg(windows)]
+fn bare_executable(exe: &Path) -> Option<String> {
+    let path = exe.to_string_lossy().replace('\\', "/");
+    if is_shell_neutral(&path) {
+        return Some(path);
+    }
+    let short = short_path(exe)?.to_string_lossy().replace('\\', "/");
+    is_shell_neutral(&short).then_some(short)
+}
+
+#[cfg(not(windows))]
+fn bare_executable(exe: &Path) -> Option<String> {
+    let path = exe.to_string_lossy();
+    is_shell_neutral(&path).then(|| path.into_owned())
+}
+
+/// The 8.3 name Windows keeps for a path with long names; `None` where the
+/// volume keeps none.
+#[cfg(windows)]
+fn short_path(path: &Path) -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
+
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    // SAFETY: `wide` is NUL-terminated; a null buffer asks for the length.
+    let needed = unsafe { GetShortPathNameW(wide.as_ptr(), std::ptr::null_mut(), 0) };
+    if needed == 0 {
+        return None;
+    }
+    let mut buffer = vec![0u16; needed as usize];
+    // SAFETY: `buffer` holds `needed` characters, the terminator included.
+    let written = unsafe { GetShortPathNameW(wide.as_ptr(), buffer.as_mut_ptr(), needed) };
+    if written == 0 || written >= needed {
+        return None;
+    }
+    buffer.truncate(written as usize);
+    Some(PathBuf::from(OsString::from_wide(&buffer)))
 }
 
 /// Codex, Gemini CLI and Grok run their hooks through PowerShell on Windows, and there a statement
@@ -895,6 +946,59 @@ mod tests {
         }))
         .unwrap();
         assert!(!has_any_ours(&root));
+    }
+
+    #[test]
+    fn a_plain_path_is_left_bare_for_any_shell() {
+        assert!(is_shell_neutral("C:/Users/me/AppData/Local/Termo/termo.exe"));
+        assert!(is_shell_neutral("C:/PROGRA~1/Termo/termo.exe"));
+        assert!(!is_shell_neutral("C:/Program Files/Termo/termo.exe"));
+        assert!(!is_shell_neutral("C:/me's/termo.exe"));
+        assert!(!is_shell_neutral("C:/a$b/termo.exe"));
+        assert!(!is_shell_neutral("C:/a(1)/termo.exe"));
+    }
+
+    /// The same command for every tool, with neither quotes nor `&`: Claude
+    /// Code runs it in Git Bash or, without one, in PowerShell.
+    #[cfg(windows)]
+    #[test]
+    fn a_path_without_spaces_needs_no_quotes_nor_call_operator() {
+        let exe = Path::new(r"C:\Users\me\AppData\Local\Termo\termo.exe");
+        assert_eq!(
+            hook_command(exe, AgentTool::Claude, "Stop"),
+            "C:/Users/me/AppData/Local/Termo/termo.exe --agent-hook claude Stop"
+        );
+        assert_eq!(
+            hook_command(exe, AgentTool::Codex, "Stop"),
+            "C:/Users/me/AppData/Local/Termo/termo.exe --agent-hook codex Stop"
+        );
+    }
+
+    /// A path with spaces that exists goes by its short name, where the
+    /// volume keeps them.
+    #[cfg(windows)]
+    #[test]
+    fn a_path_with_spaces_goes_by_its_short_name() {
+        let base = temp_dir();
+        let dir = base.join("Long Folder Name");
+        fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("termo.exe");
+        fs::write(&exe, "").unwrap();
+        let command = hook_command(&exe, AgentTool::Claude, "Stop");
+        let short = short_path(&exe);
+        let _ = fs::remove_dir_all(&base);
+        if short.is_some_and(|short| is_shell_neutral(&short.to_string_lossy().replace('\\', "/"))) {
+            assert!(!command.starts_with('"') && !command.contains("Long Folder Name"), "{command}");
+        } else {
+            // No 8.3 names on this volume: the quoted path, as before.
+            assert!(command.starts_with('"'), "{command}");
+        }
+        // The system drive usually keeps them.
+        let program_files = Path::new(r"C:\Program Files");
+        if let Some(short) = program_files.exists().then(|| short_path(program_files)).flatten() {
+            let short = short.to_string_lossy().replace('\\', "/");
+            assert!(short == "C:/Program Files" || is_shell_neutral(&short), "{short}");
+        }
     }
 
     #[cfg(windows)]

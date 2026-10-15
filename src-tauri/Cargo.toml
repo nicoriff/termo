@@ -60,6 +60,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Shell",
     # Keeping the computer awake (keep_awake.rs).
     "Win32_System_Power",
+    # Short (8.3) paths for agent hooks any shell can run (agent_hooks.rs).
+    "Win32_Storage_FileSystem",
 ] }
 
 # Already in the graph through tauri-plugin-notification, which shows a toast
