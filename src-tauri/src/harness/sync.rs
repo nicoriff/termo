@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 
 use super::model::{self, Harness, Owned, SPEC_FILE};
 use super::external::ExternalEntry;
-use super::{checks, claude, codex, copilot, gemini, instructions, json_merge};
+use super::{checks, claude, codex, copilot, gemini, guard, instructions, json_merge};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +42,7 @@ const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[
     (codex::RULES_FILE, codex::rules),
     (gemini::POLICY_FILE, gemini::policy),
     (copilot::FILE, copilot::hooks),
+    (guard::SCRIPT_FILE, guard::script_for),
     (checks::SCRIPT_FILE, checks::script_for),
 ];
 
@@ -209,6 +210,7 @@ mod tests {
                 gemini::FILE,
                 gemini::POLICY_FILE,
                 copilot::FILE,
+                guard::SCRIPT_FILE,
                 checks::SCRIPT_FILE,
                 "AGENTS.md",
                 "CLAUDE.md",

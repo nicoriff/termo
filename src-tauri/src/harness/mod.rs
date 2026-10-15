@@ -13,6 +13,7 @@ pub mod copilot;
 pub mod detect;
 pub mod external;
 pub mod gemini;
+pub mod guard;
 pub mod instructions;
 pub mod json_merge;
 pub mod markers;

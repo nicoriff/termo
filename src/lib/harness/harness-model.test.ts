@@ -134,7 +134,7 @@ describe("external rules", () => {
 
 describe("rows", () => {
   const rules = spec({
-    agents: ["claude", "copilot"],
+    agents: ["claude", "codex"],
     paths: [
       { pattern: "dist", access: "noEdit" },
       { pattern: ".env", access: "noRead" },
@@ -190,7 +190,7 @@ describe("rows", () => {
   it("say what each agent does with them", () => {
     expect(rowSupport(rules, "noRead")).toEqual([
       { agent: "claude", support: "enforced" },
-      { agent: "copilot", support: "text" },
+      { agent: "codex", support: "text" },
     ]);
     expect(rowSupport(rules, "instruction").every(({ support }) => support === "text")).toBe(true);
     expect(rowSupport(rules, "check").map(({ support }) => support)).toEqual(["enforced", "enforced"]);
@@ -250,7 +250,7 @@ describe("testCommand", () => {
 
   it("says what each agent does", () => {
     const verdicts = Object.fromEntries(testCommand(rules, "git push origin").map(({ agent, verdict }) => [agent, verdict]));
-    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "ask", copilot: "text" });
+    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "ask", copilot: "ask" });
     expect(testCommand(rules, "ls").every(({ verdict }) => verdict === "none")).toBe(true);
   });
 });
