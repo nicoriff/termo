@@ -1,8 +1,8 @@
 //! Turning each CLI's machine-readable output into one shape of event:
-//! Claude's `--output-format stream-json`, Codex's `exec --json`, Gemini
-//! CLI's `--output-format stream-json` and Copilot CLI's `--output-format
-//! json` all print one JSON object per line, in different vocabularies; so
-//! does Grok, whose lines are the messages of an ACP session (see acp.rs).
+//! Claude's `--output-format stream-json`, Codex's `exec --json` and Copilot
+//! CLI's `--output-format json` all print one JSON object per line, in
+//! different vocabularies; so do Grok and Gemini CLI, whose lines are the
+//! messages of an ACP session (see acp.rs).
 
 use std::collections::HashSet;
 
@@ -132,16 +132,16 @@ pub fn describe_input(input: &serde_json::Value) -> String {
 }
 
 /// Reads a run's output line by line. Claude's and Codex's lines each stand
-/// on their own; Gemini CLI streams its answer in pieces, gathered here into
-/// one Text event whenever it stops to use a tool, and into the Result at
-/// the end.
+/// on their own; an ACP session streams its answer in pieces, gathered here
+/// into one Text event whenever it stops to use a tool, and into the Result
+/// at the end.
 pub struct Parser {
     engine: Engine,
-    /// Grok: turns cut short so far (see acp::MAX_REFUSED_TURNS).
+    /// ACP: turns cut short so far (see acp::MAX_REFUSED_TURNS).
     cut_short: u32,
     /// Grok: what the run's turns cost so far, in its ticks.
     spent_ticks: f64,
-    /// Gemini CLI's answer so far, since the last tool call.
+    /// ACP: the answer so far, since the last tool call.
     pending: String,
     /// The errors the CLI reported, to explain a failure (see diagnose.rs).
     pub errors: Vec<String>,
@@ -173,9 +173,8 @@ impl Parser {
         let (mut events, outcome) = match self.engine {
             Engine::Claude => parse_claude(&value, at),
             Engine::Codex => parse_codex(&value, at),
-            Engine::Gemini => self.gemini(&value, at),
             Engine::Copilot => parse_copilot(&value, at),
-            Engine::Grok => self.grok(&value, at),
+            Engine::Gemini | Engine::Grok => self.acp(&value, at),
         };
         events.extend(self.notice(&value, at));
         // What it reported as errors, kept to explain a failure.
@@ -198,10 +197,8 @@ impl Parser {
     fn notice(&mut self, value: &serde_json::Value, at: i64) -> Option<RunEvent> {
         let text = |key: &str| value.get(key).and_then(|text| text.as_str()).unwrap_or("").to_string();
         let kind = text("type");
-        // Claude Code's first line; Gemini CLI's.
-        let started = (self.engine == Engine::Claude && kind == "system" && text("subtype") == "init")
-            || (self.engine == Engine::Gemini && kind == "init");
-        if started {
+        // Claude Code's first line.
+        if self.engine == Engine::Claude && kind == "system" && text("subtype") == "init" {
             let model = text("model");
             self.model.clone_from(&model);
             let key_source = text("apiKeySource");
@@ -265,35 +262,6 @@ impl Parser {
         let text = std::mem::take(&mut self.pending);
         (!text.trim().is_empty()).then(|| event(EventKind::Text, "", text.trim().to_string(), at))
     }
-
-    fn gemini(&mut self, value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
-        let mut events = Vec::new();
-        let mut outcome = Outcome::default();
-        let text = |key: &str| value.get(key).and_then(|text| text.as_str()).unwrap_or("");
-        match text("type") {
-            "message" if text("role") == "assistant" => self.pending.push_str(text("content")),
-            "tool_use" => {
-                events.extend(self.flush(at));
-                let detail = value.get("parameters").map(describe_input).unwrap_or_default();
-                events.push(event(EventKind::Tool, text("tool_name"), detail, at));
-            }
-            "tool_result" if text("status") == "error" => {
-                let message = value.pointer("/error/message").and_then(|message| message.as_str()).unwrap_or("");
-                events.push(event(EventKind::Stderr, "", message.to_string(), at));
-            }
-            "error" => events.push(event(EventKind::Stderr, "", text("message").to_string(), at)),
-            "result" => {
-                outcome.failed = text("status") != "success";
-                if let Some(message) = value.pointer("/error/message").and_then(|message| message.as_str()) {
-                    events.push(event(EventKind::Stderr, "", message.to_string(), at));
-                }
-                let answer = std::mem::take(&mut self.pending);
-                events.push(event(EventKind::Result, "", answer.trim().to_string(), at));
-            }
-            _ => {}
-        }
-        (events, outcome)
-    }
 }
 
 /// What Grok bills a turn at comes in "ticks": ten thousand million to the
@@ -301,10 +269,10 @@ impl Parser {
 const GROK_TICKS_PER_USD: f64 = 1e10;
 
 impl Parser {
-    /// Grok's ACP messages. Like Gemini CLI's, its answer streams in pieces:
-    /// gathered into one Text event whenever it stops to use a tool, and
-    /// into the Result when the turn's reply comes.
-    fn grok(&mut self, value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
+    /// An ACP session's messages (Grok's, Gemini CLI's). The answer streams
+    /// in pieces: gathered into one Text event whenever it stops to use a
+    /// tool, and into the Result when the turn's reply comes.
+    fn acp(&mut self, value: &serde_json::Value, at: i64) -> (Vec<RunEvent>, Outcome) {
         let mut events = Vec::new();
         let mut outcome = Outcome::default();
         let text = |pointer: &str| value.pointer(pointer).and_then(|text| text.as_str()).unwrap_or("");
@@ -337,13 +305,21 @@ impl Parser {
                     // Its answer to `initialize`: what it is and what it runs.
                     let model = text("/result/_meta/modelState/currentModelId").to_string();
                     self.model.clone_from(&model);
+                    // Grok's own field; the protocol's, which Gemini CLI fills.
+                    let version = [text("/result/_meta/agentVersion"), text("/result/agentInfo/version")]
+                        .into_iter()
+                        .find(|version| !version.is_empty())
+                        .unwrap_or_default();
                     let session = SessionInfo {
                         engine: self.engine,
-                        version: text("/result/_meta/agentVersion").to_string(),
+                        version: version.to_string(),
                         model,
                         ..SessionInfo::default()
                     };
                     events.push(RunEvent { kind: EventKind::Session, at, session: Some(session), ..RunEvent::default() });
+                } else if let Some(model) = value.pointer("/result/models/currentModelId").and_then(|model| model.as_str()) {
+                    // Gemini CLI's answer to `session/new`: the model it runs.
+                    self.model = model.to_string();
                 } else if let Some(reason) = value.pointer("/result/stopReason").and_then(|reason| reason.as_str()) {
                     // The turn's own reply. One cut short by a permission
                     // Termo refused isn't the end: acp.rs sends it on, up to
@@ -555,46 +531,43 @@ mod tests {
         assert_eq!(events[0].text, "quota");
     }
 
-    /// Gemini CLI's pieces of text come out whole: one Text before a tool
-    /// call, the rest in the Result.
+    /// Gemini CLI, over ACP: the protocol's own fields for its version and
+    /// model, no cost, and a refused tool said as such. Lines as it really
+    /// sends them.
     #[test]
-    fn gemini_answers_are_gathered_from_their_pieces() {
+    fn gemini_over_acp_reports_its_version_model_tools_and_refusals() {
         let mut parser = Parser::new(Engine::Gemini);
-        let lines = [
-            r#"{"type":"init","session_id":"s1","model":"gemini-2.5-pro"}"#,
-            r#"{"type":"message","role":"user","content":"Revisá"}"#,
-            r#"{"type":"message","role":"assistant","content":"Voy a ","delta":true}"#,
-            r#"{"type":"message","role":"assistant","content":"mirar.","delta":true}"#,
-            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"t1","parameters":{"file_path":"a.txt"}}"#,
-            r#"{"type":"tool_result","tool_id":"t1","status":"success","output":"hola"}"#,
-            r#"{"type":"message","role":"assistant","content":"Dice ","delta":true}"#,
-            r#"{"type":"message","role":"assistant","content":"hola.","delta":true}"#,
-            r#"{"type":"result","status":"success","stats":{}}"#,
-        ];
-        let events: Vec<RunEvent> = lines.iter().flat_map(|line| parser.line(line, 1).0).collect();
-        // The first line says which model it is.
-        assert_eq!(events[0].session.as_ref().map(|session| session.model.as_str()), Some("gemini-2.5-pro"));
+        let mut events = Vec::new();
+        let mut outcome = Outcome::default();
+        for line in [
+            r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"authMethods":[{"id":"oauth-personal"}],"agentInfo":{"name":"gemini-cli","title":"Gemini CLI","version":"0.63.0"},"agentCapabilities":{"loadSession":true}}}"#,
+            r#"{"jsonrpc":"2.0","id":3,"result":{"sessionId":"s1","modes":{"currentModeId":"default"},"models":{"currentModelId":"auto"}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Miro."}}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"tool_call","toolCallId":"web_fetch__call_1","status":"pending","title":"Fetch https://example.com","content":[],"locations":[],"kind":"fetch"}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"tool_call_update","toolCallId":"web_fetch__call_1","status":"failed","content":[{"type":"content","content":{"type":"text","text":"Tool \"web_fetch\" was canceled by the user."}}],"kind":"fetch"}}}"#,
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Sin web."}}}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"result":{"stopReason":"end_turn","_meta":{"quota":{"token_count":{"input_tokens":10,"output_tokens":2}}}}}"#,
+        ] {
+            let (mut found, said) = parser.line(line, 1);
+            events.append(&mut found);
+            outcome.failed |= said.failed;
+            outcome.cost_usd = said.cost_usd.or(outcome.cost_usd);
+        }
+        let said: Vec<(EventKind, &str, &str)> =
+            events.iter().map(|event| (event.kind, event.tool.as_str(), event.text.as_str())).collect();
         assert_eq!(
-            events[1..].to_vec(),
-            vec![
-                event(EventKind::Text, "", "Voy a mirar.".into(), 1),
-                event(EventKind::Tool, "read_file", "a.txt".into(), 1),
-                event(EventKind::Result, "", "Dice hola.".into(), 1),
+            said,
+            [
+                (EventKind::Session, "", ""),
+                (EventKind::Text, "", "Miro."),
+                (EventKind::Tool, "Fetch https://example.com", ""),
+                (EventKind::Stderr, "", "Tool \"web_fetch\" was canceled by the user."),
+                (EventKind::Result, "", "Sin web."),
             ]
         );
-    }
-
-    #[test]
-    fn gemini_failures_say_why() {
-        let mut parser = Parser::new(Engine::Gemini);
-        let (events, outcome) = parser.line(r#"{"type":"result","status":"error","error":{"type":"API","message":"quota"}}"#, 1);
-        assert!(outcome.failed);
-        assert_eq!(events[0], event(EventKind::Stderr, "", "quota".into(), 1));
-        let (events, _) = parser.line(r#"{"type":"tool_result","tool_id":"t","status":"error","error":{"message":"denied"}}"#, 1);
-        assert_eq!(events[0].text, "denied");
-        // Output that ends without a result keeps what was said.
-        parser.line(r#"{"type":"message","role":"assistant","content":"a medias","delta":true}"#, 1);
-        assert_eq!(parser.finish(2), vec![event(EventKind::Text, "", "a medias".into(), 2)]);
+        assert_eq!(events[0].session.as_ref().unwrap().version, "0.63.0");
+        assert_eq!(parser.model, "auto");
+        assert_eq!(outcome, Outcome::default());
     }
 
     /// Grok, over ACP: its answer comes in chunks, cut wherever it stops for

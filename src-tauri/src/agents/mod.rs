@@ -6,7 +6,6 @@ pub mod acp;
 pub mod console_bridge;
 pub mod diagnose;
 pub mod draft;
-pub mod gemini_system;
 pub mod events;
 pub mod git_hooks;
 pub mod github;

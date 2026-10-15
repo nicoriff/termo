@@ -1913,7 +1913,7 @@ export const es = {
         askUserHint: "Cuando se encuentra con una decisión que te corresponde a vos, te pregunta y espera tu respuesta en vez de suponer. Solo en las corridas que arrancás vos, a mano o desde una consola (ahí la pregunta también le llega a esa consola); en las que arrancan solas —por horario, cambios, git, webhook u otro agente— decide por su cuenta. Si no respondés a tiempo, decide solo y dice qué asumió.",
         consoles: "Desde tus consolas",
         fromConsoles: "Disponible desde las consolas",
-        fromConsolesHint: "Las consolas de Claude Code, Codex, Gemini o Copilot que abras desde Termo pueden pedirle cosas y esperar su respuesta. Atiende cada pedido dentro de su rol, con sus propios permisos y en su carpeta. La consola te pide confirmación antes de cada pedido, porque cada uno es una ejecución paga.",
+        fromConsolesHint: "Las consolas de Claude Code, Codex o Copilot que abras desde Termo pueden pedirle cosas y esperar su respuesta (también las de Gemini CLI, con \"También en consolas abiertas fuera de Termo\" activado en Preferencias). Atiende cada pedido dentro de su rol, con sus propios permisos y en su carpeta. La consola te pide confirmación antes de cada pedido, porque cada uno es una ejecución paga.",
         consolesMayRun: "Permitirlo aunque ejecute comandos",
         consolesMayRunHint: "Este agente puede ejecutar comandos en su carpeta. Lo que le pidan desde una consola lo escribe el modelo de esa consola, que puede estar influido por el contenido del proyecto en el que trabaja. Activalo solo si confiás en eso.",
         escalation: "Permitir pedirles a agentes con más permisos",
@@ -2499,7 +2499,7 @@ export const es = {
       inActivityBarHint:
         "La barra vertical está en el borde izquierdo de la ventana. Aunque lo ocultes, el panel se sigue abriendo con {shortcut}, desde el menú ≡ o la paleta de comandos.",
       consoles: "Agentes desde las consolas",
-      consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex, Gemini y Copilot que abras desde Termo, sin configurar nada más. También si tipeás claude, codex o copilot en una pestaña de shell de Termo.",
+      consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex y Copilot que abras desde Termo, sin configurar nada más. También si tipeás claude, codex o copilot en una pestaña de shell de Termo. Gemini CLI solo los toma de su propia configuración: activá la opción de abajo.",
       everyConsole: "También en consolas abiertas fuera de Termo",
       everyConsoleHint: "Agrega Termo como servidor MCP en la configuración de cada CLI instalada, así lo ven las consolas que abras en cualquier lado (VS Code, otra terminal). El token de acceso queda escrito en esos archivos, y con Termo cerrado esas CLIs avisan que no pudieron conectarse.",
       registering: "Actualizando la configuración de cada CLI…",

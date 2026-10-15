@@ -1913,7 +1913,7 @@ export const en: Messages = {
         askUserHint: "When it hits a decision that's yours to make, it asks you and waits for your answer instead of assuming. Only in the runs you start, by hand or from a console (there the question reaches that console too); in the ones that start on their own — a schedule, changes, git, a webhook or another agent — it decides by itself. If you don't answer in time, it decides alone and says what it assumed.",
         consoles: "From your consoles",
         fromConsoles: "Available from consoles",
-        fromConsolesHint: "The Claude Code, Codex, Gemini or Copilot consoles you open from Termo can ask it things and wait for its answer. It handles each request within its role, with its own permissions and in its own folder. The console asks you to confirm each request first, since each one is a paid run.",
+        fromConsolesHint: "The Claude Code, Codex or Copilot consoles you open from Termo can ask it things and wait for its answer (Gemini CLI ones too, with \"Also in consoles opened outside Termo\" on in Preferences). It handles each request within its role, with its own permissions and in its own folder. The console asks you to confirm each request first, since each one is a paid run.",
         consolesMayRun: "Allow it even though it runs commands",
         consolesMayRunHint: "This agent can run commands in its folder. What a console asks it is written by that console's model, which can be swayed by the project it works in. Turn this on only if you trust that.",
         escalation: "Allow asking agents with more permissions",
@@ -2498,7 +2498,7 @@ export const en: Messages = {
       inActivityBarHint:
         "The vertical bar is on the window's left edge. Even with the button hidden, the panel still opens with {shortcut}, from the ≡ menu or from the command palette.",
       consoles: "Agents from consoles",
-      consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex, Gemini and Copilot consoles you open from Termo, with nothing else to set up. Also when you type claude, codex or copilot in one of Termo's shell tabs.",
+      consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex and Copilot consoles you open from Termo, with nothing else to set up. Also when you type claude, codex or copilot in one of Termo's shell tabs. Gemini CLI only takes them from its own settings: turn on the option below.",
       everyConsole: "Also in consoles opened outside Termo",
       everyConsoleHint: "Adds Termo as an MCP server in each installed CLI's own settings, so consoles you open anywhere (VS Code, another terminal) see it. The access token is written in those files, and with Termo closed those CLIs warn that they couldn't connect.",
       registering: "Updating each CLI's settings…",

@@ -312,6 +312,7 @@ pub fn is_reserved_env(name: &str) -> bool {
         "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "HTTP_PROXY",
         "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "ANTHROPIC_BASE_URL",
         "OPENAI_BASE_URL", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GEMINI_CLI_SYSTEM_SETTINGS_PATH",
+        "GEMINI_CLI_HOME", GEMINI_TRUST_VAR,
         "MCP_TOOL_TIMEOUT", TEAM_TOKEN_VAR,
     ];
     const PREFIXES: &[&str] = &["LD_", "DYLD_", "PYTHON", "NPM_CONFIG_", "GIT_", "CLAUDE_CODE_", "TERMO_MCP_"];
@@ -533,13 +534,13 @@ pub struct Invocation {
     pub stdin: String,
     pub env: Vec<(String, String)>,
     /// A file the runner writes for this run and removes after it. Gemini
-    /// CLI: its settings (its own MCP servers, the web tools left out), which
-    /// GEMINI_CLI_SYSTEM_SETTINGS_PATH points at — system settings, above the
-    /// user's. Copilot CLI: its MCP servers, passed as
+    /// CLI: a policy that leaves out the web tools, passed as `--policy`.
+    /// Copilot CLI: its MCP servers, passed as
     /// `--additional-mcp-config @<file>`.
     pub settings: Option<String>,
-    /// Grok: the run as a session over ACP (see acp.rs), which is how it takes
-    /// its prompt and its MCP servers. Nothing goes through `stdin` then.
+    /// Grok and Gemini CLI: the run as a session over ACP (see acp.rs), which
+    /// is how they take its prompt and its MCP servers. Nothing goes through
+    /// `stdin` then.
     pub acp: Option<AcpRun>,
 }
 
@@ -552,6 +553,10 @@ pub struct AcpRun {
     pub mcp_servers: Vec<serde_json::Value>,
     pub autonomy: Autonomy,
     pub web: bool,
+    /// Whether the session starts by logging in with one of the methods the
+    /// agent offers. Grok needs it; Gemini CLI uses the login its settings
+    /// already name, and the first method it offers would be a different one.
+    pub sign_in: bool,
 }
 
 /// `system_prompt_file`: where the runner wrote the agent's logic (Claude
@@ -746,21 +751,22 @@ const GEMINI_WEB_TOOLS: &[&str] = &["google_web_search", "web_fetch"];
 /// servers allows only this one.
 const GEMINI_NO_SERVER: &str = "termo-none";
 
+/// Gemini CLI runs as an ACP agent (`gemini --acp`), like Grok: its headless
+/// mode takes MCP servers only from a settings file, and the one a run could
+/// bring of its own (the system file) it reads only from a folder an
+/// administrator owns. A session takes them as Grok's does.
 fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<String, String>) -> Invocation {
-    // Its own approval modes match the three levels: `plan` only reads (no
-    // shell, no edits), `auto_edit` also edits, `yolo` runs anything. Run
-    // headless, what a mode doesn't approve on its own is refused.
+    // Its approval modes do part of the work: `plan` only reads (no shell,
+    // no edits), `auto_edit` edits on its own. What a mode leaves to ask,
+    // acp.rs answers the way the agent's level says (`default` asks for
+    // each command and edit). Never `yolo`: that would also approve what the
+    // level doesn't cover.
     let mode = match spec.autonomy {
         Autonomy::Read => "plan",
         Autonomy::Edit => "auto_edit",
-        Autonomy::Run => "yolo",
+        Autonomy::Run => "default",
     };
-    let mut args: Vec<String> = vec![
-        "--output-format".into(),
-        "stream-json".into(),
-        "--approval-mode".into(),
-        mode.into(),
-    ];
+    let mut args: Vec<String> = vec!["--acp".into(), "--approval-mode".into(), mode.into()];
     // Only its own servers, not whatever the user's settings or extensions
     // bring: they could hand it tools nobody chose for it.
     let servers: Vec<&str> = usable_servers(spec).map(|server| server.name.as_str()).collect();
@@ -772,35 +778,34 @@ fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<
         args.push("-m".into());
         args.push(spec.model.trim().into());
     }
-    // Gemini CLI fills `${NAME}` in its settings from its environment, as
-    // Claude Code does: the same rule on what may go there.
-    let mut env: Vec<(String, String)> = secrets
-        .iter()
-        .filter(|(name, _)| *name == TEAM_TOKEN_VAR || (is_env_name(name) && !is_reserved_env(name)))
-        .map(|(name, value)| (name.clone(), value.clone()))
-        .collect();
-    env.sort();
     Invocation {
         args,
-        // The prompt comes from stdin, which also puts it in headless mode.
-        stdin: codex_prompt(spec, context),
-        env,
-        settings: Some(gemini_settings_json(spec)),
-        acp: None,
+        stdin: String::new(),
+        // Run headless, Gemini CLI refuses a folder it hasn't been told to
+        // trust; the user picked this one for the agent. Trusted, it also
+        // reads the folder's own settings, such as the rules a repository
+        // gives every agent.
+        env: vec![(GEMINI_TRUST_VAR.to_string(), "true".to_string())],
+        settings: (!spec.tools.web).then(gemini_no_web_policy),
+        acp: Some(AcpRun {
+            prompt: codex_prompt(spec, context),
+            mcp_servers: acp_servers(spec, secrets),
+            autonomy: spec.autonomy,
+            web: spec.tools.web,
+            sign_in: false,
+        }),
     }
 }
 
-/// The run's settings for Gemini CLI: its MCP servers in Gemini's shape, and
-/// the web tools left out unless the agent has the web.
-pub fn gemini_settings_json(spec: &AgentSpec) -> String {
-    let servers: serde_json::Map<String, serde_json::Value> = usable_servers(spec)
-        .map(|server| (server.name.clone(), gemini_server(&server.config)))
-        .collect();
-    let mut settings = serde_json::json!({ "mcpServers": servers });
-    if !spec.tools.web {
-        settings["tools"] = serde_json::json!({ "exclude": GEMINI_WEB_TOOLS });
-    }
-    settings.to_string()
+/// What tells Gemini CLI to trust the folder it runs in.
+pub const GEMINI_TRUST_VAR: &str = "GEMINI_CLI_TRUST_WORKSPACE";
+
+/// A policy file (`--policy`) that takes the web tools away from a run
+/// without the web. Searching never asks for permission, so acp.rs can't
+/// refuse it the way it refuses a fetch.
+pub fn gemini_no_web_policy() -> String {
+    let tools = GEMINI_WEB_TOOLS.iter().map(|tool| format!("\"{tool}\"")).collect::<Vec<_>>().join(", ");
+    format!("[[rule]]\ntoolName = [{tools}]\ndecision = \"deny\"\npriority = 999\n")
 }
 
 /// A server's `.mcp.json` config (Claude Code's shape, which the agents keep)
@@ -913,6 +918,7 @@ fn grok_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<St
             mcp_servers: acp_servers(spec, secrets),
             autonomy: spec.autonomy,
             web: spec.tools.web,
+            sign_in: true,
         }),
     }
 }
@@ -1310,8 +1316,9 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "false");
     }
 
-    /// Gemini CLI: its approval mode per level, its settings in a file of the
-    /// run's own, and only the agent's servers allowed.
+    /// Gemini CLI: an ACP agent in the approval mode of its level, in a
+    /// trusted folder, with only the agent's servers allowed and the web tools
+    /// taken away by a policy.
     #[test]
     fn gemini_runs_at_the_agents_level_with_only_its_own_servers() {
         let modes: Vec<String> = [Autonomy::Read, Autonomy::Edit, Autonomy::Run]
@@ -1321,20 +1328,25 @@ mod tests {
                 value_after(&run.args, "--approval-mode").unwrap().to_string()
             })
             .collect();
-        assert_eq!(modes, ["plan", "auto_edit", "yolo"]);
+        assert_eq!(modes, ["plan", "auto_edit", "default"]);
 
         let run = build_invocation(&spec(Engine::Gemini, Autonomy::Read), None, None, &no_secrets());
-        assert_eq!(value_after(&run.args, "--output-format"), Some("stream-json"));
+        assert_eq!(run.args[0], "--acp");
         // No servers of its own: none of the user's either.
         assert_eq!(value_after(&run.args, "--allowed-mcp-server-names"), Some(GEMINI_NO_SERVER));
-        assert!(run.stdin.starts_with("Sé breve") && run.stdin.ends_with("Resumí los cambios"));
-        let settings: serde_json::Value = serde_json::from_str(run.settings.as_deref().unwrap()).unwrap();
-        assert_eq!(settings["tools"]["exclude"], serde_json::json!(GEMINI_WEB_TOOLS));
-        assert_eq!(settings["mcpServers"], serde_json::json!({}));
+        assert!(run.stdin.is_empty());
+        assert_eq!(run.env, [(GEMINI_TRUST_VAR.to_string(), "true".to_string())]);
+        let acp = run.acp.unwrap();
+        assert_eq!(acp.prompt, "Sé breve\n\n---\n\nResumí los cambios");
+        assert_eq!((acp.autonomy, acp.web, acp.sign_in), (Autonomy::Read, false, false));
+        assert!(acp.mcp_servers.is_empty());
+        let policy = run.settings.unwrap();
+        assert!(policy.contains("toolName = [\"google_web_search\", \"web_fetch\"]"), "{policy}");
+        assert!(policy.contains("decision = \"deny\""));
     }
 
     #[test]
-    fn gemini_gets_its_servers_in_its_own_shape() {
+    fn gemini_gets_its_servers_in_the_session() {
         let mut agent = spec(Engine::Gemini, Autonomy::Read);
         agent.tools.web = true;
         agent.tools.mcp = vec![
@@ -1355,19 +1367,18 @@ mod tests {
         let allowed: Vec<&String> =
             run.args.iter().enumerate().filter(|(i, _)| *i > 0 && run.args[i - 1] == "--allowed-mcp-server-names").map(|(_, a)| a).collect();
         assert_eq!(allowed, ["docs", "remote", "termo"]);
-        let settings: serde_json::Value = serde_json::from_str(run.settings.as_deref().unwrap()).unwrap();
-        let servers = &settings["mcpServers"];
-        assert_eq!(servers["docs"], serde_json::json!({ "command": "npx", "args": ["-y", "docs"], "env": { "API_KEY": "${K}" } }));
-        assert_eq!(servers["remote"], serde_json::json!({ "httpUrl": "https://x.example/mcp", "headers": { "X-Team": "core" } }));
-        assert_eq!(servers["termo"]["httpUrl"], "http://127.0.0.1:47821/mcp");
-        assert_eq!(servers["termo"]["headers"]["Authorization"], format!("Bearer ${{{TEAM_TOKEN_VAR}}}"));
-        assert_eq!(servers["termo"]["timeout"], 15 * 60 * 1000);
-        assert!(servers.get("x,Bash").is_none());
+        // In the session, with the secrets in place.
+        let servers = run.acp.unwrap().mcp_servers;
+        let names: Vec<&str> = servers.iter().filter_map(|server| server["name"].as_str()).collect();
+        assert_eq!(names, ["docs", "remote", "termo"]);
+        assert_eq!(servers[0]["env"], serde_json::json!([{ "name": "API_KEY", "value": "v" }]));
+        assert_eq!(servers[1]["url"], "https://x.example/mcp");
+        assert_eq!(servers[2]["url"], "http://127.0.0.1:47821/mcp");
         // The web on: nothing left out.
-        assert!(settings.get("tools").is_none());
-        // Secrets through its environment, never a reserved one.
+        assert!(run.settings.is_none());
+        // No secret goes into its environment.
         let names: Vec<&str> = run.env.iter().map(|(name, _)| name.as_str()).collect();
-        assert_eq!(names, ["K"]);
+        assert_eq!(names, [GEMINI_TRUST_VAR]);
     }
 
     /// The rules after each `flag`, in order.

@@ -31,7 +31,6 @@ use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
 use super::diagnose::provider_name;
-use super::gemini_system;
 use super::run_questions::{self, RunQuestion};
 use super::runner::Runner;
 use super::spec::{copilot_home, AgentSpec, Autonomy};
@@ -618,12 +617,8 @@ pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
             write(format!("copilot-{short}.json"), copilot_config(&url, &bearer))
                 .map(|path| vec!["--additional-mcp-config".into(), format!("@{}", path.to_string_lossy())])
         }
-        "gemini" => {
-            write(format!("gemini-{short}.json"), gemini_config(&url, &bearer)).map(|path| {
-                env.push(("GEMINI_CLI_SYSTEM_SETTINGS_PATH", path.to_string_lossy().into_owned()));
-                Vec::new()
-            })
-        }
+        // Not Gemini CLI: see shell_extras. Its consoles get the server only
+        // from its own settings (`global`).
         _ => None,
     };
     let Some(args) = args else {
@@ -645,14 +640,6 @@ fn copilot_config(url: &str, bearer: &str) -> String {
         "type": "http", "url": url, "headers": { "Authorization": bearer }, "tools": ["*"],
     }}})
     .to_string()
-}
-
-fn gemini_config(url: &str, bearer: &str) -> String {
-    let ours = json!({ "mcpServers": { SERVER: {
-        "httpUrl": url, "headers": { "Authorization": bearer }, "timeout": TOOL_TIMEOUT_SEC * 1000,
-    }}});
-    // On top of the system settings, never instead of them.
-    gemini_system::with_system(&ours.to_string())
 }
 
 /// The server for a shell Termo opens, with a token of its own, for the

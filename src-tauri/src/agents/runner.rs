@@ -271,24 +271,23 @@ impl Runner {
         );
         // The CLI's settings for this run (see spec::Invocation), removed when
         // the run ends.
-        let engine_name = match spec.engine {
-            Engine::Copilot => "copilot",
-            _ => "gemini",
+        let file_name = match spec.engine {
+            Engine::Copilot => "copilot-settings.json",
+            _ => "gemini-policy.toml",
         };
-        let run_settings = invocation
-            .settings
-            .as_ref()
-            .map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.{engine_name}-settings.json")));
+        let run_settings =
+            invocation.settings.as_ref().map(|_| root.join(&spec.id).join("runs").join(format!("{run_id}.{file_name}")));
         if let (Some(path), Some(text)) = (&run_settings, &invocation.settings) {
-            // Gemini CLI's take the system file's place: written on top of it.
-            let text =
-                if spec.engine == Engine::Gemini { super::gemini_system::with_system(text) } else { text.clone() };
             // They can hold the agent's secrets and its team token.
             let written = std::fs::create_dir_all(path.parent().expect("has a folder"))
-                .and_then(|_| super::console_bridge::write_private(path, &text));
+                .and_then(|_| super::console_bridge::write_private(path, text));
             written.map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
         }
         let mut args = invocation.args.clone();
+        if let Some(path) = run_settings.as_ref().filter(|_| spec.engine == Engine::Gemini) {
+            args.push("--policy".into());
+            args.push(path.display().to_string());
+        }
         if spec.engine == Engine::Copilot {
             if let Some(path) = &run_settings {
                 args.push("--additional-mcp-config".into());
@@ -310,9 +309,6 @@ impl Runner {
         }
         cmd.envs(invocation.env.iter().map(|(name, value)| (name, value)));
         cmd.envs(GIT_SAFETY_ENV.iter().copied());
-        if let Some(path) = run_settings.as_ref().filter(|_| spec.engine == Engine::Gemini) {
-            cmd.env("GEMINI_CLI_SYSTEM_SETTINGS_PATH", path);
-        }
         if team_token.is_some() && spec.engine == Engine::Claude {
             // Asking another agent takes as long as that agent's run; Claude
             // Code would give up on the call well before.
