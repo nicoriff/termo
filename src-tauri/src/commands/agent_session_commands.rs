@@ -3,7 +3,7 @@ use crate::agent_sessions::{self, AgentSession};
 
 #[tauri::command]
 pub fn list_agent_sessions(app: tauri::AppHandle) -> Vec<AgentSession> {
-    agent_sessions::list(&app)
+    agent_sessions::list_resumable(&app)
 }
 
 #[tauri::command]

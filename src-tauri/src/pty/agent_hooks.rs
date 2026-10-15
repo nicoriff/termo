@@ -694,10 +694,14 @@ pub fn start_watcher(app: tauri::AppHandle) {
                 let offset = offsets.entry(path.clone()).or_insert(0);
                 for update in read_new_lines(&path, offset) {
                     if let Some(agent_session_id) = update.agent_session_id.clone() {
+                        // Working only follows a prompt: SessionStart alone
+                        // is a conversation with nothing in it yet.
+                        let begun = update.status == Some(super::agent_events::AgentStatus::Running);
                         crate::agent_sessions::record(
                             &app,
                             crate::agent_sessions::AgentSession::new(&update.tool, &agent_session_id)
                                 .with_cwd(update.agent_cwd.clone()),
+                            begun,
                         );
                     }
                     let _ = app.emit(
