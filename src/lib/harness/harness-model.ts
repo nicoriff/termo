@@ -43,6 +43,7 @@ function comparable(spec: HarnessSpec): string {
     commands: spec.commands.map((rule) => [normalizePrefix(rule.prefix), rule.decision]).filter(([prefix]) => prefix),
     checks: spec.checks.map((check) => [check.command.trim(), check.timeoutSec ?? null]).filter(([command]) => command),
     instructions: spec.instructions.trim(),
+    protectOwnFiles: spec.protectOwnFiles !== false,
   });
 }
 

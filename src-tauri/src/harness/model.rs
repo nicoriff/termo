@@ -87,6 +87,14 @@ pub struct Harness {
     pub checks: Vec<Check>,
     #[serde(default)]
     pub instructions: String,
+    /// The files the harness writes can't be edited by the agents it holds,
+    /// so none can switch its rules off (see `with_own_files`).
+    #[serde(default = "yes")]
+    pub protect_own_files: bool,
+    /// The paths `with_own_files` added, never saved: AGENTS.md names them
+    /// in one line rather than one each.
+    #[serde(skip)]
+    pub own_files: Vec<String>,
     /// By file, relative to the root. Kept by Termo, never edited in the UI.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub managed: BTreeMap<String, Owned>,
@@ -100,6 +108,10 @@ fn all_agents() -> Vec<Agent> {
     Agent::ALL.to_vec()
 }
 
+fn yes() -> bool {
+    true
+}
+
 impl Default for Harness {
     fn default() -> Self {
         Harness {
@@ -109,6 +121,8 @@ impl Default for Harness {
             commands: Vec::new(),
             checks: Vec::new(),
             instructions: String::new(),
+            protect_own_files: true,
+            own_files: Vec::new(),
             managed: BTreeMap::new(),
         }
     }
@@ -167,8 +181,27 @@ impl Harness {
             commands,
             checks,
             instructions: self.instructions.trim().to_string(),
+            protect_own_files: self.protect_own_files,
+            own_files: Vec::new(),
             managed: self.managed.clone(),
         }
+    }
+
+    /// The rules as the agents get them: with `protect_own_files`, `files`
+    /// (the harness's own, see sync.rs) can't be edited either. Never for a
+    /// blank harness, which writes nothing to protect.
+    pub fn with_own_files(&self, files: &[&str]) -> Harness {
+        let mut spec = self.clone();
+        if !spec.protect_own_files || spec.is_blank() {
+            return spec;
+        }
+        for file in files {
+            if !spec.paths.iter().any(|rule| rule.pattern == *file) {
+                spec.paths.push(PathRule { pattern: file.to_string(), access: Access::NoEdit });
+                spec.own_files.push(file.to_string());
+            }
+        }
+        spec
     }
 }
 
@@ -205,6 +238,29 @@ mod tests {
         assert_eq!(spec.version, 1);
         assert_eq!(spec.agents, Agent::ALL.to_vec());
         assert_eq!(spec.paths[0].access, Access::NoRead);
+        // A harness from before the option protects its files too.
+        assert!(spec.protect_own_files);
+    }
+
+    #[test]
+    fn its_own_files_are_added_as_paths_not_to_edit() {
+        let files = [".termo/**", ".claude/settings.json"];
+        let spec = Harness {
+            paths: vec![PathRule { pattern: ".termo/**".into(), access: Access::NoRead }],
+            ..Harness::default()
+        };
+        let rules = spec.with_own_files(&files);
+        assert_eq!(
+            rules.paths,
+            vec![
+                // A rule of the user's for one of them stays as it is.
+                PathRule { pattern: ".termo/**".into(), access: Access::NoRead },
+                PathRule { pattern: ".claude/settings.json".into(), access: Access::NoEdit },
+            ]
+        );
+        let off = Harness { protect_own_files: false, ..spec.clone() };
+        assert_eq!(off.with_own_files(&files).paths, off.paths);
+        assert!(Harness::default().with_own_files(&files).paths.is_empty());
     }
 
     #[test]

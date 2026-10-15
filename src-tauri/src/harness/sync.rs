@@ -45,6 +45,27 @@ const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[
     (checks::SCRIPT_FILE, checks::script_for),
 ];
 
+/// The files the harness writes for `spec`'s agents, where any of them could
+/// switch a rule off: `.termo/` (the harness itself, the checks), and each
+/// agent's settings and rules files. Every agent gets them as paths it
+/// can't edit, so none can loosen another's rules either.
+fn own_files(spec: &Harness) -> Vec<&'static str> {
+    let mut files = vec![".termo/**"];
+    if claude::applies(spec) {
+        files.push(claude::FILE);
+    }
+    if codex::applies(spec) {
+        files.extend([codex::RULES_FILE, codex::HOOKS_FILE]);
+    }
+    if gemini::applies(spec) {
+        files.extend([gemini::FILE, gemini::POLICY_FILE]);
+    }
+    if copilot::applies(spec) {
+        files.push(copilot::FILE);
+    }
+    files
+}
+
 fn read(root: &Path, file: &str) -> Option<String> {
     fs::read_to_string(root.join(file)).ok()
 }
@@ -64,6 +85,8 @@ pub fn plan(root: &Path, spec: &Harness, adopted: &[ExternalEntry]) -> anyhow::R
             .push(Value::String(entry.value.clone()));
     }
     let spec = spec.normalized();
+    // What the agents get; `spec` is what's saved.
+    let rules = spec.with_own_files(&own_files(&spec));
     let mut managed = BTreeMap::new();
     let mut changes = Vec::new();
     let mut note = |path: &str, before: Option<String>, after: Option<String>| {
@@ -76,10 +99,10 @@ pub fn plan(root: &Path, spec: &Harness, adopted: &[ExternalEntry]) -> anyhow::R
         let before = read(root, target.file);
         let empty = Owned::new();
         let previous = previous.get(target.file).unwrap_or(&empty);
-        let applies = (target.applies)(&spec);
+        let applies = (target.applies)(&rules);
         let (after, added) = json_merge::merge(target.file, before.as_deref(), previous, |current| {
             if applies {
-                (target.desired)(&spec, current)
+                (target.desired)(&rules, current)
             } else {
                 Owned::new()
             }
@@ -92,14 +115,14 @@ pub fn plan(root: &Path, spec: &Harness, adopted: &[ExternalEntry]) -> anyhow::R
 
     for (file, render) in OWN_FILES {
         let before = read(root, file);
-        note(file, before, render(&spec));
+        note(file, before, render(&rules));
     }
 
     let before = read(root, instructions::AGENTS_MD);
-    let after = instructions::agents_md(&spec, before.as_deref());
+    let after = instructions::agents_md(&rules, before.as_deref());
     note(instructions::AGENTS_MD, before, after);
     let before = read(root, instructions::CLAUDE_MD);
-    let after = instructions::claude_md(&spec, before.as_deref());
+    let after = instructions::claude_md(&rules, before.as_deref());
     note(instructions::CLAUDE_MD, before, after);
 
     let mut saved = spec;
@@ -207,6 +230,32 @@ mod tests {
         for folder in [".termo", ".codex", ".gemini", ".github"] {
             assert!(!root.join(folder).exists(), "{folder} is left");
         }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The harness's files can't be edited by its agents, unless that's
+    /// turned off; and the rules saved are only the user's.
+    #[test]
+    fn its_own_files_are_protected_by_default() {
+        let root = temp_root();
+        let spec = Harness { agents: vec![model::Agent::Claude, model::Agent::Gemini], ..spec() };
+        let changes = plan(&root, &spec, &[]).unwrap();
+        let after = |path: &str| changes.iter().find(|change| change.path == path).and_then(|change| change.after.clone());
+        let claude: Value = serde_json::from_str(&after(claude::FILE).unwrap()).unwrap();
+        let deny = claude["permissions"]["deny"].as_array().unwrap();
+        for rule in ["Edit(/.termo/**)", "Edit(/.claude/settings.json)", "Edit(/.gemini/settings.json)", "Edit(/.gemini/termo-harness.toml)"] {
+            assert!(deny.contains(&serde_json::json!(rule)), "{rule} missing from {deny:?}");
+        }
+        // Not for an agent the harness doesn't write for.
+        assert!(!deny.contains(&serde_json::json!("Edit(/.codex/hooks.json)")));
+        assert!(after(gemini::POLICY_FILE).unwrap().contains("termo-harness"));
+        let saved: Harness = serde_json::from_str(&after(SPEC_FILE).unwrap()).unwrap();
+        assert_eq!(saved.paths, spec.paths);
+
+        let off = Harness { protect_own_files: false, ..spec };
+        let changes = plan(&root, &off, &[]).unwrap();
+        let claude = changes.iter().find(|change| change.path == claude::FILE).unwrap().after.clone().unwrap();
+        assert!(!claude.contains(".termo/**"));
         fs::remove_dir_all(&root).unwrap();
     }
 

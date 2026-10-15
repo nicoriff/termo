@@ -33,6 +33,9 @@ export interface HarnessSpec {
   commands: CommandRule[];
   checks: Check[];
   instructions: string;
+  /** The files the harness writes can't be edited by its agents. Absent in
+   * a harness from before the option: on. */
+  protectOwnFiles?: boolean;
   /** Kept by Termo: what it wrote into each file. Sent back untouched. */
   managed?: Record<string, Record<string, unknown[]>>;
 }

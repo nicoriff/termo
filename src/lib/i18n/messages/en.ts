@@ -867,6 +867,9 @@ export const en: Messages = {
         title: "What not to do",
         hint: "What the agents can't touch or run, or only with your go-ahead.",
         empty: "Nothing yet.",
+        protectOwn: "Protect the harness's files",
+        protectOwnHint:
+          "No agent can edit .termo/ or the rules files Termo writes for each agent, so none can switch its own rules off, or another's.",
       },
       add: "Add",
       done: "Done",

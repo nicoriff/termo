@@ -336,6 +336,17 @@
 
         <HarnessRuleSection side="dont" spec={draft} {root}>
           {#snippet footer()}
+            <label class="check-row" title={t("harness.rows.dont.protectOwnHint")}>
+              <input
+                type="checkbox"
+                checked={draft.protectOwnFiles !== false}
+                onchange={(event) => {
+                  const on = event.currentTarget.checked;
+                  harnessStore.edit((spec) => (spec.protectOwnFiles = on));
+                }}
+              />
+              <span>{t("harness.rows.dont.protectOwn")}</span>
+            </label>
             <div class="chips" role="group" aria-label={t("harness.packs.title")}>
               <span class="chips-label">{t("harness.packs.title")}</span>
               {#each COMMAND_PACKS as pack (pack.id)}

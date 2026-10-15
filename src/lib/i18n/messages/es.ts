@@ -866,6 +866,9 @@ export const es = {
         title: "Qué no hacer",
         hint: "Lo que los agentes no pueden tocar ni correr, o solo con tu permiso.",
         empty: "Nada todavía.",
+        protectOwn: "Proteger los archivos del harness",
+        protectOwnHint:
+          "Ningún agente puede editar .termo/ ni los archivos de reglas que Termo escribe para cada agente, así que ninguno puede desactivar sus propias reglas ni las de otro.",
       },
       add: "Agregar",
       done: "Listo",

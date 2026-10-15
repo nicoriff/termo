@@ -225,6 +225,13 @@ describe("command packs", () => {
   });
 });
 
+describe("protectOwnFiles", () => {
+  it("counts as a change, and absent is on", () => {
+    expect(sameSpec(spec(), spec({ protectOwnFiles: true }))).toBe(true);
+    expect(sameSpec(spec(), spec({ protectOwnFiles: false }))).toBe(false);
+  });
+});
+
 describe("testCommand", () => {
   const rules = spec({
     agents: ["claude", "codex", "gemini", "copilot"],
