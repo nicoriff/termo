@@ -62,6 +62,15 @@ pub struct StatusSnapshot {
     pub spend_limit_percentage: Option<f64>,
 }
 
+impl StatusSnapshot {
+    /// Whether the conversation has anything in it: the status line is drawn
+    /// from the moment the agent opens, before a word is said, and nothing
+    /// is spent or held in context until one is.
+    pub fn has_begun(&self) -> bool {
+        self.cost_usd.is_some_and(|cost| cost > 0.0) || self.context_used_percentage.is_some_and(|used| used > 0.0)
+    }
+}
+
 fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
     let payload: Value = serde_json::from_str(input).ok()?;
     let number = |pointer: &str| payload.pointer(pointer).and_then(Value::as_f64);
@@ -190,6 +199,7 @@ pub fn start_watcher(app: tauri::AppHandle) {
                             .with_cwd(snapshot.cwd.clone())
                             .with_project_dir(snapshot.project_dir.clone())
                             .with_model(snapshot.model.clone()),
+                        snapshot.has_begun(),
                     );
                 }
                 let _ = app.emit("agent-status", StatusEvent { session_id, snapshot });
