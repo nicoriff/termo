@@ -285,8 +285,7 @@ impl Runner {
         }
         let mut args = invocation.args.clone();
         if let Some(path) = run_settings.as_ref().filter(|_| spec.engine == Engine::Gemini) {
-            args.push("--policy".into());
-            args.push(path.display().to_string());
+            args.extend(super::spec::gemini_policy_args(path, &dir, super::console_bridge::home().as_deref()));
         }
         if spec.engine == Engine::Copilot {
             if let Some(path) = &run_settings {

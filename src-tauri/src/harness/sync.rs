@@ -40,6 +40,7 @@ const JSON_TARGETS: &[JsonTarget] = &[
 /// A file that's Termo's alone, named so: written whole, or taken away.
 const OWN_FILES: &[(&str, fn(&Harness) -> Option<String>)] = &[
     (codex::RULES_FILE, codex::rules),
+    (gemini::POLICY_FILE, gemini::policy),
     (copilot::FILE, copilot::hooks),
     (checks::SCRIPT_FILE, checks::script_for),
 ];

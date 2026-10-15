@@ -763,7 +763,7 @@ pub fn json_config(current: &str, server: Option<Value>) -> Result<String, Strin
     serde_json::to_string_pretty(&value).map_err(|err| err.to_string())
 }
 
-fn home() -> Option<PathBuf> {
+pub fn home() -> Option<PathBuf> {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
 }
 

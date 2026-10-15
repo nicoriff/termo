@@ -183,7 +183,7 @@ export const RULE_KINDS: RuleKind[] = ["noEdit", "noRead", "deny", "ask", "allow
 export const SUPPORT: Record<HarnessAgent, Record<RuleKind, Support>> = {
   claude: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
   codex: { noEdit: "text", noRead: "text", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
-  gemini: { noEdit: "text", noRead: "text", deny: "enforced", ask: "text", allow: "enforced", checks: "enforced" },
+  gemini: { noEdit: "text", noRead: "text", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
   copilot: { noEdit: "text", noRead: "text", deny: "text", ask: "text", allow: "none", checks: "enforced" },
   // Through Claude Code's settings, which it reads too.
   grok: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "partial" },

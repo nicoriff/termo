@@ -803,6 +803,47 @@ pub const GEMINI_TRUST_VAR: &str = "GEMINI_CLI_TRUST_WORKSPACE";
 /// A policy file (`--policy`) that takes the web tools away from a run
 /// without the web. Searching never asks for permission, so acp.rs can't
 /// refuse it the way it refuses a fetch.
+/// The `--policy` arguments for a run with Termo's own policy file (`own`).
+/// On the command line, `--policy` takes the place of the `policyPaths` in
+/// Gemini CLI's settings, the user's and those of the folder it runs in,
+/// such as a repository's harness (see harness/gemini.rs): those go along
+/// with Termo's. Any of them that could read as something else on a command
+/// line (an option, or a batch-file metacharacter through npm's `.cmd`
+/// shim) is left out.
+pub fn gemini_policy_args(own: &std::path::Path, dir: &std::path::Path, home: Option<&std::path::Path>) -> Vec<String> {
+    let named = |settings: std::path::PathBuf| -> Vec<String> {
+        let value: serde_json::Value = std::fs::read_to_string(settings)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
+        value
+            .get("policyPaths")
+            .and_then(|paths| paths.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|path| path.as_str())
+            .filter(|path| is_plain_path(path))
+            .map(String::from)
+            .collect()
+    };
+    let mut paths = vec![own.display().to_string()];
+    let gemini_home = std::env::var_os("GEMINI_CLI_HOME").map(std::path::PathBuf::from).or(home.map(Into::into));
+    let sources = gemini_home.into_iter().chain([dir.to_path_buf()]).map(|base| base.join(".gemini").join("settings.json"));
+    for path in sources.flat_map(named) {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths.into_iter().flat_map(|path| ["--policy".to_string(), path]).collect()
+}
+
+/// A path with nothing a command line could take for more than a path.
+fn is_plain_path(path: &str) -> bool {
+    !path.trim().is_empty()
+        && !path.starts_with('-')
+        && !path.chars().any(|c| c.is_control() || "\"%&|<>^!`$;".contains(c))
+}
+
 pub fn gemini_no_web_policy() -> String {
     let tools = GEMINI_WEB_TOOLS.iter().map(|tool| format!("\"{tool}\"")).collect::<Vec<_>>().join(", ");
     format!("[[rule]]\ntoolName = [{tools}]\ndecision = \"deny\"\npriority = 999\n")
@@ -1343,6 +1384,32 @@ mod tests {
         let policy = run.settings.unwrap();
         assert!(policy.contains("toolName = [\"google_web_search\", \"web_fetch\"]"), "{policy}");
         assert!(policy.contains("decision = \"deny\""));
+    }
+
+    /// Termo's policy file doesn't push out the ones Gemini CLI's settings
+    /// name: a repository's harness, the user's own. Nothing that could pass
+    /// for an option or a shell metacharacter goes along.
+    #[test]
+    fn gemini_keeps_the_policies_its_settings_name() {
+        let base = std::env::temp_dir().join(format!("termo-gemini-policy-{}", uuid::Uuid::new_v4()));
+        let (repo, home) = (base.join("repo"), base.join("home"));
+        for folder in [&repo, &home] {
+            std::fs::create_dir_all(folder.join(".gemini")).unwrap();
+        }
+        let repo_settings = serde_json::json!({ "policyPaths": [".gemini/termo-harness.toml", "x & calc", "-y", "a\"b"] });
+        std::fs::write(repo.join(".gemini/settings.json"), repo_settings.to_string()).unwrap();
+        std::fs::write(home.join(".gemini/settings.json"), r#"{ "policyPaths": ["~/policies/mine.toml"] }"#).unwrap();
+        let own = base.join("run.toml");
+
+        let args = gemini_policy_args(&own, &repo, Some(&home));
+        assert_eq!(
+            values_after(&args, "--policy"),
+            [own.display().to_string().as_str(), "~/policies/mine.toml", ".gemini/termo-harness.toml"]
+        );
+        // Settings that aren't there, or don't read: Termo's file alone.
+        let elsewhere = gemini_policy_args(&own, &base, None);
+        assert_eq!(elsewhere, ["--policy".to_string(), own.display().to_string()]);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -243,7 +243,7 @@ describe("testCommand", () => {
 
   it("says what each agent does", () => {
     const verdicts = Object.fromEntries(testCommand(rules, "git push origin").map(({ agent, verdict }) => [agent, verdict]));
-    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "text", copilot: "text" });
+    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "ask", copilot: "text" });
     expect(testCommand(rules, "ls").every(({ verdict }) => verdict === "none")).toBe(true);
   });
 });
