@@ -24,8 +24,8 @@ pub fn hooks(spec: &Harness) -> Option<String> {
         return None;
     }
     let mut hooks = serde_json::Map::new();
-    if guard::script_for(spec).is_some() {
-        let command = guard::command();
+    if guard::for_copilot(spec) {
+        let command = guard::command(guard::Caller::Copilot);
         hooks.insert(
             "preToolUse".into(),
             json!([{ "type": "command", "bash": command, "powershell": command, "timeoutSec": 30 }]),
@@ -75,7 +75,7 @@ mod tests {
             ..Harness::default()
         };
         let root: serde_json::Value = serde_json::from_str(&hooks(&spec).unwrap()).unwrap();
-        assert_eq!(root["hooks"]["preToolUse"][0]["powershell"], guard::command());
+        assert_eq!(root["hooks"]["preToolUse"][0]["powershell"], guard::command(guard::Caller::Copilot));
         assert!(root["hooks"].get("agentStop").is_none());
     }
 }

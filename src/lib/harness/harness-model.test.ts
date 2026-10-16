@@ -190,7 +190,7 @@ describe("rows", () => {
   it("say what each agent does with them", () => {
     expect(rowSupport(rules, "noRead")).toEqual([
       { agent: "claude", support: "enforced" },
-      { agent: "codex", support: "text" },
+      { agent: "codex", support: "enforced" },
     ]);
     expect(rowSupport(rules, "instruction").every(({ support }) => support === "text")).toBe(true);
     expect(rowSupport(rules, "check").map(({ support }) => support)).toEqual(["enforced", "enforced"]);

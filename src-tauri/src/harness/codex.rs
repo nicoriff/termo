@@ -1,12 +1,14 @@
 //! Codex's project layer, `.codex/`: command rules in a rules file of
 //! Termo's own (Codex's `prefix_rule`s, its execution policy), and the
 //! checks as a `Stop` hook in `.codex/hooks.json`. Codex reads either only
-//! once the project is trusted. It has no rule for paths: those reach it as
-//! text, in AGENTS.md.
+//! once the project is trusted. It has no rule for paths: those are a
+//! `PreToolUse` hook there, the gate in guard.rs, which looks at its patches
+//! and at the paths its shell commands name.
 
 use serde_json::{json, Map, Value};
 
 use super::checks;
+use super::guard;
 use super::model::{Agent, Decision, Harness, Owned};
 
 pub const RULES_FILE: &str = ".codex/rules/termo-harness.rules";
@@ -59,6 +61,12 @@ pub fn rules(spec: &Harness) -> Option<String> {
 
 pub fn hooks(spec: &Harness, _current: &Map<String, Value>) -> Owned {
     let mut owned = Owned::new();
+    if guard::for_codex(spec) {
+        owned.insert(
+            "hooks.PreToolUse".into(),
+            vec![json!({ "hooks": [{ "type": "command", "command": guard::command(guard::Caller::Codex), "timeout": 30 }] })],
+        );
+    }
     if !spec.checks.is_empty() {
         let command = checks::command();
         owned.insert(
@@ -104,5 +112,14 @@ mod tests {
         let spec = Harness { checks: vec![Check { command: "make test".into(), timeout_sec: None }], ..Harness::default() };
         let owned = hooks(&spec, &Map::new());
         assert_eq!(owned["hooks.Stop"][0]["hooks"][0]["command"], checks::command());
+        assert!(!owned.contains_key("hooks.PreToolUse"));
+    }
+
+    #[test]
+    fn paths_become_a_pre_tool_use_gate() {
+        use crate::harness::model::{Access, PathRule};
+        let spec = Harness { paths: vec![PathRule { pattern: ".env".into(), access: Access::NoRead }], ..Harness::default() };
+        let owned = hooks(&spec, &Map::new());
+        assert_eq!(owned["hooks.PreToolUse"][0]["hooks"][0]["command"], guard::command(guard::Caller::Codex));
     }
 }
