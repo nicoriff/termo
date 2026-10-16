@@ -226,6 +226,10 @@ pub async fn pty_attach(
 ) -> Result<SessionInfo, String> {
     let id = parse_id(&id)?;
     let host = host.map(|host| host.parse::<std::net::SocketAddr>().map_err(|err| err.to_string())).transpose()?;
+    // Another computer's console is only ever reached over the tailnet.
+    if host.is_some_and(|host| !crate::mux::tailscale::is_tailnet_address(host.ip())) {
+        return Err("not on the tailnet".into());
+    }
     let owner = window.label().to_string();
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<AppState>().pty.attach(&owner, id, channel_sink(on_event), host).map_err(|err| err.to_string())

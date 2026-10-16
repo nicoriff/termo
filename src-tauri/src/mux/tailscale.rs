@@ -119,7 +119,7 @@ fn parse_status(json: &Value) -> Option<Status> {
     let me = machine(json.get("Self")?);
     let mut peers: Vec<Machine> =
         json.get("Peer").and_then(Value::as_object).into_iter().flat_map(|peers| peers.values()).map(machine).collect();
-    peers.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    peers.sort_by_key(|peer| peer.name.to_lowercase());
     Some(Status {
         backend: json.get("BackendState").and_then(Value::as_str).unwrap_or("").to_string(),
         me,

@@ -164,7 +164,18 @@ struct RemoteAccess {
     /// The connections from the tailnet, by client id.
     viewers: Mutex<HashMap<u64, RemoteViewer>>,
     wake: (Mutex<bool>, Condvar),
+    /// What Tailscale said of each address lately (see identify).
+    known: Mutex<HashMap<IpAddr, (Instant, Option<Identity>)>>,
+    /// Connections being identified right now.
+    admitting: AtomicUsize,
 }
+
+/// How long Tailscale's word on an address is taken as still good. Not at
+/// all in tests, which pretend to be several people from one address.
+const WHOIS_FOR: Duration = if cfg!(test) { Duration::ZERO } else { Duration::from_secs(30) };
+/// Connections from the tailnet being identified at once, at most; more are
+/// dropped.
+const MAX_ADMITTING: usize = 16;
 
 struct RemoteViewer {
     identity: Identity,
@@ -326,6 +337,8 @@ impl Daemon {
                 listener: Mutex::new(None),
                 viewers: Mutex::new(HashMap::new()),
                 wake: (Mutex::new(false), Condvar::new()),
+                known: Mutex::new(HashMap::new()),
+                admitting: AtomicUsize::new(0),
             },
         })
     }
@@ -373,11 +386,18 @@ impl Daemon {
     /// A connection from the tailnet: in, if Tailscale says who it is and
     /// they're on the list; turned away and left pending otherwise.
     fn admit(self: Arc<Self>, stream: TcpStream, peer: SocketAddr) {
+        // Each new connection asks Tailscale who it is: someone connecting
+        // over and over mustn't pile those up.
+        if self.remote.admitting.fetch_add(1, Ordering::SeqCst) >= MAX_ADMITTING {
+            self.remote.admitting.fetch_sub(1, Ordering::SeqCst);
+            return;
+        }
+        let identity = self.identify(peer);
+        self.remote.admitting.fetch_sub(1, Ordering::SeqCst);
         let dir = self.dir.get().cloned();
         let now = now_seconds();
         // A browser (the web client, see web.rs) or the daemon's own protocol.
         let browser = web::is_http(&stream);
-        let identity = (self.remote.whois)(peer);
         let access = identity.as_ref().and_then(|who| self.remote.config.lock().unwrap().access_for(who));
         if let Some(dir) = &dir {
             let outcome = match (&identity, access) {
@@ -409,6 +429,22 @@ impl Daemon {
                 let _ = write_frame(&mut writer, &Frame::Message(ServerMessage::Rejected { reason: reason.into() }));
             }
         }
+    }
+
+    /// Who `peer` is, as Tailscale said a moment ago or says now. An
+    /// address stays the same computer, and the same someone, for a while.
+    fn identify(&self, peer: SocketAddr) -> Option<Identity> {
+        let ip = peer.ip();
+        {
+            let mut known = self.remote.known.lock().unwrap();
+            known.retain(|_, (at, _)| at.elapsed() < WHOIS_FOR);
+            if let Some((_, who)) = known.get(&ip) {
+                return who.clone();
+            }
+        }
+        let who = (self.remote.whois)(peer);
+        self.remote.known.lock().unwrap().insert(ip, (Instant::now(), who.clone()));
+        who
     }
 
     /// Ends every connection from the tailnet.
