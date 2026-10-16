@@ -2,13 +2,11 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use base64::{engine::general_purpose::STANDARD, Engine};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
-use tauri::ipc::Channel;
 use uuid::Uuid;
 
 use super::recorder::Recorder;
-use super::PtyEvent;
+use super::{ConsoleEvent, EventSink, SpawnSpec};
 
 pub struct PtySession {
     pub id: Uuid,
@@ -32,16 +30,8 @@ pub struct PtySession {
 }
 
 impl PtySession {
-    pub fn spawn(
-        shell_path: &str,
-        shell_args: &[String],
-        env: &[(&str, String)],
-        cwd: Option<&str>,
-        cols: u16,
-        rows: u16,
-        prompt_redraw: Option<Vec<u8>>,
-        channel: Channel<PtyEvent>,
-    ) -> anyhow::Result<Self> {
+    pub fn spawn(spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Self> {
+        let (cols, rows) = (spec.cols, spec.rows);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
             rows,
@@ -50,9 +40,9 @@ impl PtySession {
             pixel_height: 0,
         })?;
 
-        let mut cmd = CommandBuilder::new(shell_path);
-        cmd.args(shell_args);
-        if let Some(cwd) = cwd {
+        let mut cmd = CommandBuilder::new(&spec.path);
+        cmd.args(&spec.args);
+        if let Some(cwd) = &spec.cwd {
             cmd.cwd(cwd);
         }
         // CommandBuilder otherwise inherits Termo's own process
@@ -69,7 +59,7 @@ impl PtySession {
         for key in super::console_shims::OWN_VARS {
             cmd.env_remove(key);
         }
-        for (key, value) in env {
+        for (key, value) in &spec.env {
             cmd.env(key, value);
         }
         // The agent CLIs' stand-ins go ahead of the real ones (see
@@ -85,10 +75,9 @@ impl PtySession {
         }
         // An agent CLI installed where the user chose is on no PATH: on this
         // console's it is, after everything else.
-        let extra = super::bin_search::extra_dirs();
-        if !extra.is_empty() {
+        if !spec.extra_path.is_empty() {
             let base = cmd.get_env("PATH").map(std::ffi::OsString::from).or_else(|| std::env::var_os("PATH"));
-            let dirs = base.iter().flat_map(std::env::split_paths).chain(extra);
+            let dirs = base.iter().flat_map(std::env::split_paths).chain(spec.extra_path.iter().cloned());
             if let Ok(path) = std::env::join_paths(dirs) {
                 cmd.env("PATH", path);
             }
@@ -153,14 +142,12 @@ impl PtySession {
         let recorder = Recorder::from_env(id, cols, rows).map(Arc::new);
         let reader_recorder = recorder.clone();
 
-        // Cloned before the move below consumes `channel` — Channel<T> is a
-        // cheap Clone (it's just a dispatcher handle), so both threads can
-        // hold their own independent copy.
+        // Each thread below holds its own handle to the same sink.
         #[cfg(unix)]
-        let poll_channel = channel.clone();
+        let poll_sink = Arc::clone(&sink);
         #[cfg(windows)]
-        let exit_channel = channel.clone();
-        let reader_channel = channel;
+        let exit_sink = Arc::clone(&sink);
+        let reader_sink = sink;
         let reader_child = Arc::clone(&child);
         // The exit is reported once, by whichever thread sees it first: this
         // one at EOF, or on Windows the one watching the process (below).
@@ -189,8 +176,7 @@ impl PtySession {
                         // running another process in this same terminal.
                         forwarding = forwarding && !reader_exit_sent.load(Ordering::Relaxed);
                         if forwarding {
-                            let data = STANDARD.encode(&buf[..n]);
-                            forwarding = reader_channel.send(PtyEvent::Data { data }).is_ok();
+                            forwarding = reader_sink(ConsoleEvent::Output(buf[..n].to_vec()));
                         }
                     }
                     Err(_) => break,
@@ -205,7 +191,7 @@ impl PtySession {
                 .map(|status| status.exit_code() as i32)
                 .unwrap_or(-1);
             if forwarding && !reader_exit_sent.swap(true, Ordering::Relaxed) {
-                let _ = reader_channel.send(PtyEvent::Exit { code });
+                reader_sink(ConsoleEvent::Exit(code));
             }
         });
 
@@ -240,7 +226,7 @@ impl PtySession {
                     }
                 }
                 if !watch_stop.load(Ordering::Relaxed) && !exit_sent.swap(true, Ordering::Relaxed) {
-                    let _ = exit_channel.send(PtyEvent::Exit { code });
+                    exit_sink(ConsoleEvent::Exit(code));
                 }
             });
         }
@@ -266,7 +252,7 @@ impl PtySession {
                         .and_then(super::foreground::process_path);
                     if path != last_path {
                         last_path = path.clone();
-                        if poll_channel.send(PtyEvent::ForegroundProcess { path }).is_err() {
+                        if !poll_sink(ConsoleEvent::Foreground(path)) {
                             break;
                         }
                     }
@@ -281,7 +267,7 @@ impl PtySession {
             writer: Mutex::new(writer),
             child,
             pid,
-            prompt_redraw,
+            prompt_redraw: spec.prompt_redraw.clone(),
             stop,
             recorder,
             size: Mutex::new((cols, rows)),
@@ -404,47 +390,49 @@ mod cursor_report_tests {
 // handshake is answered on the frontend; see TerminalInstance's onData handler.
 
 #[cfg(all(test, unix))]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
-    #[test]
-    fn console_sees_its_session_id_and_extra_env() {
-        let (tx, rx) = mpsc::channel::<String>();
-        let tx = Mutex::new(tx);
-        let channel = Channel::new(move |body| {
-            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
-                let _ = tx.lock().unwrap().send(json);
-            }
-            Ok(())
-        });
+    pub(crate) fn shell_spec(script: &str, env: &[(&str, &str)]) -> SpawnSpec {
+        SpawnSpec {
+            path: "/bin/sh".into(),
+            args: vec!["-c".into(), script.into()],
+            env: env.iter().map(|(key, value)| (key.to_string(), value.to_string())).collect(),
+            cwd: None,
+            cols: 80,
+            rows: 24,
+            prompt_redraw: None,
+            extra_path: Vec::new(),
+        }
+    }
 
-        let session = PtySession::spawn(
-            "/bin/sh",
-            &["-c".into(), r#"printf '%s|%s' "$TERMO_SESSION_ID" "$TERMO_TEST_VAR""#.into()],
-            &[("TERMO_TEST_VAR", "hello".to_string())],
-            None,
-            80,
-            24,
-            None,
-            channel,
-        )
-        .unwrap();
+    /// Spawns `spec` and returns its id and what it printed, up to its exit.
+    fn run(spec: &SpawnSpec) -> (Uuid, String) {
+        let (tx, rx) = mpsc::channel::<ConsoleEvent>();
+        let tx = Mutex::new(tx);
+        let sink: EventSink = Arc::new(move |event| tx.lock().unwrap().send(event).is_ok());
+        let session = PtySession::spawn(spec, sink).unwrap();
 
         let mut output = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(10);
-        while let Ok(json) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-            let event: serde_json::Value = serde_json::from_str(&json).unwrap();
-            match event["type"].as_str() {
-                Some("data") => output.extend(STANDARD.decode(event["data"].as_str().unwrap()).unwrap()),
-                Some("exit") => break,
-                _ => {}
+        while let Ok(event) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            match event {
+                ConsoleEvent::Output(bytes) => output.extend(bytes),
+                ConsoleEvent::Exit(_) => break,
+                ConsoleEvent::Foreground(_) => {}
             }
         }
-        let text = String::from_utf8_lossy(&output);
         let _ = session.kill();
-        assert!(text.contains(&format!("{}|hello", session.id)), "console output: {text:?}");
+        (session.id, String::from_utf8_lossy(&output).into_owned())
+    }
+
+    #[test]
+    fn console_sees_its_session_id_and_extra_env() {
+        let spec = shell_spec(r#"printf '%s|%s' "$TERMO_SESSION_ID" "$TERMO_TEST_VAR""#, &[("TERMO_TEST_VAR", "hello")]);
+        let (id, text) = run(&spec);
+        assert!(text.contains(&format!("{id}|hello")), "console output: {text:?}");
     }
 
     /// Termo started from a shell that exports EDITOR (an agent's, a CI
@@ -455,39 +443,7 @@ mod tests {
         std::env::set_var("EDITOR", "vi");
         std::env::set_var("VISUAL", "vi");
 
-        let (tx, rx) = mpsc::channel::<String>();
-        let tx = Mutex::new(tx);
-        let channel = Channel::new(move |body| {
-            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
-                let _ = tx.lock().unwrap().send(json);
-            }
-            Ok(())
-        });
-
-        let session = PtySession::spawn(
-            "/bin/sh",
-            &["-c".into(), r#"printf 'EDITOR=[%s] VISUAL=[%s]' "$EDITOR" "$VISUAL""#.into()],
-            &[],
-            None,
-            80,
-            24,
-            None,
-            channel,
-        )
-        .unwrap();
-
-        let mut output = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while let Ok(json) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-            let event: serde_json::Value = serde_json::from_str(&json).unwrap();
-            match event["type"].as_str() {
-                Some("data") => output.extend(STANDARD.decode(event["data"].as_str().unwrap()).unwrap()),
-                Some("exit") => break,
-                _ => {}
-            }
-        }
-        let text = String::from_utf8_lossy(&output);
-        let _ = session.kill();
+        let (_, text) = run(&shell_spec(r#"printf 'EDITOR=[%s] VISUAL=[%s]' "$EDITOR" "$VISUAL""#, &[]));
 
         std::env::remove_var("EDITOR");
         std::env::remove_var("VISUAL");

@@ -1,8 +1,7 @@
 use dashmap::DashMap;
-use tauri::ipc::Channel;
 use uuid::Uuid;
 
-use super::{PtyEvent, PtySession};
+use super::{EventSink, PtySession, SpawnSpec};
 
 #[derive(Default)]
 pub struct PtyManager {
@@ -13,20 +12,8 @@ pub struct PtyManager {
 }
 
 impl PtyManager {
-    #[allow(clippy::too_many_arguments)]
-    pub fn spawn(
-        &self,
-        owner: &str,
-        shell_path: &str,
-        shell_args: &[String],
-        env: &[(&str, String)],
-        cwd: Option<&str>,
-        cols: u16,
-        rows: u16,
-        prompt_redraw: Option<Vec<u8>>,
-        channel: Channel<PtyEvent>,
-    ) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(shell_path, shell_args, env, cwd, cols, rows, prompt_redraw, channel)?;
+    pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
+        let session = PtySession::spawn(spec, sink)?;
         let id = session.id;
         self.sessions.insert(id, session);
         self.owners.insert(id, owner.to_string());
@@ -146,14 +133,9 @@ fn dispose(sessions: Vec<PtySession>) {
 mod tests {
     use super::*;
 
-    fn discarding_channel() -> Channel<PtyEvent> {
-        Channel::new(|_| Ok(()))
-    }
-
     fn spawn_sleeper(manager: &PtyManager, owner: &str) -> Uuid {
-        manager
-            .spawn(owner, "/bin/sh", &["-c".into(), "sleep 30".into()], &[], None, 80, 24, None, discarding_channel())
-            .unwrap()
+        let spec = crate::pty::session::tests::shell_spec("sleep 30", &[]);
+        manager.spawn(owner, &spec, std::sync::Arc::new(|_| true)).unwrap()
     }
 
     /// The reload and close paths this exists for (window_commands::
