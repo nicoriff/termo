@@ -17,6 +17,7 @@
     shellArgs = undefined,
     cwd = undefined,
     agent = undefined,
+    attach = undefined,
     active = false,
   }: {
     sessionId: string;
@@ -24,6 +25,8 @@
     shellArgs?: string[];
     cwd?: string;
     agent?: AgentLaunch;
+    /** A console the sessions daemon kept running, to show (see SessionTab.attach). */
+    attach?: string;
     active?: boolean;
   } = $props();
 
@@ -45,7 +48,7 @@
     instance.onExit = () => {
       if (!workspaceStore.closeSession(sessionId)) void instance?.restartShell(shellPath, shellArgs, cwd);
     };
-    void instance.mount(container, shellPath, shellArgs, cwd, agent);
+    void instance.mount(container, shellPath, shellArgs, cwd, agent, attach);
 
     resizeObserver = new ResizeObserver(() => instance?.resize());
     resizeObserver.observe(container);

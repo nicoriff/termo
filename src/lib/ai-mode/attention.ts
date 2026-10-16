@@ -27,7 +27,14 @@ interface AgentEventPayload {
   agentCwd?: string | null;
   /** What the event has to tell the user: what it asks for, what it said. */
   note?: string | null;
+  /** Where the agent stood when the app attached to a console the sessions
+   * daemon kept running: not news, nothing to notify. */
+  restored?: boolean;
 }
+
+/** Tabs whose status is being set from a restored event: their change of
+ * status says nothing new (status changes are reported synchronously). */
+const quiet = new Set<string>();
 
 /** How much of the agent's note goes in the notification. */
 const MAX_BODY = 140;
@@ -83,7 +90,7 @@ function soundFor(tool: ToolId, entry: AiSessionEntry, prev: AiSessionEntry | un
 }
 
 async function maybeNotify(sessionId: string, entry: AiSessionEntry, prev: AiSessionEntry | undefined) {
-  if (!entry.tool) return;
+  if (!entry.tool || quiet.has(sessionId)) return;
   // Nothing to announce about a console you're looking at.
   if (document.hasFocus() && workspaceStore.isSessionVisible(sessionId)) return;
   playSound(soundFor(entry.tool, entry, prev), appConfigStore.aiSoundVolume);
@@ -116,7 +123,13 @@ export function startAgentAttention(): () => void {
     // Before the status, whose change is what notifies.
     if (payload.note) notes.set(tabId, { status: payload.status, note: payload.note });
     else notes.delete(tabId);
-    if (appConfigStore.aiModeEnabled) aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
+    if (!appConfigStore.aiModeEnabled) return;
+    if (payload.restored) quiet.add(tabId);
+    try {
+      aiStatusStore.setFromHook(tabId, payload.tool, payload.status);
+    } finally {
+      quiet.delete(tabId);
+    }
   });
   // Plan usage / context / cost, from Claude Code's status line or from
   // Codex's rollout. Independent of Modo IA being on: it's just information

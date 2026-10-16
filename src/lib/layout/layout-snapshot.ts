@@ -45,6 +45,10 @@ export interface LayoutSession {
    * with sessions. Restoring reopens it with the agent's own resume command. */
   agentTool?: ToolId;
   agentSessionId?: string;
+  /** The console's id, in what a window records for consoles that outlive
+   * it (see session-keeper.svelte.ts): if the sessions daemon still runs
+   * it, restoring shows it again instead of starting a new one. */
+  consoleId?: string;
 }
 
 export type LayoutNode =
@@ -64,6 +68,8 @@ export interface SnapshotOptions {
    * and not just the consoles. The folder is stored either way: a console that
    * moved should come back where it was, not where the app was launched. */
   withSessions?: boolean;
+  /** Each console's id (pty-registry), to record with it. */
+  consoleByTab?: Record<string, string>;
 }
 
 /** A console to reopen a conversation in, once the restored tree is live. */
@@ -120,6 +126,8 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
         stored.agentTool = agent.tool;
         stored.agentSessionId = agent.agentSessionId;
       }
+      const consoleId = options.consoleByTab?.[session.id];
+      if (consoleId) stored.consoleId = consoleId;
       return stored;
     });
     // Stored as a position, since the id it refers to isn't stored either.
@@ -144,13 +152,21 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
  *
  * Tolerant of hand-edited files: a leaf with no tabs still yields one console,
  * and an out-of-range active tab falls back to the first.
+ *
+ * A console whose `consoleId` is in `running` (the sessions daemon still
+ * runs it) is shown again rather than started: its conversation is still
+ * open in it, so there's nothing to resume.
  */
-export function hydrateLayout(node: LayoutNode, newId?: () => string): HydratedLayout {
+export function hydrateLayout(
+  node: LayoutNode,
+  newId?: () => string,
+  running: ReadonlySet<string> = new Set(),
+): HydratedLayout {
   const resumes: LayoutResume[] = [];
-  return { root: build(node, resumes, newId), resumes };
+  return { root: build(node, resumes, newId, running), resumes };
 }
 
-function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string): SplitNode {
+function build(node: LayoutNode, resumes: LayoutResume[], newId: (() => string) | undefined, running: ReadonlySet<string>): SplitNode {
   if (node.kind === "leaf") {
     const stored = node.sessions.length > 0 ? node.sessions : [{ title: "Shell" } as LayoutSession];
     const sessions = stored.map((session) => {
@@ -170,6 +186,7 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string):
       if (session.diff) return withId(makeDiffSession(session.diff), newId);
       if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
       const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
+      if (session.consoleId && running.has(session.consoleId)) return { ...live, attach: session.consoleId };
       if (session.agentTool && session.agentSessionId) {
         resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });
       }
@@ -184,7 +201,7 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId?: () => string):
     id: newId ? newId() : crypto.randomUUID(),
     direction: node.direction,
     ratio: node.ratio,
-    children: [build(node.children[0], resumes, newId), build(node.children[1], resumes, newId)],
+    children: [build(node.children[0], resumes, newId, running), build(node.children[1], resumes, newId, running)],
   };
 }
 

@@ -21,6 +21,10 @@ export interface SessionTab {
    * fields are then what it falls back to once the agent exits. Never saved
    * with a layout: a restored tab opens the shell. */
   agent?: AgentLaunch;
+  /** Set on a tab that shows a console the sessions daemon kept running
+   * (its id there) rather than starting one; the shell fields are what it
+   * falls back to if that console is gone by the time the tab opens. */
+  attach?: string;
   /** Set on a tab that shows a file in the editor rather than a console
    * (see isFileTab); the shell fields are then unused. */
   filePath?: string;

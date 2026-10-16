@@ -85,7 +85,7 @@ impl Consoles {
 
     pub fn kill(&self, id: Uuid) -> anyhow::Result<()> {
         match self.mux_for(id) {
-            Some(mux) => mux.kill(id).map_err(anyhow::Error::msg),
+            Some(_) => self.kill_kept(id),
             None => self.local.kill(id),
         }
     }
@@ -94,6 +94,8 @@ impl Consoles {
     /// sessions menu).
     pub fn kill_kept(&self, id: Uuid) -> anyhow::Result<()> {
         let mux = self.mux().ok_or_else(|| anyhow::anyhow!("no folder for the sessions daemon"))?;
+        // Its token for the user's agents dies with it (console_bridge.rs).
+        crate::agents::console_bridge::release(&id.to_string());
         mux.kill(id).map_err(anyhow::Error::msg)
     }
 

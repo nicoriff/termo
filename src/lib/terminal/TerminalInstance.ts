@@ -8,7 +8,16 @@ import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
-import { killPty, promptRedrawPty, resizePty, spawnPty, windowsBuild, writePty } from "../core/pty-client";
+import {
+  attachPty,
+  killPty,
+  promptRedrawPty,
+  resizePty,
+  restoreAgentEvents,
+  spawnPty,
+  windowsBuild,
+  writePty,
+} from "../core/pty-client";
 import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import type { AgentLaunch } from "../layout/split-tree";
@@ -337,6 +346,7 @@ export class TerminalInstance {
     shellArgs?: string[],
     cwd?: string,
     agent?: AgentLaunch,
+    attach?: string,
   ): Promise<void> {
     this.container = container;
     this.term.open(container);
@@ -345,6 +355,11 @@ export class TerminalInstance {
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
     );
     await this.matchConPty();
+    if (this.disposed) return;
+
+    // A console the sessions daemon kept running: shown again as it is. If
+    // it's gone by now, the tab starts its shell anew, in its folder.
+    if (attach && (await this.start({ shellPath, shellArgs, cwd, attach }))) return;
     if (this.disposed) return;
 
     if (agent) {
@@ -409,56 +424,70 @@ export class TerminalInstance {
     await this.start({ shellPath, shellArgs, cwd });
   }
 
-  /** Spawns the console's process. False when an agent couldn't be started,
-   * with the reason written to the console. `afterExit` replaces `onExit`. */
+  /** Spawns the console's process — or, with `attach`, shows one the
+   * sessions daemon kept running. False when an agent couldn't be started,
+   * with the reason written to the console, or the console to attach to is
+   * gone. `afterExit` replaces `onExit`. */
   private async start(
-    opts: { shellPath?: string; shellArgs?: string[]; cwd?: string; agent?: AgentLaunch },
+    opts: { shellPath?: string; shellArgs?: string[]; cwd?: string; agent?: AgentLaunch; attach?: string },
     afterExit?: () => void,
   ): Promise<boolean> {
     const { shellPath } = opts;
     const spawnSize = { cols: this.term.cols, rows: this.term.rows };
+    // Every callback below bails once this instance is gone. A console being
+    // torn down keeps producing output (and finally an exit) for a moment,
+    // and writing that into an already-disposed xterm throws — inside the
+    // Tauri channel's message handler, which is the same dispatch every
+    // other console's output rides on. Restoring a layout is exactly when
+    // that matters: consoles are created while others are being killed.
+    const handlers = {
+      onForegroundProcess: (path: string | null) => {
+        if (this.disposed) return;
+        this.lastForegroundProcessPath = path;
+        tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
+      },
+      onData: (bytes: Uint8Array) => {
+        if (this.disposed) return;
+        const decoded = this.decoder.decode(bytes, { stream: true });
+        const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
+        this.term.write(
+          themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
+          this.starting ? () => this.uncoverWhenDrawn() : undefined,
+        );
+      },
+      onExit: (code: number) => {
+        if (this.disposed) return;
+        if (afterExit) afterExit();
+        else this.onExit?.(code);
+      },
+    };
     let spawned: string;
+    // The size the console has: the one it was started with, or the one the
+    // console being attached to was left at.
+    let consoleSize = spawnSize;
+    let exitedMeanwhile: number | null = null;
     try {
-      spawned = await spawnPty({
-        ...opts,
-        ...spawnSize,
-        // Every callback below bails once this instance is gone. A console being
-        // torn down keeps producing output (and finally an exit) for a moment,
-        // and writing that into an already-disposed xterm throws — inside the
-        // Tauri channel's message handler, which is the same dispatch every
-        // other console's output rides on. Restoring a layout is exactly when
-        // that matters: consoles are created while others are being killed.
-        onForegroundProcess: (path) => {
-          if (this.disposed) return;
-          this.lastForegroundProcessPath = path;
-          tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
-        },
-        onData: (bytes) => {
-          if (this.disposed) return;
-          const decoded = this.decoder.decode(bytes, { stream: true });
-          const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
-          this.term.write(
-            themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
-            this.starting ? () => this.uncoverWhenDrawn() : undefined,
-          );
-        },
-        onExit: (code) => {
-          if (this.disposed) return;
-          if (afterExit) afterExit();
-          else this.onExit?.(code);
-        },
-      });
+      if (opts.attach) {
+        const kept = await attachPty(opts.attach, handlers);
+        spawned = kept.id;
+        consoleSize = { cols: kept.cols, rows: kept.rows };
+        exitedMeanwhile = kept.exitCode;
+      } else {
+        spawned = await spawnPty({ ...opts, ...spawnSize, ...handlers });
+      }
     } catch (err) {
       this.setStarting(false);
+      if (opts.attach) return false;
       if (!opts.agent || this.disposed) throw err;
       this.term.write(`\x1b[31m${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
       return false;
     }
     // Disposed while the spawn was in flight (a layout restore replaces tiles
     // faster than a console starts): adopt the session only to kill it, or it
-    // would outlive its terminal as an orphan shell.
+    // would outlive its terminal as an orphan shell. One that was attached
+    // to keeps running: it was never this tab's to end.
     if (this.disposed) {
-      void killPty(spawned);
+      if (!opts.attach) void killPty(spawned);
       return true;
     }
     this.sessionId = spawned;
@@ -481,7 +510,13 @@ export class TerminalInstance {
       clear: () => this.term.clear(),
       focus: () => this.focus(),
     });
-    this.lastPtySize = spawnSize;
+    this.lastPtySize = consoleSize;
+    if (opts.attach) {
+      // What its agent did while no window showed it.
+      void restoreAgentEvents(spawned).catch(() => {});
+      // Its process ended meanwhile: the tab does what it does on an exit.
+      if (exitedMeanwhile !== null) handlers.onExit(exitedMeanwhile);
+    }
 
     // resize() no-ops while sessionId is still null, so a ResizeObserver
     // tick landing during the spawnPty() await above (e.g. surrounding

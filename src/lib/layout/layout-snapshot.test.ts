@@ -111,6 +111,23 @@ describe("hydrateLayout", () => {
     expect(everyId).not.toContain("tile-1");
   });
 
+  /** What a window records for consoles that outlive it: the ones the
+   * sessions daemon still runs come back as they are, the rest start anew
+   * (and reopen their conversation). */
+  it("shows a console that is still running again instead of starting it", () => {
+    const recorded = snapshotLayout(tree, {
+      agentByTab: agents,
+      withSessions: true,
+      consoleByTab: { a: "console-a", b: "console-b" },
+    });
+    const { root, resumes } = hydrateLayout(recorded, ids(), new Set(["console-b"]));
+    const [first] = collectTiles(root);
+    expect(first.sessions[0].attach).toBeUndefined();
+    expect(first.sessions[1].attach).toBe("console-b");
+    // Its conversation is still open in it: nothing to resume.
+    expect(resumes).toEqual([]);
+  });
+
   it("brings back the tab that was active, by position", () => {
     const { root } = hydrateLayout(snapshotLayout(tree), ids());
     const tiles = collectTiles(root);

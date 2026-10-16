@@ -22,3 +22,14 @@ export function saveLayout(name: string, root: LayoutNode): Promise<SavedLayout[
 export function deleteLayout(name: string): Promise<SavedLayout[]> {
   return invoke("delete_layout", { name });
 }
+
+/** Records what this window has open, for consoles that outlive it (see
+ * layouts::save_window_session); null forgets it. */
+export function saveWindowSession(root: LayoutNode | null): Promise<void> {
+  return invoke("save_window_session", { root });
+}
+
+/** What this window had open the last time it recorded it. */
+export function windowSession(): Promise<LayoutNode | null> {
+  return invoke("window_session");
+}

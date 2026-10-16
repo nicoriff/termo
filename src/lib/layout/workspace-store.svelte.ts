@@ -82,6 +82,21 @@ class WorkspaceStore {
     return session.id;
   }
 
+  /** Shows, in a new tab of `tileId`, a console the sessions daemon kept
+   * running (see SessionTab.attach). */
+  attachTab(tileId: string, consoleId: string, title: string, cwd?: string): void {
+    if (!this.root) return;
+    const session: SessionTab = { ...makeSession(title, undefined, undefined, cwd), attach: consoleId };
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: [...tile.sessions, session],
+      activeSessionId: session.id,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
+  }
+
   /** The agent a console started with has exited and, being the window's
    * only tab, the console now runs its shell (see TerminalInstance). */
   dropAgent(sessionId: string): void {

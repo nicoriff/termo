@@ -231,6 +231,13 @@ pub async fn pty_attach(
     .map_err(|err| err.to_string())?
 }
 
+/// Where the agent in a console the app just attached to stood (see
+/// agent_hooks::restore), sent as the usual events.
+#[tauri::command]
+pub fn agent_events_restore(app: tauri::AppHandle, id: String) {
+    agent_hooks::restore(&app, &id);
+}
+
 /// The consoles the sessions daemon runs, shown in some window or not.
 /// None when it isn't running: asking doesn't start it.
 #[tauri::command]

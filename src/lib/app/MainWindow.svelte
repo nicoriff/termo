@@ -47,6 +47,7 @@
   import QuickAsk from "$lib/companion/QuickAsk.svelte";
   import { quickAskStore } from "$lib/companion/quick-ask-store.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
+  import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -77,6 +78,7 @@
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
+    let stopSessionKeeper: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopNotificationClicks = startNotificationClicks();
@@ -102,12 +104,17 @@
         isFirstWindow() && appConfigStore.defaultLayout
           ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
           : undefined;
-      if (preset) {
+      // Before either: consoles this window had open that are still running
+      // (see session-keeper) come back where they were.
+      const restored = await sessionKeeper.restore();
+      if (!restored && preset) {
         layoutsStore.apply(preset);
-      } else {
+      } else if (!restored) {
         const shell = await resolveDefaultShell();
         workspaceStore.initRoot(shell.path, shell.args, shell.title);
       }
+
+      stopSessionKeeper = sessionKeeper.start();
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);
@@ -132,6 +139,7 @@
       appConfigStore.stopSystemAppearanceSync();
       clearTimeout(resizeDebounce);
       unlisten?.();
+      stopSessionKeeper?.();
       stopAgentAttention();
       stopAgentRunAttention();
       stopNotificationClicks();

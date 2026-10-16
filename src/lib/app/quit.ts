@@ -3,6 +3,7 @@ import { appConfigStore } from "$lib/core/app-config.svelte";
 import { busyConsoles } from "$lib/core/pty-client";
 import { uiState } from "$lib/core/ui-state.svelte";
 import { closeWindow, quitApp } from "$lib/core/window-client";
+import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
 
 /** What closing Termo would cut short: consoles with a command running under
  * them, and agent sessions (Modo IA) mid-turn or waiting on the user. Also
@@ -25,6 +26,9 @@ export async function runningWork(thisWindow = false): Promise<{ consoles: numbe
  * count must not turn Quit into a dead button.
  */
 export async function requestQuit(): Promise<void> {
+  // The consoles that outlive Termo come back as they are now (see
+  // session-keeper), not as they were a moment ago.
+  await sessionKeeper.save();
   const { consoles, agents } = await runningWork();
   if (consoles === 0 && agents === 0) {
     void quitApp();
@@ -37,6 +41,7 @@ export async function requestQuit(): Promise<void> {
  * and the others stay. Closing the last window ends Termo
  * (terminal_windows::on_destroyed). */
 export async function requestCloseWindow(): Promise<void> {
+  await sessionKeeper.save();
   const { consoles, agents } = await runningWork(true);
   if (consoles === 0 && agents === 0) {
     void closeWindow();

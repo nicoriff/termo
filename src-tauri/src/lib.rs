@@ -96,13 +96,18 @@ pub fn run() {
             if let Some(window) = app.get_webview_window(terminal_windows::MAIN) {
                 commands::window_shape::attach(&window);
             }
-            pty::agent_hooks::start_watcher(app.handle().clone());
+            // The consoles of an earlier run that the sessions daemon still
+            // runs (see mux/): what belongs to them stays.
+            let kept: std::collections::HashSet<String> =
+                app.state::<AppState>().pty.background().into_iter().map(|session| session.id.to_string()).collect();
+            pty::agent_hooks::start_watcher(app.handle().clone(), kept.clone());
             pty::status_line::start_watcher(app.handle().clone());
             // Before any run can start: files a run killed with Termo left.
             agents::runner::remove_leftovers(app.handle());
-            // Consoles' token files from before: their tokens died with it.
+            // Consoles' token files from before: their tokens died with it,
+            // but for those of consoles still running.
             if let Ok(root) = agents::store::root(app.handle()) {
-                agents::console_bridge::remove_leftovers(&root);
+                agents::console_bridge::remove_leftovers(&root, &kept);
             }
             agents::orchestration::executor::recover(app.handle());
             // The agents, their local server and refreshing the hooks: only
@@ -133,6 +138,7 @@ pub fn run() {
             commands::pty_commands::pty_attach,
             commands::pty_commands::pty_background,
             commands::pty_commands::pty_kill_background,
+            commands::pty_commands::agent_events_restore,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
             commands::pty_commands::windows_build,
@@ -209,6 +215,8 @@ pub fn run() {
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,
+            commands::layout_commands::save_window_session,
+            commands::layout_commands::window_session,
             commands::agent_commands::agents_list,
             commands::agent_commands::agents_save,
             commands::agent_commands::agents_delete,
