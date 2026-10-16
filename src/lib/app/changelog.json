@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.22.0",
+    "date": "2026-10-15",
+    "es": [
+      "**Agent Harness**: un panel nuevo en la barra vertical (o ⌘⇧W / Ctrl+Shift+W, o el menú ≡) para escribir una sola vez las reglas de un repositorio —qué hacer y qué no hacer— y que Termo las traduzca a los archivos propios de cada agente: Claude Code, Codex, Gemini CLI, Copilot CLI y Grok. Esos archivos van en el repositorio, así que las reglas valen para cualquiera que abra un agente ahí, con Termo o sin él.",
+      "**Reglas que el agente cumple, no solo lee**: rutas que no se leen o no se editan, comandos prohibidos o que piden permiso, comandos que corren sin preguntar, y chequeos que tienen que pasar antes de dar una tarea por terminada (si fallan, el agente sigue trabajando). Cada regla muestra cómo la cumple cada agente, y un probador dice qué haría cada uno con un comando. Los archivos del propio harness quedan protegidos para que ningún agente pueda desactivar sus reglas.",
+      "**Lo que el repositorio ya tiene**: el panel muestra los archivos de instrucciones (AGENTS.md, CLAUDE.md, GEMINI.md…) y los edita ahí mismo, sin tocar lo que no es de Termo. Un agente puede proponer reglas a partir de esas instrucciones o unificarlas en AGENTS.md, y hay paquetes listos (git destructivo, publicar, instalar dependencias, borrado recursivo). Antes de escribir nada, se revisa el diff de cada archivo.",
+      "**Menús con el teclado**: todos los menús de Termo (el ≡, el ˅ de las pestañas, los de clic derecho, Keep Awake, Git y Agentes) se recorren con las flechas, Inicio/Fin y la inicial de cada opción; Enter elige, → abre un submenú y Escape cierra. ⌘⇧T / Ctrl+Shift+T abre el menú ˅ de la pestaña.",
+      "**Agentes de Gemini CLI que no arrancaban**: con Gemini CLI 0.63, las ejecuciones fallaban en carpetas sin confianza y no recibían sus servidores MCP. Ahora corren por ACP, como los de Grok. Las consolas de Gemini CLI abiertas desde Termo hablan con tus agentes con la opción \"También en consolas abiertas fuera de Termo\".",
+      "**Hooks de agentes en PowerShell**: los avisos y estados de los agentes funcionan también cuando el agente corre sus hooks en PowerShell.",
+      "**Recientes, sin sesiones vacías**: la lista de sesiones recientes ya no muestra las que se abrieron y cerraron sin conversación."
+    ],
+    "en": [
+      "**Agent Harness**: a new panel in the vertical bar (or ⌘⇧W / Ctrl+Shift+W, or the ≡ menu) to write a repository's rules once —what to do and what not to do— and have Termo turn them into each agent's own files: Claude Code, Codex, Gemini CLI, Copilot CLI and Grok. Those files live in the repository, so the rules hold for anyone who opens an agent there, with Termo or without.",
+      "**Rules the agent keeps, not just reads**: paths that can't be read or edited, commands that are forbidden or ask first, commands that run without asking, and checks that must pass before a task counts as done (if they fail, the agent keeps working). Each rule shows how each agent holds it, and a tester tells what each one would do with a command. The harness's own files are protected, so no agent can switch its rules off.",
+      "**What the repository already has**: the panel shows the instruction files (AGENTS.md, CLAUDE.md, GEMINI.md…) and edits them right there, leaving alone what isn't Termo's. An agent can propose rules from those instructions or unify them into AGENTS.md, and there are ready-made packs (destructive git, publishing, installing dependencies, recursive deletes). Before anything is written, you review each file's diff.",
+      "**Menus from the keyboard**: every Termo menu (the ≡, the tabs' ˅, right-click menus, Keep Awake, Git and Agents) moves with the arrows, Home/End and each option's first letter; Enter picks, → opens a submenu and Escape closes. ⌘⇧T / Ctrl+Shift+T opens the tab's ˅ menu.",
+      "**Gemini CLI agents that wouldn't start**: with Gemini CLI 0.63, runs failed in untrusted folders and didn't get their MCP servers. They now run over ACP, like Grok's. Gemini CLI consoles opened from Termo reach your agents with the \"Also in consoles opened outside Termo\" option.",
+      "**Agent hooks in PowerShell**: agents' notices and states work also when the agent runs its hooks in PowerShell.",
+      "**Recent, without empty sessions**: the recent sessions list no longer shows the ones opened and closed without a conversation."
+    ]
+  },
+  {
     "version": "0.21.1",
     "date": "2026-10-12",
     "es": [
