@@ -17,22 +17,22 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use super::protocol::{read_frame, write_frame, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
+use super::screen::Screen;
 use super::DaemonInfo;
 use crate::pty::{contains_cursor_report, ConsoleEvent, EventSink, PtySession, SpawnSpec};
 
-/// How much of a console's output it keeps for a client that attaches later.
-const HISTORY_BYTES: usize = 2 * 1024 * 1024;
+/// How much of a console's latest output it keeps as is, for a client that
+/// lost its connection to pick up where it was. One that attaches anew gets
+/// the screen instead (see screen.rs).
+const HISTORY_BYTES: usize = 1024 * 1024;
 /// Frames waiting to go out to one client. A client this far behind isn't
 /// reading: it is dropped rather than letting the daemon's memory grow.
 const CLIENT_QUEUE: usize = 4096;
 /// How long the daemon stays up with no consoles and no one connected.
 const IDLE_EXIT: Duration = Duration::from_secs(5 * 60);
-/// What ConPTY asks before it lets the shell start (see PtySession::write),
-/// and the answer the daemon gives when no terminal is attached to.
+/// What ConPTY asks before it lets the shell start (see PtySession::write);
+/// the daemon answers it when no terminal is attached to.
 const CURSOR_QUERY: &[u8] = b"\x1b[6n";
-const CURSOR_HOME_REPORT: &[u8] = b"\x1b[1;1R";
-/// Resets the terminal: what a replay that lost its beginning starts with.
-const RESET: &[u8] = b"\x1bc";
 
 /// `termo --mux <build> <folder>`: runs the daemon until it has been idle a
 /// while.
@@ -118,6 +118,7 @@ struct State {
     /// The connections showing this console now.
     clients: Vec<Client>,
     history: History,
+    screen: Screen,
     /// The number of the last output.
     seq: u64,
     cols: u16,
@@ -313,6 +314,7 @@ impl Daemon {
                 let mut state = live.state.lock().unwrap();
                 state.cols = cols;
                 state.rows = rows;
+                state.screen.resize(rows, cols);
                 Ok(Reply::Done)
             }
             Op::PromptRedraw { session } => {
@@ -346,6 +348,7 @@ impl Daemon {
             state: Mutex::new(State {
                 clients: Vec::new(),
                 history: History::default(),
+                screen: Screen::new(spec.rows, spec.cols),
                 seq: 0,
                 cols: spec.cols,
                 rows: spec.rows,
@@ -405,7 +408,15 @@ impl Daemon {
         let mut state = live.state.lock().unwrap();
         state.clients.retain(|other| other.id != client.id);
         // Under the same lock as new output: nothing is missed or sent twice.
-        for frame in state.history.replay(id, since) {
+        // What came after `since`, if it's all still kept; else (and to
+        // a client attaching anew) the screen as it is.
+        let replay = (since > 0).then(|| state.history.since(id, since)).flatten();
+        let frames = replay.unwrap_or_else(|| {
+            let title = state.title.clone();
+            let bytes = state.screen.snapshot(title.as_deref());
+            vec![Frame::Output { session: id, seq: state.seq, bytes }]
+        });
+        for frame in frames {
             if !client.offer(frame) {
                 return Err("client is not reading".into());
             }
@@ -422,11 +433,11 @@ impl Daemon {
             let mut state = live.state.lock().unwrap();
             state.clients.retain(|other| other.id != client);
             let alone = state.clients.is_empty();
-            let unanswered = alone && std::mem::take(&mut state.cursor_query);
+            let unanswered = (alone && std::mem::take(&mut state.cursor_query)).then(|| state.screen.cursor_report());
             (alone && state.exit_code.is_some(), unanswered)
         };
-        if unanswered {
-            live.answer_cursor_query();
+        if let Some(report) = unanswered {
+            live.answer_cursor_query(&report);
         }
         // Its process ended while shown; the last one to stop showing it
         // lets it go.
@@ -496,6 +507,7 @@ impl Live {
             if let Some(title) = last_title(&bytes) {
                 state.title = Some(title);
             }
+            state.screen.process(&bytes);
             let frame = Frame::Output { session: self.id, seq, bytes: bytes.clone() };
             state.clients.retain(|client| client.offer(frame.clone()));
             let asked = contains(&bytes, CURSOR_QUERY);
@@ -503,18 +515,18 @@ impl Live {
             if asked {
                 state.cursor_query = !state.clients.is_empty();
             }
-            asked && state.clients.is_empty()
+            (asked && state.clients.is_empty()).then(|| state.screen.cursor_report())
         };
-        if answer {
-            self.answer_cursor_query();
+        if let Some(report) = answer {
+            self.answer_cursor_query(&report);
         }
     }
 
     /// No terminal to answer ConPTY's question: without an answer the
     /// console would never finish starting (see CURSOR_QUERY).
-    fn answer_cursor_query(&self) {
+    fn answer_cursor_query(&self, report: &[u8]) {
         if let Some(pty) = self.pty.get() {
-            let _ = pty.write(CURSOR_HOME_REPORT);
+            let _ = pty.write(report);
         }
     }
 }
@@ -540,26 +552,20 @@ impl History {
         }
     }
 
-    /// Output after `since`, as frames. When some of it is no longer kept,
-    /// what is left starts with a terminal reset, so it isn't drawn on top
-    /// of a screen it doesn't belong to.
-    fn replay(&self, session: Uuid, since: u64) -> Vec<Frame<ServerMessage>> {
+    /// Output after `since`, as frames — None when some of it is no longer
+    /// kept.
+    fn since(&self, session: Uuid, since: u64) -> Option<Vec<Frame<ServerMessage>>> {
         let first = self.chunks.front().map(|(seq, _)| *seq);
-        let gap = match first {
-            Some(first) => self.trimmed && since + 1 < first,
-            None => false,
-        };
-        let mut frames = Vec::new();
-        if gap {
-            let seq = first.unwrap_or(1) - 1;
-            frames.push(Frame::Output { session, seq, bytes: RESET.to_vec() });
+        if self.trimmed && first.is_some_and(|first| since + 1 < first) {
+            return None;
         }
-        for (seq, bytes) in &self.chunks {
-            if *seq > since {
-                frames.push(Frame::Output { session, seq: *seq, bytes: without_queries(bytes) });
-            }
-        }
-        frames
+        let frames = self
+            .chunks
+            .iter()
+            .filter(|(seq, _)| *seq > since)
+            .map(|(seq, bytes)| Frame::Output { session, seq: *seq, bytes: without_queries(bytes) })
+            .collect();
+        Some(frames)
     }
 }
 
@@ -684,17 +690,15 @@ mod tests {
         history.push(1, chunk.clone());
         history.push(2, chunk.clone());
         assert!(!history.trimmed);
+        assert_eq!(history.since(id, 0).map(|frames| frames.len()), Some(2));
         history.push(3, chunk.clone());
         assert!(history.trimmed);
 
-        let all = history.replay(id, 0);
-        assert!(matches!(&all[0], Frame::Output { bytes, .. } if bytes == RESET), "starts with a reset");
-        assert_eq!(all.len(), 3, "reset + the two kept");
-
-        let newer = history.replay(id, 2);
+        assert!(history.since(id, 0).is_none(), "the first output is gone");
+        let newer = history.since(id, 2).unwrap();
         assert_eq!(newer.len(), 1);
         assert!(matches!(&newer[0], Frame::Output { seq: 3, .. }));
-        assert!(history.replay(id, 3).is_empty());
+        assert!(history.since(id, 3).unwrap().is_empty());
     }
 
     #[test]

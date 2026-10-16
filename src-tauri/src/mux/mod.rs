@@ -16,6 +16,7 @@
 
 pub mod client;
 pub mod protocol;
+mod screen;
 pub mod server;
 
 use std::io;
