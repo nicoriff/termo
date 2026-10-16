@@ -84,9 +84,19 @@ class WorkspaceStore {
 
   /** Shows, in a new tab of `tileId`, a console the sessions daemon kept
    * running (see SessionTab.attach). */
-  attachTab(tileId: string, consoleId: string, title: string, cwd?: string): void {
+  attachTab(
+    tileId: string,
+    consoleId: string,
+    title: string,
+    cwd?: string,
+    host?: { ip: string; name: string },
+  ): void {
     if (!this.root) return;
-    const session: SessionTab = { ...makeSession(title, undefined, undefined, cwd), attach: consoleId };
+    const session: SessionTab = {
+      ...makeSession(title, undefined, undefined, host ? undefined : cwd),
+      attach: consoleId,
+      ...(host ? { attachHost: host } : {}),
+    };
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
       sessions: [...tile.sessions, session],

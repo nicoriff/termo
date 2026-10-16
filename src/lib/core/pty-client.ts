@@ -50,9 +50,10 @@ export interface KeptConsole {
 }
 
 /** Shows a console the sessions daemon kept running: what it printed so
- * far arrives through `onData` first, then everything new. */
-export function attachPty(id: string, handlers: ConsoleHandlers): Promise<KeptConsole> {
-  return invoke<KeptConsole>("pty_attach", { id, onEvent: eventChannel(handlers) });
+ * far arrives through `onData` first, then everything new. With `host` (an
+ * address on the tailnet, `ip:port`), another computer's. */
+export function attachPty(id: string, handlers: ConsoleHandlers, host?: string): Promise<KeptConsole> {
+  return invoke<KeptConsole>("pty_attach", { id, host: host ?? null, onEvent: eventChannel(handlers) });
 }
 
 /** Every console the sessions daemon runs, shown or not. Empty when it

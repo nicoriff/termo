@@ -31,6 +31,9 @@ pub enum Endpoint {
     Dir(PathBuf),
     #[cfg_attr(not(test), allow(dead_code))]
     Direct { port: u16, token: String },
+    /// Another computer's daemon, over the tailnet: no token, Tailscale
+    /// tells it who this is (see mux/remote.rs).
+    Remote(SocketAddr),
 }
 
 pub struct MuxClient {
@@ -108,6 +111,7 @@ impl MuxClient {
                 let addr = SocketAddr::from(([127, 0, 0, 1], *port));
                 (TcpStream::connect_timeout(&addr, Duration::from_secs(2))?, token.clone())
             }
+            Endpoint::Remote(addr) => (TcpStream::connect_timeout(addr, Duration::from_secs(4))?, String::new()),
         };
         handshake(stream, &token).map(|(reader, writer)| {
             let conn = Arc::new(Conn {
@@ -214,9 +218,18 @@ impl MuxClient {
         self.cast(Op::PromptRedraw { session: id })
     }
 
+    /// Ends a console. Its tab stops showing it first, so the daemon's word
+    /// that it's gone doesn't reach it as an exit; if it can't be ended (a
+    /// read-only connection), it keeps showing it.
     pub fn kill(&self, id: Uuid) -> Result<(), String> {
-        self.shown.remove(&id);
-        self.call(Op::Kill { session: id }).map(|_| ())
+        let shown = self.shown.remove(&id);
+        let result = self.call(Op::Kill { session: id }).map(|_| ());
+        if result.is_err() {
+            if let Some((id, shown)) = shown {
+                self.shown.insert(id, shown);
+            }
+        }
+        result
     }
 
     /// Stops showing a console; it keeps running in the daemon.
@@ -242,15 +255,42 @@ impl MuxClient {
         }
     }
 
+    /// Who is connected to this daemon from the tailnet.
+    pub fn viewers(&self) -> Result<Vec<super::remote::Viewer>, String> {
+        match self.call(Op::Viewers)? {
+            Reply::Viewers { viewers } => Ok(viewers),
+            other => Err(format!("unexpected answer: {other:?}")),
+        }
+    }
+
+    /// Ends every connection from the tailnet.
+    pub fn disconnect_remote(&self) -> Result<(), String> {
+        self.call(Op::DisconnectRemote).map(|_| ())
+    }
+
+    /// The remote access settings changed (remote.json): applied now.
+    pub fn reload_remote(&self) -> Result<(), String> {
+        self.call(Op::ReloadRemote).map(|_| ())
+    }
+
+    /// Whether there's a daemon to talk to — connected already, or running
+    /// and connected to now — without starting one.
+    pub fn is_connected_or_running(&self) -> bool {
+        if self.conn.lock().unwrap().as_ref().is_some_and(|conn| conn.alive.load(Ordering::SeqCst)) {
+            return true;
+        }
+        let Ok(conn) = self.open(false) else {
+            return false;
+        };
+        *self.conn.lock().unwrap() = Some(conn);
+        true
+    }
+
     /// Lists the daemon's consoles only if one is already running: asking
     /// must not start one.
     pub fn list_if_running(&self) -> Vec<SessionInfo> {
-        let running = self.conn.lock().unwrap().as_ref().is_some_and(|conn| conn.alive.load(Ordering::SeqCst));
-        if !running {
-            let Ok(conn) = self.open(false) else {
-                return Vec::new();
-            };
-            *self.conn.lock().unwrap() = Some(conn);
+        if !self.is_connected_or_running() {
+            return Vec::new();
         }
         self.list().unwrap_or_default()
     }
@@ -263,6 +303,17 @@ impl MuxClient {
         self.shown.iter().filter_map(|shown| Some((*shown.key(), shown.pid?))).collect()
     }
 
+    /// Tells every tab showing a console through this client that it's
+    /// gone, and stops showing them.
+    fn forget_all(&self) {
+        let ids: Vec<Uuid> = self.shown.iter().map(|shown| *shown.key()).collect();
+        for id in ids {
+            if let Some((_, shown)) = self.shown.remove(&id) {
+                (shown.sink)(ConsoleEvent::Exit(-1));
+            }
+        }
+    }
+
     /// The connection dropped. If the daemon is still there (it was the
     /// connection, not the daemon), every console is attached again from
     /// where it was; otherwise they are gone, and their tabs are told.
@@ -273,11 +324,7 @@ impl MuxClient {
         });
         let ids: Vec<Uuid> = self.shown.iter().map(|shown| *shown.key()).collect();
         let Some(conn) = reattached else {
-            for id in ids {
-                if let Some((_, shown)) = self.shown.remove(&id) {
-                    (shown.sink)(ConsoleEvent::Exit(-1));
-                }
-            }
+            self.forget_all();
             return;
         };
         *self.conn.lock().unwrap() = Some(conn);
@@ -385,12 +432,18 @@ fn read_loop(client: Weak<MuxClient>, conn: Arc<Conn>, mut reader: TcpStream) {
         }
     }
     conn.alive.store(false, Ordering::SeqCst);
+    // Closed from this side too, so the daemon sees the end at once.
+    let _ = conn.writer.lock().unwrap().shutdown(std::net::Shutdown::Both);
     // Whoever was waiting gets an error now rather than at the timeout.
     for (_, waiting) in conn.pending.lock().unwrap().drain() {
         let _ = waiting.send(Err("the sessions daemon disconnected".into()));
     }
     if let Some(client) = client.upgrade() {
-        if !client.shown.is_empty() {
+        // Another computer that ended the connection meant to (it was
+        // turned off, or this one disconnected): no coming back by itself.
+        if matches!(client.endpoint, Endpoint::Remote(_)) {
+            client.forget_all();
+        } else if !client.shown.is_empty() {
             client.reconnect();
         }
     }
@@ -572,6 +625,95 @@ mod tests {
             assert!(Instant::now() < deadline, "the daemon removed its info file on the way out");
             std::thread::sleep(Duration::from_millis(50));
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Remote access, with a stand-in for Tailscale's `whois` that says
+    /// whoever the test is pretending to be.
+    #[test]
+    fn the_tailnet_gets_in_as_far_as_the_list_says() {
+        use crate::mux::remote::{self, Access, Allowed, RemoteConfig};
+        use crate::mux::tailscale::Identity;
+
+        let dir = std::env::temp_dir().join(format!("termo-remote-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = RemoteConfig {
+            enabled: true,
+            port: 0,
+            allowed: vec![
+                Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
+                Allowed { login: "friend@example.com".into(), node: None, access: Access::ReadOnly },
+            ],
+        };
+        remote::write_config(&dir, &config).unwrap();
+        let pretending: Arc<Mutex<Option<Identity>>> = Arc::default();
+        let whois = {
+            let pretending = Arc::clone(&pretending);
+            Box::new(move |_| pretending.lock().unwrap().clone())
+        };
+        let token = "remote-test-token";
+        let (port, remote_port) = crate::mux::server::start_remote_for_test(token, &dir, whois).unwrap();
+        let remote_addr = SocketAddr::from(([127, 0, 0, 1], remote_port));
+        let pretend = |login: &str, node: &str| {
+            *pretending.lock().unwrap() = Some(Identity { login: login.into(), node: node.into() });
+            MuxClient::new(Endpoint::Remote(remote_addr))
+        };
+
+        // A console on this computer, reading what's typed into it.
+        let local = client(port, token);
+        // `call`: cmd expands %x% when it reads the line, before `set /p`.
+        let script = if cfg!(windows) { "echo listo && set /p x= && call echo got-%x% && ping -n 30 127.0.0.1 >nul" } else { "echo listo; read x; echo got-$x; sleep 30" };
+        let (id, seen_here) = spawn_until(&local, script, "listo");
+
+        // Someone not on the list: turned away, and left pending.
+        assert!(pretend("stranger@example.com", "laptop").list().is_err());
+        let pending = remote::read_pending(&dir);
+        assert!(pending.iter().any(|entry| entry.login == "stranger@example.com"), "pending: {pending:?}");
+
+        // Read-only: sees the console, can't type into it nor close it.
+        let friend = pretend("friend@example.com", "tablet");
+        assert!(friend.list().unwrap().iter().any(|session| session.id == id));
+        let seen_by_friend = Arc::new(Seen::default());
+        friend.attach("main", id, terminal(&friend, &seen_by_friend, &Arc::new(Mutex::new(Some(id))))).unwrap();
+        assert!(seen_by_friend.wait_for(|seen| seen.text().contains("listo")), "the friend sees the screen");
+        friend.write(id, b"from-friend\r").unwrap();
+        assert!(friend.kill(id).is_err(), "read-only can't close it");
+
+        // Full access: typed in, and everyone showing it sees the answer.
+        let me = pretend("me@example.com", "phone");
+        let seen_by_me = Arc::new(Seen::default());
+        me.attach("main", id, terminal(&me, &seen_by_me, &Arc::new(Mutex::new(Some(id))))).unwrap();
+        me.write(id, b"from-me\r").unwrap();
+        assert!(seen_here.wait_for(|seen| seen.text().contains("got-from-me")), "typed from the phone: {:?}", seen_here.text());
+        assert!(seen_by_friend.wait_for(|seen| seen.text().contains("got-from-me")));
+        assert!(!seen_here.text().contains("from-friend"), "the read-only typing went nowhere");
+
+        // This computer sees who's connected, and can cut them off.
+        let viewers = local.viewers().unwrap();
+        let logins: Vec<&str> = viewers.iter().map(|viewer| viewer.login.as_str()).collect();
+        assert!(logins.contains(&"me@example.com") && logins.contains(&"friend@example.com"), "viewers: {logins:?}");
+        local.disconnect_remote().unwrap();
+        assert!(seen_by_me.wait_for(|seen| seen.exit.lock().unwrap().is_some()), "the phone was told it's gone");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let left = local.viewers().unwrap();
+            if left.is_empty() {
+                break;
+            }
+            assert!(Instant::now() < deadline, "nobody connected any more: {left:?}");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        // Turned off: the tailnet listener goes.
+        remote::write_config(&dir, &RemoteConfig { enabled: false, ..config }).unwrap();
+        local.reload_remote().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while TcpStream::connect_timeout(&remote_addr, Duration::from_millis(200)).is_ok() {
+            assert!(Instant::now() < deadline, "the listener stopped");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        local.kill(id).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 

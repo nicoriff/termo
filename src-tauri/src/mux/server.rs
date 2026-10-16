@@ -7,17 +7,19 @@
 //! write to it, and the console's own (see PtySession).
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
 use super::protocol::{read_frame, write_frame, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
+use super::remote::{self, Access, RemoteConfig, Viewer};
 use super::screen::Screen;
+use super::tailscale::{self, Identity};
 use super::DaemonInfo;
 use crate::pty::{contains_cursor_report, ConsoleEvent, EventSink, PtySession, SpawnSpec};
 
@@ -50,7 +52,11 @@ pub fn run(build: &str, dir: Option<&str>) {
     let Ok(port) = listener.local_addr().map(|addr| addr.port()) else {
         return;
     };
-    let daemon = Daemon::new(super::new_token());
+    let daemon = Daemon::new(
+        super::new_token(),
+        Box::new(tailscale::whois),
+        Box::new(|| tailscale::status().filter(tailscale::Status::running).and_then(|status| status.me.ip).map(IpAddr::V4)),
+    );
     let info = DaemonInfo {
         pid: std::process::id(),
         port,
@@ -66,18 +72,55 @@ pub fn run(build: &str, dir: Option<&str>) {
         let daemon = Arc::clone(&daemon);
         std::thread::spawn(move || exit_when_idle(&daemon));
     }
+    {
+        let daemon = Arc::clone(&daemon);
+        std::thread::spawn(move || remote_supervisor(&daemon));
+    }
     serve(&daemon, listener);
     super::remove_info(&dir, info.pid);
 }
 
-/// Accepts connections until the listener fails.
+/// Accepts this computer's own connections (the app's) until the listener
+/// fails.
 fn serve(daemon: &Arc<Daemon>, listener: TcpListener) {
     for stream in listener.incoming() {
         let Ok(stream) = stream else {
             continue;
         };
         let daemon = Arc::clone(daemon);
-        std::thread::spawn(move || daemon.handle_connection(stream));
+        std::thread::spawn(move || daemon.handle_connection(stream, Role::Local));
+    }
+}
+
+/// Keeps the tailnet listener as the remote access settings say: up on this
+/// computer's Tailscale address when they're on, down otherwise; and ends
+/// the connections of whoever is no longer allowed. Looks again every few
+/// seconds — Tailscale can come up, or its address change, at any time —
+/// and at once when the app says the settings changed.
+fn remote_supervisor(daemon: &Arc<Daemon>) {
+    loop {
+        daemon.apply_remote_config();
+        let (flag, wake) = &daemon.remote.wake;
+        let mut woken = flag.lock().unwrap();
+        if !*woken {
+            woken = wake.wait_timeout(woken, Duration::from_secs(5)).unwrap().0;
+        }
+        *woken = false;
+    }
+}
+
+/// Accepts connections from the tailnet until told to stop.
+fn accept_remote(daemon: &Arc<Daemon>, listener: &TcpListener, stop: &AtomicBool) {
+    let _ = listener.set_nonblocking(true);
+    while !stop.load(Ordering::SeqCst) {
+        match listener.accept() {
+            Ok((stream, peer)) => {
+                let _ = stream.set_nonblocking(false);
+                let daemon = Arc::clone(daemon);
+                std::thread::spawn(move || daemon.admit(stream, peer));
+            }
+            Err(_) => std::thread::sleep(Duration::from_millis(100)),
+        }
     }
 }
 
@@ -102,6 +145,64 @@ pub struct Daemon {
     next_client: AtomicU64,
     /// When the daemon last had a console or a connection.
     busy_at: Mutex<Instant>,
+    remote: RemoteAccess,
+}
+
+pub type Whois = Box<dyn Fn(SocketAddr) -> Option<Identity> + Send + Sync>;
+pub type Address = Box<dyn Fn() -> Option<IpAddr> + Send + Sync>;
+
+/// Remote access's moving parts (see remote.rs).
+struct RemoteAccess {
+    /// Who is behind a connection from the tailnet: Tailscale's answer.
+    whois: Whois,
+    /// This computer's address on the tailnet, if it has one now.
+    address: Address,
+    config: Mutex<RemoteConfig>,
+    /// The listener: the address it was asked for, the one it got, and what
+    /// stops it.
+    listener: Mutex<Option<(SocketAddr, SocketAddr, Arc<AtomicBool>)>>,
+    /// The connections from the tailnet, by client id.
+    viewers: Mutex<HashMap<u64, RemoteViewer>>,
+    wake: (Mutex<bool>, Condvar),
+}
+
+struct RemoteViewer {
+    identity: Identity,
+    access: Access,
+    since: i64,
+    kick: Arc<Kick>,
+    sessions: HashSet<Uuid>,
+}
+
+/// Who a connection is, and so what it may do.
+#[derive(Clone)]
+pub enum Role {
+    /// The app on this computer, with the token from the info file.
+    Local,
+    /// Someone on the tailnet, as Tailscale vouched for them.
+    Remote { identity: Identity, access: Access },
+}
+
+impl Role {
+    fn may(&self, op: &Op) -> bool {
+        match self {
+            Role::Local => true,
+            Role::Remote { access, .. } => match op {
+                Op::List | Op::Attach { .. } | Op::Detach { .. } => true,
+                Op::Resize { .. } | Op::PromptRedraw { .. } | Op::Kill { .. } => *access == Access::Full,
+                // Starting consoles, and everything about the daemon itself,
+                // is this computer's alone.
+                _ => false,
+            },
+        }
+    }
+
+    fn may_type(&self) -> bool {
+        match self {
+            Role::Local => true,
+            Role::Remote { access, .. } => *access == Access::Full,
+        }
+    }
 }
 
 /// A console the daemon runs.
@@ -129,14 +230,32 @@ struct State {
     /// Whoever is attached answers; if the last one leaves first, the
     /// daemon does (see CURSOR_QUERY).
     cursor_query: bool,
+    /// The client that typed last. With more than one terminal attached,
+    /// each would answer what the program asks its terminal; only this
+    /// one's answers go through (see accepts_input).
+    typist: Option<u64>,
+}
+
+impl State {
+    /// Whether `client`'s input reaches the console: everything typed does,
+    /// and makes it the typist; a terminal's answer only from the typist
+    /// (or from anyone while no one has typed).
+    fn accepts_input(&mut self, client: u64, bytes: &[u8]) -> bool {
+        if is_terminal_reply(bytes) {
+            return self.typist.is_none_or(|typist| typist == client);
+        }
+        self.typist = Some(client);
+        true
+    }
 }
 
 #[derive(Clone)]
 struct Client {
     id: u64,
     tx: SyncSender<Frame<ServerMessage>>,
-    /// Ends the connection, for a client that stopped reading.
-    stream: Arc<TcpStream>,
+    /// Ends the connection: a client that stopped reading, one no longer
+    /// allowed in.
+    kick: Arc<Kick>,
 }
 
 impl Client {
@@ -146,7 +265,7 @@ impl Client {
         match self.tx.try_send(frame) {
             Ok(()) => true,
             Err(TrySendError::Full(_)) => {
-                let _ = self.stream.shutdown(std::net::Shutdown::Both);
+                self.kick.kick();
                 false
             }
             Err(TrySendError::Disconnected(_)) => false,
@@ -154,8 +273,45 @@ impl Client {
     }
 }
 
+/// What ends a connection from this side, whatever the other side does:
+/// shutting the socket down isn't enough on Windows, where it doesn't wake
+/// a read already waiting — the reader (see KickableReader) checks this.
+struct Kick {
+    stream: TcpStream,
+    kicked: AtomicBool,
+}
+
+impl Kick {
+    fn kick(&self) {
+        self.kicked.store(true, Ordering::SeqCst);
+        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+/// Reads a connection a little at a time, so a kick is noticed even while
+/// nothing arrives: a read that times out with nothing read is retried —
+/// no data is lost — unless the connection was kicked.
+struct KickableReader {
+    stream: TcpStream,
+    kick: Arc<Kick>,
+}
+
+impl std::io::Read for KickableReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            if self.kick.kicked.load(Ordering::SeqCst) {
+                return Err(std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "kicked"));
+            }
+            match self.stream.read(buf) {
+                Err(err) if matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                other => return other,
+            }
+        }
+    }
+}
+
 impl Daemon {
-    pub fn new(token: String) -> Arc<Self> {
+    pub fn new(token: String, whois: Whois, address: Address) -> Arc<Self> {
         Arc::new(Self {
             token,
             dir: OnceLock::new(),
@@ -163,7 +319,122 @@ impl Daemon {
             connections: AtomicUsize::new(0),
             next_client: AtomicU64::new(1),
             busy_at: Mutex::new(Instant::now()),
+            remote: RemoteAccess {
+                whois,
+                address,
+                config: Mutex::new(RemoteConfig::default()),
+                listener: Mutex::new(None),
+                viewers: Mutex::new(HashMap::new()),
+                wake: (Mutex::new(false), Condvar::new()),
+            },
         })
+    }
+
+    /// Applies the remote access settings (see remote_supervisor).
+    fn apply_remote_config(self: &Arc<Self>) {
+        let Some(dir) = self.dir.get() else {
+            return;
+        };
+        let config = remote::read_config(dir);
+        // Whoever is no longer allowed — or now allowed less — is cut off.
+        for viewer in self.remote.viewers.lock().unwrap().values() {
+            if !config.enabled || config.access_for(&viewer.identity) != Some(viewer.access) {
+                viewer.kick.kick();
+            }
+        }
+        *self.remote.config.lock().unwrap() = config.clone();
+        let wanted = config
+            .enabled
+            .then(|| (self.remote.address)())
+            .flatten()
+            .map(|ip| SocketAddr::new(ip, config.port));
+        let mut listener = self.remote.listener.lock().unwrap();
+        if listener.as_ref().map(|(asked, _, _)| *asked) == wanted {
+            return;
+        }
+        if let Some((_, _, stop)) = listener.take() {
+            stop.store(true, Ordering::SeqCst);
+            self.disconnect_remote();
+        }
+        let Some(asked) = wanted else {
+            return;
+        };
+        let Ok(tcp) = TcpListener::bind(asked) else {
+            return;
+        };
+        let bound = tcp.local_addr().unwrap_or(asked);
+        let stop = Arc::new(AtomicBool::new(false));
+        let daemon = Arc::clone(self);
+        let stop_for_thread = Arc::clone(&stop);
+        std::thread::spawn(move || accept_remote(&daemon, &tcp, &stop_for_thread));
+        *listener = Some((asked, bound, stop));
+    }
+
+    /// A connection from the tailnet: in, if Tailscale says who it is and
+    /// they're on the list; turned away and left pending otherwise.
+    fn admit(self: Arc<Self>, stream: TcpStream, peer: SocketAddr) {
+        let dir = self.dir.get().cloned();
+        let now = now_seconds();
+        let identity = (self.remote.whois)(peer);
+        let access = identity.as_ref().and_then(|who| self.remote.config.lock().unwrap().access_for(who));
+        if let Some(dir) = &dir {
+            let outcome = match (&identity, access) {
+                (None, _) => "unknown",
+                (Some(_), None) => "pending",
+                (Some(_), Some(Access::Full)) => "full",
+                (Some(_), Some(Access::ReadOnly)) => "read-only",
+            };
+            remote::log(dir, now, peer, identity.as_ref(), outcome);
+        }
+        match (identity, access) {
+            (Some(identity), Some(access)) => self.handle_connection(stream, Role::Remote { identity, access }),
+            (identity, _) => {
+                if let (Some(identity), Some(dir)) = (&identity, &dir) {
+                    remote::add_pending(dir, identity, now);
+                }
+                let reason = if identity.is_some() { "waiting for approval" } else { "not on the tailnet" };
+                let mut writer = stream;
+                let _ = writer.set_read_timeout(Some(Duration::from_secs(5)));
+                let _ = read_frame::<ClientMessage>(&mut writer);
+                let _ = write_frame(&mut writer, &Frame::Message(ServerMessage::Rejected { reason: reason.into() }));
+            }
+        }
+    }
+
+    /// Ends every connection from the tailnet.
+    fn disconnect_remote(&self) {
+        for viewer in self.remote.viewers.lock().unwrap().values() {
+            viewer.kick.kick();
+        }
+    }
+
+    fn viewers(&self) -> Vec<Viewer> {
+        let mut viewers: Vec<Viewer> = self
+            .remote
+            .viewers
+            .lock()
+            .unwrap()
+            .values()
+            .map(|viewer| Viewer {
+                login: viewer.identity.login.clone(),
+                node: viewer.identity.node.clone(),
+                access: viewer.access,
+                sessions: viewer.sessions.iter().copied().collect(),
+                since: viewer.since,
+            })
+            .collect();
+        viewers.sort_by_key(|viewer| viewer.since);
+        viewers
+    }
+
+    fn note_viewing(&self, client: u64, session: Uuid, viewing: bool) {
+        if let Some(viewer) = self.remote.viewers.lock().unwrap().get_mut(&client) {
+            if viewing {
+                viewer.sessions.insert(session);
+            } else {
+                viewer.sessions.remove(&session);
+            }
+        }
     }
 
     fn set_dir(&self, dir: PathBuf) {
@@ -199,8 +470,9 @@ impl Daemon {
         self.sessions.lock().unwrap().get(&id).cloned().ok_or_else(|| format!("unknown session: {id}"))
     }
 
-    /// One connection, from its hello to its end.
-    pub fn handle_connection(self: Arc<Self>, stream: TcpStream) {
+    /// One connection, from its hello to its end. A local one has to bring
+    /// the token; a remote one was already vouched for (see admit).
+    pub fn handle_connection(self: Arc<Self>, stream: TcpStream, role: Role) {
         let _ = stream.set_nodelay(true);
         let mut reader = stream;
         let _ = reader.set_read_timeout(Some(Duration::from_secs(5)));
@@ -209,7 +481,8 @@ impl Daemon {
         };
         match read_frame::<ClientMessage>(&mut reader) {
             Ok(Some(Frame::Message(ClientMessage::Hello { protocol, token, .. }))) => {
-                if !crate::agents::webhook::token_matches(&token, &self.token) {
+                let local = matches!(role, Role::Local);
+                if local && !crate::agents::webhook::token_matches(&token, &self.token) {
                     let rejected = ServerMessage::Rejected { reason: "bad token".into() };
                     let _ = write_frame(&mut writer, &Frame::Message(rejected));
                     return;
@@ -230,16 +503,18 @@ impl Daemon {
         if write_frame(&mut writer, &Frame::Message(welcome)).is_err() {
             return;
         }
-        let _ = reader.set_read_timeout(None);
-
-        let Ok(shutdown_handle) = reader.try_clone() else {
+        // Short reads, so a kick is noticed (see KickableReader).
+        let _ = reader.set_read_timeout(Some(Duration::from_millis(500)));
+        let Ok(kick_handle) = reader.try_clone() else {
             return;
         };
+        let kick = Arc::new(Kick { stream: kick_handle, kicked: AtomicBool::new(false) });
+        let mut reader = KickableReader { stream: reader, kick: Arc::clone(&kick) };
         let (tx, rx) = sync_channel::<Frame<ServerMessage>>(CLIENT_QUEUE);
         let client = Client {
             id: self.next_client.fetch_add(1, Ordering::SeqCst),
             tx,
-            stream: Arc::new(shutdown_handle),
+            kick,
         };
         std::thread::spawn(move || {
             for frame in rx {
@@ -250,15 +525,37 @@ impl Daemon {
             let _ = writer.shutdown(std::net::Shutdown::Both);
         });
 
+        if let Role::Remote { identity, access } = &role {
+            self.remote.viewers.lock().unwrap().insert(
+                client.id,
+                RemoteViewer {
+                    identity: identity.clone(),
+                    access: *access,
+                    since: now_seconds(),
+                    kick: Arc::clone(&client.kick),
+                    sessions: HashSet::new(),
+                },
+            );
+        }
         self.connections.fetch_add(1, Ordering::SeqCst);
         self.touch();
         let mut attached: HashSet<Uuid> = HashSet::new();
         while let Ok(Some(frame)) = read_frame::<ClientMessage>(&mut reader) {
             match frame {
                 Frame::Input { session, bytes } => {
+                    // Read-only: shown, never typed into.
+                    if !role.may_type() || !attached.contains(&session) {
+                        continue;
+                    }
                     if let Ok(live) = self.session(session) {
-                        if contains_cursor_report(&bytes) {
-                            live.state.lock().unwrap().cursor_query = false;
+                        {
+                            let mut state = live.state.lock().unwrap();
+                            if !state.accepts_input(client.id, &bytes) {
+                                continue;
+                            }
+                            if contains_cursor_report(&bytes) {
+                                state.cursor_query = false;
+                            }
                         }
                         if let Some(pty) = live.pty.get() {
                             let _ = pty.write(&bytes);
@@ -267,12 +564,17 @@ impl Daemon {
                 }
                 Frame::Message(ClientMessage::Request { id, op }) => {
                     let shutdown = op == Op::Shutdown;
-                    let result = self.handle(&client, &mut attached, op);
+                    let result = if role.may(&op) {
+                        self.handle(&client, &mut attached, op)
+                    } else {
+                        Err("not allowed".to_string())
+                    };
                     // Blocking here is fine: the writer thread drains it.
+                    let allowed = result.is_ok();
                     if client.tx.send(Frame::Message(ServerMessage::Reply { id, result })).is_err() {
                         break;
                     }
-                    if shutdown {
+                    if shutdown && allowed {
                         // Time for the reply to go out.
                         std::thread::sleep(Duration::from_millis(100));
                         self.exit();
@@ -284,6 +586,7 @@ impl Daemon {
         for session in attached {
             self.detach(session, client.id);
         }
+        self.remote.viewers.lock().unwrap().remove(&client.id);
         self.connections.fetch_sub(1, Ordering::SeqCst);
         self.touch();
     }
@@ -299,11 +602,24 @@ impl Daemon {
             Op::Attach { session, since } => {
                 let info = self.attach(session, client, since)?;
                 attached.insert(session);
+                self.note_viewing(client.id, session, true);
                 Ok(Reply::Attached { info })
             }
             Op::Detach { session } => {
                 attached.remove(&session);
                 self.detach(session, client.id);
+                self.note_viewing(client.id, session, false);
+                Ok(Reply::Done)
+            }
+            Op::Viewers => Ok(Reply::Viewers { viewers: self.viewers() }),
+            Op::DisconnectRemote => {
+                self.disconnect_remote();
+                Ok(Reply::Done)
+            }
+            Op::ReloadRemote => {
+                let (flag, wake) = &self.remote.wake;
+                *flag.lock().unwrap() = true;
+                wake.notify_all();
                 Ok(Reply::Done)
             }
             Op::Resize { session, cols, rows } => {
@@ -355,6 +671,7 @@ impl Daemon {
                 title: None,
                 exit_code: None,
                 cursor_query: false,
+                typist: None,
             }),
         });
         let sink = self.sink_for(&live);
@@ -432,6 +749,9 @@ impl Daemon {
         let (finished, unanswered) = {
             let mut state = live.state.lock().unwrap();
             state.clients.retain(|other| other.id != client);
+            if state.typist == Some(client) {
+                state.typist = None;
+            }
             let alone = state.clients.is_empty();
             let unanswered = (alone && std::mem::take(&mut state.cursor_query)).then(|| state.screen.cursor_report());
             (alone && state.exit_code.is_some(), unanswered)
@@ -640,6 +960,69 @@ fn string_sequence(bytes: &[u8], start: usize, is_query: impl Fn(&[u8]) -> bool)
     (bytes.len(), false)
 }
 
+/// Whether `bytes` is nothing but what a terminal sends on its own — its
+/// answers to a program's questions (cursor position, device attributes,
+/// modes, colors, sizes, its version) and focus reports — rather than
+/// anything typed.
+fn is_terminal_reply(bytes: &[u8]) -> bool {
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at] != 0x1b || at + 1 >= bytes.len() {
+            return false;
+        }
+        let end = match bytes[at + 1] {
+            b'[' => {
+                let start = at + 2;
+                let mut end = start;
+                while end < bytes.len() && !(0x40..=0x7e).contains(&bytes[end]) {
+                    end += 1;
+                }
+                let Some(&last) = bytes.get(end) else {
+                    return false;
+                };
+                let middle = &bytes[start..end];
+                let reply = match last {
+                    // Cursor position report.
+                    b'R' => !middle.is_empty() && middle.iter().all(|byte| byte.is_ascii_digit() || *byte == b';'),
+                    // Device attributes, primary and secondary.
+                    b'c' => middle.starts_with(b"?") || middle.starts_with(b">"),
+                    // Mode report (DECRPM).
+                    b'y' => middle.ends_with(b"$"),
+                    // Focus in, focus out.
+                    b'I' | b'O' => middle.is_empty(),
+                    // Sizes.
+                    b't' => middle.first().is_some_and(u8::is_ascii_digit),
+                    // The kitty keyboard protocol's flags.
+                    b'u' => middle.starts_with(b"?"),
+                    // "Terminal OK".
+                    b'n' => middle == b"0",
+                    _ => false,
+                };
+                if !reply {
+                    return false;
+                }
+                end + 1
+            }
+            // A string from the terminal is always an answer: colors (OSC),
+            // its version or a setting (DCS).
+            b']' | b'P' => {
+                let (end, _) = string_sequence(bytes, at + 2, |_| true);
+                if end > bytes.len() || !ends_string(&bytes[..end]) {
+                    return false;
+                }
+                end
+            }
+            _ => return false,
+        };
+        at = end;
+    }
+    !bytes.is_empty()
+}
+
+fn ends_string(bytes: &[u8]) -> bool {
+    bytes.ends_with(b"\x07") || bytes.ends_with(b"\x1b\\")
+}
+
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|window| window == needle)
 }
@@ -673,9 +1056,35 @@ fn last_title(bytes: &[u8]) -> Option<String> {
 pub fn start_for_test(token: &str) -> std::io::Result<u16> {
     let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
     let port = listener.local_addr()?.port();
-    let daemon = Daemon::new(token.to_string());
+    let daemon = Daemon::new(token.to_string(), Box::new(|_| None), Box::new(|| None));
     std::thread::spawn(move || serve(&daemon, listener));
     Ok(port)
+}
+
+/// For tests: a daemon with remote access on, its "tailnet" listener on
+/// 127.0.0.1, `whois` standing in for Tailscale. Returns the local port and
+/// the remote one.
+#[cfg(test)]
+pub fn start_remote_for_test(token: &str, dir: &std::path::Path, whois: Whois) -> std::io::Result<(u16, u16)> {
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
+    let port = listener.local_addr()?.port();
+    let daemon = Daemon::new(token.to_string(), whois, Box::new(|| Some(IpAddr::from([127, 0, 0, 1]))));
+    daemon.set_dir(dir.to_path_buf());
+    daemon.apply_remote_config();
+    let remote_port = daemon
+        .remote
+        .listener
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|(_, bound, _)| bound.port())
+        .ok_or_else(|| std::io::Error::other("remote access is off"))?;
+    {
+        let daemon = Arc::clone(&daemon);
+        std::thread::spawn(move || remote_supervisor(&daemon));
+    }
+    std::thread::spawn(move || serve(&daemon, listener));
+    Ok((port, remote_port))
 }
 
 #[cfg(test)]
@@ -711,6 +1120,49 @@ mod tests {
         let drawn = b"\x1b[1;31mred\x1b[0m\x1b]0;title\x07\x1b[2J\x1b[?2004h\x1b[22t\x1b[?25l ok";
         assert_eq!(without_queries(drawn), drawn.to_vec());
         assert_eq!(without_queries(b"before\x1b[6nafter"), b"beforeafter");
+    }
+
+    #[test]
+    fn tells_a_terminals_answers_from_typing() {
+        for reply in [
+            &b"\x1b[12;40R"[..],
+            b"\x1b[?1;2c",
+            b"\x1b[>0;276;0c",
+            b"\x1b[?2004;1$y",
+            b"\x1b[I",
+            b"\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\",
+            b"\x1bP>|xterm.js(5.5.0)\x1b\\",
+            b"\x1b[8;24;80t",
+            b"\x1b[1;1R\x1b[O",
+        ] {
+            assert!(is_terminal_reply(reply), "{:?}", String::from_utf8_lossy(reply));
+        }
+        for typed in [&b"ls\r"[..], b"\x1b[A", b"\x1b[1;5D", b"\x1b[24;7~", b"a\x1b[1;1R", b"", b"\x1b]11;?"] {
+            assert!(!is_terminal_reply(typed), "{:?}", String::from_utf8_lossy(typed));
+        }
+    }
+
+    #[test]
+    fn only_the_typists_terminal_answers() {
+        let mut state = State {
+            clients: Vec::new(),
+            history: History::default(),
+            screen: Screen::new(24, 80),
+            seq: 0,
+            cols: 80,
+            rows: 24,
+            title: None,
+            exit_code: None,
+            cursor_query: false,
+            typist: None,
+        };
+        // No one has typed: anyone's answer goes through.
+        assert!(state.accepts_input(1, b"\x1b[1;1R"));
+        assert!(state.accepts_input(2, b"echo hi\r"));
+        assert!(!state.accepts_input(1, b"\x1b[?1;2c"), "not the typist's");
+        assert!(state.accepts_input(2, b"\x1b[?1;2c"));
+        assert!(state.accepts_input(1, b"x"), "typing always goes through");
+        assert!(state.accepts_input(1, b"\x1b[5;5R"));
     }
 
     #[test]

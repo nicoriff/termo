@@ -213,19 +213,22 @@ fn prepare_console(
 }
 
 /// Shows, in this window, a console the sessions daemon kept running: what
-/// it printed so far, then everything new. Off the main thread: the first
-/// request may have to wait for the daemon.
+/// it printed so far, then everything new. With `host` (an address on the
+/// tailnet), another computer's. Off the main thread: the first request may
+/// have to wait for the daemon.
 #[tauri::command]
 pub async fn pty_attach(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     id: String,
+    host: Option<String>,
     on_event: Channel<PtyEvent>,
 ) -> Result<SessionInfo, String> {
     let id = parse_id(&id)?;
+    let host = host.map(|host| host.parse::<std::net::SocketAddr>().map_err(|err| err.to_string())).transpose()?;
     let owner = window.label().to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<AppState>().pty.attach(&owner, id, channel_sink(on_event)).map_err(|err| err.to_string())
+        app.state::<AppState>().pty.attach(&owner, id, channel_sink(on_event), host).map_err(|err| err.to_string())
     })
     .await
     .map_err(|err| err.to_string())?

@@ -17,6 +17,8 @@
   import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
   import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import GitStatusItem from "./GitStatusItem.svelte";
+  import { remoteWatch } from "$lib/remote/remote-watch.svelte";
+  import { openPreferencesWindow } from "$lib/core/window-client";
 
   const MEMORY_POLL_MS = 2000;
   /** A plan's monthly count barely moves; the backend keeps it as long. */
@@ -217,8 +219,20 @@
       <span class="nudge-dot" aria-hidden="true"></span>{nudgeText}
     </button>
   {/if}
-  <!-- The right end: the repository, then the console's memory. -->
+  <!-- The right end: who's connected from the tailnet, the repository, then
+       the console's memory. -->
   <div class="status-right">
+    {#if remoteWatch.viewers.length > 0}
+      <button
+        class="status-item status-remote"
+        title={t("remote.viewersHint", {
+          who: remoteWatch.viewers.map((viewer) => `${viewer.login} (${viewer.node})`).join(", "),
+        })}
+        onclick={() => void openPreferencesWindow("remote")}
+      >
+        <span class="remote-dot" aria-hidden="true"></span>{t("remote.viewers", { count: String(remoteWatch.viewers.length) })}
+      </button>
+    {/if}
     <GitStatusItem />
     {#if memoryBytes !== null}
       <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
@@ -271,6 +285,31 @@
     height: 6px;
     border-radius: 50%;
     background: #f5a623;
+  }
+
+  .status-remote {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 12px;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .status-remote:hover {
+    opacity: 1;
+    text-decoration: underline;
+  }
+
+  .remote-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3fb950;
   }
 
   .status-engine {

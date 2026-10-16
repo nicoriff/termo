@@ -119,6 +119,7 @@
             cwd={loc.session.cwd}
             agent={loc.session.agent}
             attach={loc.session.attach}
+            attachHost={loc.session.attachHost}
             active={workspaceStore.focusedTileId === loc.tileId &&
               tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
           />

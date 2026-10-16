@@ -60,6 +60,13 @@ pub enum Op {
     List,
     /// Ends the daemon and every console in it.
     Shutdown,
+    /// Who is connected from the tailnet now (see remote.rs).
+    Viewers,
+    /// Ends every connection from the tailnet.
+    DisconnectRemote,
+    /// The remote access settings changed: applied now rather than at the
+    /// next look.
+    ReloadRemote,
 }
 
 /// From the daemon to the app.
@@ -82,6 +89,7 @@ pub enum Reply {
     Spawned { pid: Option<u32> },
     Attached { info: SessionInfo },
     Sessions { sessions: Vec<SessionInfo> },
+    Viewers { viewers: Vec<super::remote::Viewer> },
 }
 
 /// A console as the daemon knows it.

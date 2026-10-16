@@ -5,7 +5,9 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 export type NotificationTarget =
   | { kind: "session"; sessionId: string }
   | { kind: "agentRun"; agentId: string; runId: string; title: string }
-  | { kind: "orchestration"; orchestrationId: string; title: string };
+  | { kind: "orchestration"; orchestrationId: string; title: string }
+  /** A page of Preferences (see Preferences.svelte's "preferences-section"). */
+  | { kind: "preferences"; section: string };
 
 /** A system notification that, clicked, brings this window forward and
  * comes back through `onNotificationOpened` (Windows; elsewhere the click

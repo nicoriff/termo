@@ -1,4 +1,5 @@
 import { keptConsoles, listShells, type KeptConsole } from "$lib/core/pty-client";
+import { remoteOverview, tailscaleRunning } from "$lib/core/remote-client";
 import { marketplaceStatus } from "$lib/core/marketplace-client";
 import type { ShellInfo } from "$lib/core/types";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
@@ -18,12 +19,17 @@ class NewTabOptions {
   agentClis = $state<Record<ToolId, boolean> | null>(null);
   /** Consoles the sessions daemon runs that no window shows (see mux/). */
   background = $state<KeptConsole[]>([]);
+  /** Whether Tailscale is up here, for "Another computer…". */
+  tailscale = $state(false);
 
   refresh(): void {
     listShells()
       .then((list) => (this.shells = list))
       .catch(() => {});
     void this.refreshBackground();
+    remoteOverview()
+      .then((overview) => (this.tailscale = tailscaleRunning(overview)))
+      .catch(() => {});
     marketplaceStatus()
       .then(
         (status) =>

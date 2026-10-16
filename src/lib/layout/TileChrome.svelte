@@ -670,8 +670,21 @@
             {/if}
           </button>
         {/each}
-        {#if recentSessions.length > 0 || favoriteSessions.length > 0 || backgroundConsoles.length > 0}
+        {#if recentSessions.length > 0 || favoriteSessions.length > 0 || backgroundConsoles.length > 0 || newTabOptions.tailscale}
           <div class="shell-picker-divider"></div>
+        {/if}
+        {#if newTabOptions.tailscale}
+          <button
+            class="shell-picker-item"
+            role="menuitem"
+            onmouseenter={() => (submenu = null)}
+            onclick={() => {
+              closeShellPicker();
+              uiState.openRemoteConnect(tile.id);
+            }}
+          >
+            <span class="shell-picker-label">{t("remote.connectMenu")}</span>
+          </button>
         {/if}
         {#if backgroundConsoles.length > 0}
           <button

@@ -49,6 +49,8 @@ export interface LayoutSession {
    * it (see session-keeper.svelte.ts): if the sessions daemon still runs
    * it, restoring shows it again instead of starting a new one. */
   consoleId?: string;
+  /** With `consoleId`: it's another computer's console (see SessionTab.attachHost). */
+  remoteHost?: { ip: string; name: string };
 }
 
 export type LayoutNode =
@@ -128,6 +130,7 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
       }
       const consoleId = options.consoleByTab?.[session.id];
       if (consoleId) stored.consoleId = consoleId;
+      if (consoleId && session.attachHost) stored.remoteHost = { ...session.attachHost };
       return stored;
     });
     // Stored as a position, since the id it refers to isn't stored either.
@@ -187,6 +190,10 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId: (() => string) 
       if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
       const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
       if (session.consoleId && running.has(session.consoleId)) return { ...live, attach: session.consoleId };
+      // Another computer's: whether it still runs is only known by asking it,
+      // which the tab does as it opens (and falls back to a shell here).
+      if (session.consoleId && session.remoteHost)
+        return { ...live, attach: session.consoleId, attachHost: { ...session.remoteHost } };
       if (session.agentTool && session.agentSessionId) {
         resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });
       }

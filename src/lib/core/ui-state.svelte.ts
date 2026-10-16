@@ -49,6 +49,9 @@ class UiState {
   projectDialog = $state<{ project: Project | null } | null>(null);
   /** "New orchestration": the work to plan (see OrchestrationDialog). */
   orchestrationDialog = $state(false);
+  /** "Another computer…": which tile gets the tab with the console picked
+   * on another computer of the tailnet (see RemoteConnectDialog). */
+  remoteConnect = $state<{ tileId: string } | null>(null);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -94,6 +97,7 @@ class UiState {
       this.agentWizard !== null ||
       this.projectDialog !== null ||
       this.orchestrationDialog ||
+      this.remoteConnect !== null ||
       this.marketplaceOpen ||
       this.quickAskOpen ||
       this.missingAgents !== null ||
@@ -105,6 +109,14 @@ class UiState {
 
   setMaximized(value: boolean): void {
     this.maximized = value;
+  }
+
+  openRemoteConnect(tileId: string): void {
+    this.remoteConnect = { tileId };
+  }
+
+  closeRemoteConnect(): void {
+    this.remoteConnect = null;
   }
 
   openCommandPalette(): void {

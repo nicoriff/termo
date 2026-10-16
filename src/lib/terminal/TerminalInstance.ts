@@ -18,6 +18,7 @@ import {
   windowsBuild,
   writePty,
 } from "../core/pty-client";
+import { remoteAddress } from "../core/remote-client";
 import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import type { AgentLaunch } from "../layout/split-tree";
@@ -347,6 +348,8 @@ export class TerminalInstance {
     cwd?: string,
     agent?: AgentLaunch,
     attach?: string,
+    /** With `attach`: the tailnet address of the computer whose console it is. */
+    attachHost?: string,
   ): Promise<void> {
     this.container = container;
     this.term.open(container);
@@ -359,7 +362,7 @@ export class TerminalInstance {
 
     // A console the sessions daemon kept running: shown again as it is. If
     // it's gone by now, the tab starts its shell anew, in its folder.
-    if (attach && (await this.start({ shellPath, shellArgs, cwd, attach }))) return;
+    if (attach && (await this.start({ shellPath, shellArgs, cwd, attach, attachHost }))) return;
     if (this.disposed) return;
 
     if (agent) {
@@ -429,7 +432,14 @@ export class TerminalInstance {
    * with the reason written to the console, or the console to attach to is
    * gone. `afterExit` replaces `onExit`. */
   private async start(
-    opts: { shellPath?: string; shellArgs?: string[]; cwd?: string; agent?: AgentLaunch; attach?: string },
+    opts: {
+      shellPath?: string;
+      shellArgs?: string[];
+      cwd?: string;
+      agent?: AgentLaunch;
+      attach?: string;
+      attachHost?: string;
+    },
     afterExit?: () => void,
   ): Promise<boolean> {
     const { shellPath } = opts;
@@ -468,7 +478,11 @@ export class TerminalInstance {
     let exitedMeanwhile: number | null = null;
     try {
       if (opts.attach) {
-        const kept = await attachPty(opts.attach, handlers);
+        const kept = await attachPty(
+          opts.attach,
+          handlers,
+          opts.attachHost ? remoteAddress(opts.attachHost) : undefined,
+        );
         spawned = kept.id;
         consoleSize = { cols: kept.cols, rows: kept.rows };
         exitedMeanwhile = kept.exitCode;
@@ -512,8 +526,9 @@ export class TerminalInstance {
     });
     this.lastPtySize = consoleSize;
     if (opts.attach) {
-      // What its agent did while no window showed it.
-      void restoreAgentEvents(spawned).catch(() => {});
+      // What its agent did while no window showed it — this computer's
+      // consoles only: another's report there.
+      if (!opts.attachHost) void restoreAgentEvents(spawned).catch(() => {});
       // Its process ended meanwhile: the tab does what it does on an exit.
       if (exitedMeanwhile !== null) handlers.onExit(exitedMeanwhile);
     }

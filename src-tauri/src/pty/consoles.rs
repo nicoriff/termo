@@ -5,8 +5,10 @@
 //! Where a console runs is decided when it starts, so turning the setting
 //! on or off applies to new consoles and leaves the open ones be.
 
+use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 
+use dashmap::DashMap;
 use uuid::Uuid;
 
 use super::{EventSink, PtyManager, SpawnSpec};
@@ -17,6 +19,8 @@ use crate::mux::protocol::SessionInfo;
 pub struct Consoles {
     local: PtyManager,
     mux: OnceLock<Option<Arc<MuxClient>>>,
+    /// Other computers' daemons, over the tailnet (see mux/remote.rs).
+    remotes: DashMap<SocketAddr, Arc<MuxClient>>,
 }
 
 impl Consoles {
@@ -32,9 +36,28 @@ impl Consoles {
         self.mux.get().and_then(Option::as_ref)
     }
 
-    /// The daemon's client, for a console it runs.
-    fn mux_for(&self, id: Uuid) -> Option<&Arc<MuxClient>> {
-        self.mux_if_used().filter(|mux| mux.shows(id))
+    /// The client of the daemon — this computer's or another's — that shows
+    /// a console.
+    fn mux_for(&self, id: Uuid) -> Option<Arc<MuxClient>> {
+        if let Some(mux) = self.mux_if_used().filter(|mux| mux.shows(id)) {
+            return Some(Arc::clone(mux));
+        }
+        self.remotes.iter().find(|remote| remote.shows(id)).map(|remote| Arc::clone(remote.value()))
+    }
+
+    fn is_remote(&self, id: Uuid) -> bool {
+        self.remotes.iter().any(|remote| remote.shows(id))
+    }
+
+    /// The client of another computer's daemon.
+    pub fn remote(&self, addr: SocketAddr) -> Arc<MuxClient> {
+        Arc::clone(self.remotes.entry(addr).or_insert_with(|| MuxClient::new(Endpoint::Remote(addr))).value())
+    }
+
+    /// The client of this computer's daemon, connecting to it only if it's
+    /// already running.
+    pub fn local_daemon(&self) -> Option<&Arc<MuxClient>> {
+        self.mux()
     }
 
     pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink, persistent: bool) -> anyhow::Result<Uuid> {
@@ -45,8 +68,12 @@ impl Consoles {
         self.local.spawn(owner, spec, sink)
     }
 
-    /// Shows a console the daemon kept running.
-    pub fn attach(&self, owner: &str, id: Uuid, sink: EventSink) -> anyhow::Result<SessionInfo> {
+    /// Shows a console the daemon kept running — this computer's, or with
+    /// `host`, another's on the tailnet.
+    pub fn attach(&self, owner: &str, id: Uuid, sink: EventSink, host: Option<SocketAddr>) -> anyhow::Result<SessionInfo> {
+        if let Some(host) = host {
+            return self.remote(host).attach(owner, id, sink).map_err(anyhow::Error::msg);
+        }
         let mux = self.mux().ok_or_else(|| anyhow::anyhow!("no folder for the sessions daemon"))?;
         mux.attach(owner, id, sink).map_err(anyhow::Error::msg)
     }
@@ -72,6 +99,11 @@ impl Consoles {
     }
 
     pub fn prompt_redraw(&self, id: Uuid, shell_is_idle: impl FnOnce(u32) -> bool) -> anyhow::Result<()> {
+        // Whether another computer's shell is at its prompt can't be told
+        // from here: it gets no keys.
+        if self.is_remote(id) {
+            return Ok(());
+        }
         match self.mux_for(id) {
             Some(mux) => {
                 if mux.pid(id).is_some_and(shell_is_idle) {
@@ -83,7 +115,15 @@ impl Consoles {
         }
     }
 
+    /// Ends a console — but one of another computer's only stops being
+    /// shown here: closing its tab shouldn't end it there.
     pub fn kill(&self, id: Uuid) -> anyhow::Result<()> {
+        if self.is_remote(id) {
+            if let Some(remote) = self.mux_for(id) {
+                remote.detach(id);
+            }
+            return Ok(());
+        }
         match self.mux_for(id) {
             Some(_) => self.kill_kept(id),
             None => self.local.kill(id),
@@ -99,7 +139,12 @@ impl Consoles {
         mux.kill(id).map_err(anyhow::Error::msg)
     }
 
+    /// None for another computer's console: its process id means nothing
+    /// here.
     pub fn pid(&self, id: Uuid) -> anyhow::Result<Option<u32>> {
+        if self.is_remote(id) {
+            return Ok(None);
+        }
         match self.mux_for(id) {
             Some(mux) => Ok(mux.pid(id)),
             None => self.local.pid(id),
@@ -132,6 +177,9 @@ impl Consoles {
         self.local.kill_owned_by(owner);
         if let Some(mux) = self.mux_if_used() {
             mux.detach_owned_by(owner);
+        }
+        for remote in self.remotes.iter() {
+            remote.detach_owned_by(owner);
         }
     }
 }

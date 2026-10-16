@@ -16,8 +16,10 @@
 
 pub mod client;
 pub mod protocol;
+pub mod remote;
 mod screen;
 pub mod server;
+pub mod tailscale;
 
 use std::io;
 use std::net::{SocketAddr, TcpStream};

@@ -10,6 +10,7 @@
   import { favoriteDraftForFocusedTab } from "$lib/ai-mode/favorites-store.svelte";
   import FavoritesManagerDialog from "$lib/ai-mode/FavoritesManagerDialog.svelte";
   import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
+  import RemoteConnectDialog from "$lib/remote/RemoteConnectDialog.svelte";
   import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
@@ -48,6 +49,7 @@
   import { quickAskStore } from "$lib/companion/quick-ask-store.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
+  import { remoteWatch } from "$lib/remote/remote-watch.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -79,6 +81,7 @@
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
     let stopSessionKeeper: (() => void) | null = null;
+    let stopRemoteWatch: (() => void) | null = null;
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopNotificationClicks = startNotificationClicks();
@@ -115,6 +118,9 @@
       }
 
       stopSessionKeeper = sessionKeeper.start();
+      // Someone asking to connect from the tailnet is told about once: by
+      // the first window.
+      stopRemoteWatch = remoteWatch.start(isFirstWindow());
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);
@@ -140,6 +146,7 @@
       clearTimeout(resizeDebounce);
       unlisten?.();
       stopSessionKeeper?.();
+      stopRemoteWatch?.();
       stopAgentAttention();
       stopAgentRunAttention();
       stopNotificationClicks();
@@ -437,6 +444,9 @@
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />
+    {/if}
+    {#if uiState.remoteConnect}
+      <RemoteConnectDialog />
     {/if}
     {#if uiState.deleteLayoutTarget}
       <DeleteLayoutDialog />
