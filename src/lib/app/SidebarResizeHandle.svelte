@@ -2,6 +2,16 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { SIDEBAR_WIDTH, agentsStore } from "$lib/agents/agents-store.svelte";
 
+  interface Sizer {
+    width: number;
+    setWidth(width: number, persist?: boolean): void;
+  }
+
+  /** The panels on the left edge share the agents panel's width; one that
+   * needs more room (the Harness panel) brings its own, with its limits. */
+  let { sizer = agentsStore, limits = SIDEBAR_WIDTH }: { sizer?: Sizer; limits?: { initial: number; min: number; max: number } } =
+    $props();
+
   let resizing = $state(false);
 
   /** Dragging the right edge: the width follows the pointer, and is
@@ -12,12 +22,12 @@
     const handle = event.currentTarget as HTMLElement;
     handle.setPointerCapture(event.pointerId);
     const startX = event.clientX;
-    const startWidth = agentsStore.width;
+    const startWidth = sizer.width;
     resizing = true;
-    const move = (e: PointerEvent) => agentsStore.setWidth(startWidth + e.clientX - startX);
+    const move = (e: PointerEvent) => sizer.setWidth(startWidth + e.clientX - startX);
     const end = () => {
       resizing = false;
-      agentsStore.setWidth(agentsStore.width, true);
+      sizer.setWidth(sizer.width, true);
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
@@ -29,8 +39,8 @@
 
   function onResizeKey(event: KeyboardEvent) {
     const step = event.shiftKey ? 40 : 10;
-    if (event.key === "ArrowLeft") agentsStore.setWidth(agentsStore.width - step, true);
-    else if (event.key === "ArrowRight") agentsStore.setWidth(agentsStore.width + step, true);
+    if (event.key === "ArrowLeft") sizer.setWidth(sizer.width - step, true);
+    else if (event.key === "ArrowRight") sizer.setWidth(sizer.width + step, true);
     else return;
     event.preventDefault();
   }
@@ -46,13 +56,13 @@
   role="separator"
   aria-orientation="vertical"
   aria-label={t("agents.resize")}
-  aria-valuemin={SIDEBAR_WIDTH.min}
-  aria-valuemax={SIDEBAR_WIDTH.max}
-  aria-valuenow={agentsStore.width}
+  aria-valuemin={limits.min}
+  aria-valuemax={limits.max}
+  aria-valuenow={sizer.width}
   title={t("agents.resize")}
   tabindex="0"
   onpointerdown={startResize}
-  ondblclick={() => agentsStore.setWidth(SIDEBAR_WIDTH.initial, true)}
+  ondblclick={() => sizer.setWidth(limits.initial, true)}
   onkeydown={onResizeKey}
 ></div>
 

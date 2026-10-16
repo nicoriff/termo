@@ -21,6 +21,7 @@
     disabled = false,
     width,
     labelledby,
+    label,
   }: {
     options: DropdownOption[];
     value: string;
@@ -32,6 +33,8 @@
     width?: string;
     /** The id of the text that names it, when that isn't beside it in a row. */
     labelledby?: string;
+    /** Its accessible name, when no visible text names it. */
+    label?: string;
   } = $props();
 
   let open = $state(false);
@@ -136,6 +139,7 @@
     onclick={toggle}
     onkeydown={onKeydown}
     aria-labelledby={labelledby}
+    aria-label={label}
     aria-haspopup="listbox"
     aria-expanded={open}
   >

@@ -453,8 +453,7 @@ fn run_reader(ask: &Ask, prompt: &str, schema: &serde_json::Value, on_step: &dyn
         // The web tools left out (see runner.rs).
         let file = scratch.join(format!("termo-gemini-{id}.toml"));
         std::fs::write(&file, policy).map_err(|err| err.to_string())?;
-        args.push("--policy".into());
-        args.push(file.display().to_string());
+        args.extend(super::spec::gemini_policy_args(&file, ask.dir, super::console_bridge::home().as_deref()));
         files.push(file);
     }
     cmd.args(&args)

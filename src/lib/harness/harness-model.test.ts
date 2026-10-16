@@ -1,0 +1,284 @@
+import { describe, expect, it } from "vitest";
+import type { ExternalEntry, HarnessSpec, ProposedRule, SuggestedRule } from "$lib/core/harness-client";
+import {
+  addPack,
+  addProposed,
+  addRow,
+  copySpec,
+  hasProposed,
+  instructionItems,
+  removeRow,
+  rowProblem,
+  rowSupport,
+  ruleRows,
+  addRule,
+  COMMAND_PACKS,
+  groupExternal,
+  hasPack,
+  matchingRule,
+  testCommand,
+  changeKind,
+  commandProblem,
+  harnessStatus,
+  normalizePattern,
+  normalizePrefix,
+  pathProblem,
+  relativeToRoot,
+  ruleKinds,
+  sameSpec,
+} from "./harness-model";
+
+function spec(overrides: Partial<HarnessSpec> = {}): HarnessSpec {
+  return {
+    version: 1,
+    agents: ["claude", "codex"],
+    paths: [],
+    commands: [],
+    checks: [],
+    instructions: "",
+    ...overrides,
+  };
+}
+
+describe("normalizing", () => {
+  it("writes paths the way the backend does", () => {
+    expect(normalizePattern(" ./src\\gen/ ")).toBe("src/gen");
+    expect(normalizePattern(".env")).toBe(".env");
+  });
+
+  it("collapses a command's spaces", () => {
+    expect(normalizePrefix("  git   push  --force ")).toBe("git push --force");
+  });
+});
+
+describe("sameSpec", () => {
+  it("ignores what doesn't change what's written", () => {
+    const a = spec({ paths: [{ pattern: "./gen/", access: "noEdit" }], instructions: "Hi\n" });
+    const b = spec({
+      agents: ["codex", "claude"],
+      paths: [{ pattern: "gen", access: "noEdit" }],
+      instructions: "Hi",
+      managed: { "x.json": { a: [1] } },
+    });
+    expect(sameSpec(a, b)).toBe(true);
+  });
+
+  it("sees a rule that changed", () => {
+    expect(sameSpec(spec(), spec({ commands: [{ prefix: "git push", decision: "ask" }] }))).toBe(false);
+  });
+});
+
+describe("pathProblem", () => {
+  it("takes a path inside the repository", () => {
+    expect(pathProblem("src/**", [])).toBeNull();
+  });
+
+  it("refuses one outside, a duplicate and parentheses", () => {
+    expect(pathProblem("../x", [])).toBe("harness.paths.outside");
+    expect(pathProblem("C:\\x", [])).toBe("harness.paths.outside");
+    expect(pathProblem("./.env", [".env"])).toBe("harness.paths.duplicate");
+    expect(pathProblem("a(b)", [])).toBe("harness.paths.parentheses");
+    expect(pathProblem("  ", [])).toBe("harness.paths.empty");
+  });
+});
+
+describe("commandProblem", () => {
+  it("refuses a duplicate written differently", () => {
+    expect(commandProblem("git  push", ["git push"])).toBe("harness.commands.duplicate");
+    expect(commandProblem("git push", [])).toBeNull();
+  });
+});
+
+describe("relativeToRoot", () => {
+  it("makes a picked file relative to the repository", () => {
+    expect(relativeToRoot("C:\\Repo", "c:\\repo\\src\\a.ts")).toBe("src/a.ts");
+    expect(relativeToRoot("/home/me/repo", "/home/me/repo/.env")).toBe(".env");
+  });
+
+  it("refuses one outside it", () => {
+    expect(relativeToRoot("/home/me/repo", "/home/me/repository/x")).toBeNull();
+    expect(relativeToRoot("/home/me/repo", "/etc/passwd")).toBeNull();
+  });
+});
+
+describe("external rules", () => {
+  const entry = (value: string, rule?: SuggestedRule): ExternalEntry => ({
+    file: ".claude/settings.json",
+    key: "permissions.ask",
+    value,
+    rule,
+  });
+
+  it("groups the entries of one rule", () => {
+    const push: SuggestedRule = { kind: "command", prefix: "git push", decision: "ask" };
+    const groups = groupExternal([entry("Bash(git push *)", push), entry("PowerShell(git push)", push), entry("WebFetch")]);
+    expect(groups.map((group) => group.entries.length)).toEqual([2, 1]);
+    expect(groups[1].rule).toBeNull();
+  });
+
+  it("adopting changes a rule the harness already has", () => {
+    const target = spec({
+      paths: [{ pattern: ".env", access: "noEdit" }],
+      commands: [{ prefix: "git push", decision: "deny" }],
+    });
+    addRule(target, { kind: "path", pattern: "./.env", access: "noRead" });
+    addRule(target, { kind: "command", prefix: "git  push", decision: "ask" });
+    addRule(target, { kind: "command", prefix: "rm -rf", decision: "deny" });
+    expect(target.paths).toEqual([{ pattern: ".env", access: "noRead" }]);
+    expect(target.commands).toEqual([
+      { prefix: "git push", decision: "ask" },
+      { prefix: "rm -rf", decision: "deny" },
+    ]);
+  });
+});
+
+describe("rows", () => {
+  const rules = spec({
+    agents: ["claude", "codex"],
+    paths: [
+      { pattern: "dist", access: "noEdit" },
+      { pattern: ".env", access: "noRead" },
+    ],
+    commands: [
+      { prefix: "git push", decision: "ask" },
+      { prefix: "npm test", decision: "allow" },
+      { prefix: "rm -rf", decision: "deny" },
+    ],
+    checks: [{ command: "npm run check" }],
+    instructions: "- Use pnpm.\n\n* Keep commits small.\nWrite tests.",
+  });
+
+  it("split into what to do and what not to, kind by kind", () => {
+    const rows = ruleRows(rules);
+    expect(rows.do.map((row) => [row.kind, row.subject])).toEqual([
+      ["check", "npm run check"],
+      ["allow", "npm test"],
+      ["instruction", "Use pnpm."],
+      ["instruction", "Keep commits small."],
+      ["instruction", "Write tests."],
+    ]);
+    expect(rows.dont.map((row) => [row.kind, row.subject])).toEqual([
+      ["noRead", ".env"],
+      ["noEdit", "dist"],
+      ["deny", "rm -rf"],
+      ["ask", "git push"],
+    ]);
+  });
+
+  it("come and go by their kind and index", () => {
+    const target = copySpec(rules);
+    addRow(target, "instruction", " Prefer small PRs. ");
+    addRow(target, "noEdit", "./build/");
+    expect(target.instructions).toBe("- Use pnpm.\n- Keep commits small.\n- Write tests.\n- Prefer small PRs.");
+    expect(target.paths.at(-1)).toEqual({ pattern: "build", access: "noEdit" });
+    const second = ruleRows(target).do.find((row) => row.subject === "Keep commits small.")!;
+    removeRow(target, second);
+    expect(instructionItems(target.instructions)).toEqual(["Use pnpm.", "Write tests.", "Prefer small PRs."]);
+    const push = ruleRows(target).dont.find((row) => row.subject === "git push")!;
+    removeRow(target, push);
+    expect(target.commands.map((rule) => rule.prefix)).toEqual(["npm test", "rm -rf"]);
+  });
+
+  it("refuse duplicates and blanks", () => {
+    expect(rowProblem(rules, "instruction", "Use pnpm.")).toBe("harness.rows.duplicate");
+    expect(rowProblem(rules, "check", "  ")).toBe("harness.rows.empty");
+    expect(rowProblem(rules, "deny", "git  push")).toBe("harness.commands.duplicate");
+    expect(rowProblem(rules, "noRead", "../x")).toBe("harness.paths.outside");
+    expect(rowProblem(rules, "check", "cargo test")).toBeNull();
+  });
+
+  it("say what each agent does with them", () => {
+    expect(rowSupport(rules, "noRead")).toEqual([
+      { agent: "claude", support: "enforced" },
+      { agent: "codex", support: "enforced" },
+    ]);
+    expect(rowSupport(rules, "instruction").every(({ support }) => support === "text")).toBe(true);
+    expect(rowSupport(rules, "check").map(({ support }) => support)).toEqual(["enforced", "enforced"]);
+  });
+});
+
+describe("proposals", () => {
+  it("go into the draft once, and say when they're in", () => {
+    const target = spec();
+    const check: ProposedRule = { kind: "check", command: " npm test " };
+    const path: ProposedRule = { kind: "path", pattern: "./dist/", access: "noEdit" };
+    expect(hasProposed(target, path)).toBe(false);
+    addProposed(target, check);
+    addProposed(target, check);
+    addProposed(target, path);
+    expect(target.checks).toEqual([{ command: "npm test" }]);
+    expect(target.paths).toEqual([{ pattern: "dist", access: "noEdit" }]);
+    expect(hasProposed(target, path)).toBe(true);
+    expect(hasProposed(target, check)).toBe(true);
+  });
+});
+
+describe("command packs", () => {
+  it("adds what's missing and keeps what's there", () => {
+    const target = spec({ commands: [{ prefix: "git push", decision: "deny" }] });
+    const pack = COMMAND_PACKS.find((item) => item.id === "gitDestructive")!;
+    expect(hasPack(target, pack)).toBe(false);
+    addPack(target, pack);
+    expect(hasPack(target, pack)).toBe(true);
+    expect(target.commands.find((rule) => rule.prefix === "git push")?.decision).toBe("deny");
+    expect(target.commands.length).toBe(pack.rules.length);
+  });
+});
+
+describe("protectOwnFiles", () => {
+  it("counts as a change, and absent is on", () => {
+    expect(sameSpec(spec(), spec({ protectOwnFiles: true }))).toBe(true);
+    expect(sameSpec(spec(), spec({ protectOwnFiles: false }))).toBe(false);
+  });
+});
+
+describe("testCommand", () => {
+  const rules = spec({
+    agents: ["claude", "codex", "gemini", "copilot"],
+    commands: [
+      { prefix: "git push", decision: "ask" },
+      { prefix: "git push --force", decision: "deny" },
+    ],
+  });
+
+  it("takes the strictest rule whose words start the command", () => {
+    expect(matchingRule(rules, "git push --force origin main")?.decision).toBe("deny");
+    expect(matchingRule(rules, "git  push origin")?.decision).toBe("ask");
+    expect(matchingRule(rules, "git pushx")).toBeNull();
+    expect(matchingRule(rules, "git")).toBeNull();
+  });
+
+  it("says what each agent does", () => {
+    const verdicts = Object.fromEntries(testCommand(rules, "git push origin").map(({ agent, verdict }) => [agent, verdict]));
+    expect(verdicts).toEqual({ claude: "ask", codex: "ask", gemini: "ask", copilot: "ask" });
+    expect(testCommand(rules, "ls").every(({ verdict }) => verdict === "none")).toBe(true);
+  });
+});
+
+describe("ruleKinds", () => {
+  it("lists the kinds present, in order", () => {
+    const kinds = ruleKinds(
+      spec({
+        commands: [{ prefix: "git push", decision: "ask" }],
+        paths: [{ pattern: ".env", access: "noRead" }],
+        checks: [{ command: "  " }],
+      }),
+    );
+    expect(kinds).toEqual(["noRead", "ask"]);
+  });
+});
+
+describe("status", () => {
+  it("puts unapplied edits first", () => {
+    expect(harnessStatus(true, true, 2)).toBe("draft");
+    expect(harnessStatus(true, false, 2)).toBe("pending");
+    expect(harnessStatus(true, false, 0)).toBe("synced");
+    expect(harnessStatus(false, false, 0)).toBe("none");
+  });
+
+  it("names a change by what happens to the file", () => {
+    expect(changeKind({ path: "a", before: null, after: "x" })).toBe("create");
+    expect(changeKind({ path: "a", before: "x", after: null })).toBe("delete");
+    expect(changeKind({ path: "a", before: "x", after: "y" })).toBe("update");
+  });
+});

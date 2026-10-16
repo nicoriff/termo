@@ -15,6 +15,8 @@ import type { ToolId } from "$lib/ai-mode/pattern-table";
 const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_tab_mac: null,
   new_tab_other: null,
+  tab_menu_mac: null,
+  tab_menu_other: null,
   new_claude_mac: null,
   new_claude_other: null,
   new_codex_mac: null,
@@ -33,6 +35,8 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   toggle_explorer_other: null,
   toggle_git_mac: null,
   toggle_git_other: null,
+  toggle_harness_mac: null,
+  toggle_harness_other: null,
   toggle_agents_mac: null,
   toggle_agents_other: null,
   toggle_orchestration_mac: null,
@@ -71,6 +75,7 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
 
 const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; other: keyof ShortcutsConfig }> = {
   newTab: { mac: "new_tab_mac", other: "new_tab_other" },
+  tabMenu: { mac: "tab_menu_mac", other: "tab_menu_other" },
   newClaude: { mac: "new_claude_mac", other: "new_claude_other" },
   newCodex: { mac: "new_codex_mac", other: "new_codex_other" },
   newGemini: { mac: "new_gemini_mac", other: "new_gemini_other" },
@@ -80,6 +85,7 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   newWindow: { mac: "new_window_mac", other: "new_window_other" },
   toggleExplorer: { mac: "toggle_explorer_mac", other: "toggle_explorer_other" },
   toggleGit: { mac: "toggle_git_mac", other: "toggle_git_other" },
+  toggleHarness: { mac: "toggle_harness_mac", other: "toggle_harness_other" },
   toggleAgents: { mac: "toggle_agents_mac", other: "toggle_agents_other" },
   toggleOrchestration: { mac: "toggle_orchestration_mac", other: "toggle_orchestration_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },

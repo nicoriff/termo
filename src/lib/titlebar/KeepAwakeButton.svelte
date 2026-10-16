@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { menuKeys } from "$lib/core/menu-keys";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n/i18n.svelte";
   import {
@@ -132,7 +133,7 @@
 {#if menuOpen}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="backdrop" onpointerdown={() => (menuOpen = false)}></div>
-  <div class="menu" style="top:{pos.top}px; left:{pos.left}px" role="menu" aria-label={t("titlebar.keepAwake.label")}>
+  <div class="menu" style="top:{pos.top}px; left:{pos.left}px" role="menu" aria-label={t("titlebar.keepAwake.label")} use:menuKeys={{ close: () => (menuOpen = false) }}>
     <div class="menu-title">{t("titlebar.keepAwake.label")}</div>
     <p class="menu-status">
       {session.active ? (left ? t("titlebar.keepAwake.onFor", { time: left }) : t("titlebar.keepAwake.onForever")) : t("titlebar.keepAwake.off")}
@@ -264,7 +265,9 @@
     cursor: pointer;
   }
 
-  .menu-item:hover {
+  .menu-item:hover,
+  .menu-item:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

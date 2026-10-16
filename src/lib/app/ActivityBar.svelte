@@ -7,6 +7,7 @@
   import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
   import { gitStore } from "$lib/git/git-store.svelte";
+  import { harnessStore } from "$lib/harness/harness-store.svelte";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -19,6 +20,7 @@
   const orchestrationHint = $derived(`${t("agents.sections.orchestration")} (${keys("toggleOrchestration")})`);
   const explorerHint = $derived(`${t("explorer.toggle")} (${keys("toggleExplorer")})`);
   const gitHint = $derived(`${t("git.title")} (${keys("toggleGit")})`);
+  const harnessHint = $derived(`${t("harness.title")} (${keys("toggleHarness")})`);
   /** Files with anything to commit, in the repository of the tab in focus. */
   const changed = $derived(gitStore.counts.total);
 </script>
@@ -68,6 +70,23 @@
       {/if}
     </button>
   {/if}
+  <button
+    class="activity-item"
+    class:active={harnessStore.open}
+    title={harnessHint}
+    aria-label={harnessHint}
+    aria-pressed={harnessStore.open}
+    onclick={() => harnessStore.toggle()}
+  >
+    <!-- Guardrails: the agent moves ahead, between the rules it works under. -->
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.5 20.5L8.5 3.5M20.5 20.5L15.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+      <path d="M12 19V8.5M9.4 11.1L12 8.5l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    {#if harnessStore.status === "pending" || harnessStore.status === "draft"}
+      <span class="activity-badge pending" title={t("harness.badge")}>!</span>
+    {/if}
+  </button>
   {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
     <button
       class="activity-item"
@@ -167,6 +186,11 @@
   .activity-item:focus-visible {
     outline: 1px solid var(--pane-active-border, #3a6df0);
     outline-offset: -3px;
+  }
+
+  .activity-badge.pending {
+    background: #d7a72a;
+    color: #1e1e1e;
   }
 
   .activity-badge.asking {

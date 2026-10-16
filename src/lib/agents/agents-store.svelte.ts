@@ -34,6 +34,7 @@ import {
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
+import { harnessStore } from "$lib/harness/harness-store.svelte";
 
 /** The sidebar's width: a default, and how far it can be dragged. */
 export const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 560 };
@@ -212,6 +213,7 @@ class AgentsStore {
     if (open) {
       explorerStore.open = false;
       gitStore.open = false;
+      harnessStore.setOpen(false);
     }
     this.open = open;
     if (this.timer) clearInterval(this.timer);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { menuKeys } from "$lib/core/menu-keys";
   import { untrack } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -394,7 +395,13 @@
               </button>
               {#if menuOpen}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="menu" role="menu" tabindex="-1" onpointerdown={(event) => event.stopPropagation()}>
+                <div
+                  class="menu"
+                  role="menu"
+                  tabindex="-1"
+                  onpointerdown={(event) => event.stopPropagation()}
+                  use:menuKeys={{ close: () => (menuOpen = false), returnTo: "previous", escape: false }}
+                >
                   <button role="menuitem" disabled={busy || snap.detached || snap.remotes.length === 0} onclick={() => runFromMenu(() => void gitStore.run({ kind: "sync" }))}>
                     {t("git.actions.sync")}
                   </button>
@@ -939,7 +946,9 @@
     cursor: pointer;
   }
 
-  .menu button:hover:not(:disabled) {
+  .menu button:hover:not(:disabled),
+  .menu button:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

@@ -14,6 +14,7 @@ describe("keep awake", () => {
   it("names each duration", () => {
     expect(durationLabel(null).key).toBe("titlebar.keepAwake.forever");
     expect(durationLabel(30)).toEqual({ key: "titlebar.keepAwake.minutes", params: { n: "30" } });
+    expect(durationLabel(60)).toEqual({ key: "titlebar.keepAwake.hour" });
     expect(durationLabel(120)).toEqual({ key: "titlebar.keepAwake.hours", params: { n: "2" } });
   });
 

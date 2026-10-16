@@ -4,6 +4,7 @@ use crate::agents::orchestration::executor::Orchestrator;
 use crate::agents::runner::Runner;
 use crate::git::ops::GitOps;
 use crate::git::review::Reviews;
+use crate::harness::assist::Asks;
 use crate::keep_awake::KeepAwake;
 use crate::marketplace::catalog::CatalogCache;
 use crate::pty::{MemorySampler, PtyManager};
@@ -20,4 +21,7 @@ pub struct AppState {
     pub git: Arc<GitOps>,
     /// The code reviews under way, by repository (see git/review.rs).
     pub git_reviews: Arc<Reviews>,
+    /// The Harness panel's questions to an agent under way, by repository
+    /// (see harness/assist.rs).
+    pub harness_asks: Arc<Asks>,
 }

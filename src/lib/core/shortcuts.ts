@@ -21,6 +21,7 @@ import type { MessageKey } from "../i18n/translate";
 export type ShortcutAction =
   | "newWindow"
   | "newTab"
+  | "tabMenu"
   | "newClaude"
   | "newCodex"
   | "newGemini"
@@ -29,6 +30,7 @@ export type ShortcutAction =
   | "favoriteTab"
   | "toggleExplorer"
   | "toggleGit"
+  | "toggleHarness"
   | "toggleAgents"
   | "toggleOrchestration"
   | "cycleTab"
@@ -50,6 +52,7 @@ export type ShortcutAction =
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "newWindow",
   "newTab",
+  "tabMenu",
   "newClaude",
   "newCodex",
   "newGemini",
@@ -58,6 +61,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "favoriteTab",
   "toggleExplorer",
   "toggleGit",
+  "toggleHarness",
   "toggleAgents",
   "toggleOrchestration",
   "cycleTab",
@@ -82,6 +86,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   newWindow: "shortcuts.labels.newWindow",
   newTab: "shortcuts.labels.newTab",
+  tabMenu: "shortcuts.labels.tabMenu",
   newClaude: "shortcuts.labels.newClaude",
   newCodex: "shortcuts.labels.newCodex",
   newGemini: "shortcuts.labels.newGemini",
@@ -90,6 +95,7 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   favoriteTab: "shortcuts.labels.favoriteTab",
   toggleExplorer: "shortcuts.labels.toggleExplorer",
   toggleGit: "shortcuts.labels.toggleGit",
+  toggleHarness: "shortcuts.labels.toggleHarness",
   toggleAgents: "shortcuts.labels.toggleAgents",
   toggleOrchestration: "shortcuts.labels.toggleOrchestration",
   cycleTab: "shortcuts.labels.cycleTab",
@@ -259,6 +265,9 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   // Shift elsewhere: plain Ctrl+N belongs to the shell (next history line).
   newWindow: { mac: "meta+n", other: "ctrl+shift+n" },
   newTab: { mac: "meta+t", other: "ctrl+t" },
+  // T with Shift: the menu of everything a new tab can be (Ctrl+T opens one
+  // like the active tab right away).
+  tabMenu: { mac: "meta+shift+t", other: "ctrl+shift+t" },
   // Not Ctrl+Alt: on Spanish and other layouts that's AltGr, which types @,
   // # and friends.
   newClaude: { mac: "meta+shift+l", other: "ctrl+shift+l" },
@@ -274,6 +283,8 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   toggleExplorer: { mac: "meta+shift+b", other: "ctrl+shift+b" },
   // S, from source control: G is the agents panel's.
   toggleGit: { mac: "meta+shift+s", other: "ctrl+shift+s" },
+  // W, the first free letter: H is the quick question's, R orchestration's.
+  toggleHarness: { mac: "meta+shift+w", other: "ctrl+shift+w" },
   toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },
   // R, from oRchestration: O is Copilot's.
   toggleOrchestration: { mac: "meta+shift+r", other: "ctrl+shift+r" },

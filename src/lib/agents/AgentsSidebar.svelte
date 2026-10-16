@@ -1,5 +1,6 @@
 <script lang="ts">
   import { slide } from "svelte/transition";
+  import { menuKeys } from "$lib/core/menu-keys";
   import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
@@ -601,7 +602,7 @@
 
           {#if menuFor === agent.id}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="agent-menu" role="menu" tabindex="-1" onpointerdown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+            <div class="agent-menu" role="menu" tabindex="-1" onpointerdown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()} use:menuKeys={{ close: () => (menuFor = null), returnTo: "previous" }}>
               <button role="menuitem" onclick={() => ((menuFor = null), uiState.openAgentWizard(agent, false))}>
                 {t("agents.actions.edit")}
               </button>
@@ -709,7 +710,7 @@
             {#if projectMenuFor === project.id}
               {@const allPaused = members.length > 0 && members.every((member) => !member.enabled)}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="agent-menu" role="menu" tabindex="-1" onpointerdown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+              <div class="agent-menu" role="menu" tabindex="-1" onpointerdown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()} use:menuKeys={{ close: () => (projectMenuFor = null), returnTo: "previous" }}>
                 {#if deletingProject === project.id}
                   <p class="menu-note">{t("agents.projects.deleteAsk", { n: String(members.length) })}</p>
                   <button role="menuitem" onclick={() => void removeProject(project.id, false)}>{t("agents.projects.deleteKeep")}</button>
@@ -1232,7 +1233,9 @@
     cursor: pointer;
   }
 
-  .agent-menu button:hover {
+  .agent-menu button:hover,
+  .agent-menu button:focus-visible {
+    outline: none;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 

@@ -27,6 +27,8 @@
   import { TOOL_IDS, type ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
+  import { menuKeys } from "$lib/core/menu-keys";
+  import { untrack } from "svelte";
 
   // No CSS custom properties exist for the ANSI palette (theme-loader.ts
   // only exposes chrome colors like --titlebar-bg) — read straight from the
@@ -92,6 +94,16 @@
     // Already loaded at startup; this only picks up changes, in the background.
     if (shellPickerOpen) newTabOptions.refresh();
   }
+
+  // The shortcut for this menu (see uiState.openTabMenu): the focused tile's
+  // opens. Only a change counts, not the value it had when this tile mounted.
+  let seenTabMenuNonce = uiState.tabMenuNonce;
+  $effect(() => {
+    const nonce = uiState.tabMenuNonce;
+    if (nonce === seenTabMenuNonce) return;
+    seenTabMenuNonce = nonce;
+    if (untrack(() => workspaceStore.focusedTileId) === tile.id) untrack(toggleShellPicker);
+  });
 
   const shells = $derived(newTabOptions.shells);
   const agentClis = $derived(newTabOptions.agentClis);
@@ -562,7 +574,7 @@
       <button
         class="tile-tab-more"
         aria-label={t("tabs.moreOptions")}
-        title={t("tabs.moreOptions")}
+        title={`${t("tabs.moreOptions")} (${formatKeybindingLabel(appConfigStore.getEffectiveShortcut("tabMenu"), isMac)})`}
         aria-haspopup="menu"
         aria-expanded={shellPickerOpen}
         onclick={toggleShellPicker}
@@ -581,18 +593,32 @@
       <div
         class="shell-picker-panel"
         style="top:{shellPickerPos.top}px; left:{shellPickerPos.left}px"
-        role="listbox"
+        role="menu"
+        use:menuKeys={{ close: closeShellPicker }}
         in:fly={{ y: -4, duration: 120, easing: cubicOut }}
       >
         {#each shells as shell (shell.id)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="shell-picker-row" onmouseenter={() => (submenu = null)}>
-            <button class="shell-picker-item" onclick={(e) => onShellClick(e, shell)}>
+            <button
+              class="shell-picker-item"
+              role="menuitem"
+              onclick={(e) => onShellClick(e, shell)}
+              onkeydown={(e) => {
+                // Shift+Enter: the keyboard's way to the folder icon.
+                if (e.key === "Enter" && e.shiftKey) {
+                  e.preventDefault();
+                  pickShellElsewhere(shell);
+                }
+              }}
+            >
               <ConsoleIcon kind={shell.id} />
               <span class="shell-picker-label">{shell.display_name}</span>
             </button>
             <button
               class="shell-picker-elsewhere"
+              tabindex="-1"
+              data-menu-skip
               title={t("tabs.openElsewhere")}
               aria-label={t("tabs.openElsewhereFor", { shell: shell.display_name })}
               onclick={() => pickShellElsewhere(shell)}
@@ -615,6 +641,7 @@
           {@const installed = agentClis?.[tool] ?? true}
           <button
             class="shell-picker-item"
+            role="menuitem"
             disabled={!installed}
             onmouseenter={() => (submenu = null)}
             onclick={() => pickAgent(tool)}
@@ -633,6 +660,7 @@
           <button
             class="shell-picker-item shell-picker-submenu-row"
             class:open={submenu === "favorites"}
+            role="menuitem"
             bind:this={favoritesRowEl}
             aria-haspopup="menu"
             aria-expanded={submenu === "favorites"}
@@ -649,6 +677,7 @@
           <button
             class="shell-picker-item shell-picker-submenu-row"
             class:open={recentOpen}
+            role="menuitem"
             bind:this={recentRowEl}
             aria-haspopup="menu"
             aria-expanded={recentOpen}
@@ -667,6 +696,7 @@
           class="recent-submenu"
           style="top:{recentPos.top}px; left:{recentPos.left}px"
           role="menu"
+          use:menuKeys={{ close: closeShellPicker, back: () => (submenu = null) }}
           in:fly={{ x: -4, duration: 120, easing: cubicOut }}
         >
           {#each favoriteSessions as favorite (favorite.agentSessionId)}
@@ -687,6 +717,7 @@
           class="recent-submenu"
           style="top:{recentPos.top}px; left:{recentPos.left}px"
           role="menu"
+          use:menuKeys={{ close: closeShellPicker, back: () => (submenu = null) }}
           in:fly={{ x: -4, duration: 120, easing: cubicOut }}
         >
           {#each recentSessions as session (session.agentSessionId)}
@@ -716,7 +747,12 @@
           tabMenu = null;
         }}
       ></div>
-      <div class="tab-menu" style="top:{tabMenu.y}px; left:{tabMenu.x}px" role="menu">
+      <div
+        class="tab-menu"
+        style="top:{tabMenu.y}px; left:{tabMenu.x}px"
+        role="menu"
+        use:menuKeys={{ close: () => (tabMenu = null) }}
+      >
         {#if tabMenuFavorite}
           {@const saved = favoritesStore.byId.has(tabMenuFavorite.agentSessionId)}
           <button class="shell-picker-item" role="menuitem" onclick={favoriteFromTabMenu}>
@@ -1128,7 +1164,8 @@
     text-overflow: ellipsis;
   }
 
-  .shell-picker-item:hover:not(:disabled) {
+  .shell-picker-item:hover:not(:disabled),
+  .shell-picker-item:focus-visible {
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 
@@ -1177,6 +1214,10 @@
   .shell-picker-row:hover .shell-picker-elsewhere,
   .shell-picker-elsewhere:focus-visible {
     opacity: 0.75;
+  }
+
+  .shell-picker-item:focus-visible {
+    outline: none;
   }
 
   .shell-picker-elsewhere:hover {

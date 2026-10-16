@@ -31,6 +31,7 @@ export const DURATIONS: (number | null)[] = [null, 30, 60, 120, 240, 480];
 export function durationLabel(minutes: number | null): { key: MessageKey; params?: Record<string, string> } {
   if (minutes === null) return { key: "titlebar.keepAwake.forever" };
   if (minutes < 60) return { key: "titlebar.keepAwake.minutes", params: { n: String(minutes) } };
+  if (minutes === 60) return { key: "titlebar.keepAwake.hour" };
   return { key: "titlebar.keepAwake.hours", params: { n: String(minutes / 60) } };
 }
 
