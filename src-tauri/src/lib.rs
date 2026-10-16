@@ -147,6 +147,7 @@ pub fn run() {
             commands::remote_commands::remote_disconnect_all,
             commands::remote_commands::remote_machines,
             commands::remote_commands::remote_consoles,
+            commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
             commands::pty_commands::windows_build,

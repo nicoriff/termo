@@ -166,7 +166,7 @@
   );
 
   /** Which of the picker's flyouts is open. */
-  type Submenu = "recent" | "favorites" | "background";
+  type Submenu = "recent" | "favorites" | "background" | "zellij";
   let submenu = $state<Submenu | null>(null);
   const recentOpen = $derived(submenu === "recent");
   let recentPos = $state({ top: 0, left: 0 });
@@ -175,6 +175,16 @@
   let recentRowEl = $state<HTMLButtonElement | undefined>(undefined);
   let favoritesRowEl = $state<HTMLButtonElement | undefined>(undefined);
   let backgroundRowEl = $state<HTMLButtonElement | undefined>(undefined);
+  let zellijRowEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  /** A Zellij session in a new tab: an existing one (`name`), or a new one. */
+  function pickZellij(name?: string) {
+    const zellij = newTabOptions.zellij;
+    if (!zellij) return;
+    closeShellPicker();
+    const title = name ? `${t("tabs.zellij")} · ${name}` : t("tabs.zellij");
+    workspaceStore.addTab(tile.id, zellij.path, name ? ["attach", name] : [], title);
+  }
 
   /** Consoles still running that no window shows (see src-tauri/src/mux/). */
   const backgroundConsoles = $derived(newTabOptions.background);
@@ -193,7 +203,8 @@
   /** Flies out beside the picker, flipping to its left when the window edge is
    * too close — same clamping idea as the picker itself. */
   function openSubmenu(kind: Submenu) {
-    const row = kind === "recent" ? recentRowEl : kind === "favorites" ? favoritesRowEl : backgroundRowEl;
+    const rows = { recent: recentRowEl, favorites: favoritesRowEl, background: backgroundRowEl, zellij: zellijRowEl };
+    const row = rows[kind];
     if (!row) return;
     const box = row.getBoundingClientRect();
     const toTheRight = box.right + 4;
@@ -670,8 +681,25 @@
             {/if}
           </button>
         {/each}
-        {#if recentSessions.length > 0 || favoriteSessions.length > 0 || backgroundConsoles.length > 0 || newTabOptions.tailscale}
+        {#if recentSessions.length > 0 || favoriteSessions.length > 0 || backgroundConsoles.length > 0 || newTabOptions.tailscale || newTabOptions.zellij}
           <div class="shell-picker-divider"></div>
+        {/if}
+        {#if newTabOptions.zellij}
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={submenu === "zellij"}
+            role="menuitem"
+            bind:this={zellijRowEl}
+            aria-haspopup="menu"
+            aria-expanded={submenu === "zellij"}
+            onmouseenter={() => openSubmenu("zellij")}
+            onclick={() => toggleSubmenu("zellij")}
+          >
+            <span>{t("tabs.zellij")}</span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
         {/if}
         {#if newTabOptions.tailscale}
           <button
@@ -739,6 +767,27 @@
           </button>
         {/if}
       </div>
+      {#if submenu === "zellij" && newTabOptions.zellij}
+        <div
+          class="recent-submenu"
+          style="top:{recentPos.top}px; left:{recentPos.left}px"
+          role="menu"
+          use:menuKeys={{ close: closeShellPicker, back: () => (submenu = null) }}
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
+          <button class="shell-picker-item" role="menuitem" onclick={() => pickZellij()}>
+            <span class="shell-picker-label">{t("tabs.zellijNew")}</span>
+          </button>
+          {#each newTabOptions.zellij.sessions as session (session.name)}
+            <button class="shell-picker-item" role="menuitem" onclick={() => pickZellij(session.name)}>
+              <span class="shell-picker-label">{session.name}</span>
+              {#if session.exited}
+                <span class="shell-picker-note">{t("tabs.zellijExited")}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if submenu === "background"}
         <div
           class="recent-submenu"

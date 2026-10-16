@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { keptConsoles, listShells, type KeptConsole } from "$lib/core/pty-client";
 import { remoteOverview, tailscaleRunning } from "$lib/core/remote-client";
 import { marketplaceStatus } from "$lib/core/marketplace-client";
@@ -21,6 +22,8 @@ class NewTabOptions {
   background = $state<KeptConsole[]>([]);
   /** Whether Tailscale is up here, for "Another computer…". */
   tailscale = $state(false);
+  /** Zellij, when it's installed: where, and its sessions. */
+  zellij = $state<{ path: string; sessions: { name: string; exited: boolean }[] } | null>(null);
 
   refresh(): void {
     listShells()
@@ -29,6 +32,9 @@ class NewTabOptions {
     void this.refreshBackground();
     remoteOverview()
       .then((overview) => (this.tailscale = tailscaleRunning(overview)))
+      .catch(() => {});
+    invoke<{ path: string | null; sessions: { name: string; exited: boolean }[] }>("zellij_sessions")
+      .then((found) => (this.zellij = found.path ? { path: found.path, sessions: found.sessions } : null))
       .catch(() => {});
     marketplaceStatus()
       .then(
