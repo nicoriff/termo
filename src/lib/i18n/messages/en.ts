@@ -2442,6 +2442,10 @@ export const en: Messages = {
       searching: "Looking for available consoles...",
       output: "Console output",
       highlight: "Highlight IPs, URLs, paths, errors...",
+      sessions: "Sessions",
+      keepRunning: "Keep consoles running when Termo closes",
+      keepRunningHint:
+        "New consoles keep running, along with whatever runs in them, when you close the window or Termo, or update it, and reconnect when you open it again. They don't survive restarting the computer.",
     },
     platform: {
       onlyEditableOn: "This section can only be edited on {os}.",

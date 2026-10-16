@@ -8,6 +8,7 @@ pub mod bin_search;
 mod codex_usage;
 mod grok_usage;
 pub mod console_shims;
+mod consoles;
 pub mod copilot_status;
 pub mod cwd_report;
 mod manager;
@@ -22,8 +23,10 @@ pub mod status_line;
 pub mod zsh_init;
 
 pub use bash_colors::bash_color_env;
+pub use consoles::Consoles;
 pub use manager::PtyManager;
 pub use memory::MemorySampler;
+pub(crate) use session::contains_cursor_report;
 pub use session::PtySession;
 pub use shell_detect::{default_shell, list_shells, ShellInfo};
 
@@ -31,7 +34,7 @@ pub use shell_detect::{default_shell, list_shells, ShellInfo};
 /// from its config (shell integrations, the agents' bridge, hooks) before
 /// the console starts, so whoever starts it — this process or the sessions
 /// daemon (see mux/) — needs nothing else.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SpawnSpec {
     pub path: String,
     pub args: Vec<String>,

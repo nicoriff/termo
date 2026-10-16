@@ -54,6 +54,19 @@
   </label>
 </section>
 
+<section>
+  <h3>{t("preferences.console.sessions")}</h3>
+  <label class="toggle-row">
+    <span>{t("preferences.console.keepRunning")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.persistentSessions}
+      onchange={(e) => appConfigStore.setPersistentSessions(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.console.keepRunningHint")}</p>
+</section>
+
 <style>
   section {
     margin-bottom: 20px;

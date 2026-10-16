@@ -2443,6 +2443,10 @@ export const es = {
       searching: "Buscando consolas disponibles...",
       output: "Salida de la consola",
       highlight: "Resaltar IPs, URLs, rutas, errores...",
+      sessions: "Sesiones",
+      keepRunning: "Mantener las consolas abiertas al cerrar Termo",
+      keepRunningHint:
+        "Las consolas nuevas siguen corriendo, con lo que tengan adentro, cuando cerrás la ventana o Termo, o lo actualizás, y se reconectan al volver a abrirlo. No sobreviven a un reinicio de la computadora.",
     },
     platform: {
       onlyEditableOn: "Solo se puede editar esta sección en {os}.",

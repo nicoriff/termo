@@ -13,7 +13,7 @@ pub struct PtyManager {
 
 impl PtyManager {
     pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(spec, sink)?;
+        let session = PtySession::spawn(Uuid::new_v4(), spec, sink)?;
         let id = session.id;
         self.sessions.insert(id, session);
         self.owners.insert(id, owner.to_string());

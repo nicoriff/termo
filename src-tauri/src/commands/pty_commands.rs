@@ -3,6 +3,7 @@ use tauri::Manager;
 use uuid::Uuid;
 
 use crate::config::store;
+use crate::mux::protocol::SessionInfo;
 use crate::pty::agent_launch::{self, AgentLaunch};
 use crate::pty::{
     agent_hooks, bash_color_env, console_shims, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
@@ -74,8 +75,9 @@ fn spawn_console(
     on_event: Channel<PtyEvent>,
 ) -> Result<String, String> {
     let state = app.state::<AppState>();
+    let persistent = store::load(app).persistent_sessions;
     let (spec, token) = prepare_console(app, shell_path, shell_args, cwd, cols, rows, agent)?;
-    match state.pty.spawn(owner, &spec, channel_sink(on_event)) {
+    match state.pty.spawn(owner, &spec, channel_sink(on_event), persistent) {
         Ok(id) => {
             // The user's agents, reachable from this console (see
             // agents/console_bridge.rs).
@@ -208,6 +210,45 @@ fn prepare_console(
     cwd_report::apply(&path, &mut args, &mut env);
     drop(preparing);
     Ok((spec(path, args, env, prompt_redraw), console_token))
+}
+
+/// Shows, in this window, a console the sessions daemon kept running: what
+/// it printed so far, then everything new. Off the main thread: the first
+/// request may have to wait for the daemon.
+#[tauri::command]
+pub async fn pty_attach(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, String> {
+    let id = parse_id(&id)?;
+    let owner = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().pty.attach(&owner, id, channel_sink(on_event)).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// The consoles the sessions daemon runs, shown in some window or not.
+/// None when it isn't running: asking doesn't start it.
+#[tauri::command]
+pub async fn pty_background(app: tauri::AppHandle) -> Result<Vec<SessionInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.background())
+        .await
+        .map_err(|err| err.to_string())
+}
+
+/// Ends a console the sessions daemon runs, whether or not a tab shows it.
+#[tauri::command]
+pub async fn pty_kill_background(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let id = parse_id(&id)?;
+    agent_hooks::forget_session(&app, id);
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.kill_kept(id))
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
 }
 
 /// Asks the console's shell to redraw its prompt at the size it now has,

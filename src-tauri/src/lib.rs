@@ -13,6 +13,7 @@ mod keep_awake;
 mod layouts;
 mod marketplace;
 mod migration;
+mod mux;
 mod pty;
 mod state;
 mod terminal_windows;
@@ -42,6 +43,13 @@ pub fn run_cli_mode_from_args() -> bool {
         }
         [flag, ..] if flag == pty::status_line::STATUS_LINE_FLAG => {
             pty::status_line::run_status_line_cli();
+            true
+        }
+        // The sessions daemon (see mux/): before anything of the app's own
+        // startup — the single-instance check would hand it to the running
+        // Termo, and nothing else of it (hooks, watchers) is the daemon's.
+        [flag, rest @ ..] if flag == mux::MUX_FLAG => {
+            mux::server::run(rest.first().map_or("", String::as_str), rest.get(1).map(String::as_str));
             true
         }
         _ => false,
@@ -122,6 +130,9 @@ pub fn run() {
             commands::pty_commands::pty_resize,
             commands::pty_commands::pty_prompt_redraw,
             commands::pty_commands::pty_kill,
+            commands::pty_commands::pty_attach,
+            commands::pty_commands::pty_background,
+            commands::pty_commands::pty_kill_background,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
             commands::pty_commands::windows_build,

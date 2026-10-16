@@ -143,6 +143,8 @@ class AppConfigStore {
   ohMyPoshEnabled = $state(false);
   ohMyPoshTheme = $state("jandedobbeleer");
   zshMenuComplete = $state(false);
+  /** New consoles run in the sessions daemon and outlive the app (see mux/). */
+  persistentSessions = $state(false);
   backgroundBlur = $state(false);
   aiModeEnabled = $state(true);
   aiNotifyAwaiting = $state(true);
@@ -274,6 +276,7 @@ class AppConfigStore {
     this.ohMyPoshEnabled = config.oh_my_posh_enabled;
     this.ohMyPoshTheme = config.oh_my_posh_theme;
     this.zshMenuComplete = config.zsh_menu_complete;
+    this.persistentSessions = config.persistent_sessions ?? false;
     this.backgroundBlur = config.background_blur;
     this.aiModeEnabled = config.ai_mode_enabled;
     this.aiNotifyAwaiting = config.ai_notify_awaiting;
@@ -415,6 +418,11 @@ class AppConfigStore {
 
   setZshMenuComplete(enabled: boolean): void {
     this.zshMenuComplete = enabled;
+    void this.persist();
+  }
+
+  setPersistentSessions(enabled: boolean): void {
+    this.persistentSessions = enabled;
     void this.persist();
   }
 
@@ -645,6 +653,7 @@ class AppConfigStore {
       oh_my_posh_enabled: this.ohMyPoshEnabled,
       oh_my_posh_theme: this.ohMyPoshTheme,
       zsh_menu_complete: this.zshMenuComplete,
+      persistent_sessions: this.persistentSessions,
       background_blur: this.backgroundBlur,
       ai_mode_enabled: this.aiModeEnabled,
       ai_notify_awaiting: this.aiNotifyAwaiting,

@@ -30,7 +30,9 @@ pub struct PtySession {
 }
 
 impl PtySession {
-    pub fn spawn(spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Self> {
+    /// `id` is the console's for good: its TERMO_SESSION_ID, and how the
+    /// app and the agents' hooks name it.
+    pub fn spawn(id: Uuid, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Self> {
         let (cols, rows) = (spec.cols, spec.rows);
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
@@ -84,7 +86,6 @@ impl PtySession {
         }
         // Lets agent hooks running inside this console report back to its
         // tab (see pty/agent_hooks.rs).
-        let id = Uuid::new_v4();
         cmd.env("TERMO_SESSION_ID", id.to_string());
 
         // Also strip anything identifying the process that launched Termo
@@ -348,7 +349,7 @@ impl PtySession {
 
 /// Whether `data` carries a cursor position report (`ESC [ row ; col R`), the
 /// terminal's answer to ESC[6n.
-fn contains_cursor_report(data: &[u8]) -> bool {
+pub(crate) fn contains_cursor_report(data: &[u8]) -> bool {
     data.windows(2).enumerate().any(|(start, pair)| {
         if pair != b"\x1b[" {
             return false;
@@ -413,7 +414,7 @@ pub(crate) mod tests {
         let (tx, rx) = mpsc::channel::<ConsoleEvent>();
         let tx = Mutex::new(tx);
         let sink: EventSink = Arc::new(move |event| tx.lock().unwrap().send(event).is_ok());
-        let session = PtySession::spawn(spec, sink).unwrap();
+        let session = PtySession::spawn(Uuid::new_v4(), spec, sink).unwrap();
 
         let mut output = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(10);

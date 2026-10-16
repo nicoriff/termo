@@ -96,6 +96,7 @@ export interface AppConfig {
   oh_my_posh_enabled: boolean;
   oh_my_posh_theme: string;
   zsh_menu_complete: boolean;
+  persistent_sessions: boolean;
   ai_mode_enabled: boolean;
   ai_notify_awaiting: boolean;
   ai_notify_error: boolean;
