@@ -56,7 +56,13 @@
   }
 </script>
 
-<svelte:window onpointerdown={onWindowPointer} onscroll={() => open && place()} onresize={() => open && place()} />
+<!-- Pinned, Escape closes it wherever the focus went since. -->
+<svelte:window
+  onpointerdown={onWindowPointer}
+  onkeydown={(event) => pinned && event.key === "Escape" && (pinned = false)}
+  onscroll={() => open && place()}
+  onresize={() => open && place()}
+/>
 
 <button
   bind:this={button}

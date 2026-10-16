@@ -1,7 +1,7 @@
 <script lang="ts">
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { t } from "$lib/i18n/i18n.svelte";
+  import { listOf, t } from "$lib/i18n/i18n.svelte";
   import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { harnessDetectChecks, type HarnessFileChange, type ProposedRule } from "$lib/core/harness-client";
@@ -484,7 +484,7 @@
               {/each}
               {#if trusting.length > 0}
                 <p class="notice">
-                  {t("harness.support.trust", { agents: trusting.map((agent) => TOOL_DISPLAY_NAMES[agent]).join(", ") })}
+                  {t("harness.support.trust", { agents: listOf(trusting.map((agent) => TOOL_DISPLAY_NAMES[agent])) })}
                   {#if trusting.includes("codex")}
                     {t("harness.support.codexHooks")}
                   {/if}

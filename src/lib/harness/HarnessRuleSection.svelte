@@ -69,8 +69,8 @@
     instruction: "harness.rows.placeholders.instruction",
     noRead: "harness.rows.placeholders.path",
     noEdit: "harness.rows.placeholders.path",
-    deny: "harness.rows.placeholders.command",
-    ask: "harness.rows.placeholders.command",
+    deny: "harness.rows.placeholders.deny",
+    ask: "harness.rows.placeholders.ask",
   } as const;
   const SUPPORT_LABEL = {
     enforced: "harness.support.enforced",

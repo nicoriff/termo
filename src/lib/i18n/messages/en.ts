@@ -12,6 +12,7 @@ export const en: Messages = {
       duration: "For",
       forever: "Until I turn it off",
       minutes: "{n} minutes",
+      hour: "1 hour",
       hours: "{n} hours",
       display: "Keep the screen on too",
       turnOff: "Turn off",
@@ -909,7 +910,8 @@ export const en: Messages = {
         allow: "npm test",
         instruction: "Use pnpm, not npm.",
         path: "src/generated/** or .env",
-        command: "git push --force",
+        deny: "git push --force",
+        ask: "git push",
       },
     },
     assist: {

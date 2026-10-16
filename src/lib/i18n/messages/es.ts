@@ -10,6 +10,7 @@ export const es = {
       duration: "Durante",
       forever: "Hasta que lo desactive",
       minutes: "{n} minutos",
+      hour: "1 hora",
       hours: "{n} horas",
       display: "Mantener también la pantalla encendida",
       turnOff: "Desactivar",
@@ -908,7 +909,8 @@ export const es = {
         allow: "npm test",
         instruction: "Usá pnpm, no npm.",
         path: "src/generated/** o .env",
-        command: "git push --force",
+        deny: "git push --force",
+        ask: "git push",
       },
     },
     assist: {

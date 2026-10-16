@@ -34,6 +34,11 @@ export function t(key: MessageKey, params?: MessageParams): string {
   return params ? interpolate(text, params) : text;
 }
 
+/** Names as a list in the current locale: "A, B y C", "A, B and C". */
+export function listOf(items: string[]): string {
+  return new Intl.ListFormat(i18n.locale, { style: "long", type: "conjunction" }).format(items);
+}
+
 /** Keeps `<html lang>` and the backend's language (Rust-side messages and the
  * Preferences window title) in sync with the resolved locale. Each window
  * calls this once; returns a teardown function. */

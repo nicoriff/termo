@@ -11,10 +11,12 @@
  *   `menuKeys` with `back`, focuses its first item, and ← or Escape returns.
  * - Escape or Tab closes; then focus goes back to the console.
  *
- * Items are the container's enabled `[role=menuitem]` and buttons, skipping
- * any marked `data-menu-skip` (a row's secondary button, reachable by Shift
- * instead).
+ * Items are the container's enabled `[role=menuitem]`, buttons and
+ * checkboxes (Enter or Space ticks one), skipping any marked
+ * `data-menu-skip` (a row's secondary button, reachable by Shift instead).
  */
+
+const ITEMS = '[role="menuitem"], button, input[type="checkbox"]';
 
 import { uiState } from "./ui-state.svelte";
 
@@ -58,7 +60,7 @@ export function indexByLetter(labels: string[], current: number, letter: string)
 }
 
 function items(node: HTMLElement): HTMLElement[] {
-  return [...node.querySelectorAll<HTMLElement>('[role="menuitem"], button')].filter(
+  return [...node.querySelectorAll<HTMLElement>(ITEMS)].filter(
     (item) =>
       !item.hasAttribute("data-menu-skip") &&
       !(item as HTMLButtonElement).disabled &&
@@ -84,7 +86,9 @@ export function menuKeys(node: HTMLElement, initial: MenuKeysOptions) {
   function onKeydown(event: KeyboardEvent) {
     if (event.ctrlKey || event.altKey || event.metaKey) return;
     // In a text box inside the menu (a filter), only ↑/↓ leave it.
-    const typing = (event.target as HTMLElement).matches("input, textarea, [contenteditable]");
+    const typing = (event.target as HTMLElement).matches(
+      'input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable]',
+    );
     if (typing && event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const list = items(node);
     const current = list.indexOf(document.activeElement as HTMLElement);
@@ -93,6 +97,8 @@ export function menuKeys(node: HTMLElement, initial: MenuKeysOptions) {
       focusItem(list[step]);
     } else if (event.key === "ArrowRight" && list[current]?.getAttribute("aria-haspopup")) {
       if (list[current].getAttribute("aria-expanded") !== "true") list[current].click();
+    } else if (event.key === "Enter" && (list[current] as HTMLInputElement | undefined)?.type === "checkbox") {
+      list[current].click();
     } else if (event.key === "ArrowLeft" && options.back) {
       options.back();
     } else if (event.key === "Escape" && options.escape !== false) {
@@ -118,7 +124,7 @@ export function menuKeys(node: HTMLElement, initial: MenuKeysOptions) {
   // The pointer and the keyboard share one place in the list: moving the
   // pointer over an item makes the arrows go on from there.
   function onPointerOver(event: PointerEvent) {
-    const item = (event.target as HTMLElement).closest<HTMLElement>('[role="menuitem"], button');
+    const item = (event.target as HTMLElement).closest<HTMLElement>(ITEMS);
     if (item && node.contains(item) && items(node).includes(item)) item.focus({ preventScroll: true });
   }
 
