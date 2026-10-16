@@ -5,9 +5,14 @@
 //! sh, PowerShell (Claude Code falls back to it on Windows when it can't
 //! find Git Bash) — so the hook itself only calls git, which is on every
 //! PATH, and git runs the checks' script in its own sh through a one-off
-//! alias. A shell alias runs at the repository's root and passes its exit
-//! code on. The command is single-quoted, which bash and PowerShell read
-//! alike.
+//! alias, which runs at the repository's root. The command is
+//! single-quoted, which bash and PowerShell read alike.
+//!
+//! The gate answers with a decision on stdout, `{"decision":"block",
+//! "reason":…}`, and exit code 0: every agent here reads it, and no shell in
+//! between can change it. Exit code 2, the other way they all know, doesn't
+//! survive Windows PowerShell, which Claude Code (without Git Bash), Codex
+//! and Grok run hooks in: it turns it into 1, a failed hook they let through.
 //!
 //! The script and the reason are read by the agents and live in the
 //! repository, so they're in English whatever language Termo is in.
@@ -24,24 +29,9 @@ pub fn timeout_sec(checks: &[Check]) -> u32 {
     checks.iter().map(|check| check.timeout_sec.unwrap_or(DEFAULT_TIMEOUT_SEC)).sum()
 }
 
-/// How the gate tells the agent it isn't done.
-#[derive(Clone, Copy)]
-pub enum Mode {
-    /// Exit code 2, with what the checks printed on stderr for the model
-    /// (Claude Code, Codex, Gemini CLI).
-    ExitCode,
-    /// `{"decision":"block","reason":…}` on stdout, with the end of what the
-    /// checks printed (Copilot CLI's agentStop; Claude Code's and Grok's Stop).
-    Json,
-}
-
-/// The hook's command.
-pub fn command(mode: Mode) -> String {
-    let mode = match mode {
-        Mode::ExitCode => "exit2",
-        Mode::Json => "json",
-    };
-    format!("git -c 'alias.termo-checks=!sh {SCRIPT_FILE}' termo-checks {mode}")
+/// The hook's command, the same for every agent.
+pub fn command() -> String {
+    format!("git -c 'alias.termo-checks=!sh {SCRIPT_FILE}' termo-checks")
 }
 
 /// Why the agent was sent back, when only a reason can be given.
@@ -80,25 +70,19 @@ pub fn script(checks: &[Check]) -> Option<String> {
 #
 # The agents' \"done\" hooks run this through git (git -c 'alias...'), so it
 # runs in git's own sh at the repository's root, whatever shell the agent
-# uses. \"exit2\": fail with exit code 2 and the output on stderr. \"json\":
-# print a block decision on stdout and exit 0, which no shell in between can
-# change (PowerShell turns a command's exit code 2 into 1).
+# uses. A failure is a block decision on stdout, with exit code 0, which no
+# shell in between can change (PowerShell turns exit code 2 into 1).
 
 # A turn that changed nothing (it only answered a question) isn't checked.
 if git diff --quiet HEAD 2>/dev/null && [ -z \"$(git ls-files --others --exclude-standard)\" ]; then
   exit 0
 fi
 
-if [ \"$1\" = json ]; then
-  output=$({{ {chain}; }} 2>&1) && exit 0
-  # Its last lines, as a JSON string's inside: no control characters.
-  printf '%s' {block}
-  printf '%s\\n' \"$output\" | tail -n 60 | awk {escape}
-  printf '\"}}\\n'
-  exit 0
-fi
-
-{{ {chain}; }} 1>&2 || exit 2
+output=$({{ {chain}; }} 2>&1) && exit 0
+# Its last lines, as a JSON string's inside: no control characters.
+printf '%s' {block}
+printf '%s\\n' \"$output\" | tail -n 60 | awk {escape}
+printf '\"}}\\n'
 ",
         block = single_quoted(&block),
         escape = ESCAPE,
@@ -136,13 +120,15 @@ mod tests {
     #[test]
     fn checks_run_in_order() {
         let text = script(&checks(&["npm run check", "cargo test"])).unwrap();
-        assert!(text.contains("{ ( npm run check ) && ( cargo test ); } 1>&2 || exit 2"));
+        assert!(text.contains("output=$({ ( npm run check ) && ( cargo test ); } 2>&1) && exit 0"));
+        // No exit code but 0: the decision is on stdout.
+        assert!(!text.contains("exit 2"));
     }
 
     #[test]
     fn the_command_reads_the_same_in_bash_and_powershell() {
-        let command = command(Mode::Json);
-        assert_eq!(command, "git -c 'alias.termo-checks=!sh .termo/checks.sh' termo-checks json");
+        let command = command();
+        assert_eq!(command, "git -c 'alias.termo-checks=!sh .termo/checks.sh' termo-checks");
         // Only single quotes: no escapes, no $ or backquote for either shell.
         assert!(!command.contains(['"', '$', '`']));
     }
@@ -160,7 +146,7 @@ mod tests {
         // Something changed, or nothing is checked.
         std::fs::write(root.join("new.txt"), "x").unwrap();
 
-        let output = run(&["-c", &format!("alias.termo-checks=!sh {SCRIPT_FILE}"), "termo-checks", "json"]);
+        let output = run(&["-c", &format!("alias.termo-checks=!sh {SCRIPT_FILE}"), "termo-checks"]);
         assert!(output.status.success());
         let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|err| {
             panic!("{err}: {}", String::from_utf8_lossy(&output.stdout));
@@ -175,7 +161,7 @@ mod tests {
 
         // Passing: nothing said, and the turn ends.
         std::fs::write(root.join(SCRIPT_FILE), script(&checks(&["true"])).unwrap()).unwrap();
-        let output = run(&["-c", &format!("alias.termo-checks=!sh {SCRIPT_FILE}"), "termo-checks", "json"]);
+        let output = run(&["-c", &format!("alias.termo-checks=!sh {SCRIPT_FILE}"), "termo-checks"]);
         assert!(output.status.success() && output.stdout.is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }

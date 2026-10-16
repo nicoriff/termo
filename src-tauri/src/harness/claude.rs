@@ -59,10 +59,7 @@ pub fn desired(spec: &Harness, _current: &Map<String, Value>) -> Owned {
             "hooks.Stop",
             json!({ "hooks": [{
                 "type": "command",
-                // A decision on stdout, not exit code 2: Grok (and Claude
-                // Code without Git Bash) runs it in PowerShell, which turns
-                // that into 1, a failed hook they let through.
-                "command": checks::command(checks::Mode::Json),
+                "command": checks::command(),
                 "timeout": checks::timeout_sec(&spec.checks),
             }] }),
         );

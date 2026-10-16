@@ -136,7 +136,7 @@ pub fn desired(spec: &Harness, current: &Map<String, Value>) -> Owned {
         push("policyPaths", json!(POLICY_FILE));
     }
     if !spec.checks.is_empty() {
-        let command = checks::command(checks::Mode::ExitCode);
+        let command = checks::command();
         // Gemini CLI's timeouts are in milliseconds.
         let timeout = u64::from(checks::timeout_sec(&spec.checks)) * 1000;
         push("hooks.AfterAgent", json!({ "hooks": [{ "type": "command", "command": command, "timeout": timeout }] }));

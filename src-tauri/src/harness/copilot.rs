@@ -32,7 +32,7 @@ pub fn hooks(spec: &Harness) -> Option<String> {
         );
     }
     if !spec.checks.is_empty() {
-        let command = checks::command(checks::Mode::Json);
+        let command = checks::command();
         hooks.insert(
             "agentStop".into(),
             json!([{
@@ -61,7 +61,7 @@ mod tests {
         let text = hooks(&spec).unwrap();
         let root: serde_json::Value = serde_json::from_str(&text).unwrap();
         let hook = &root["hooks"]["agentStop"][0];
-        assert_eq!(hook["bash"], checks::command(checks::Mode::Json));
+        assert_eq!(hook["bash"], checks::command());
         assert_eq!(hook["powershell"], hook["bash"]);
         assert_eq!(hooks(&Harness::default()), None);
         assert!(root["hooks"].get("preToolUse").is_none());
