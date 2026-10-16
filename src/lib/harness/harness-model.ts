@@ -173,8 +173,8 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, MessageKey> = {
 
 /** A kind of rule, as far as which agents can hold it goes. */
 export type RuleKind = "noEdit" | "noRead" | "deny" | "ask" | "allow" | "checks";
-/** enforced: the agent itself refuses or stops; partial: not every case
- * (Grok's gate, unconfirmed); text: only told in AGENTS.md; none: no effect. */
+/** enforced: the agent itself refuses or stops; partial: not every case;
+ * text: only told in AGENTS.md; none: no effect. */
 export type Support = "enforced" | "partial" | "text" | "none";
 
 export const RULE_KINDS: RuleKind[] = ["noEdit", "noRead", "deny", "ask", "allow", "checks"];
@@ -187,7 +187,7 @@ export const SUPPORT: Record<HarnessAgent, Record<RuleKind, Support>> = {
   gemini: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
   copilot: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "none", checks: "enforced" },
   // Through Claude Code's settings, which it reads too.
-  grok: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "partial" },
+  grok: { noEdit: "enforced", noRead: "enforced", deny: "enforced", ask: "enforced", allow: "enforced", checks: "enforced" },
 };
 
 /** The kinds of rule the harness has, in a fixed order. */
