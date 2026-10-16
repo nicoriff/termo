@@ -1,0 +1,167 @@
+:root {
+  --bg: #1e1e1e;
+  --fg: #d4d4d4;
+  --muted: #8a8a8a;
+  --line: #333;
+  --accent: #3a6df0;
+  --waiting: #f5a623;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+main[hidden] {
+  display: none;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  min-height: 52px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 17px;
+}
+
+#host,
+#title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#title {
+  color: var(--fg);
+  font-size: 14px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-height: 36px;
+  touch-action: manipulation;
+}
+
+button.icon {
+  min-width: 36px;
+  font-size: 16px;
+}
+
+button:active,
+button.on {
+  background: #2d2d2d;
+  border-color: var(--accent);
+}
+
+.status {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status:empty {
+  display: none;
+}
+
+#sessions {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+#sessions li + li {
+  margin-top: 8px;
+}
+
+#sessions button {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.session-title {
+  font-size: 15px;
+}
+
+.session-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--waiting);
+  color: var(--waiting);
+}
+
+#terminal-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px;
+}
+
+#terminal {
+  display: inline-block;
+}
+
+#keys {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+#keys button {
+  flex-shrink: 0;
+  min-width: 44px;
+}
+
+#keys[hidden] {
+  display: none;
+}

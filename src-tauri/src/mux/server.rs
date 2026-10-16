@@ -20,7 +20,7 @@ use super::protocol::{read_frame, write_frame, ClientMessage, Frame, Op, Reply, 
 use super::remote::{self, Access, RemoteConfig, Viewer};
 use super::screen::Screen;
 use super::tailscale::{self, Identity};
-use super::DaemonInfo;
+use super::{web, DaemonInfo};
 use crate::pty::{contains_cursor_report, ConsoleEvent, EventSink, PtySession, SpawnSpec};
 
 /// How much of a console's latest output it keeps as is, for a client that
@@ -375,6 +375,8 @@ impl Daemon {
     fn admit(self: Arc<Self>, stream: TcpStream, peer: SocketAddr) {
         let dir = self.dir.get().cloned();
         let now = now_seconds();
+        // A browser (the web client, see web.rs) or the daemon's own protocol.
+        let browser = web::is_http(&stream);
         let identity = (self.remote.whois)(peer);
         let access = identity.as_ref().and_then(|who| self.remote.config.lock().unwrap().access_for(who));
         if let Some(dir) = &dir {
@@ -387,10 +389,18 @@ impl Daemon {
             remote::log(dir, now, peer, identity.as_ref(), outcome);
         }
         match (identity, access) {
+            (Some(identity), Some(access)) if browser => {
+                let own = web::own_names((self.remote.address)());
+                web::serve(self, stream, &own, Role::Remote { identity, access });
+            }
             (Some(identity), Some(access)) => self.handle_connection(stream, Role::Remote { identity, access }),
             (identity, _) => {
                 if let (Some(identity), Some(dir)) = (&identity, &dir) {
                     remote::add_pending(dir, identity, now);
+                }
+                if browser {
+                    web::refuse(stream, identity.is_some());
+                    return;
                 }
                 let reason = if identity.is_some() { "waiting for approval" } else { "not on the tailnet" };
                 let mut writer = stream;
@@ -499,6 +509,10 @@ impl Daemon {
             protocol: PROTOCOL,
             version: env!("CARGO_PKG_VERSION").to_string(),
             pid: std::process::id(),
+            access: match &role {
+                Role::Local => None,
+                Role::Remote { access, .. } => Some(*access),
+            },
         };
         if write_frame(&mut writer, &Frame::Message(welcome)).is_err() {
             return;

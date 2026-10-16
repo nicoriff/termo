@@ -73,7 +73,14 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
-    Welcome { protocol: u32, version: String, pid: u32 },
+    Welcome {
+        protocol: u32,
+        version: String,
+        pid: u32,
+        /// For a connection from the tailnet, what it may do.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        access: Option<super::remote::Access>,
+    },
     Rejected { reason: String },
     Reply { id: u64, result: Result<Reply, String> },
     Exit { session: Uuid, code: i32 },

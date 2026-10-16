@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e1e1e" />
+    <title>Termo</title>
+    <link rel="stylesheet" href="/xterm.css" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main id="list-view">
+      <header>
+        <h1>Termo</h1>
+        <span id="host"></span>
+        <button id="refresh" class="icon" data-label="refresh">⟳</button>
+      </header>
+      <p id="status" class="status"></p>
+      <ul id="sessions"></ul>
+    </main>
+    <main id="term-view" hidden>
+      <header>
+        <button id="back" class="icon" data-label="back">‹</button>
+        <span id="title"></span>
+        <span id="badge" class="badge" hidden></span>
+        <button id="smaller" class="icon" data-label="smaller">A−</button>
+        <button id="bigger" class="icon" data-label="bigger">A+</button>
+        <button id="fit" class="text" data-text="fit"></button>
+      </header>
+      <div id="terminal-frame"><div id="terminal"></div></div>
+      <nav id="keys">
+        <button data-key="esc">Esc</button>
+        <button data-key="tab">Tab</button>
+        <button data-key="ctrl" id="ctrl">Ctrl</button>
+        <button data-key="up">↑</button>
+        <button data-key="down">↓</button>
+        <button data-key="left">←</button>
+        <button data-key="right">→</button>
+        <button data-key="pgup">PgUp</button>
+        <button data-key="pgdn">PgDn</button>
+        <button data-key="enter">⏎</button>
+        <button data-key="send" data-text="send"></button>
+      </nav>
+    </main>
+    <script src="/xterm.js"></script>
+    <script src="/addon-fit.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

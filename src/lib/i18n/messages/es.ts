@@ -2478,6 +2478,7 @@ export const es = {
       noTailscale: "Tailscale no está instalado. Instalalo e iniciá sesión para usar el acceso remoto.",
       tailscaleDown: "Tailscale no está conectado en esta computadora.",
       thisComputer: "Esta computadora en la tailnet: {name} ({ip})",
+      webClient: "Desde el navegador de otra computadora o del celular: {url}",
       allowed: "Quién puede conectarse",
       anyComputer: "desde cualquier computadora",
       fromComputer: "desde {node}",

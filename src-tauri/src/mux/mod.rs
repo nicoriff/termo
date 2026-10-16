@@ -20,6 +20,7 @@ pub mod remote;
 mod screen;
 pub mod server;
 pub mod tailscale;
+mod web;
 
 use std::io;
 use std::net::{SocketAddr, TcpStream};

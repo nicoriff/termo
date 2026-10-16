@@ -2477,6 +2477,7 @@ export const en: Messages = {
       noTailscale: "Tailscale isn't installed. Install it and sign in to use remote access.",
       tailscaleDown: "Tailscale isn't connected on this computer.",
       thisComputer: "This computer on the tailnet: {name} ({ip})",
+      webClient: "From the browser on another computer or a phone: {url}",
       allowed: "Who can connect",
       anyComputer: "from any computer",
       fromComputer: "from {node}",

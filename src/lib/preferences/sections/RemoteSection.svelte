@@ -85,6 +85,13 @@
   {#if config?.enabled && !appConfigStore.persistentSessions}
     <p class="notice">{t("preferences.remote.needsKeepRunning")}</p>
   {/if}
+  {#if config?.enabled && overview?.tailscale && running}
+    <p class="setting-hint">
+      {t("preferences.remote.webClient", {
+        url: `http://${overview.tailscale.me.dnsName || overview.tailscale.me.ip}:${config.port}`,
+      })}
+    </p>
+  {/if}
 </section>
 
 {#if config?.enabled}
