@@ -18,6 +18,7 @@
   import { requestCloseWindow } from "$lib/app/quit";
   import AppMenu from "./AppMenu.svelte";
   import KeepAwakeButton from "./KeepAwakeButton.svelte";
+  import RemoteButton from "./RemoteButton.svelte";
   import { DEFAULT_DECORATION_LAYOUT, parseDecorationLayout, type WindowButton } from "./decoration-layout";
 
   // This bar is also the Preferences window's, where closing just hides it.
@@ -134,8 +135,11 @@
 </div>
 
 <!-- Keeping the computer awake belongs to the app, not to a window: only
-     the main window's bar offers it. -->
+     the main window's bar offers it. Remote access too, to its left. -->
 {#snippet keepAwake()}
+  {#if isConsoleWindow && showSettingsButton && appConfigStore.remoteButton}
+    <RemoteButton />
+  {/if}
   {#if isConsoleWindow && showSettingsButton && appConfigStore.keepAwakeButton}
     <KeepAwakeButton />
   {/if}

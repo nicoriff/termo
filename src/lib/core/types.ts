@@ -128,6 +128,7 @@ export interface AppConfig {
   agents_from_any_console?: boolean;
   marketplace_source?: string;
   keep_awake_button: boolean;
+  remote_button?: boolean;
   /** Where the user installed an agent's CLI when not npm's own folder, by
    * agent. Absent in configs from before Termo could install them. */
   agent_install_dirs?: Record<string, string>;

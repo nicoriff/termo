@@ -197,6 +197,9 @@ pub struct AppConfig {
     pub agent_clis_known: std::collections::BTreeMap<String, String>,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
+    /// The remote access button in the title bar (Tailscale, who's
+    /// connected, the address to open from a phone).
+    pub remote_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
     /// Everything git: the panel, the status bar's item, the diff and graph
@@ -304,6 +307,7 @@ impl Default for AppConfig {
             agent_install_dirs: std::collections::BTreeMap::new(),
             agent_clis_known: std::collections::BTreeMap::new(),
             keep_awake_button: true,
+            remote_button: true,
             tabs_fill_width: false,
             git_enabled: true,
             git_in_activity_bar: true,

@@ -183,6 +183,8 @@ pub fn run() {
             commands::remote_commands::remote_share_agents,
             commands::remote_commands::remote_set_open_choices,
             commands::remote_commands::remote_opened,
+            commands::remote_commands::tailscale_connect,
+            commands::remote_commands::tailscale_disconnect,
             commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,

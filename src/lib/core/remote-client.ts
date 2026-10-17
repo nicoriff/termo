@@ -94,6 +94,21 @@ export function answerRemotePending(login: string, node: string, access: RemoteA
   return invoke("remote_answer_pending", { login, node, access });
 }
 
+/** What came of asking Tailscale to connect: done, a page to sign in at
+ * first (see src-tauri/src/mux/tailscale.rs), or still at it. */
+export type TailscaleConnecting = { kind: "connected" } | { kind: "login"; url: string } | { kind: "waiting" };
+
+/** Connects this computer to the tailnet. Rejects with "not-installed",
+ * "permission" or what Tailscale said. */
+export function connectTailscale(): Promise<TailscaleConnecting> {
+  return invoke("tailscale_connect");
+}
+
+/** Disconnects this computer from the tailnet: everything using it here. */
+export function disconnectTailscale(): Promise<void> {
+  return invoke("tailscale_disconnect");
+}
+
 export function disconnectAllRemote(): Promise<void> {
   return invoke("remote_disconnect_all");
 }

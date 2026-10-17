@@ -240,3 +240,16 @@ pub async fn remote_opened(app: tauri::AppHandle, request: u64, console: Option<
     };
     let _ = tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.opened(request, result)).await;
 }
+
+/// Connects this computer to the tailnet: done, or the page to sign in at
+/// first (the app opens it), or still at it.
+#[tauri::command]
+pub async fn tailscale_connect() -> Result<tailscale::Connecting, String> {
+    tauri::async_runtime::spawn_blocking(tailscale::connect).await.map_err(|err| err.to_string())?
+}
+
+/// Disconnects this computer from the tailnet — every program using it here.
+#[tauri::command]
+pub async fn tailscale_disconnect() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(tailscale::disconnect).await.map_err(|err| err.to_string())?
+}

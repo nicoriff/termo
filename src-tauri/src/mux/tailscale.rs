@@ -1,13 +1,16 @@
 //! What Termo asks the user's own Tailscale (its CLI, which talks to the
 //! tailscaled running on this computer): whether it's up, this computer's
 //! address on the tailnet, the other computers on it, and who is behind a
-//! connection that arrives from one (`whois`). Termo embeds nothing of
+//! connection that arrives from one (`whois`) — and turning it on or off,
+//! as its own app would (`up`, `down`). Termo embeds nothing of
 //! Tailscale's: without it installed and signed in, remote access is off.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -30,17 +33,139 @@ pub fn cli() -> Option<PathBuf> {
     })
 }
 
+/// No console window flashing up from a GUI app.
+fn no_window(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    #[cfg(not(windows))]
+    let _ = command;
+}
+
+/// What came of asking Tailscale to connect.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Connecting {
+    Connected,
+    /// It needs signing in first, at this page: `tailscale up` waits for it
+    /// meanwhile, and connects once it's done.
+    Login { url: String },
+    /// Still at it, with nothing to show yet.
+    Waiting,
+}
+
+/// How long `tailscale up` is given to say how it went before it's left to
+/// carry on by itself.
+const UP_ANSWER: Duration = Duration::from_secs(15);
+
+/// Connects this computer to the tailnet, as the Tailscale app's "Connect"
+/// does. Errors are words the app translates ("not-installed",
+/// "permission"), or what Tailscale said.
+pub fn connect() -> Result<Connecting, String> {
+    let cli = cli().ok_or("not-installed")?;
+    let mut command = Command::new(cli);
+    // Signing in can take a while: it's left waiting for that, in the
+    // background, for a few minutes.
+    command.args(["up", "--timeout=300s"]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    no_window(&mut command);
+    let mut child = command.spawn().map_err(|err| err.to_string())?;
+    enum Heard {
+        Line(String),
+        Exit(bool),
+    }
+    let (tx, rx) = mpsc::channel();
+    let pipes: [Option<Box<dyn Read + Send>>; 2] = [
+        child.stdout.take().map(|pipe| Box::new(pipe) as Box<dyn Read + Send>),
+        child.stderr.take().map(|pipe| Box::new(pipe) as Box<dyn Read + Send>),
+    ];
+    for pipe in pipes.into_iter().flatten() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                let _ = tx.send(Heard::Line(line));
+            }
+        });
+    }
+    std::thread::spawn(move || {
+        let ok = child.wait().is_ok_and(|status| status.success());
+        let _ = tx.send(Heard::Exit(ok));
+    });
+    let deadline = Instant::now() + UP_ANSWER;
+    let mut said = String::new();
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(left) {
+            Ok(Heard::Line(line)) => {
+                if let Some(url) = login_url(&line) {
+                    return Ok(Connecting::Login { url });
+                }
+                said.push_str(&line);
+                said.push('\n');
+            }
+            Ok(Heard::Exit(true)) => return Ok(Connecting::Connected),
+            Ok(Heard::Exit(false)) | Err(RecvTimeoutError::Disconnected) => {
+                // What it printed last may still be on its way.
+                while let Ok(Heard::Line(line)) = rx.recv_timeout(Duration::from_millis(200)) {
+                    said.push_str(&line);
+                    said.push('\n');
+                }
+                return Err(failure(&said));
+            }
+            Err(RecvTimeoutError::Timeout) => return Ok(Connecting::Waiting),
+        }
+    }
+}
+
+/// Disconnects this computer from the tailnet, as the Tailscale app's
+/// "Disconnect" does: every program here using it loses it, not only Termo.
+pub fn disconnect() -> Result<(), String> {
+    let cli = cli().ok_or("not-installed")?;
+    let mut command = Command::new(cli);
+    command.arg("down").stdin(Stdio::null());
+    no_window(&mut command);
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(command.output());
+    });
+    let output = rx.recv_timeout(Duration::from_secs(10)).map_err(|_| "timeout".to_string())?.map_err(|err| err.to_string())?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let mut said = String::from_utf8_lossy(&output.stderr).into_owned();
+    said.push_str(&String::from_utf8_lossy(&output.stdout));
+    Err(failure(&said))
+}
+
+/// The page `tailscale up` says to sign in at, in one of its lines.
+fn login_url(line: &str) -> Option<String> {
+    let at = line.find("https://")?;
+    let url: String = line[at..].chars().take_while(|c| !c.is_whitespace()).collect();
+    (url.len() > "https://".len()).then_some(url)
+}
+
+/// What Tailscale's complaint comes down to: not allowed (Linux, without
+/// sudo or being its operator), or what it said.
+fn failure(said: &str) -> String {
+    let lower = said.to_lowercase();
+    if lower.contains("access denied") || lower.contains("permission denied") || lower.contains("sudo") || lower.contains("operator") {
+        return "permission".to_string();
+    }
+    let said = said.trim();
+    if said.is_empty() {
+        "failed".to_string()
+    } else {
+        said.chars().take(400).collect()
+    }
+}
+
 /// Runs the CLI with `args` and parses what it prints as JSON.
 fn run_json(args: &[&str]) -> Option<Value> {
     let cli = cli()?;
     let mut command = Command::new(cli);
     command.args(args).stdin(Stdio::null()).stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // No console window flashing up from a GUI app.
-        command.creation_flags(0x0800_0000);
-    }
+    no_window(&mut command);
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let _ = tx.send(command.output());
@@ -255,6 +380,19 @@ mod tests {
         assert!(is_tailnet_address("fd7a:115c:a1e0::5".parse().unwrap()));
         assert!(!is_tailnet_address("100.128.0.1".parse().unwrap()));
         assert!(!is_tailnet_address("192.168.1.10".parse().unwrap()));
+    }
+
+    #[test]
+    fn finds_where_to_sign_in_and_why_it_failed() {
+        assert_eq!(
+            login_url("To authenticate, visit:\t https://login.tailscale.com/a/1a2b3c4d "),
+            Some("https://login.tailscale.com/a/1a2b3c4d".to_string())
+        );
+        assert_eq!(login_url("Success."), None);
+        assert_eq!(login_url("https://"), None);
+        assert_eq!(failure("Access denied: prefs write access denied\nUse 'sudo tailscale up'"), "permission");
+        assert_eq!(failure("  \n"), "failed");
+        assert_eq!(failure("backend error: no network\n"), "backend error: no network");
     }
 
     #[test]
