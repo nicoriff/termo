@@ -2,46 +2,94 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#1e1e1e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Termo</title>
+    <link rel="icon" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
     <link rel="stylesheet" href="/xterm.css" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <main id="list-view">
-      <header>
-        <h1>Termo</h1>
-        <span id="host"></span>
-        <button id="refresh" class="icon" data-label="refresh">⟳</button>
+    <div id="app">
+      <header class="topbar">
+        <button id="menu" class="menu-button" aria-expanded="false" data-label="allConsoles">
+          <span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+        </button>
+        <nav id="tab-list" class="tab-list"></nav>
+        <span id="link" class="link-dot" role="status"></span>
       </header>
-      <p id="status" class="status"></p>
-      <ul id="sessions"></ul>
-    </main>
-    <main id="term-view" hidden>
-      <header>
-        <button id="back" class="icon" data-label="back">‹</button>
-        <span id="title"></span>
-        <span id="badge" class="badge" hidden></span>
-        <button id="smaller" class="icon" data-label="smaller">A−</button>
-        <button id="bigger" class="icon" data-label="bigger">A+</button>
-        <button id="fit" class="text" data-text="fit"></button>
-      </header>
-      <div id="terminal-frame"><div id="terminal"></div></div>
-      <nav id="keys">
-        <button data-key="esc">Esc</button>
-        <button data-key="tab">Tab</button>
-        <button data-key="ctrl" id="ctrl">Ctrl</button>
-        <button data-key="up">↑</button>
-        <button data-key="down">↓</button>
-        <button data-key="left">←</button>
-        <button data-key="right">→</button>
-        <button data-key="pgup">PgUp</button>
-        <button data-key="pgdn">PgDn</button>
-        <button data-key="enter">⏎</button>
-        <button data-key="send" data-text="send"></button>
+
+      <div class="stage">
+        <main id="console" class="console" hidden>
+          <div id="terminal-frame" class="terminal-frame"><div id="terminal"></div></div>
+        </main>
+
+        <div id="backdrop" class="backdrop" hidden></div>
+        <aside id="home" class="home">
+          <div class="home-head">
+            <img class="app-icon" src="/icon.png" alt="" />
+            <div class="home-title">
+              <span class="app-name">Termo</span>
+              <span id="host" class="host"></span>
+            </div>
+            <button id="refresh" class="round-button" data-label="refresh">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" /></svg>
+            </button>
+          </div>
+          <p id="status" class="status"></p>
+          <h2 id="home-heading" class="home-heading" data-text="consoles" hidden></h2>
+          <ul id="sessions" class="session-list"></ul>
+        </aside>
+      </div>
+
+      <nav id="keys" class="keys" hidden>
+        <div class="key-group">
+          <button data-key="esc">Esc</button>
+          <button data-key="tab">Tab</button>
+        </div>
+        <div class="key-group">
+          <button data-key="ctrl" id="ctrl" class="toggle">Ctrl</button>
+          <button data-key="alt" id="alt" class="toggle">Alt</button>
+        </div>
+        <div class="key-group">
+          <button data-key="left" data-label="left" class="arrow">←</button>
+          <button data-key="up" data-label="up" class="arrow">↑</button>
+          <button data-key="down" data-label="down" class="arrow">↓</button>
+          <button data-key="right" data-label="right" class="arrow">→</button>
+        </div>
+        <div class="key-group">
+          <button data-key="enter" data-label="enter">⏎</button>
+          <button data-key="ctrlc" class="danger">^C</button>
+        </div>
+        <div class="key-group">
+          <button data-key="pgup">PgUp</button>
+          <button data-key="pgdn">PgDn</button>
+          <button data-key="home">Home</button>
+          <button data-key="end">End</button>
+        </div>
+        <div class="key-group">
+          <button data-key="send" data-text="send"></button>
+        </div>
       </nav>
-    </main>
+
+      <footer class="statusbar">
+        <!-- What the desktop's status bar says of the console: scrolls
+             sideways when it doesn't fit; the controls stay put. -->
+        <div id="info" class="status-info">
+          <span id="details" class="status-details"></span>
+        </div>
+        <span id="access" class="status-item"></span>
+        <span class="status-spacer"></span>
+        <span id="size" class="status-item size" hidden></span>
+        <button id="fit" class="status-button" data-text="fit" data-label="fitHint" hidden></button>
+        <button id="smaller" class="status-button" data-label="smaller" hidden>A−</button>
+        <button id="bigger" class="status-button" data-label="bigger" hidden>A+</button>
+      </footer>
+    </div>
     <script src="/xterm.js"></script>
     <script src="/addon-fit.js"></script>
     <script src="/app.js"></script>

@@ -41,8 +41,53 @@
     }
   }
 
+  /** The state the checkbox was just set to, while that's being applied:
+   * shown at once, with a spinner, rather than the old one until it's done. */
+  let turning = $state<boolean | null>(null);
+
+  async function setEnabled(enabled: boolean) {
+    turning = enabled;
+    try {
+      await setRemoteEnabled(enabled);
+      await refresh();
+    } catch {
+      await refresh();
+    } finally {
+      turning = null;
+    }
+  }
+
   const running = $derived(tailscaleRunning(overview));
   const config = $derived(overview?.config ?? null);
+
+  /** Where the web client is: by this computer's short name on the tailnet,
+   * the easiest to type — and its full name too, for a device that doesn't
+   * use Tailscale's DNS for short names. Without MagicDNS, only by address.
+   * The page answers under all of them (see src-tauri/src/mux/web.rs). */
+  const webUrls = $derived.by(() => {
+    const tailscale = overview?.tailscale;
+    const me = tailscale?.me;
+    if (!config?.enabled || !running || !me) return null;
+    const at = (host: string) => `http://${host}:${config.port}`;
+    if (!tailscale.magicDns || !me.name) return me.ip ? { main: at(me.ip), full: null } : null;
+    return { main: at(me.name), full: me.dnsName && me.dnsName !== me.name ? at(me.dnsName) : null };
+  });
+  const webUrl = $derived(webUrls?.main ?? null);
+
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function copyUrl() {
+    if (!webUrl) return;
+    try {
+      await navigator.clipboard.writeText(webUrl);
+      copied = true;
+      clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => (copied = false), 1600);
+    } catch {
+      // Nothing to do: the address is on screen, selectable.
+    }
+  }
 
   function setAccess(index: number, access: RemoteAccess) {
     if (!config) return;
@@ -66,15 +111,20 @@
     <p class="notice">{t("preferences.remote.tailscaleDown")}</p>
   {/if}
   <label class="toggle-row">
-    <span>{t("preferences.remote.enable")}</span>
+    <span class="enable-label">
+      {t("preferences.remote.enable")}
+      {#if turning !== null}
+        <span class="turning" role="status">
+          <span class="spinner" aria-hidden="true"></span>
+          {turning ? t("preferences.remote.enabling") : t("preferences.remote.disabling")}
+        </span>
+      {/if}
+    </span>
     <input
       type="checkbox"
-      checked={config?.enabled ?? false}
-      disabled={working || !overview || (!config?.enabled && !running)}
-      onchange={(e) => {
-        const enabled = e.currentTarget.checked;
-        void change(() => setRemoteEnabled(enabled));
-      }}
+      checked={turning ?? config?.enabled ?? false}
+      disabled={working || turning !== null || !overview || (!config?.enabled && !running)}
+      onchange={(e) => void setEnabled(e.currentTarget.checked)}
     />
   </label>
   {#if overview?.tailscale && running}
@@ -83,14 +133,25 @@
     </p>
   {/if}
   {#if config?.enabled && !appConfigStore.persistentSessions}
-    <p class="notice">{t("preferences.remote.needsKeepRunning")}</p>
+    <p class="setting-hint">{t("preferences.remote.notKeptHint")}</p>
   {/if}
-  {#if config?.enabled && overview?.tailscale && running}
-    <p class="setting-hint">
-      {t("preferences.remote.webClient", {
-        url: `http://${overview.tailscale.me.dnsName || overview.tailscale.me.ip}:${config.port}`,
-      })}
-    </p>
+  {#if webUrl}
+    <div class="web-url">
+      <span class="web-url-title">{t("preferences.remote.webClientTitle")}</span>
+      <div class="web-url-row">
+        <code class="web-url-text">{webUrl}</code>
+        <button class="copy" class:done={copied} onclick={() => void copyUrl()}>
+          {copied ? `✓ ${t("preferences.remote.copiedUrl")}` : t("preferences.remote.copyUrl")}
+        </button>
+      </div>
+      <span class="web-url-hint">{t("preferences.remote.webClientHint")}</span>
+      {#if webUrls?.full}
+        <span class="web-url-hint">
+          {t("preferences.remote.webClientFull")}
+          <code class="web-url-full">{webUrls.full}</code>
+        </span>
+      {/if}
+    </div>
   {/if}
 </section>
 
@@ -210,6 +271,42 @@
     cursor: pointer;
   }
 
+  .enable-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .turning {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    opacity: 0.75;
+  }
+
+  .spinner {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top-color: var(--pane-active-border, #3a6df0);
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation-duration: 2s;
+    }
+  }
+
   .toggle-row input {
     accent-color: var(--pane-active-border, #3a6df0);
     flex-shrink: 0;
@@ -234,6 +331,79 @@
     border: 1px solid var(--tabbar-border, #3a3a3a);
     font-size: 11px;
     line-height: 1.4;
+  }
+
+  /* The address to open on a phone: the one thing here people come back
+     for, so it stands out. */
+  .web-url {
+    margin: 12px 0 4px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--pane-active-border, #3a6df0) 55%, transparent);
+    background: color-mix(in srgb, var(--pane-active-border, #3a6df0) 10%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .web-url-title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .web-url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .web-url-text {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: var(--tabbar-bg, #181818);
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+    user-select: text;
+    cursor: text;
+  }
+
+  .copy {
+    flex-shrink: 0;
+    min-width: 84px;
+    padding: 7px 12px;
+    border: none;
+    border-radius: 6px;
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 120ms ease;
+  }
+
+  .copy:hover {
+    filter: brightness(1.12);
+  }
+
+  .copy.done {
+    background: #2ea043;
+  }
+
+  .web-url-full {
+    font-size: 11px;
+    user-select: all;
+    word-break: break-all;
+  }
+
+  .web-url-hint {
+    font-size: 11px;
+    line-height: 1.4;
+    opacity: 0.7;
   }
 
   .people {

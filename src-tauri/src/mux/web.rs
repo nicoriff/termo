@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::{Message, WebSocket};
 
+use super::remote;
 use super::server::{Daemon, Role};
 
 const INDEX: &[u8] = include_bytes!("../../web-client/index.html");
@@ -29,6 +30,11 @@ const STYLE: &[u8] = include_bytes!("../../web-client/style.css");
 const XTERM_JS: &[u8] = include_bytes!("../../../node_modules/@xterm/xterm/lib/xterm.js");
 const XTERM_CSS: &[u8] = include_bytes!("../../../node_modules/@xterm/xterm/css/xterm.css");
 const FIT_JS: &[u8] = include_bytes!("../../../node_modules/@xterm/addon-fit/lib/addon-fit.js");
+const ICON: &[u8] = include_bytes!("../../../static/app-icon.png");
+/// Where the page gets Nerd Fonts' symbols (the icons in prompts like Oh My
+/// Posh's), which a phone doesn't have: fetched by the browser, not carried
+/// in Termo (see web-client/style.css). Only fonts may come from there.
+const SYMBOLS_FONT_ORIGIN: &str = "https://cdn.jsdelivr.net";
 
 /// Whether a connection is a browser's: it starts with a request line.
 pub fn is_http(stream: &TcpStream) -> bool {
@@ -71,6 +77,13 @@ pub fn serve(daemon: Arc<Daemon>, mut stream: TcpStream, own: &[String], role: R
     }
     // The request head, read out before answering.
     let _ = read_head(&mut stream);
+    if path == "/look.json" {
+        // The theme the app shows on this computer (see remote::WebLook).
+        let look = daemon.folder().and_then(remote::read_look).unwrap_or_default();
+        let body = serde_json::to_vec(&look).unwrap_or_default();
+        let _ = respond(&mut stream, "200 OK", "application/json", &body);
+        return;
+    }
     let file = match path.as_str() {
         "/" | "/index.html" => Some((INDEX, "text/html; charset=utf-8")),
         "/app.js" => Some((APP, "text/javascript; charset=utf-8")),
@@ -78,12 +91,30 @@ pub fn serve(daemon: Arc<Daemon>, mut stream: TcpStream, own: &[String], role: R
         "/xterm.js" => Some((XTERM_JS, "text/javascript; charset=utf-8")),
         "/xterm.css" => Some((XTERM_CSS, "text/css; charset=utf-8")),
         "/addon-fit.js" => Some((FIT_JS, "text/javascript; charset=utf-8")),
+        "/icon.png" => Some((ICON, "image/png")),
         _ => None,
     };
     let _ = match file {
-        Some((body, kind)) => respond(&mut stream, "200 OK", kind, body),
+        Some((body, kind)) => respond(&mut stream, "200 OK", kind, &from_disk_in_dev(&path).unwrap_or_else(|| body.to_vec())),
         None => respond(&mut stream, "404 Not Found", "text/plain; charset=utf-8", b"not found"),
     };
+}
+
+/// A dev build serves the page's own files as they are on disk, so a change
+/// shows on reloading it, without rebuilding (and so restarting the daemon
+/// and every console in it). `.taurignore` keeps `tauri dev` from
+/// rebuilding over them.
+fn from_disk_in_dev(path: &str) -> Option<Vec<u8>> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let name = match path {
+        "/" | "/index.html" => "index.html",
+        "/app.js" => "app.js",
+        "/style.css" => "style.css",
+        _ => return None,
+    };
+    std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web-client").join(name)).ok()
 }
 
 /// Turned away (not on the list, or not on the tailnet): a short page that
@@ -118,7 +149,7 @@ fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) -> io:
         "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\n\
          X-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n\
          Content-Security-Policy: default-src 'self'; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; \
-         frame-ancestors 'none'\r\nConnection: close\r\n\r\n",
+         font-src 'self' {SYMBOLS_FONT_ORIGIN}; frame-ancestors 'none'\r\nConnection: close\r\n\r\n",
         body.len()
     );
     stream.write_all(head.as_bytes())?;

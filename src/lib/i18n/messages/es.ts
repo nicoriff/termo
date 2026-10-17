@@ -63,6 +63,9 @@ export const es = {
   },
   statusBar: {
     aiMode: "Modo IA: {state}",
+    daemonDown: "Las consolas no se mantienen",
+    daemonDownHint:
+      "El proceso que mantiene las consolas abiertas no responde. Las consolas nuevas se abren en Termo y se cierran con él. Clic para reiniciarlo desde Preferencias.",
     aiOn: "activado",
     aiOff: "desactivado",
     memory: "Memoria: {value}",
@@ -2471,17 +2474,29 @@ export const es = {
       keepRunning: "Mantener las consolas abiertas al cerrar Termo",
       keepRunningHint:
         "Las consolas nuevas siguen corriendo, con lo que tengan adentro, cuando cerrás la ventana o Termo, o lo actualizás, y se reconectan al volver a abrirlo. No sobreviven a un reinicio de la computadora.",
+      daemonDown: "El proceso que mantiene las consolas no responde",
+      daemonDownHint:
+        "Mientras tanto, las consolas nuevas se abren en Termo y se cierran con él. Reiniciarlo cierra las consolas que mantenía; las pestañas que las mostraban quedan terminadas.",
+      restartDaemon: "Reiniciar",
+      restartingDaemon: "Reiniciando…",
+      restartFailed: "No se pudo reiniciar: {error}",
     },
     remote: {
       intro:
-        "Mostrá y usá desde otra computadora de tu tailnet de Tailscale las consolas que Termo mantiene abiertas en esta. Tailscale dice quién se conecta; solo entra quien esté en la lista.",
+        "Mostrá y usá desde otra computadora o el celular, en tu tailnet de Tailscale, las consolas abiertas en esta. Tailscale dice quién se conecta; solo entra quien esté en la lista.",
       enable: "Permitir conexiones desde la tailnet",
-      needsKeepRunning:
-        "Hace falta «Mantener las consolas abiertas al cerrar Termo» (en Consola): solo esas consolas se pueden mostrar en otra computadora.",
+      enabling: "Activando…",
+      disabling: "Desactivando…",
+      notKeptHint:
+        "Se ven todas las consolas abiertas mientras Termo esté abierto. Para que sigan ahí después de cerrarlo, activá «Mantener las consolas abiertas al cerrar Termo» en Consola.",
       noTailscale: "Tailscale no está instalado. Instalalo e iniciá sesión para usar el acceso remoto.",
       tailscaleDown: "Tailscale no está conectado en esta computadora.",
       thisComputer: "Esta computadora en la tailnet: {name} ({ip})",
-      webClient: "Desde el navegador de otra computadora o del celular: {url}",
+      webClientTitle: "Entrar desde el celular u otra computadora",
+      webClientHint: "Abrí esta dirección en el navegador de cualquier dispositivo de tu tailnet (con Tailscale y tu cuenta).",
+      copyUrl: "Copiar",
+      copiedUrl: "Copiada",
+      webClientFull: "Si en algún dispositivo no abre, usá la dirección completa:",
       allowed: "Quién puede conectarse",
       anyComputer: "desde cualquier computadora",
       fromComputer: "desde {node}",

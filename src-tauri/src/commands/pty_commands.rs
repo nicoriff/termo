@@ -254,6 +254,26 @@ pub async fn pty_background(app: tauri::AppHandle) -> Result<Vec<SessionInfo>, S
         .map_err(|err| err.to_string())
 }
 
+/// Whether the sessions daemon answered the last time it was asked. The
+/// `sessions-daemon` event says when that changes.
+#[tauri::command]
+pub fn sessions_daemon_answering(state: tauri::State<'_, AppState>) -> bool {
+    state.pty.local_daemon().is_none_or(|mux| mux.is_answering())
+}
+
+/// Replaces a sessions daemon that stopped answering with a new one; the
+/// consoles it ran end with it.
+#[tauri::command]
+pub async fn sessions_daemon_restart(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mux = state.pty.local_daemon().ok_or("no folder for the sessions daemon")?;
+        mux.restart()
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
 /// Ends a console the sessions daemon runs, whether or not a tab shows it.
 #[tauri::command]
 pub async fn pty_kill_background(app: tauri::AppHandle, id: String) -> Result<(), String> {
@@ -290,6 +310,19 @@ pub fn pty_write(state: tauri::State<'_, AppState>, id: String, data: String) ->
         .pty
         .write(id, data.as_bytes())
         .map_err(|err| err.to_string())
+}
+
+/// The console back to its tab's size if someone on the tailnet sized it
+/// meanwhile (see Consoles::claim_size): whether it changed. Waits on the
+/// daemon, hence the thread.
+#[tauri::command]
+pub async fn pty_claim_size(app: tauri::AppHandle, id: String, cols: u16, rows: u16) -> Result<bool, String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().pty.claim_size(id, cols, rows).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]

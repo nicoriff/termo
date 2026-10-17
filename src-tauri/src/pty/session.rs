@@ -303,6 +303,11 @@ impl PtySession {
         Ok(())
     }
 
+    /// The size it was last given.
+    pub fn size(&self) -> (u16, u16) {
+        *self.size.lock().unwrap()
+    }
+
     pub fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
         *self.size.lock().unwrap() = (cols, rows);
         self.apply_size(cols, rows)

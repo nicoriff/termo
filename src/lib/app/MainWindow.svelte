@@ -50,6 +50,8 @@
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
   import { remoteWatch } from "$lib/remote/remote-watch.svelte";
+  import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
+  import { startAgentSharing } from "$lib/remote/agent-share";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -67,6 +69,8 @@
   import { startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
+  import { shareRemoteLook } from "$lib/core/remote-client";
+  import { themeStore } from "$lib/theme/theme-store.svelte";
 
   /** The quick question is there only with every switch it hangs from on. */
   const quickAskAvailable = $derived(appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.quickAskEnabled);
@@ -82,6 +86,8 @@
     let unlisten: (() => void) | null = null;
     let stopSessionKeeper: (() => void) | null = null;
     let stopRemoteWatch: (() => void) | null = null;
+    const stopSessionsDaemon = sessionsDaemon.start();
+    const stopAgentSharing = startAgentSharing();
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopNotificationClicks = startNotificationClicks();
@@ -147,6 +153,8 @@
       unlisten?.();
       stopSessionKeeper?.();
       stopRemoteWatch?.();
+      stopSessionsDaemon();
+      stopAgentSharing();
       stopAgentAttention();
       stopAgentRunAttention();
       stopNotificationClicks();
@@ -162,6 +170,20 @@
   $effect(() => {
     if (!appConfigStore.loaded) return;
     void setBackgroundBlur(appConfigStore.backgroundBlur).catch(() => {});
+  });
+
+  // The web client (a phone's browser, over the tailnet) looks like this:
+  // same theme, same console font. Told by the first window only.
+  $effect(() => {
+    if (!isFirstWindow()) return;
+    const theme = themeStore.current;
+    void shareRemoteLook({
+      appearance: theme.appearance,
+      colors: { ...theme.colors },
+      ui: { ...theme.ui },
+      fontFamily: themeStore.effectiveFontFamily,
+      lineHeight: theme.font.lineHeight,
+    }).catch(() => {});
   });
 
   // Modo IA is the switch for every AI feature: turned off (here or from

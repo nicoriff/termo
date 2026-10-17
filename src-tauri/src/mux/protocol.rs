@@ -55,6 +55,10 @@ pub enum Op {
     Attach { session: Uuid, since: u64 },
     Detach { session: Uuid },
     Resize { session: Uuid, cols: u16, rows: u16 },
+    /// Its size back to this one, if it has another now (someone else
+    /// sized it meanwhile): what a tab does when it's taken up again.
+    /// Answered with whether it changed.
+    Claim { session: Uuid, cols: u16, rows: u16 },
     PromptRedraw { session: Uuid },
     Kill { session: Uuid },
     List,
@@ -67,6 +71,63 @@ pub enum Op {
     /// The remote access settings changed: applied now rather than at the
     /// next look.
     ReloadRemote,
+    /// One of the app's own consoles, shown from the tailnet too while
+    /// remote access is on (see pty/sharing.rs): the app sends what it
+    /// prints as output frames, and gets what's typed into it from there.
+    Host { session: Uuid, console: HostedConsole },
+    /// It ended, or isn't shared any more.
+    Unhost { session: Uuid },
+    /// What runs in front in one of the app's own consoles now.
+    Foreground { session: Uuid, path: Option<String> },
+    /// What the app knows of the agent in a console — its hooks and status
+    /// line are the app's —, for whoever shows it from the tailnet.
+    Agent { session: Uuid, agent: Option<AgentInfo> },
+}
+
+/// An agent at work in a console, as the app's status bar shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentInfo {
+    /// Its name as shown: "Claude Code", "Codex"…
+    pub tool: String,
+    /// "running", "awaiting" (the user's answer), "error" or "finished".
+    pub status: String,
+    #[serde(default)]
+    pub plan_windows: Vec<PlanUse>,
+    pub context_percent: Option<f64>,
+    pub cost_usd: Option<f64>,
+}
+
+/// How much of one of the plan's rate-limit windows is used.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanUse {
+    /// How long the window runs; None when the agent doesn't say.
+    pub window_minutes: Option<u32>,
+    pub percent: f64,
+}
+
+/// The repository a console is in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitInfo {
+    /// Its branch, or the commit when none is checked out.
+    pub branch: String,
+    /// Whether anything is uncommitted; None when that isn't asked (see
+    /// git::brings_filters).
+    pub dirty: Option<bool>,
+}
+
+/// What the daemon is told of a console the app runs itself.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostedConsole {
+    pub path: String,
+    pub cwd: Option<String>,
+    pub started_at: i64,
+    pub cols: u16,
+    pub rows: u16,
+    pub pid: Option<u32>,
 }
 
 /// From the daemon to the app.
@@ -87,6 +148,14 @@ pub enum ServerMessage {
     Foreground { session: Uuid, path: Option<String> },
     /// The console is gone: killed, or exited with nobody attached.
     Gone { session: Uuid },
+    /// To the app, of a console it hosts: someone on the tailnet sized it
+    /// to their screen, or gave it its size back.
+    HostResize { session: Uuid, cols: u16, rows: u16 },
+    /// The same: its prompt to draw again, at the new size.
+    HostPromptRedraw { session: Uuid },
+    /// Something the status bar shows of it changed: its folder, what runs
+    /// in front, its agent.
+    Info { info: SessionInfo },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -97,6 +166,7 @@ pub enum Reply {
     Attached { info: SessionInfo },
     Sessions { sessions: Vec<SessionInfo> },
     Viewers { viewers: Vec<super::remote::Viewer> },
+    Claimed { changed: bool },
 }
 
 /// A console as the daemon knows it.
@@ -107,6 +177,8 @@ pub struct SessionInfo {
     pub pid: Option<u32>,
     /// What it runs: the shell or agent CLI.
     pub path: String,
+    /// Where it is now, as its shell last said (OSC 7); else where it
+    /// started.
     pub cwd: Option<String>,
     /// Unix seconds.
     pub started_at: i64,
@@ -118,6 +190,16 @@ pub struct SessionInfo {
     pub attached: u32,
     /// Its exit code, once its process has ended.
     pub exit_code: Option<i32>,
+    /// One the app runs itself and shares while it's open (see Op::Host).
+    #[serde(default)]
+    pub hosted: bool,
+    /// What runs in front now: the path of its program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreground: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git: Option<GitInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentInfo>,
 }
 
 pub fn write_frame<M: Serialize>(out: &mut impl Write, frame: &Frame<M>) -> io::Result<()> {

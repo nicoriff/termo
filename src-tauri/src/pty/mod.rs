@@ -9,6 +9,7 @@ mod codex_usage;
 mod grok_usage;
 pub mod console_shims;
 mod consoles;
+mod sharing;
 pub mod copilot_status;
 pub mod cwd_report;
 mod manager;

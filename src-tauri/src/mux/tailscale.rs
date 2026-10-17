@@ -63,6 +63,9 @@ pub struct Status {
     pub backend: String,
     pub me: Machine,
     pub peers: Vec<Machine>,
+    /// Whether the tailnet's machines are reachable by name (MagicDNS):
+    /// otherwise only by address.
+    pub magic_dns: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -124,6 +127,10 @@ fn parse_status(json: &Value) -> Option<Status> {
         backend: json.get("BackendState").and_then(Value::as_str).unwrap_or("").to_string(),
         me,
         peers,
+        magic_dns: json
+            .pointer("/CurrentTailnet/MagicDNSEnabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
@@ -178,6 +185,7 @@ mod tests {
         json!({
             "Version": "1.80.0",
             "BackendState": "Running",
+            "CurrentTailnet": { "MagicDNSSuffix": "tail1234.ts.net", "MagicDNSEnabled": true },
             "Self": {
                 "HostName": "DESKTOP-ABC",
                 "DNSName": "desktop.tail1234.ts.net.",
@@ -205,6 +213,7 @@ mod tests {
         assert!(status.running());
         assert_eq!(status.me.name, "desktop");
         assert_eq!(status.me.dns_name, "desktop.tail1234.ts.net");
+        assert!(status.magic_dns);
         assert_eq!(status.me.ip, Some(Ipv4Addr::new(100, 101, 102, 103)), "the IPv4 one");
         assert_eq!(status.me.login.as_deref(), Some("nicolas@example.com"));
         let names: Vec<&str> = status.peers.iter().map(|peer| peer.name.as_str()).collect();

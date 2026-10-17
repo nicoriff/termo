@@ -18,6 +18,7 @@ pub mod client;
 pub mod protocol;
 pub mod remote;
 mod screen;
+mod status;
 pub mod server;
 pub mod tailscale;
 mod web;
@@ -87,6 +88,55 @@ fn remove_info(dir: &Path, pid: u32) {
     }
 }
 
+/// Ends the daemon in `dir` outright, with every console it runs: one that
+/// stopped answering can't be asked to. Only a process of Termo's — the id
+/// in an old info file may be someone else's by now.
+pub fn end_daemon(dir: &Path) {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let Some(info) = read_info(dir) else {
+        return;
+    };
+    let pid = Pid::from_u32(info.pid);
+    let mut system = System::new();
+    let is_termo = |system: &mut System| {
+        system.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, ProcessRefreshKind::nothing());
+        system
+            .process(pid)
+            .is_some_and(|process| process.name().to_string_lossy().to_lowercase().starts_with("termo"))
+    };
+    if is_termo(&mut system) {
+        end_process_tree(info.pid);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while is_termo(&mut system) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    remove_info(dir, info.pid);
+}
+
+#[cfg(windows)]
+fn end_process_tree(pid: u32) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+}
+
+/// Its consoles' shells get SIGHUP when the daemon's end of their
+/// terminals closes.
+#[cfg(unix)]
+fn end_process_tree(pid: u32) {
+    // SAFETY: a plain signal to a process id.
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+}
+
 /// A connection to the daemon in `dir`, if one is running there.
 pub fn connect(dir: &Path) -> Option<(TcpStream, DaemonInfo)> {
     let info = read_info(dir)?;
@@ -142,28 +192,59 @@ pub fn launch(dir: &Path, exe: &Path) -> io::Result<()> {
 /// than the installed one: a running .exe can't be replaced, and the
 /// daemon keeps running across updates. Elsewhere replacing a running file
 /// is fine — and in an AppImage the executable only works from inside it.
+///
+/// The copy is always the same file, brought up to date: Windows' firewall
+/// asks about a program by its path, once — the tailnet listener (see
+/// server.rs) would otherwise have it asking after every update, and in a
+/// dev build after every rebuild. Only while a daemon of another build
+/// still runs from it (one of an older protocol, kept for its consoles)
+/// does a copy named after the build stand in.
 fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
     if cfg!(windows) {
         let bin = dir.join("bin");
         std::fs::create_dir_all(&bin)?;
-        let copy = bin.join(format!("termo-{build}.exe"));
-        if !copy.exists() {
-            let tmp = copy.with_extension("exe.tmp");
-            std::fs::copy(exe, &tmp)?;
-            std::fs::rename(&tmp, &copy)?;
-        }
+        let fixed = bin.join(DAEMON_EXE);
+        let stamp = bin.join(DAEMON_BUILD);
+        let up_to_date = fixed.exists() && std::fs::read_to_string(&stamp).is_ok_and(|text| text == build);
+        let program = if up_to_date {
+            fixed
+        } else if replace(exe, &fixed).is_ok() {
+            std::fs::write(&stamp, build)?;
+            fixed
+        } else {
+            let copy = bin.join(format!("termo-{build}.exe"));
+            if !copy.exists() {
+                replace(exe, &copy)?;
+            }
+            copy
+        };
         // Copies no daemon runs from any more. One that's running can't be
         // deleted, which is what keeps it.
         if let Ok(entries) = std::fs::read_dir(&bin) {
             for entry in entries.flatten() {
-                if entry.path() != copy {
-                    let _ = std::fs::remove_file(entry.path());
+                let path = entry.path();
+                if path != program && path != bin.join(DAEMON_EXE) && path != stamp {
+                    let _ = std::fs::remove_file(path);
                 }
             }
         }
-        return Ok(copy);
+        return Ok(program);
     }
     Ok(std::env::var_os("APPIMAGE").map(PathBuf::from).unwrap_or_else(|| exe.to_path_buf()))
+}
+
+/// The daemon's copy of the executable on Windows, and which build it is.
+const DAEMON_EXE: &str = "termo-daemon.exe";
+const DAEMON_BUILD: &str = "termo-daemon.build";
+
+/// Puts a copy of `exe` at `to` all at once; fails if a process runs from
+/// `to`.
+fn replace(exe: &Path, to: &Path) -> io::Result<()> {
+    let tmp = to.with_extension("exe.tmp");
+    std::fs::copy(exe, &tmp)?;
+    std::fs::rename(&tmp, to).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 /// Lets the daemon outlive the app that started it: no console of its own,
@@ -206,4 +287,35 @@ fn detach(command: &mut Command) -> io::Result<()> {
 /// A random token for the info file: two v4 UUIDs, 244 random bits.
 fn new_token() -> String {
     format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    /// One path for the firewall to know, whatever the build: brought up to
+    /// date in place, and the copies of earlier builds cleared away.
+    #[test]
+    fn the_daemon_runs_from_the_same_file_build_after_build() {
+        let dir = std::env::temp_dir().join(format!("termo-daemon-program-{}", uuid::Uuid::new_v4().simple()));
+        let exe = dir.join("termo.exe");
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join("bin").join("termo-0.1.0-old.exe"), b"old").unwrap();
+
+        std::fs::write(&exe, b"first").unwrap();
+        let first = daemon_program(&dir, &exe, "first").unwrap();
+        assert_eq!(first, dir.join("bin").join(DAEMON_EXE));
+        assert_eq!(std::fs::read(&first).unwrap(), b"first");
+
+        std::fs::write(&exe, b"second").unwrap();
+        let second = daemon_program(&dir, &exe, "second").unwrap();
+        assert_eq!(second, first);
+        assert_eq!(std::fs::read(&second).unwrap(), b"second");
+
+        let mut left: Vec<String> =
+            std::fs::read_dir(dir.join("bin")).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        assert_eq!(left, [DAEMON_BUILD, DAEMON_EXE]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

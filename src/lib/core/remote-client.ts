@@ -60,6 +60,8 @@ export interface TailscaleStatus {
   backend: string;
   me: TailnetMachine;
   peers: TailnetMachine[];
+  /** Whether machines are reachable by name (MagicDNS), or only by address. */
+  magicDns: boolean;
 }
 
 export interface RemoteOverview {
@@ -104,4 +106,18 @@ export function tailnetMachines(): Promise<TailnetMachine[]> {
 /** The consoles another computer keeps running, asked over the tailnet. */
 export function remoteConsoles(host: string): Promise<KeptConsole[]> {
   return invoke("remote_consoles", { host });
+}
+
+/** The theme and console font this window shows, for the web client to
+ * look the same (see src-tauri/src/mux/remote.rs, WebLook). */
+export interface WebLook {
+  appearance: string;
+  colors: Record<string, string>;
+  ui: Record<string, string>;
+  fontFamily: string;
+  lineHeight: number;
+}
+
+export function shareRemoteLook(look: WebLook): Promise<void> {
+  return invoke("remote_share_look", { look });
 }

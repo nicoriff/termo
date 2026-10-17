@@ -96,6 +96,21 @@ pub fn run() {
             if let Some(window) = app.get_webview_window(terminal_windows::MAIN) {
                 commands::window_shape::attach(&window);
             }
+            // The status bar says when the sessions daemon stops answering
+            // (new consoles then open in the app) and offers to restart it.
+            {
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_daemon_health(move |answering| {
+                    let _ = tauri::Emitter::emit(&handle, "sessions-daemon", answering);
+                });
+            }
+            // With remote access on, the consoles the app runs itself are
+            // shown from the tailnet too (see pty/sharing.rs).
+            if let Some(dir) = mux::dir() {
+                if mux::remote::read_config(&dir).enabled {
+                    app.state::<AppState>().pty.share(true);
+                }
+            }
             // The consoles of an earlier run that the sessions daemon still
             // runs (see mux/): what belongs to them stays.
             let kept: std::collections::HashSet<String> =
@@ -133,11 +148,14 @@ pub fn run() {
             commands::pty_commands::pty_spawn,
             commands::pty_commands::pty_write,
             commands::pty_commands::pty_resize,
+            commands::pty_commands::pty_claim_size,
             commands::pty_commands::pty_prompt_redraw,
             commands::pty_commands::pty_kill,
             commands::pty_commands::pty_attach,
             commands::pty_commands::pty_background,
             commands::pty_commands::pty_kill_background,
+            commands::pty_commands::sessions_daemon_answering,
+            commands::pty_commands::sessions_daemon_restart,
             commands::pty_commands::agent_events_restore,
             commands::remote_commands::remote_overview,
             commands::remote_commands::remote_activity,
@@ -147,6 +165,8 @@ pub fn run() {
             commands::remote_commands::remote_disconnect_all,
             commands::remote_commands::remote_machines,
             commands::remote_commands::remote_consoles,
+            commands::remote_commands::remote_share_look,
+            commands::remote_commands::remote_share_agents,
             commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,

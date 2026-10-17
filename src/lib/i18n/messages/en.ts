@@ -65,6 +65,9 @@ export const en: Messages = {
   },
   statusBar: {
     aiMode: "AI Mode: {state}",
+    daemonDown: "Consoles aren't being kept",
+    daemonDownHint:
+      "The process that keeps consoles running isn't answering. New consoles open in Termo and close with it. Click to restart it from Preferences.",
     aiOn: "on",
     aiOff: "off",
     memory: "Memory: {value}",
@@ -2470,17 +2473,29 @@ export const en: Messages = {
       keepRunning: "Keep consoles running when Termo closes",
       keepRunningHint:
         "New consoles keep running, along with whatever runs in them, when you close the window or Termo, or update it, and reconnect when you open it again. They don't survive restarting the computer.",
+      daemonDown: "The process that keeps consoles running isn't answering",
+      daemonDownHint:
+        "Meanwhile, new consoles open in Termo and close with it. Restarting it closes the consoles it kept; the tabs that showed them end.",
+      restartDaemon: "Restart",
+      restartingDaemon: "Restarting…",
+      restartFailed: "Couldn't restart it: {error}",
     },
     remote: {
       intro:
-        "Show and use the consoles Termo keeps running on this computer from another computer on your Tailscale tailnet. Tailscale says who is connecting; only those on the list get in.",
+        "Show and use this computer's open consoles from another computer or your phone on your Tailscale tailnet. Tailscale says who is connecting; only those on the list get in.",
       enable: "Allow connections from the tailnet",
-      needsKeepRunning:
-        "Needs “Keep consoles running when Termo closes” (in Console): only those consoles can be shown on another computer.",
+      enabling: "Turning on…",
+      disabling: "Turning off…",
+      notKeptHint:
+        "Every open console shows while Termo is open. To have them there after you close it, turn on “Keep consoles running when Termo closes” in Console.",
       noTailscale: "Tailscale isn't installed. Install it and sign in to use remote access.",
       tailscaleDown: "Tailscale isn't connected on this computer.",
       thisComputer: "This computer on the tailnet: {name} ({ip})",
-      webClient: "From the browser on another computer or a phone: {url}",
+      webClientTitle: "Open from your phone or another computer",
+      webClientHint: "Open this address in the browser of any device on your tailnet (with Tailscale and your account).",
+      copyUrl: "Copy",
+      copiedUrl: "Copied",
+      webClientFull: "If it doesn't open on some device, use the full address:",
       allowed: "Who can connect",
       anyComputer: "from any computer",
       fromComputer: "from {node}",

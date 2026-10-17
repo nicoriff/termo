@@ -5,11 +5,13 @@
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
 
   let shells = $state<ShellInfo[]>([]);
 
   onMount(() => {
     void listShells().then((list) => (shells = list));
+    return sessionsDaemon.start();
   });
 
   // themeStore setters never persist themselves (kept decoupled from
@@ -65,6 +67,18 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.console.keepRunningHint")}</p>
+  {#if !sessionsDaemon.answering && appConfigStore.persistentSessions}
+    <div class="daemon-down" role="status">
+      <strong>{t("preferences.console.daemonDown")}</strong>
+      <p>{t("preferences.console.daemonDownHint")}</p>
+      <button class="restart" disabled={sessionsDaemon.restarting} onclick={() => void sessionsDaemon.restart()}>
+        {sessionsDaemon.restarting ? t("preferences.console.restartingDaemon") : t("preferences.console.restartDaemon")}
+      </button>
+      {#if sessionsDaemon.restartError}
+        <p class="error">{t("preferences.console.restartFailed", { error: sessionsDaemon.restartError })}</p>
+      {/if}
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -124,5 +138,52 @@
     margin: 6px 0 0;
     font-size: 10px;
     opacity: 0.6;
+  }
+
+  .daemon-down {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, #e3b341 55%, transparent);
+    background: color-mix(in srgb, #e3b341 10%, transparent);
+    font-size: 12px;
+  }
+
+  .daemon-down strong {
+    color: #e3b341;
+  }
+
+  .daemon-down p {
+    margin: 4px 0 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    opacity: 0.8;
+  }
+
+  .daemon-down .error {
+    margin: 8px 0 0;
+    color: #f85149;
+    opacity: 1;
+  }
+
+  .restart {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    background: var(--pane-active-border, #3a6df0);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .restart:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+
+  .restart:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 </style>

@@ -10,6 +10,7 @@ import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
 import {
   attachPty,
+  claimPtySize,
   killPty,
   promptRedrawPty,
   resizePty,
@@ -57,6 +58,9 @@ const OLD_CONPTY_BEFORE_BUILD = 21376;
 // resize many times in a row, would otherwise scramble the output.
 const PTY_RESIZE_SETTLE_MS = 100;
 
+/** How often typing takes the console's size back at most (see claimSize). */
+const CLAIM_EVERY_MS = 3000;
+
 // An agent console stays covered until its CLI draws (see setStarting):
 // how long after its first text, so the screen is whole, and the longest it
 // stays covered if the CLI never writes any.
@@ -101,6 +105,8 @@ export class TerminalInstance {
   private container: HTMLElement | null = null;
   private lastPtySize: { cols: number; rows: number } | null = null;
   private ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When it last took its size back (see claimSize). */
+  private lastClaimAt = 0;
   /** Identifies the most recent font whose load we're waiting on, so a
    * quick succession of font changes only re-measures for the last one. */
   private fontToken = 0;
@@ -138,6 +144,7 @@ export class TerminalInstance {
     this.term.onData((data) => {
       if (this.sessionId) void writePty(this.sessionId, data);
       else this.pendingInput.push(data);
+      this.claimSize();
     });
 
     // Typing at a console that's still covered uncovers it: whatever the
@@ -353,6 +360,9 @@ export class TerminalInstance {
   ): Promise<void> {
     this.container = container;
     this.term.open(container);
+    // Taken up again — its tab chosen, the window back in front, clicked
+    // into: the size a phone may have taken meanwhile comes back.
+    this.term.textarea?.addEventListener("focus", () => this.claimSize({ now: true }));
     this.fit.fit();
     void this.remeasureWhenFontLoads(
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
@@ -621,6 +631,24 @@ export class TerminalInstance {
     const id = this.sessionId;
     void resizePty(id, cols, rows)
       .then(() => promptRedrawPty(id))
+      .catch(() => {});
+  }
+
+  /** A console has one size wherever it's shown: someone on the tailnet
+   * (a phone) may have sized it to their screen. Taken up again here, it
+   * gets this tab's back — on focus, and on typing, for when the window
+   * never lost it; that one at most every few seconds. */
+  private claimSize(options?: { now?: boolean }): void {
+    if (this.disposed || !this.sessionId || !this.lastPtySize || this.ptyResizeTimer) return;
+    const { cols, rows } = this.term;
+    // A resize of its own on the way: that one sizes it.
+    if (this.lastPtySize.cols !== cols || this.lastPtySize.rows !== rows) return;
+    const at = Date.now();
+    if (!options?.now && at - this.lastClaimAt < CLAIM_EVERY_MS) return;
+    this.lastClaimAt = at;
+    const id = this.sessionId;
+    void claimPtySize(id, cols, rows)
+      .then((changed) => (changed ? promptRedrawPty(id) : undefined))
       .catch(() => {});
   }
 

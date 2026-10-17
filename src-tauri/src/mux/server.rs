@@ -11,14 +11,15 @@ use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
-use super::protocol::{read_frame, write_frame, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
+use super::protocol::{read_frame, write_frame, AgentInfo, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
 use super::remote::{self, Access, RemoteConfig, Viewer};
 use super::screen::Screen;
+use super::status;
 use super::tailscale::{self, Identity};
 use super::{web, DaemonInfo};
 use crate::pty::{contains_cursor_report, ConsoleEvent, EventSink, PtySession, SpawnSpec};
@@ -46,6 +47,7 @@ pub fn run(build: &str, dir: Option<&str>) {
     if super::connect(&dir).is_some() {
         return;
     }
+    log_panics(&dir);
     let Ok(listener) = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))) else {
         return;
     };
@@ -101,9 +103,9 @@ fn remote_supervisor(daemon: &Arc<Daemon>) {
     loop {
         daemon.apply_remote_config();
         let (flag, wake) = &daemon.remote.wake;
-        let mut woken = flag.lock().unwrap();
+        let mut woken = flag.locked();
         if !*woken {
-            woken = wake.wait_timeout(woken, Duration::from_secs(5)).unwrap().0;
+            woken = wake.wait_timeout(woken, Duration::from_secs(5)).unwrap_or_else(std::sync::PoisonError::into_inner).0;
         }
         *woken = false;
     }
@@ -131,6 +133,47 @@ fn exit_when_idle(daemon: &Arc<Daemon>) {
             daemon.exit();
         }
     }
+}
+
+/// The daemon has no console to print to: a panic (what went wrong, and
+/// where) goes to `daemon.log` in its folder, the last few kept.
+fn log_panics(dir: &std::path::Path) {
+    const MAX_LOG_BYTES: u64 = 256 * 1024;
+    let path = dir.join("daemon.log");
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        use std::io::Write;
+        if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > MAX_LOG_BYTES) {
+            let _ = std::fs::remove_file(&path);
+        }
+        let thread = std::thread::current();
+        let line = format!("{}\t{}\t{info}\n", now_seconds(), thread.name().unwrap_or("?"));
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = file.write_all(line.as_bytes());
+        }
+        previous(info);
+    }));
+}
+
+/// A lock taken even after a thread panicked holding it. What it guards is
+/// still usable (a console's screen copy starts over if it was mid-update,
+/// see screen.rs); refusing it instead would take down every connection
+/// that touches it, one after another, and leave the app waiting.
+trait Locked<T> {
+    fn locked(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T> Locked<T> for Mutex<T> {
+    fn locked(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// Whether the shell `pid` sits at its prompt: nothing running under it.
+fn shell_is_idle(pid: u32) -> bool {
+    static PROCESSES: std::sync::LazyLock<crate::pty::memory::MemorySampler> =
+        std::sync::LazyLock::new(Default::default);
+    PROCESSES.busy_roots(&[pid]).is_empty()
 }
 
 fn now_seconds() -> i64 {
@@ -200,7 +243,7 @@ impl Role {
             Role::Local => true,
             Role::Remote { access, .. } => match op {
                 Op::List | Op::Attach { .. } | Op::Detach { .. } => true,
-                Op::Resize { .. } | Op::PromptRedraw { .. } | Op::Kill { .. } => *access == Access::Full,
+                Op::Resize { .. } | Op::Claim { .. } | Op::PromptRedraw { .. } | Op::Kill { .. } => *access == Access::Full,
                 // Starting consoles, and everything about the daemon itself,
                 // is this computer's alone.
                 _ => false,
@@ -223,6 +266,10 @@ struct Live {
     cwd: Option<String>,
     started_at: i64,
     pty: OnceLock<PtySession>,
+    /// For one of the app's own consoles (see Op::Host), instead of a pty:
+    /// the app's connection, where what's typed and resizes go, and the
+    /// process id it gave.
+    host: Option<(Client, Option<u32>)>,
     state: Mutex<State>,
 }
 
@@ -245,6 +292,22 @@ struct State {
     /// each would answer what the program asks its terminal; only this
     /// one's answers go through (see accepts_input).
     typist: Option<u64>,
+    /// Someone on the tailnet resized it to their screen (a phone): the
+    /// size it had before, given back when they leave — unless this
+    /// computer sized it meanwhile, which makes that its size.
+    borrowed: Option<Borrowed>,
+    /// Where its shell last said it is (see status::last_cwd).
+    cwd_now: Option<String>,
+    /// What runs in front now.
+    foreground: Option<String>,
+    /// What the app says of the agent in it (see Op::Agent).
+    agent: Option<AgentInfo>,
+}
+
+struct Borrowed {
+    by: u64,
+    cols: u16,
+    rows: u16,
 }
 
 impl State {
@@ -322,6 +385,11 @@ impl std::io::Read for KickableReader {
 }
 
 impl Daemon {
+    /// Its folder (info file, remote access settings), once it runs.
+    pub(super) fn folder(&self) -> Option<&std::path::Path> {
+        self.dir.get().map(PathBuf::as_path)
+    }
+
     pub fn new(token: String, whois: Whois, address: Address) -> Arc<Self> {
         Arc::new(Self {
             token,
@@ -350,18 +418,18 @@ impl Daemon {
         };
         let config = remote::read_config(dir);
         // Whoever is no longer allowed — or now allowed less — is cut off.
-        for viewer in self.remote.viewers.lock().unwrap().values() {
+        for viewer in self.remote.viewers.locked().values() {
             if !config.enabled || config.access_for(&viewer.identity) != Some(viewer.access) {
                 viewer.kick.kick();
             }
         }
-        *self.remote.config.lock().unwrap() = config.clone();
+        *self.remote.config.locked() = config.clone();
         let wanted = config
             .enabled
             .then(|| (self.remote.address)())
             .flatten()
             .map(|ip| SocketAddr::new(ip, config.port));
-        let mut listener = self.remote.listener.lock().unwrap();
+        let mut listener = self.remote.listener.locked();
         if listener.as_ref().map(|(asked, _, _)| *asked) == wanted {
             return;
         }
@@ -398,7 +466,7 @@ impl Daemon {
         let now = now_seconds();
         // A browser (the web client, see web.rs) or the daemon's own protocol.
         let browser = web::is_http(&stream);
-        let access = identity.as_ref().and_then(|who| self.remote.config.lock().unwrap().access_for(who));
+        let access = identity.as_ref().and_then(|who| self.remote.config.locked().access_for(who));
         if let Some(dir) = &dir {
             let outcome = match (&identity, access) {
                 (None, _) => "unknown",
@@ -436,20 +504,20 @@ impl Daemon {
     fn identify(&self, peer: SocketAddr) -> Option<Identity> {
         let ip = peer.ip();
         {
-            let mut known = self.remote.known.lock().unwrap();
+            let mut known = self.remote.known.locked();
             known.retain(|_, (at, _)| at.elapsed() < WHOIS_FOR);
             if let Some((_, who)) = known.get(&ip) {
                 return who.clone();
             }
         }
         let who = (self.remote.whois)(peer);
-        self.remote.known.lock().unwrap().insert(ip, (Instant::now(), who.clone()));
+        self.remote.known.locked().insert(ip, (Instant::now(), who.clone()));
         who
     }
 
     /// Ends every connection from the tailnet.
     fn disconnect_remote(&self) {
-        for viewer in self.remote.viewers.lock().unwrap().values() {
+        for viewer in self.remote.viewers.locked().values() {
             viewer.kick.kick();
         }
     }
@@ -458,8 +526,7 @@ impl Daemon {
         let mut viewers: Vec<Viewer> = self
             .remote
             .viewers
-            .lock()
-            .unwrap()
+            .locked()
             .values()
             .map(|viewer| Viewer {
                 login: viewer.identity.login.clone(),
@@ -474,7 +541,7 @@ impl Daemon {
     }
 
     fn note_viewing(&self, client: u64, session: Uuid, viewing: bool) {
-        if let Some(viewer) = self.remote.viewers.lock().unwrap().get_mut(&client) {
+        if let Some(viewer) = self.remote.viewers.locked().get_mut(&client) {
             if viewing {
                 viewer.sessions.insert(session);
             } else {
@@ -488,19 +555,19 @@ impl Daemon {
     }
 
     fn touch(&self) {
-        *self.busy_at.lock().unwrap() = Instant::now();
+        *self.busy_at.locked() = Instant::now();
     }
 
     fn idle_for(&self) -> Duration {
-        if !self.sessions.lock().unwrap().is_empty() || self.connections.load(Ordering::SeqCst) > 0 {
+        if !self.sessions.locked().is_empty() || self.connections.load(Ordering::SeqCst) > 0 {
             self.touch();
         }
-        self.busy_at.lock().unwrap().elapsed()
+        self.busy_at.locked().elapsed()
     }
 
     /// Ends every console and the daemon.
     fn exit(&self) -> ! {
-        let sessions: Vec<Arc<Live>> = self.sessions.lock().unwrap().drain().map(|(_, live)| live).collect();
+        let sessions: Vec<Arc<Live>> = self.sessions.locked().drain().map(|(_, live)| live).collect();
         for live in &sessions {
             if let Some(pty) = live.pty.get() {
                 let _ = pty.kill();
@@ -512,8 +579,31 @@ impl Daemon {
         std::process::exit(0);
     }
 
+    /// Sizes a console as `client` asked: someone on the tailnet borrows
+    /// the size (see Borrowed), this computer makes it its own.
+    fn resize_for(&self, client: &Client, role: &Role, session: Uuid, cols: u16, rows: u16) -> Result<(), String> {
+        let live = self.session(session)?;
+        {
+            let mut state = live.state.locked();
+            if matches!(role, Role::Remote { .. }) {
+                let before = (state.cols, state.rows);
+                let borrowed = state.borrowed.get_or_insert(Borrowed { by: client.id, cols: before.0, rows: before.1 });
+                borrowed.by = client.id;
+            } else {
+                state.borrowed = None;
+            }
+        }
+        if live.hosted_by(client.id) {
+            // The app resized its own console already.
+            live.resized(cols, rows);
+        } else {
+            live.resize(cols, rows)?;
+        }
+        Ok(())
+    }
+
     fn session(&self, id: Uuid) -> Result<Arc<Live>, String> {
-        self.sessions.lock().unwrap().get(&id).cloned().ok_or_else(|| format!("unknown session: {id}"))
+        self.sessions.locked().get(&id).cloned().ok_or_else(|| format!("unknown session: {id}"))
     }
 
     /// One connection, from its hello to its end. A local one has to bring
@@ -576,7 +666,7 @@ impl Daemon {
         });
 
         if let Role::Remote { identity, access } = &role {
-            self.remote.viewers.lock().unwrap().insert(
+            self.remote.viewers.locked().insert(
                 client.id,
                 RemoteViewer {
                     identity: identity.clone(),
@@ -598,8 +688,14 @@ impl Daemon {
                         continue;
                     }
                     if let Ok(live) = self.session(session) {
+                        // The app's own console has the app's terminal
+                        // answering what the program asks it; another
+                        // one's answer would be a second.
+                        if live.host.is_some() && is_terminal_reply(&bytes) {
+                            continue;
+                        }
                         {
-                            let mut state = live.state.lock().unwrap();
+                            let mut state = live.state.locked();
                             if !state.accepts_input(client.id, &bytes) {
                                 continue;
                             }
@@ -607,15 +703,27 @@ impl Daemon {
                                 state.cursor_query = false;
                             }
                         }
-                        if let Some(pty) = live.pty.get() {
-                            let _ = pty.write(&bytes);
+                        live.write(&bytes);
+                    }
+                }
+                // What one of the app's own consoles printed (see Op::Host).
+                Frame::Output { session, bytes, .. } => {
+                    if let Ok(live) = self.session(session) {
+                        if live.hosted_by(client.id) {
+                            live.output(bytes);
                         }
                     }
                 }
                 Frame::Message(ClientMessage::Request { id, op }) => {
                     let shutdown = op == Op::Shutdown;
                     let result = if role.may(&op) {
-                        self.handle(&client, &mut attached, op)
+                        // A bug in handling one request is that request's
+                        // error (and a line in daemon.log), not a client
+                        // left waiting for an answer that never comes.
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            self.handle(&client, &role, &mut attached, op)
+                        }))
+                        .unwrap_or_else(|_| Err("the sessions daemon failed at this".to_string()))
                     } else {
                         Err("not allowed".to_string())
                     };
@@ -636,12 +744,18 @@ impl Daemon {
         for session in attached {
             self.detach(session, client.id);
         }
-        self.remote.viewers.lock().unwrap().remove(&client.id);
+        // The app's own consoles go with it.
+        let hosted: Vec<Uuid> =
+            self.sessions.locked().values().filter(|live| live.hosted_by(client.id)).map(|live| live.id).collect();
+        for session in hosted {
+            let _ = self.kill(session);
+        }
+        self.remote.viewers.locked().remove(&client.id);
         self.connections.fetch_sub(1, Ordering::SeqCst);
         self.touch();
     }
 
-    fn handle(self: &Arc<Self>, client: &Client, attached: &mut HashSet<Uuid>, op: Op) -> Result<Reply, String> {
+    fn handle(self: &Arc<Self>, client: &Client, role: &Role, attached: &mut HashSet<Uuid>, op: Op) -> Result<Reply, String> {
         match op {
             Op::Spawn { session, spec } => {
                 let pid = self.spawn(session, &spec)?;
@@ -668,32 +782,88 @@ impl Daemon {
             }
             Op::ReloadRemote => {
                 let (flag, wake) = &self.remote.wake;
-                *flag.lock().unwrap() = true;
+                *flag.locked() = true;
                 wake.notify_all();
                 Ok(Reply::Done)
             }
             Op::Resize { session, cols, rows } => {
-                let live = self.session(session)?;
-                if let Some(pty) = live.pty.get() {
-                    pty.resize(cols, rows).map_err(|err| err.to_string())?;
-                }
-                let mut state = live.state.lock().unwrap();
-                state.cols = cols;
-                state.rows = rows;
-                state.screen.resize(rows, cols);
+                self.resize_for(client, role, session, cols, rows)?;
                 Ok(Reply::Done)
             }
-            Op::PromptRedraw { session } => {
-                // The app has already checked the shell is at its prompt.
+            Op::Claim { session, cols, rows } => {
                 let live = self.session(session)?;
-                if let Some(pty) = live.pty.get() {
-                    pty.prompt_redraw(|_| true).map_err(|err| err.to_string())?;
+                let now = {
+                    let state = live.state.locked();
+                    (state.cols, state.rows)
+                };
+                let changed = now != (cols, rows);
+                if changed || !matches!(role, Role::Remote { .. }) {
+                    // The same size still makes it this computer's.
+                    self.resize_for(client, role, session, cols, rows)?;
                 }
+                Ok(Reply::Claimed { changed })
+            }
+            Op::PromptRedraw { session } => {
+                // The app has already checked the shell is at its prompt;
+                // for the web client (resized to a phone) the daemon does:
+                // nothing running under it.
+                let live = self.session(session)?;
+                let remote = matches!(role, Role::Remote { .. });
+                live.prompt_redraw(|pid| !remote || shell_is_idle(pid))?;
                 Ok(Reply::Done)
             }
             Op::Kill { session } => {
+                // The app's own consoles are closed there, not from here.
+                if self.session(session)?.host.is_some() {
+                    return Err("this console belongs to the app".into());
+                }
                 attached.remove(&session);
                 self.kill(session)?;
+                Ok(Reply::Done)
+            }
+            Op::Host { session, console } => {
+                let existing = self.sessions.locked().get(&session).map(|live| live.host.is_some());
+                match existing {
+                    // Shared again over a new connection before the daemon
+                    // saw the old one end: the new one takes over.
+                    Some(true) => self.kill(session)?,
+                    Some(false) => return Err(format!("session {session} already exists")),
+                    None => {}
+                }
+                let live = Live::new(
+                    session,
+                    console.path,
+                    console.cwd,
+                    console.started_at,
+                    (console.cols, console.rows),
+                    Some((client.clone(), console.pid)),
+                );
+                self.sessions.locked().insert(session, live);
+                self.touch();
+                Ok(Reply::Done)
+            }
+            Op::Foreground { session, path } => {
+                let live = self.session(session)?;
+                if live.hosted_by(client.id) {
+                    let mut state = live.state.locked();
+                    state.foreground = path;
+                    live.report(&mut state);
+                }
+                Ok(Reply::Done)
+            }
+            Op::Agent { session, agent } => {
+                let live = self.session(session)?;
+                let mut state = live.state.locked();
+                if state.agent != agent {
+                    state.agent = agent;
+                    live.report(&mut state);
+                }
+                Ok(Reply::Done)
+            }
+            Op::Unhost { session } => {
+                if self.session(session)?.hosted_by(client.id) {
+                    self.kill(session)?;
+                }
                 Ok(Reply::Done)
             }
             Op::List => Ok(Reply::Sessions { sessions: self.list() }),
@@ -702,33 +872,15 @@ impl Daemon {
     }
 
     fn spawn(self: &Arc<Self>, id: Uuid, spec: &SpawnSpec) -> Result<Option<u32>, String> {
-        if self.sessions.lock().unwrap().contains_key(&id) {
+        if self.sessions.locked().contains_key(&id) {
             return Err(format!("session {id} already exists"));
         }
-        let live = Arc::new(Live {
-            id,
-            path: spec.path.clone(),
-            cwd: spec.cwd.clone(),
-            started_at: now_seconds(),
-            pty: OnceLock::new(),
-            state: Mutex::new(State {
-                clients: Vec::new(),
-                history: History::default(),
-                screen: Screen::new(spec.rows, spec.cols),
-                seq: 0,
-                cols: spec.cols,
-                rows: spec.rows,
-                title: None,
-                exit_code: None,
-                cursor_query: false,
-                typist: None,
-            }),
-        });
+        let live = Live::new(id, spec.path.clone(), spec.cwd.clone(), now_seconds(), (spec.cols, spec.rows), None);
         let sink = self.sink_for(&live);
         let pty = PtySession::spawn(id, spec, sink).map_err(|err| err.to_string())?;
         let pid = pty.pid();
         let _ = live.pty.set(pty);
-        self.sessions.lock().unwrap().insert(id, live);
+        self.sessions.locked().insert(id, live);
         self.touch();
         Ok(pid)
     }
@@ -747,7 +899,7 @@ impl Daemon {
                 ConsoleEvent::Output(bytes) => live.output(bytes),
                 ConsoleEvent::Exit(code) => {
                     let orphan = {
-                        let mut state = live.state.lock().unwrap();
+                        let mut state = live.state.locked();
                         state.exit_code = Some(code);
                         let exit = ServerMessage::Exit { session: live.id, code };
                         state.clients.retain(|client| client.offer(Frame::Message(exit.clone())));
@@ -761,9 +913,11 @@ impl Daemon {
                     }
                 }
                 ConsoleEvent::Foreground(path) => {
-                    let mut state = live.state.lock().unwrap();
+                    let mut state = live.state.locked();
+                    state.foreground = path.clone();
                     let message = ServerMessage::Foreground { session: live.id, path };
                     state.clients.retain(|client| client.offer(Frame::Message(message.clone())));
+                    live.report(&mut state);
                 }
             }
             true
@@ -772,7 +926,7 @@ impl Daemon {
 
     fn attach(&self, id: Uuid, client: &Client, since: u64) -> Result<SessionInfo, String> {
         let live = self.session(id)?;
-        let mut state = live.state.lock().unwrap();
+        let mut state = live.state.locked();
         state.clients.retain(|other| other.id != client.id);
         // Under the same lock as new output: nothing is missed or sent twice.
         // What came after `since`, if it's all still kept; else (and to
@@ -796,16 +950,27 @@ impl Daemon {
         let Ok(live) = self.session(id) else {
             return;
         };
-        let (finished, unanswered) = {
-            let mut state = live.state.lock().unwrap();
+        let (finished, unanswered, give_back) = {
+            let mut state = live.state.locked();
             state.clients.retain(|other| other.id != client);
             if state.typist == Some(client) {
                 state.typist = None;
             }
+            // Leaving with the console sized to their screen: it gets its
+            // own size back.
+            let give_back = match &state.borrowed {
+                Some(borrowed) if borrowed.by == client => state.borrowed.take().map(|size| (size.cols, size.rows)),
+                _ => None,
+            };
             let alone = state.clients.is_empty();
             let unanswered = (alone && std::mem::take(&mut state.cursor_query)).then(|| state.screen.cursor_report());
-            (alone && state.exit_code.is_some(), unanswered)
+            (alone && state.exit_code.is_some(), unanswered, give_back)
         };
+        if let Some((cols, rows)) = give_back {
+            let _ = live.resize(cols, rows);
+            // Its prompt was drawn for the phone's width (see PromptRedraw).
+            let _ = live.prompt_redraw(shell_is_idle);
+        }
         if let Some(report) = unanswered {
             live.answer_cursor_query(&report);
         }
@@ -819,7 +984,7 @@ impl Daemon {
     fn kill(&self, id: Uuid) -> Result<(), String> {
         let live = self.session(id)?;
         {
-            let mut state = live.state.lock().unwrap();
+            let mut state = live.state.locked();
             let gone = ServerMessage::Gone { session: id };
             for client in state.clients.drain(..) {
                 client.offer(Frame::Message(gone.clone()));
@@ -832,7 +997,7 @@ impl Daemon {
     /// Forgets a console and ends it, off the caller's thread: on Windows
     /// closing a console waits until its output has been read out.
     fn remove(&self, id: Uuid) {
-        let Some(live) = self.sessions.lock().unwrap().remove(&id) else {
+        let Some(live) = self.sessions.locked().remove(&id) else {
             return;
         };
         self.touch();
@@ -845,37 +1010,147 @@ impl Daemon {
     }
 
     fn list(&self) -> Vec<SessionInfo> {
-        let sessions: Vec<Arc<Live>> = self.sessions.lock().unwrap().values().cloned().collect();
+        let sessions: Vec<Arc<Live>> = self.sessions.locked().values().cloned().collect();
         let mut list: Vec<SessionInfo> =
-            sessions.iter().map(|live| live.info(&live.state.lock().unwrap())).collect();
+            sessions.iter().map(|live| live.info(&live.state.locked())).collect();
+        // Outside the consoles' locks: it may run git.
+        for info in &mut list {
+            info.git = info.cwd.as_deref().and_then(status::git_info);
+        }
         list.sort_by_key(|info| info.started_at);
         list
     }
 }
 
 impl Live {
+    fn new(
+        id: Uuid,
+        path: String,
+        cwd: Option<String>,
+        started_at: i64,
+        (cols, rows): (u16, u16),
+        host: Option<(Client, Option<u32>)>,
+    ) -> Arc<Self> {
+        Arc::new(Live {
+            id,
+            path,
+            cwd,
+            started_at,
+            pty: OnceLock::new(),
+            host,
+            state: Mutex::new(State {
+                clients: Vec::new(),
+                history: History::default(),
+                screen: Screen::new(rows, cols),
+                seq: 0,
+                cols,
+                rows,
+                title: None,
+                exit_code: None,
+                cursor_query: false,
+                typist: None,
+                borrowed: None,
+                cwd_now: None,
+                foreground: None,
+                agent: None,
+            }),
+        })
+    }
+
+    /// Tells whoever shows it what its status bar shows now.
+    fn report(&self, state: &mut State) {
+        let info = ServerMessage::Info { info: self.info(state) };
+        state.clients.retain(|client| client.offer(Frame::Message(info.clone())));
+    }
+
+    /// Whether it's one of the app's consoles, hosted over `client`.
+    fn hosted_by(&self, client: u64) -> bool {
+        self.host.as_ref().is_some_and(|(host, _)| host.id == client)
+    }
+
+    /// Types into it: its pty, or the app that runs it.
+    fn write(&self, bytes: &[u8]) {
+        if let Some((host, _)) = &self.host {
+            host.offer(Frame::Input { session: self.id, bytes: bytes.to_vec() });
+        } else if let Some(pty) = self.pty.get() {
+            let _ = pty.write(bytes);
+        }
+    }
+
+    /// Has the shell draw its prompt again, if it sits at it. The app
+    /// checks that itself for its own consoles.
+    fn prompt_redraw(&self, shell_is_idle: impl FnOnce(u32) -> bool) -> Result<(), String> {
+        if let Some((host, _)) = &self.host {
+            host.offer(Frame::Message(ServerMessage::HostPromptRedraw { session: self.id }));
+            return Ok(());
+        }
+        match self.pty.get() {
+            Some(pty) => pty.prompt_redraw(shell_is_idle).map_err(|err| err.to_string()),
+            None => Ok(()),
+        }
+    }
+
+    fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
+        if let Some((host, _)) = &self.host {
+            host.offer(Frame::Message(ServerMessage::HostResize { session: self.id, cols, rows }));
+        } else if let Some(pty) = self.pty.get() {
+            // Asked again for the size it has (a tab taken up again): left be.
+            let now = {
+                let state = self.state.locked();
+                (state.cols, state.rows)
+            };
+            if now == (cols, rows) {
+                return Ok(());
+            }
+            pty.resize(cols, rows).map_err(|err| err.to_string())?;
+        }
+        self.resized(cols, rows);
+        Ok(())
+    }
+
+    /// Its copy of the screen follows a size it already has, and those
+    /// showing it hear of it: a phone shows it at that size.
+    fn resized(&self, cols: u16, rows: u16) {
+        let mut state = self.state.locked();
+        if (state.cols, state.rows) == (cols, rows) {
+            return;
+        }
+        state.cols = cols;
+        state.rows = rows;
+        state.screen.resize(rows, cols);
+        self.report(&mut state);
+    }
+
     fn info(&self, state: &State) -> SessionInfo {
         SessionInfo {
             id: self.id,
-            pid: self.pty.get().and_then(PtySession::pid),
+            pid: self.pty.get().and_then(PtySession::pid).or_else(|| self.host.as_ref().and_then(|(_, pid)| *pid)),
             path: self.path.clone(),
-            cwd: self.cwd.clone(),
+            cwd: state.cwd_now.clone().or_else(|| self.cwd.clone()),
             started_at: self.started_at,
             cols: state.cols,
             rows: state.rows,
             title: state.title.clone(),
             attached: state.clients.len() as u32,
             exit_code: state.exit_code,
+            hosted: self.host.is_some(),
+            foreground: state.foreground.clone(),
+            git: None,
+            agent: state.agent.clone(),
         }
     }
 
     fn output(&self, bytes: Vec<u8>) {
         let answer = {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.locked();
             state.seq += 1;
             let seq = state.seq;
             if let Some(title) = last_title(&bytes) {
                 state.title = Some(title);
+            }
+            if let Some(cwd) = status::last_cwd(&bytes).filter(|cwd| state.cwd_now.as_ref() != Some(cwd)) {
+                state.cwd_now = Some(cwd);
+                self.report(&mut state);
             }
             state.screen.process(&bytes);
             let frame = Frame::Output { session: self.id, seq, bytes: bytes.clone() };
@@ -1205,6 +1480,10 @@ mod tests {
             exit_code: None,
             cursor_query: false,
             typist: None,
+            borrowed: None,
+            cwd_now: None,
+            foreground: None,
+            agent: None,
         };
         // No one has typed: anyone's answer goes through.
         assert!(state.accepts_input(1, b"\x1b[1;1R"));

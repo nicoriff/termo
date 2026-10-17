@@ -10,8 +10,8 @@ use std::net::{IpAddr, SocketAddr};
 use serde::Serialize;
 use tauri::Manager;
 
-use crate::mux::protocol::SessionInfo;
-use crate::mux::remote::{self, Access, Allowed, Pending, RemoteConfig, Viewer};
+use crate::mux::protocol::{AgentInfo, SessionInfo};
+use crate::mux::remote::{self, Access, Allowed, Pending, RemoteConfig, Viewer, WebLook};
 use crate::mux::tailscale::{self, Machine, Status};
 use crate::state::AppState;
 
@@ -111,6 +111,8 @@ pub async fn remote_set_enabled(app: tauri::AppHandle, enabled: bool) -> Result<
         }
         remote::write_config(&dir, &config).map_err(|err| err.to_string())?;
         reload(&app);
+        // The consoles the app runs itself, shown from there too.
+        app.state::<AppState>().pty.share(enabled);
         Ok(config)
     })
     .await
@@ -188,6 +190,35 @@ pub async fn remote_consoles(app: tauri::AppHandle, host: String, port: Option<u
     }
     let addr = SocketAddr::new(ip, port.unwrap_or(remote::DEFAULT_PORT));
     tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.remote(addr).list())
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+/// The theme and console font the app shows now, for the web client to
+/// look the same (see mux::remote::WebLook). The daemon reads it on each
+/// page load, so it's saved even with remote access off.
+/// One console's agent, as a window's status bar knows it.
+#[derive(serde::Deserialize)]
+pub struct ConsoleAgent {
+    id: String,
+    agent: Option<AgentInfo>,
+}
+
+/// What the windows' status bars know of the agents in their consoles,
+/// for the pages showing them from the tailnet. Only the ones that changed.
+#[tauri::command]
+pub fn remote_share_agents(app: tauri::AppHandle, agents: Vec<ConsoleAgent>) {
+    let consoles = &app.state::<AppState>().pty;
+    for entry in agents {
+        if let Ok(id) = uuid::Uuid::parse_str(&entry.id) {
+            consoles.set_agent(id, entry.agent);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn remote_share_look(look: WebLook) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || remote::write_look(&dir()?, look).map_err(|err| err.to_string()))
         .await
         .map_err(|err| err.to_string())?
 }

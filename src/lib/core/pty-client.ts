@@ -95,6 +95,12 @@ export function resizePty(id: string, cols: number, rows: number): Promise<void>
   return invoke("pty_resize", { id, cols, rows });
 }
 
+/** The console back to its tab's size, if someone on the tailnet (a phone)
+ * sized it meanwhile. Whether it changed. */
+export function claimPtySize(id: string, cols: number, rows: number): Promise<boolean> {
+  return invoke("pty_claim_size", { id, cols, rows });
+}
+
 /** Asks the shell to redraw its prompt at the console's new size. A no-op
  * for shells that redraw on their own, so callers can just always ask. */
 export function promptRedrawPty(id: string): Promise<void> {

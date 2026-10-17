@@ -11,8 +11,8 @@ use std::io;
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::mpsc::{self, sync_channel, SyncSender};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
 use dashmap::DashMap;
@@ -21,8 +21,19 @@ use uuid::Uuid;
 use super::protocol::{read_frame, write_frame, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
 use crate::pty::{ConsoleEvent, EventSink, SpawnSpec};
 
-/// How long a request waits for the daemon's answer.
+/// How long a request waits for the answer of another computer's daemon.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(15);
+/// The same, for this computer's: it answers in milliseconds, and a new
+/// console waiting on it opens in the app instead (see pty/consoles.rs) —
+/// the sooner, the better.
+const LOCAL_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+/// Once it has stopped answering: long enough to notice it's back, without
+/// every new console waiting the whole time again.
+const NOT_ANSWERING_TIMEOUT: Duration = Duration::from_millis(1500);
+/// Frames waiting to go out unawaited (see post).
+const OUTBOX: usize = 4096;
+/// How often a daemon that stopped answering is asked again.
+const HEALTH_RECHECK: Duration = Duration::from_secs(5);
 
 /// Where the daemon is: the folder of its info file (the app), or a port
 /// and token given outright (tests).
@@ -43,8 +54,31 @@ pub struct MuxClient {
     conn: Mutex<Option<Arc<Conn>>>,
     /// The consoles this app shows, by id.
     shown: DashMap<Uuid, Shown>,
+    /// Whether the daemon answered the last time it was asked; what
+    /// `on_health` is told when that changes.
+    answering: AtomicBool,
+    on_health: OnceLock<Box<dyn Fn(bool) + Send + Sync>>,
+    /// Where what the tailnet asks of the app's own consoles goes (see
+    /// pty/sharing.rs).
+    on_host: OnceLock<Box<dyn Fn(HostEvent) + Send + Sync>>,
+    /// What goes out without anyone waiting (see post).
+    outbox: OnceLock<SyncSender<(u64, Outgoing)>>,
     /// Lets the reader thread reach back without keeping the client alive.
     me: Weak<MuxClient>,
+}
+
+/// What goes out unawaited (see MuxClient::post).
+pub enum Outgoing {
+    Op(Op),
+    /// What one of the app's own consoles printed.
+    Output { session: Uuid, bytes: Vec<u8> },
+}
+
+/// What the tailnet asks of one of the app's own consoles.
+pub enum HostEvent {
+    Input { session: Uuid, bytes: Vec<u8> },
+    Resize { session: Uuid, cols: u16, rows: u16 },
+    PromptRedraw { session: Uuid },
 }
 
 struct Shown {
@@ -57,6 +91,9 @@ struct Shown {
 }
 
 struct Conn {
+    /// Which connection this is: frames posted for an earlier one are
+    /// dropped (see post).
+    generation: u64,
     writer: Mutex<TcpStream>,
     pending: Mutex<HashMap<u64, mpsc::Sender<Result<Reply, String>>>>,
     next_id: AtomicU64,
@@ -74,6 +111,10 @@ impl MuxClient {
             program,
             conn: Mutex::new(None),
             shown: DashMap::new(),
+            answering: AtomicBool::new(true),
+            on_health: OnceLock::new(),
+            on_host: OnceLock::new(),
+            outbox: OnceLock::new(),
             me: me.clone(),
         })
     }
@@ -85,9 +126,74 @@ impl MuxClient {
         if let Some(conn) = slot.as_ref().filter(|conn| conn.alive.load(Ordering::SeqCst)) {
             return Ok(Arc::clone(conn));
         }
-        let conn = self.open(true).map_err(|err| err.to_string())?;
+        let conn = self.open(true).map_err(|err| {
+            self.set_answering(false);
+            err.to_string()
+        })?;
         *slot = Some(Arc::clone(&conn));
         Ok(conn)
+    }
+
+    /// Calls `on_health` from now on whenever the daemon stops answering, or
+    /// starts again.
+    pub fn on_health(&self, report: impl Fn(bool) + Send + Sync + 'static) {
+        let _ = self.on_health.set(Box::new(report));
+    }
+
+    /// Whether the daemon answered the last time it was asked.
+    pub fn is_answering(&self) -> bool {
+        self.answering.load(Ordering::SeqCst)
+    }
+
+    fn set_answering(&self, answering: bool) {
+        if self.answering.swap(answering, Ordering::SeqCst) == answering {
+            return;
+        }
+        if let Some(report) = self.on_health.get() {
+            report(answering);
+        }
+        if !answering && matches!(self.endpoint, Endpoint::Dir(_)) {
+            // Asked again every few seconds until it answers — nothing else
+            // may ask, and the app should know it's back.
+            let me = self.me.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(HEALTH_RECHECK);
+                let Some(client) = me.upgrade() else {
+                    return;
+                };
+                if client.is_answering() || client.list().is_ok() {
+                    return;
+                }
+            });
+        }
+    }
+
+    /// Replaces a daemon that stopped answering with a new one. The old one
+    /// is ended — it can't be asked to —, and its consoles with it: their
+    /// tabs are told they're gone.
+    pub fn restart(&self) -> Result<(), String> {
+        let Endpoint::Dir(dir) = &self.endpoint else {
+            return Err("only this computer's sessions daemon can be restarted".into());
+        };
+        // Nothing shown first, so the connection ending isn't taken for a
+        // dropped one to reattach over (see read_loop).
+        self.forget_all();
+        if let Some(conn) = self.conn.lock().unwrap().take() {
+            conn.alive.store(false, Ordering::SeqCst);
+            let _ = conn.writer.lock().unwrap().shutdown(std::net::Shutdown::Both);
+        }
+        super::end_daemon(dir);
+        self.conn()?;
+        self.set_answering(true);
+        Ok(())
+    }
+
+    fn reply_timeout(&self) -> Duration {
+        match self.endpoint {
+            Endpoint::Remote(_) => REPLY_TIMEOUT,
+            _ if self.is_answering() => LOCAL_REPLY_TIMEOUT,
+            _ => NOT_ANSWERING_TIMEOUT,
+        }
     }
 
     fn open(&self, may_launch: bool) -> io::Result<Arc<Conn>> {
@@ -114,7 +220,9 @@ impl MuxClient {
             Endpoint::Remote(addr) => (TcpStream::connect_timeout(addr, Duration::from_secs(4))?, String::new()),
         };
         handshake(stream, &token).map(|(reader, writer)| {
+            static GENERATIONS: AtomicU64 = AtomicU64::new(1);
             let conn = Arc::new(Conn {
+                generation: GENERATIONS.fetch_add(1, Ordering::SeqCst),
                 writer: Mutex::new(writer),
                 pending: Mutex::new(HashMap::new()),
                 next_id: AtomicU64::new(1),
@@ -137,13 +245,56 @@ impl MuxClient {
             conn.pending.lock().unwrap().remove(&id);
             return Err(err);
         }
-        match rx.recv_timeout(REPLY_TIMEOUT) {
+        match rx.recv_timeout(self.reply_timeout()) {
             Ok(result) => result,
             Err(_) => {
                 conn.pending.lock().unwrap().remove(&id);
+                self.set_answering(false);
                 Err("the sessions daemon did not answer".into())
             }
         }
+    }
+
+    /// The connection there is now — connecting, and starting the daemon,
+    /// first if need be —, by its generation (see post).
+    pub fn connected(&self) -> Result<u64, String> {
+        Ok(self.conn()?.generation)
+    }
+
+    pub fn on_host(&self, handle: impl Fn(HostEvent) + Send + Sync + 'static) {
+        let _ = self.on_host.set(Box::new(handle));
+    }
+
+    /// Sends a frame over connection `generation` without ever waiting: the
+    /// app's own consoles print from their reader threads, which mustn't
+    /// stall on a daemon that's slow or gone. A frame for a connection that
+    /// has since ended is dropped (whoever posted it starts over on the new
+    /// one), and so are frames past what the queue holds.
+    pub fn post(&self, generation: u64, frame: Outgoing) {
+        let outbox = self.outbox.get_or_init(|| {
+            let (tx, rx) = sync_channel::<(u64, Outgoing)>(OUTBOX);
+            let me = self.me.clone();
+            std::thread::spawn(move || {
+                for (generation, frame) in rx {
+                    let Some(client) = me.upgrade() else {
+                        return;
+                    };
+                    let conn = client.conn.lock().unwrap().clone();
+                    let Some(conn) = conn.filter(|conn| conn.generation == generation) else {
+                        continue;
+                    };
+                    let frame = match frame {
+                        Outgoing::Op(op) => {
+                            Frame::Message(ClientMessage::Request { id: conn.next_id.fetch_add(1, Ordering::SeqCst), op })
+                        }
+                        Outgoing::Output { session, bytes } => Frame::Output { session, seq: 0, bytes },
+                    };
+                    let _ = conn.send(&frame);
+                }
+            });
+            tx
+        });
+        let _ = outbox.try_send((generation, frame));
     }
 
     /// Sends a request without waiting: its answer is dropped on arrival.
@@ -174,6 +325,8 @@ impl MuxClient {
             }
             Err(err) => {
                 self.shown.remove(&id);
+                // Started after all, once it answers again: no one shows it.
+                let _ = self.cast(Op::Kill { session: id });
                 Err(err)
             }
         }
@@ -212,6 +365,15 @@ impl MuxClient {
 
     pub fn resize(&self, id: Uuid, cols: u16, rows: u16) -> Result<(), String> {
         self.cast(Op::Resize { session: id, cols, rows })
+    }
+
+    /// The console back to its tab's size, if someone else (a phone)
+    /// sized it meanwhile: whether it changed.
+    pub fn claim(&self, id: Uuid, cols: u16, rows: u16) -> Result<bool, String> {
+        match self.call(Op::Claim { session: id, cols, rows })? {
+            Reply::Claimed { changed } => Ok(changed),
+            other => Err(format!("unexpected reply: {other:?}")),
+        }
     }
 
     pub fn prompt_redraw(&self, id: Uuid) -> Result<(), String> {
@@ -409,6 +571,7 @@ fn read_loop(client: Weak<MuxClient>, conn: Arc<Conn>, mut reader: TcpStream) {
                 }
             }
             Frame::Message(ServerMessage::Reply { id, result }) => {
+                client.set_answering(true);
                 if let Some(waiting) = conn.pending.lock().unwrap().remove(&id) {
                     let _ = waiting.send(result);
                 }
@@ -421,6 +584,21 @@ fn read_loop(client: Weak<MuxClient>, conn: Arc<Conn>, mut reader: TcpStream) {
             Frame::Message(ServerMessage::Foreground { session, path }) => {
                 if let Some(sink) = client.shown.get(&session).map(|shown| Arc::clone(&shown.sink)) {
                     sink(ConsoleEvent::Foreground(path));
+                }
+            }
+            Frame::Input { session, bytes } => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::Input { session, bytes });
+                }
+            }
+            Frame::Message(ServerMessage::HostResize { session, cols, rows }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::Resize { session, cols, rows });
+                }
+            }
+            Frame::Message(ServerMessage::HostPromptRedraw { session }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::PromptRedraw { session });
                 }
             }
             Frame::Message(ServerMessage::Gone { session }) => {
@@ -480,6 +658,7 @@ fn retire_stale_dev_daemon(dir: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mux::protocol::{AgentInfo, HostedConsole, PlanUse};
     use std::time::Instant;
 
     /// What a console printed and whether it exited, as a tab would see it.
@@ -688,6 +867,38 @@ mod tests {
         assert!(seen_by_friend.wait_for(|seen| seen.text().contains("got-from-me")));
         assert!(!seen_here.text().contains("from-friend"), "the read-only typing went nowhere");
 
+        // Sized to the phone's screen while it shows it, and given its own
+        // size back when the phone leaves.
+        let size = || local.list().unwrap().into_iter().find(|session| session.id == id).map(|s| (s.cols, s.rows)).unwrap();
+        let own = size();
+        me.call(Op::Resize { session: id, cols: 41, rows: 17 }).unwrap();
+        assert_eq!(size(), (41, 17));
+        assert!(friend.call(Op::Resize { session: id, cols: 30, rows: 10 }).is_err(), "read-only can't resize it");
+        me.detach(id);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while size() != own {
+            assert!(Instant::now() < deadline, "its own size back: {:?} vs {own:?}", size());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // Resized here meanwhile: that's its size now, kept when the phone goes.
+        me.attach("main", id, terminal(&me, &seen_by_me, &Arc::new(Mutex::new(Some(id))))).unwrap();
+        me.call(Op::Resize { session: id, cols: 41, rows: 17 }).unwrap();
+        local.call(Op::Resize { session: id, cols: 90, rows: 25 }).unwrap();
+        me.detach(id);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(size(), (90, 25));
+        me.attach("main", id, terminal(&me, &seen_by_me, &Arc::new(Mutex::new(Some(id))))).unwrap();
+        // Its tab taken up here again, the phone still on it: its size back
+        // at once — and asking again changes nothing.
+        me.call(Op::Resize { session: id, cols: 41, rows: 17 }).unwrap();
+        assert!(local.claim(id, 90, 25).unwrap());
+        assert_eq!(size(), (90, 25));
+        assert!(!local.claim(id, 90, 25).unwrap());
+        // The phone claiming the size it already has changes nothing either.
+        me.call(Op::Resize { session: id, cols: 41, rows: 17 }).unwrap();
+        assert_eq!(me.call(Op::Claim { session: id, cols: 41, rows: 17 }).unwrap(), Reply::Claimed { changed: false });
+        assert!(local.claim(id, 90, 25).unwrap());
+
         // This computer sees who's connected, and can cut them off.
         let viewers = local.viewers().unwrap();
         let logins: Vec<&str> = viewers.iter().map(|viewer| viewer.login.as_str()).collect();
@@ -721,6 +932,131 @@ mod tests {
     fn a_wrong_token_is_turned_away() {
         let port = crate::mux::server::start_for_test("right").unwrap();
         assert!(client(port, "wrong").list().is_err());
+    }
+
+    /// One of the app's own consoles, lent to the daemon: someone else sees
+    /// what it printed before and after, and what they type and the size
+    /// they ask for reach the app; it's gone when the app is.
+    #[test]
+    fn the_apps_own_console_is_shown_through_the_daemon() {
+        let port = crate::mux::server::start_for_test("tok").unwrap();
+        let app = client(port, "tok");
+        let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+        let heard = Arc::clone(&asked);
+        app.on_host(move |event| {
+            heard.lock().unwrap().push(match event {
+                HostEvent::Input { bytes, .. } => format!("input {}", String::from_utf8_lossy(&bytes)),
+                HostEvent::Resize { cols, rows, .. } => format!("resize {cols}x{rows}"),
+                HostEvent::PromptRedraw { .. } => "redraw".to_string(),
+            })
+        });
+        let generation = app.connected().unwrap();
+        let id = Uuid::new_v4();
+        let console = HostedConsole { path: "pwsh.exe".into(), cwd: None, started_at: 1, cols: 80, rows: 24, pid: Some(7) };
+        app.post(generation, Outgoing::Op(Op::Host { session: id, console }));
+        app.post(generation, Outgoing::Output { session: id, bytes: b"before\r\n".to_vec() });
+
+        let viewer = client(port, "tok");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !viewer.list().unwrap().iter().any(|info| info.id == id) {
+            assert!(Instant::now() < deadline, "never listed");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let listed = viewer.list().unwrap().into_iter().find(|info| info.id == id).unwrap();
+        assert!(listed.hosted);
+        assert_eq!(listed.pid, Some(7));
+
+        let seen = Arc::new(Seen::default());
+        let sink = terminal(&viewer, &seen, &Arc::new(Mutex::new(Some(id))));
+        viewer.attach("main", id, sink).unwrap();
+        app.post(generation, Outgoing::Output { session: id, bytes: b"after\r\n".to_vec() });
+        assert!(seen.wait_for(|seen| seen.text().contains("before") && seen.text().contains("after")), "{:?}", seen.text());
+
+        viewer.write(id, b"ls\r").unwrap();
+        viewer.call(Op::Resize { session: id, cols: 50, rows: 40 }).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while asked.lock().unwrap().len() < 2 {
+            assert!(Instant::now() < deadline, "the app heard {:?}", asked.lock().unwrap());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*asked.lock().unwrap(), ["input ls\r", "resize 50x40"]);
+        // Closed from the app, not from elsewhere.
+        assert!(viewer.call(Op::Kill { session: id }).is_err());
+
+        // What the status bar shows: the folder its shell says, the agent
+        // the app says.
+        let agent = AgentInfo {
+            tool: "Claude Code".into(),
+            status: "awaiting".into(),
+            plan_windows: vec![PlanUse { window_minutes: Some(300), percent: 42.0 }],
+            context_percent: Some(37.0),
+            cost_usd: None,
+        };
+        app.post(generation, Outgoing::Output { session: id, bytes: b"\x1b]7;file:///C:/work/repo\x07> ".to_vec() });
+        app.post(generation, Outgoing::Op(Op::Agent { session: id, agent: Some(agent.clone()) }));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let info = viewer.list().unwrap().into_iter().find(|info| info.id == id).unwrap();
+            if info.agent.as_ref() == Some(&agent) && info.cwd.as_deref() == Some("C:\\work\\repo") {
+                break;
+            }
+            assert!(Instant::now() < deadline, "never told: {info:?}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        drop(app);
+        assert!(seen.wait_for(|seen| seen.exit.lock().unwrap().is_some()), "the viewer was never told it's gone");
+        assert!(!viewer.list().unwrap().iter().any(|info| info.id == id));
+    }
+
+    /// A daemon that lets clients in and then never answers — the way a
+    /// hung one looks: the app hears of it, stops waiting long on it, and
+    /// hears again once it answers.
+    #[test]
+    fn a_daemon_that_stops_answering_is_noticed() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let answer = Arc::new(AtomicBool::new(false));
+        let answers = Arc::clone(&answer);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let answers = Arc::clone(&answers);
+                std::thread::spawn(move || {
+                    let mut stream = stream;
+                    let welcome = ServerMessage::Welcome { protocol: PROTOCOL, version: "test".into(), pid: 1, access: None };
+                    let _ = read_frame::<ClientMessage>(&mut stream);
+                    let _ = write_frame(&mut stream, &Frame::Message(welcome));
+                    while let Ok(Some(Frame::Message(ClientMessage::Request { id, .. }))) =
+                        read_frame::<ClientMessage>(&mut stream)
+                    {
+                        if answers.load(Ordering::SeqCst) {
+                            let reply = ServerMessage::Reply { id, result: Ok(Reply::Sessions { sessions: Vec::new() }) };
+                            let _ = write_frame(&mut stream, &Frame::Message(reply));
+                        }
+                    }
+                });
+            }
+        });
+        let client = client(port, "any");
+        let told = Arc::new(Mutex::new(Vec::new()));
+        let heard = Arc::clone(&told);
+        client.on_health(move |answering| heard.lock().unwrap().push(answering));
+
+        let started = Instant::now();
+        assert!(client.list().is_err());
+        assert!(started.elapsed() < LOCAL_REPLY_TIMEOUT + Duration::from_secs(2));
+        assert!(!client.is_answering());
+        assert_eq!(*told.lock().unwrap(), [false]);
+
+        // Not the whole wait again.
+        let started = Instant::now();
+        assert!(client.list().is_err());
+        assert!(started.elapsed() < NOT_ANSWERING_TIMEOUT + Duration::from_secs(1));
+
+        answer.store(true, Ordering::SeqCst);
+        assert!(client.list().is_ok());
+        assert!(client.is_answering());
+        assert_eq!(*told.lock().unwrap(), [false, true]);
     }
 }
 

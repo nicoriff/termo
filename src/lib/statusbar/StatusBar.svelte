@@ -18,6 +18,7 @@
   import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import GitStatusItem from "./GitStatusItem.svelte";
   import { remoteWatch } from "$lib/remote/remote-watch.svelte";
+  import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
   import { openPreferencesWindow } from "$lib/core/window-client";
 
   const MEMORY_POLL_MS = 2000;
@@ -222,6 +223,15 @@
   <!-- The right end: who's connected from the tailnet, the repository, then
        the console's memory. -->
   <div class="status-right">
+    {#if !sessionsDaemon.answering && appConfigStore.persistentSessions}
+      <button
+        class="status-item status-daemon"
+        title={t("statusBar.daemonDownHint")}
+        onclick={() => void openPreferencesWindow("console")}
+      >
+        <span class="daemon-dot" aria-hidden="true"></span>{t("statusBar.daemonDown")}
+      </button>
+    {/if}
     {#if remoteWatch.viewers.length > 0}
       <button
         class="status-item status-remote"
@@ -287,7 +297,8 @@
     background: #f5a623;
   }
 
-  .status-remote {
+  .status-remote,
+  .status-daemon {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -300,7 +311,8 @@
     cursor: pointer;
   }
 
-  .status-remote:hover {
+  .status-remote:hover,
+  .status-daemon:hover {
     opacity: 1;
     text-decoration: underline;
   }
@@ -310,6 +322,17 @@
     height: 6px;
     border-radius: 50%;
     background: #3fb950;
+  }
+
+  .status-daemon {
+    color: #e3b341;
+  }
+
+  .daemon-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #e3b341;
   }
 
   .status-engine {

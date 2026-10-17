@@ -3,7 +3,9 @@
 //! daemon (see mux/), where it outlives the window and the app.
 //!
 //! Where a console runs is decided when it starts, so turning the setting
-//! on or off applies to new consoles and leaves the open ones be.
+//! on or off applies to new consoles and leaves the open ones be. Either
+//! way, while remote access is on, they can all be shown from the tailnet:
+//! the app's own ones through the daemon too (see sharing.rs).
 
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
@@ -11,13 +13,15 @@ use std::sync::{Arc, OnceLock};
 use dashmap::DashMap;
 use uuid::Uuid;
 
+use super::sharing::Sharing;
 use super::{EventSink, PtyManager, SpawnSpec};
-use crate::mux::client::{Endpoint, MuxClient};
+use crate::mux::client::{Endpoint, HostEvent, MuxClient};
 use crate::mux::protocol::SessionInfo;
 
 #[derive(Default)]
 pub struct Consoles {
-    local: PtyManager,
+    local: Arc<PtyManager>,
+    sharing: Sharing,
     mux: OnceLock<Option<Arc<MuxClient>>>,
     /// Other computers' daemons, over the tailnet (see mux/remote.rs).
     remotes: DashMap<SocketAddr, Arc<MuxClient>>,
@@ -27,8 +31,54 @@ impl Consoles {
     /// The daemon's client; connecting is left for the first request.
     fn mux(&self) -> Option<&Arc<MuxClient>> {
         self.mux
-            .get_or_init(|| crate::mux::dir().map(|dir| MuxClient::new(Endpoint::Dir(dir))))
+            .get_or_init(|| {
+                let mux = MuxClient::new(Endpoint::Dir(crate::mux::dir()?));
+                // What the tailnet asks of the consoles the app runs itself.
+                let local = Arc::clone(&self.local);
+                let sharing = self.sharing.clone();
+                mux.on_host(move |event| match event {
+                    HostEvent::Input { session, bytes } => {
+                        let _ = local.write(session, &bytes);
+                    }
+                    HostEvent::Resize { session, cols, rows } => {
+                        if local.resize(session, cols, rows).is_ok() {
+                            sharing.resized_from_tailnet(session, cols, rows);
+                        }
+                    }
+                    HostEvent::PromptRedraw { session } => {
+                        let _ = local.prompt_redraw(session, shell_is_idle);
+                    }
+                });
+                Some(mux)
+            })
             .as_ref()
+    }
+
+    /// What the status bar knows of the agent in a console, for whoever
+    /// shows it from the tailnet (see sharing.rs).
+    pub fn set_agent(&self, id: Uuid, agent: Option<crate::mux::protocol::AgentInfo>) {
+        self.sharing.set_agent(self.mux_if_used().map(Arc::as_ref), id, agent);
+    }
+
+    /// Remote access turned on or off (see sharing.rs).
+    pub fn share(&self, enabled: bool) {
+        self.sharing.set_enabled(self.mux().cloned(), enabled);
+    }
+
+    /// Starts a console in the app itself.
+    fn spawn_here(&self, owner: &str, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
+        let id = Uuid::new_v4();
+        let sink = self.sharing.tap(self.mux().cloned(), id, spec, sink);
+        match self.local.spawn_as(owner, id, spec, sink) {
+            Ok(id) => {
+                self.sharing.started(id, self.local.pid(id).ok().flatten());
+                Ok(id)
+            }
+            Err(err) => {
+                self.sharing.forget(None, id);
+                Err(err)
+            }
+        }
     }
 
     /// The client, only if something already asked for it.
@@ -60,12 +110,32 @@ impl Consoles {
         self.mux()
     }
 
-    pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink, persistent: bool) -> anyhow::Result<Uuid> {
-        if persistent {
-            let mux = self.mux().ok_or_else(|| anyhow::anyhow!("no folder for the sessions daemon"))?;
-            return mux.spawn(owner, spec, sink).map_err(anyhow::Error::msg);
+    /// Calls `report` whenever this computer's daemon stops answering, or
+    /// answers again.
+    pub fn on_daemon_health(&self, report: impl Fn(bool) + Send + Sync + 'static) {
+        if let Some(mux) = self.mux() {
+            mux.on_health(report);
         }
-        self.local.spawn(owner, spec, sink)
+    }
+
+    pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink, persistent: bool) -> anyhow::Result<Uuid> {
+        if let Some(mux) = self.mux().filter(|_| persistent) {
+            // The sink goes to the daemon's console; a copy stays, should
+            // the console have to open here after all.
+            let shared = Arc::clone(&sink);
+            match mux.spawn(owner, spec, sink) {
+                Ok(id) => return Ok(id),
+                // The daemon can't start it — it isn't answering, or won't
+                // start: the console opens anyway, in the app, as if "Keep
+                // consoles running" were off. The status bar says why (see
+                // on_daemon_health).
+                Err(err) => {
+                    eprintln!("sessions daemon: {err}; the console runs in the app");
+                    return self.spawn_here(owner, spec, shared);
+                }
+            }
+        }
+        self.spawn_here(owner, spec, sink)
     }
 
     /// Shows a console the daemon kept running — this computer's, or with
@@ -81,7 +151,9 @@ impl Consoles {
     /// The consoles the daemon runs, shown or not — none if it isn't
     /// running (asking doesn't start it).
     pub fn background(&self) -> Vec<SessionInfo> {
-        self.mux().map(|mux| mux.list_if_running()).unwrap_or_default()
+        let all = self.mux().map(|mux| mux.list_if_running()).unwrap_or_default();
+        // Not the app's own, lent to it while remote access is on.
+        all.into_iter().filter(|session| !session.hosted).collect()
     }
 
     pub fn write(&self, id: Uuid, data: &[u8]) -> anyhow::Result<()> {
@@ -94,7 +166,27 @@ impl Consoles {
     pub fn resize(&self, id: Uuid, cols: u16, rows: u16) -> anyhow::Result<()> {
         match self.mux_for(id) {
             Some(mux) => mux.resize(id, cols, rows).map_err(anyhow::Error::msg),
-            None => self.local.resize(id, cols, rows),
+            None => {
+                self.local.resize(id, cols, rows)?;
+                self.sharing.resized(self.mux_if_used().map(Arc::as_ref), id, cols, rows);
+                Ok(())
+            }
+        }
+    }
+
+    /// The size its tab has, back, when the tab is taken up again: someone
+    /// on the tailnet (a phone) may have sized it to their screen
+    /// meanwhile. Whether it changed — its prompt then wants drawing again.
+    pub fn claim_size(&self, id: Uuid, cols: u16, rows: u16) -> anyhow::Result<bool> {
+        match self.mux_for(id) {
+            Some(mux) => mux.claim(id, cols, rows).map_err(anyhow::Error::msg),
+            None => {
+                if self.local.size(id)? == (cols, rows) {
+                    return Ok(false);
+                }
+                self.resize(id, cols, rows)?;
+                Ok(true)
+            }
         }
     }
 
@@ -126,7 +218,10 @@ impl Consoles {
         }
         match self.mux_for(id) {
             Some(_) => self.kill_kept(id),
-            None => self.local.kill(id),
+            None => {
+                self.sharing.forget(self.mux_if_used().map(Arc::as_ref), id);
+                self.local.kill(id)
+            }
         }
     }
 
@@ -174,7 +269,9 @@ impl Consoles {
     /// A window closed or reloaded: its consoles end — or, the daemon's,
     /// stop being shown and keep running.
     pub fn release_owned_by(&self, owner: &str) {
-        self.local.kill_owned_by(owner);
+        for id in self.local.kill_owned_by(owner) {
+            self.sharing.forget(self.mux_if_used().map(Arc::as_ref), id);
+        }
         if let Some(mux) = self.mux_if_used() {
             mux.detach_owned_by(owner);
         }
@@ -182,4 +279,11 @@ impl Consoles {
             remote.detach_owned_by(owner);
         }
     }
+}
+
+/// Whether the shell `pid` sits at its prompt: nothing running under it.
+/// For a phone that resized one of the app's consoles (see sharing.rs).
+fn shell_is_idle(pid: u32) -> bool {
+    static PROCESSES: std::sync::LazyLock<super::MemorySampler> = std::sync::LazyLock::new(Default::default);
+    PROCESSES.busy_roots(&[pid]).is_empty()
 }

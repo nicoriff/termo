@@ -12,8 +12,14 @@ pub struct PtyManager {
 }
 
 impl PtyManager {
+    #[cfg(test)]
     pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(Uuid::new_v4(), spec, sink)?;
+        self.spawn_as(owner, Uuid::new_v4(), spec, sink)
+    }
+
+    /// The same, with an id chosen beforehand.
+    pub fn spawn_as(&self, owner: &str, id: Uuid, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
+        let session = PtySession::spawn(id, spec, sink)?;
         let id = session.id;
         self.sessions.insert(id, session);
         self.owners.insert(id, owner.to_string());
@@ -59,6 +65,14 @@ impl PtyManager {
         session.write(data)
     }
 
+    pub fn size(&self, id: Uuid) -> anyhow::Result<(u16, u16)> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        Ok(session.size())
+    }
+
     pub fn resize(&self, id: Uuid, cols: u16, rows: u16) -> anyhow::Result<()> {
         let session = self
             .sessions
@@ -92,7 +106,7 @@ impl PtyManager {
     /// away with it, and without this every shell it had open — and anything
     /// running under it, `claude`/`codex` included — would keep running with
     /// nothing left able to reach or close it. Other windows' stay.
-    pub fn kill_owned_by(&self, owner: &str) {
+    pub fn kill_owned_by(&self, owner: &str) -> Vec<Uuid> {
         let ids: Vec<Uuid> = self
             .owners
             .iter()
@@ -100,7 +114,7 @@ impl PtyManager {
             .map(|entry| *entry.key())
             .collect();
         let mut gone = Vec::new();
-        for id in ids {
+        for &id in &ids {
             self.owners.remove(&id);
             crate::agents::console_bridge::release(&id.to_string());
             if let Some((_, session)) = self.sessions.remove(&id) {
@@ -108,6 +122,7 @@ impl PtyManager {
             }
         }
         dispose(gone);
+        ids
     }
 }
 
