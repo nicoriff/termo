@@ -24,4 +24,10 @@ describe("parseOsc7", () => {
     expect(parseOsc7("file://host-only")).toBeNull();
     expect(parseOsc7("")).toBeNull();
   });
+
+  it("ignores a server's share", () => {
+    expect(parseOsc7("file:////evil/share")).toBeNull();
+    expect(parseOsc7("file://host/%5C%5Cevil%5Cshare")).toBeNull();
+    expect(parseOsc7("file:///%5Cevil%5Cshare")).toBeNull();
+  });
 });

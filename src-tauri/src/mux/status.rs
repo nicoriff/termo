@@ -28,13 +28,21 @@ pub fn last_cwd(bytes: &[u8]) -> Option<String> {
     }
     let after = &payload[7..];
     let path = percent_decode(&after[after.find('/')?..]);
-    if path.is_empty() {
+    if path.is_empty() || is_network_path(&path) {
         return None;
     }
     // "/C:/Users/x" is a Windows path in a URL's clothes; "/home/x" isn't.
     let windows = path.len() >= 4 && path.as_bytes()[0] == b'/' && path.as_bytes()[2] == b':' && path.as_bytes()[3] == b'/'
         && path.as_bytes()[1].is_ascii_alphabetic();
     Some(if windows { path[1..].replace('/', "\\") } else { path })
+}
+
+/// `//server/share` (or with backslashes): looking in it would have this
+/// computer reach a server named by whatever the console printed — and
+/// Windows hand that server the user's credentials (NTLM) on the way.
+fn is_network_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 2 && matches!(bytes[0], b'/' | b'\\') && matches!(bytes[1], b'/' | b'\\')
 }
 
 fn percent_decode(text: &str) -> String {
@@ -120,6 +128,10 @@ mod tests {
         assert_eq!(last_cwd(b"\x1b]7;file:///a\x07 \x1b]7;file:///b\x07").as_deref(), Some("/b"));
         assert_eq!(last_cwd(b"no folder here"), None);
         assert_eq!(last_cwd(b"\x1b]7;https://example.com/x\x07"), None);
+        // A server's share is no folder to look in.
+        assert_eq!(last_cwd(b"\x1b]7;file:////evil/share\x07"), None);
+        assert_eq!(last_cwd(b"\x1b]7;file://host/%5C%5Cevil%5Cshare\x07"), None);
+        assert_eq!(last_cwd(b"\x1b]7;file:///%5Cevil%5Cshare\x07"), None);
         // Cut before its end: the next output finishes it.
         assert_eq!(last_cwd(b"\x1b]7;file:///hal"), None);
     }

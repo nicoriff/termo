@@ -16,7 +16,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
-use super::protocol::{read_frame, write_frame, AgentInfo, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
+use super::protocol::{read_frame, read_frame_within, write_frame, AgentInfo, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
 use super::remote::{self, Access, RemoteConfig, Viewer};
 use super::screen::Screen;
 use super::status;
@@ -259,6 +259,19 @@ impl Role {
     }
 }
 
+/// The longest hello a connection may send (see read_frame_within).
+const HELLO_MAX: usize = 64 * 1024;
+
+/// The biggest a console is made by whoever sizes it: its copy of the
+/// screen holds every cell, so a size from a phone (or a client gone
+/// wrong) of 65535×65535 would take the daemon down with every console.
+const MAX_COLS: u16 = 1000;
+const MAX_ROWS: u16 = 500;
+
+fn bounded(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.clamp(2, MAX_COLS), rows.clamp(1, MAX_ROWS))
+}
+
 /// A console the daemon runs.
 struct Live {
     id: Uuid,
@@ -493,7 +506,7 @@ impl Daemon {
                 let reason = if identity.is_some() { "waiting for approval" } else { "not on the tailnet" };
                 let mut writer = stream;
                 let _ = writer.set_read_timeout(Some(Duration::from_secs(5)));
-                let _ = read_frame::<ClientMessage>(&mut writer);
+                let _ = read_frame_within::<ClientMessage>(&mut writer, HELLO_MAX);
                 let _ = write_frame(&mut writer, &Frame::Message(ServerMessage::Rejected { reason: reason.into() }));
             }
         }
@@ -582,6 +595,7 @@ impl Daemon {
     /// Sizes a console as `client` asked: someone on the tailnet borrows
     /// the size (see Borrowed), this computer makes it its own.
     fn resize_for(&self, client: &Client, role: &Role, session: Uuid, cols: u16, rows: u16) -> Result<(), String> {
+        let (cols, rows) = bounded(cols, rows);
         let live = self.session(session)?;
         {
             let mut state = live.state.locked();
@@ -615,7 +629,7 @@ impl Daemon {
         let Ok(mut writer) = reader.try_clone() else {
             return;
         };
-        match read_frame::<ClientMessage>(&mut reader) {
+        match read_frame_within::<ClientMessage>(&mut reader, HELLO_MAX) {
             Ok(Some(Frame::Message(ClientMessage::Hello { protocol, token, .. }))) => {
                 let local = matches!(role, Role::Local);
                 if local && !crate::agents::webhook::token_matches(&token, &self.token) {
@@ -796,7 +810,7 @@ impl Daemon {
                     let state = live.state.locked();
                     (state.cols, state.rows)
                 };
-                let changed = now != (cols, rows);
+                let changed = now != bounded(cols, rows);
                 if changed || !matches!(role, Role::Remote { .. }) {
                     // The same size still makes it this computer's.
                     self.resize_for(client, role, session, cols, rows)?;

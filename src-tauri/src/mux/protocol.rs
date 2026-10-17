@@ -229,6 +229,12 @@ pub fn write_frame<M: Serialize>(out: &mut impl Write, frame: &Frame<M>) -> io::
 
 /// The next frame, or None at a clean end of the stream.
 pub fn read_frame<M: for<'de> Deserialize<'de>>(input: &mut impl Read) -> io::Result<Option<Frame<M>>> {
+    read_frame_within(input, MAX_FRAME)
+}
+
+/// The same, refusing one longer than `max`: what a connection says before
+/// it's known who it is (its hello) is small.
+pub fn read_frame_within<M: for<'de> Deserialize<'de>>(input: &mut impl Read, max: usize) -> io::Result<Option<Frame<M>>> {
     let mut len = [0u8; 4];
     match input.read_exact(&mut len) {
         Ok(()) => {}
@@ -236,11 +242,17 @@ pub fn read_frame<M: for<'de> Deserialize<'de>>(input: &mut impl Read) -> io::Re
         Err(err) => return Err(err),
     }
     let len = u32::from_le_bytes(len) as usize;
-    if len == 0 || len > MAX_FRAME {
+    if len == 0 || len > max {
         return Err(invalid("bad frame length"));
     }
-    let mut body = vec![0u8; len];
-    input.read_exact(&mut body)?;
+    // Taken in as it arrives, not set aside up front: a length says nothing
+    // of what will follow, and a connection that says a big one and then
+    // sends a byte now and then mustn't hold that much memory.
+    let mut body = Vec::new();
+    Read::take(&mut *input, len as u64).read_to_end(&mut body)?;
+    if body.len() < len {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "frame cut short"));
+    }
     let rest = &body[1..];
     let frame = match body[0] {
         KIND_MESSAGE => Frame::Message(serde_json::from_slice(rest).map_err(|err| invalid(&err.to_string()))?),
@@ -320,5 +332,16 @@ mod tests {
         assert!(read_frame::<ServerMessage>(&mut huge).is_err());
         let mut unknown: &[u8] = &[1, 0, 0, 0, 9];
         assert!(read_frame::<ServerMessage>(&mut unknown).is_err());
+    }
+
+    #[test]
+    fn a_frame_is_no_longer_than_allowed_nor_than_what_came() {
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &Frame::<ClientMessage>::Input { session: Uuid::new_v4(), bytes: vec![b'x'; 100] }).unwrap();
+        assert!(read_frame_within::<ClientMessage>(&mut buf.as_slice(), 64).is_err(), "longer than allowed");
+        // Says 1 MB, sends three bytes and stops.
+        let mut short: &[u8] = &[0, 0, 0x10, 0, 2, 0, 0];
+        let err = read_frame::<ClientMessage>(&mut short).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
     }
 }

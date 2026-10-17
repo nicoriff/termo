@@ -4,7 +4,7 @@
 //! connection that arrives from one (`whois`). Termo embeds nothing of
 //! Tailscale's: without it installed and signed in, remote access is off.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -12,17 +12,12 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// The CLI: on the PATH, or where its installers put it.
+/// The CLI: where its installers put it, or else on the PATH. Its word on
+/// who connects is what lets them in, so a `tailscale` that something put
+/// earlier on the PATH doesn't get to speak for it when the real one is
+/// installed.
 pub fn cli() -> Option<PathBuf> {
     let name = if cfg!(windows) { "tailscale.exe" } else { "tailscale" };
-    if let Some(found) = std::env::var_os("PATH")
-        .iter()
-        .flat_map(std::env::split_paths)
-        .map(|dir| dir.join(name))
-        .find(|path| path.is_file())
-    {
-        return Some(found);
-    }
     let known: &[&str] = if cfg!(windows) {
         &["C:\\Program Files\\Tailscale\\tailscale.exe"]
     } else if cfg!(target_os = "macos") {
@@ -30,7 +25,9 @@ pub fn cli() -> Option<PathBuf> {
     } else {
         &["/usr/bin/tailscale", "/usr/local/bin/tailscale", "/usr/sbin/tailscale"]
     };
-    known.iter().map(PathBuf::from).find(|path| path.is_file())
+    known.iter().map(PathBuf::from).find(|path| path.is_file()).or_else(|| {
+        std::env::var_os("PATH").iter().flat_map(std::env::split_paths).map(|dir| dir.join(name)).find(|path| path.is_file())
+    })
 }
 
 /// Runs the CLI with `args` and parses what it prints as JSON.
@@ -147,7 +144,7 @@ pub struct Identity {
 /// Asks tailscaled who `peer` is. None when it isn't someone on the tailnet
 /// (or Tailscale can't say).
 pub fn whois(peer: SocketAddr) -> Option<Identity> {
-    if !is_tailnet_address(peer.ip()) {
+    if !is_tailnet_address(peer.ip()) || is_own(peer.ip()) {
         return None;
     }
     parse_whois(&run_json(&["whois", "--json", &peer.to_string()])?)
@@ -163,6 +160,15 @@ fn parse_whois(json: &Value) -> Option<Identity> {
         .or_else(|| node.get("Hostinfo").and_then(|info| info.get("Hostname")).and_then(Value::as_str))
         .or_else(|| node.get("Name").and_then(Value::as_str).and_then(|name| name.split('.').next()))?;
     Some(Identity { login, node: name.to_string() })
+}
+
+/// Whether `ip` is one of this computer's own. A connection from one comes
+/// from a program on this computer, which Tailscale would vouch for as the
+/// user — any program, any user of this computer: those connect as the app
+/// does, with the token, or not at all. Only an address of this computer's
+/// can be listened on.
+fn is_own(ip: IpAddr) -> bool {
+    TcpListener::bind(SocketAddr::new(ip, 0)).is_ok()
 }
 
 /// Tailscale's addresses: 100.64.0.0/10 (CGNAT space), and its IPv6 range.
@@ -249,6 +255,12 @@ mod tests {
         assert!(is_tailnet_address("fd7a:115c:a1e0::5".parse().unwrap()));
         assert!(!is_tailnet_address("100.128.0.1".parse().unwrap()));
         assert!(!is_tailnet_address("192.168.1.10".parse().unwrap()));
+    }
+
+    #[test]
+    fn this_computers_own_addresses_are_told_apart() {
+        assert!(is_own("127.0.0.1".parse().unwrap()));
+        assert!(!is_own("192.0.2.1".parse().unwrap()));
         assert!(!is_tailnet_address("127.0.0.1".parse().unwrap()));
     }
 }

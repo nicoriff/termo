@@ -205,7 +205,10 @@ fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
         std::fs::create_dir_all(&bin)?;
         let fixed = bin.join(DAEMON_EXE);
         let stamp = bin.join(DAEMON_BUILD);
-        let up_to_date = fixed.exists() && std::fs::read_to_string(&stamp).is_ok_and(|text| text == build);
+        // The build it says it is, and byte for byte this executable: the
+        // folder is the user's to write in, and the firewall lets what's
+        // at that path listen — something else put there mustn't run.
+        let up_to_date = std::fs::read_to_string(&stamp).is_ok_and(|text| text == build) && same_contents(exe, &fixed);
         let program = if up_to_date {
             fixed
         } else if replace(exe, &fixed).is_ok() {
@@ -213,7 +216,7 @@ fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
             fixed
         } else {
             let copy = bin.join(format!("termo-{build}.exe"));
-            if !copy.exists() {
+            if !same_contents(exe, &copy) {
                 replace(exe, &copy)?;
             }
             copy
@@ -236,6 +239,31 @@ fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
 /// The daemon's copy of the executable on Windows, and which build it is.
 const DAEMON_EXE: &str = "termo-daemon.exe";
 const DAEMON_BUILD: &str = "termo-daemon.build";
+
+/// Whether two files hold the same bytes.
+fn same_contents(a: &Path, b: &Path) -> bool {
+    use std::io::Read;
+    let (Ok(first), Ok(second)) = (std::fs::metadata(a), std::fs::metadata(b)) else {
+        return false;
+    };
+    if first.len() != second.len() {
+        return false;
+    }
+    let (Ok(mut a), Ok(mut b)) = (std::fs::File::open(a), std::fs::File::open(b)) else {
+        return false;
+    };
+    let mut left = vec![0u8; 1 << 20];
+    let mut right = vec![0u8; 1 << 20];
+    loop {
+        let Ok(read) = a.read(&mut left) else { return false };
+        if read == 0 {
+            return true;
+        }
+        if b.read_exact(&mut right[..read]).is_err() || left[..read] != right[..read] {
+            return false;
+        }
+    }
+}
 
 /// Puts a copy of `exe` at `to` all at once; fails if a process runs from
 /// `to`.
@@ -311,6 +339,11 @@ mod tests {
         let second = daemon_program(&dir, &exe, "second").unwrap();
         assert_eq!(second, first);
         assert_eq!(std::fs::read(&second).unwrap(), b"second");
+
+        // Something else put there, under the same build: replaced, not run.
+        std::fs::write(&second, b"planted").unwrap();
+        let third = daemon_program(&dir, &exe, "second").unwrap();
+        assert_eq!(std::fs::read(&third).unwrap(), b"second");
 
         let mut left: Vec<String> =
             std::fs::read_dir(dir.join("bin")).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();

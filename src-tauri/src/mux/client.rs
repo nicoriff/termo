@@ -898,6 +898,12 @@ mod tests {
         me.call(Op::Resize { session: id, cols: 41, rows: 17 }).unwrap();
         assert_eq!(me.call(Op::Claim { session: id, cols: 41, rows: 17 }).unwrap(), Reply::Claimed { changed: false });
         assert!(local.claim(id, 90, 25).unwrap());
+        // A size no screen has stops at what the daemon allows.
+        me.call(Op::Resize { session: id, cols: u16::MAX, rows: u16::MAX }).unwrap();
+        assert_eq!(size(), (1000, 500));
+        me.call(Op::Resize { session: id, cols: 0, rows: 0 }).unwrap();
+        assert_eq!(size(), (2, 1));
+        assert!(local.claim(id, 90, 25).unwrap());
 
         // This computer sees who's connected, and can cut them off.
         let viewers = local.viewers().unwrap();
