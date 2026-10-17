@@ -20,6 +20,9 @@
           <span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
         </button>
         <nav id="tab-list" class="tab-list"></nav>
+        <button id="new" class="new-button" data-label="newConsoleHint" hidden>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" /></svg>
+        </button>
         <span id="link" class="link-dot" role="status"></span>
       </header>
 
@@ -43,7 +46,45 @@
           <p id="status" class="status"></p>
           <h2 id="home-heading" class="home-heading" data-text="consoles" hidden></h2>
           <ul id="sessions" class="session-list"></ul>
+          <!-- A new console, opened by Termo on that computer as a tab of
+               its own (full access only). -->
+          <section id="opener" class="opener" hidden>
+            <h2 class="home-heading" data-text="newConsole"></h2>
+            <div id="open-folder-row" class="open-folder">
+              <span class="open-folder-label" data-text="folder"></span>
+              <button id="open-folder" class="folder-pick">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" /></svg>
+                <span class="folder-pick-text">
+                  <span id="open-folder-name" class="folder-pick-name"></span>
+                  <span id="open-folder-path" class="folder-pick-path"></span>
+                </span>
+                <svg class="chevron" viewBox="0 0 6 10" aria-hidden="true"><path d="M1 1l4 4-4 4" /></svg>
+              </button>
+            </div>
+            <div id="open-choices" class="open-choices"></div>
+            <p id="open-status" class="status open-status"></p>
+          </section>
         </aside>
+
+        <!-- Where a new console opens: the desktop's folder browser, by touch. -->
+        <section id="folders" class="folders" hidden>
+          <header class="folders-head">
+            <button id="folders-back" class="round-button" data-label="back">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+            </button>
+            <h2 class="folders-title" data-text="pickFolder"></h2>
+          </header>
+          <nav id="crumbs" class="crumbs"></nav>
+          <div id="folder-list" class="folder-list"></div>
+          <p id="folders-error" class="status folders-error"></p>
+          <footer class="folders-actions">
+            <button id="new-folder" class="pill">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" /><path d="M8 7v4M6 9h4" /></svg>
+              <span data-text="newFolder"></span>
+            </button>
+            <button id="use-folder" class="pill primary"></button>
+          </footer>
+        </section>
       </div>
 
       <nav id="keys" class="keys" hidden>

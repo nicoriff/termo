@@ -52,6 +52,7 @@
   import { remoteWatch } from "$lib/remote/remote-watch.svelte";
   import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
   import { startAgentSharing } from "$lib/remote/agent-share";
+  import { startRemoteOpen } from "$lib/remote/remote-open.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -88,6 +89,8 @@
     let stopRemoteWatch: (() => void) | null = null;
     const stopSessionsDaemon = sessionsDaemon.start();
     const stopAgentSharing = startAgentSharing();
+    // Consoles asked for from the tailnet open as tabs of the first window.
+    const stopRemoteOpen = isFirstWindow() ? startRemoteOpen() : () => {};
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopNotificationClicks = startNotificationClicks();
@@ -155,6 +158,7 @@
       stopRemoteWatch?.();
       stopSessionsDaemon();
       stopAgentSharing();
+      stopRemoteOpen();
       stopAgentAttention();
       stopAgentRunAttention();
       stopNotificationClicks();

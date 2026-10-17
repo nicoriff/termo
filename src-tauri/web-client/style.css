@@ -240,6 +240,28 @@ svg {
   opacity: 0.6;
 }
 
+.new-button {
+  flex-shrink: 0;
+  width: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+}
+
+.new-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.new-button:active {
+  background: var(--hover);
+}
+
 .link-dot {
   flex-shrink: 0;
   align-self: center;
@@ -450,6 +472,43 @@ svg {
   gap: 8px;
 }
 
+/* The row is the console's button; ✕ sits inside it, on its right. */
+.session-item {
+  position: relative;
+  min-width: 0;
+  transition: opacity 150ms ease;
+}
+
+.session-item.closing {
+  opacity: 0.45;
+}
+
+.session-item.closable .session {
+  padding-right: 54px;
+}
+
+.session-close {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  color: var(--muted);
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.session-close:active {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
 .session {
   width: 100%;
   display: flex;
@@ -529,6 +588,363 @@ svg {
 .session-state.ended {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
+}
+
+/* ---- A new console */
+
+.opener {
+  margin-top: 24px;
+}
+
+.open-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.open-folder[hidden] {
+  display: none;
+}
+
+.folder-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--active-fg);
+  text-align: left;
+}
+
+.folder-pick:active {
+  background: var(--raised-strong);
+}
+
+.folder-pick > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-pick .chevron {
+  width: 7px;
+  height: 11px;
+}
+
+.folder-pick-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.folder-pick-name {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-pick-path {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-pick-path:empty {
+  display: none;
+}
+
+/* ---- The folder browser */
+
+.folders {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: sheet-in 200ms var(--ease);
+}
+
+.folders[hidden] {
+  display: none;
+}
+
+.folders-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 6px;
+}
+
+.folders-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--active-fg);
+}
+
+.crumbs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 14px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.crumb {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.crumb:active {
+  background: var(--hover);
+}
+
+.crumb.current {
+  color: var(--active-fg);
+  font-weight: 600;
+}
+
+.crumb-sep {
+  flex-shrink: 0;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.folder-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.folder-list.forward {
+  animation: slide-forward 170ms var(--ease);
+}
+
+.folder-list.back {
+  animation: slide-back 170ms var(--ease);
+}
+
+@keyframes slide-forward {
+  from {
+    transform: translateX(40px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes slide-back {
+  from {
+    transform: translateX(-40px);
+    opacity: 0.4;
+  }
+}
+
+.folder-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 15px;
+  color: var(--active-fg);
+}
+
+.folder-row:active {
+  background: var(--hover);
+}
+
+.folder-row > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-row .chevron {
+  width: 7px;
+  height: 11px;
+  opacity: 0.6;
+}
+
+.folder-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.folder-row-name,
+.folder-row-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-row-path {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.folder-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--raised-strong);
+  color: var(--muted);
+}
+
+.folder-section {
+  margin: 14px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.folder-note {
+  margin: 18px 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.new-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 10px;
+}
+
+.new-folder-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--raised);
+  color: var(--active-fg);
+  font: inherit;
+  /* Below 16px, iOS zooms the page in on it. */
+  font-size: 16px;
+  outline: none;
+}
+
+.folders-error {
+  margin: 0 14px 10px;
+}
+
+.folders-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 14px;
+  color: var(--active-fg);
+  white-space: nowrap;
+}
+
+.pill:active {
+  background: var(--raised-strong);
+}
+
+.pill:disabled {
+  opacity: 0.45;
+}
+
+.pill.primary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.open-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
+}
+
+.open-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  text-align: left;
+  font-size: 14px;
+  color: var(--active-fg);
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.open-choice:active {
+  transform: scale(0.985);
+  background: var(--raised-strong);
+}
+
+.open-choice:disabled {
+  opacity: 0.5;
+}
+
+.open-choice .session-kind {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.open-choice-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-status {
+  margin-top: 12px;
 }
 
 /* ---- The keys a phone's keyboard lacks */
@@ -802,6 +1218,28 @@ body.typing .statusbar {
     width: 40px;
   }
 
+  .new-button {
+    width: 38px;
+  }
+
+  .new-button:hover,
+  .open-choice:hover,
+  .folder-row:hover,
+  .crumb:hover {
+    background: var(--hover);
+  }
+
+  .folders {
+    inset: 24px auto auto 50%;
+    width: 520px;
+    height: min(620px, calc(100% - 48px));
+    transform: translateX(-50%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    animation: none;
+  }
+
   .tab {
     font-size: 12px;
     padding: 0 12px;
@@ -835,6 +1273,20 @@ body.typing .statusbar {
 
   .session:hover {
     background: var(--raised-strong);
+  }
+
+  .session-close {
+    width: 30px;
+    height: 30px;
+  }
+
+  .session-item.closable .session {
+    padding-right: 46px;
+  }
+
+  .session-close:hover {
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    color: var(--danger);
   }
 
   .statusbar {

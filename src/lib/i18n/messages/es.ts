@@ -117,6 +117,13 @@ export const es = {
     windowTitle: "Cerrar ventana",
     windowWarning: "Si cerrás esta ventana se cierran sus consolas y se pierde lo que estén haciendo. Las otras ventanas siguen abiertas.",
     windowConfirm: "Cerrar igual",
+    warningSome: "Estas no siguen en segundo plano: si salís, se cierran y se pierde lo que estén haciendo.",
+    windowWarningSome: "Estas no siguen en segundo plano: si cerrás la ventana, se cierran y se pierde lo que estén haciendo.",
+    keptTitle: "Siguen en segundo plano",
+    keptInfo: "No se pierde nada: siguen corriendo, y cuando vuelvas a abrir Termo aparecen donde estaban.",
+    windowKeptInfo: "No se pierde nada: siguen corriendo. Las volvés a mostrar desde «En segundo plano», en el menú ˅ de una pestaña.",
+    quitPlain: "Salir",
+    windowClosePlain: "Cerrar",
   },
   edit: {
     title: "Edición",

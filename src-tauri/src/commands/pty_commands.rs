@@ -398,16 +398,29 @@ pub async fn pty_kill_tree(app: tauri::AppHandle, id: String) -> Result<usize, S
     .map_err(|err| err.to_string())
 }
 
-/// How many consoles have something running under their shell: every
-/// window's (quitting), or with `this_window` only the asking window's
-/// (closing it). Off the main thread for the same reason as pty_memory: it
-/// refreshes the process table.
+/// What closing Termo (or a window) does to the consoles: those it ends,
+/// and those that keep running in the background (see mux/).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusyConsoles {
+    /// Ended, with something running under their shell.
+    pub lost: usize,
+    /// Kept running, with something running under their shell.
+    pub kept: usize,
+    /// Every console kept running, busy or not: whose agents keep going too.
+    pub kept_ids: Vec<String>,
+}
+
+/// How many consoles have something running under their shell, among those
+/// closing ends and those it leaves running: every window's (quitting), or
+/// with `this_window` only the asking window's (closing it). Off the main
+/// thread for the same reason as pty_memory: it refreshes the process table.
 #[tauri::command]
 pub async fn busy_consoles(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     this_window: Option<bool>,
-) -> Result<usize, String> {
+) -> Result<BusyConsoles, String> {
     let owner = this_window.unwrap_or(false).then(|| window.label().to_string());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -415,7 +428,13 @@ pub async fn busy_consoles(
             Some(owner) => state.pty.pids_of(owner),
             None => state.pty.pids(),
         };
-        state.memory.busy_roots(&pids).len()
+        let kept = state.pty.kept(owner.as_deref());
+        let kept_pids: Vec<u32> = kept.iter().filter_map(|(_, pid)| *pid).collect();
+        BusyConsoles {
+            lost: state.memory.busy_roots(&pids).len(),
+            kept: state.memory.busy_roots(&kept_pids).len(),
+            kept_ids: kept.iter().map(|(id, _)| id.to_string()).collect(),
+        }
     })
     .await
     .map_err(|err| err.to_string())

@@ -10,6 +10,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::commands::folder_commands::{FolderEntry, FolderRoots};
 use crate::pty::SpawnSpec;
 
 /// Bumped on any change a daemon of the previous version wouldn't
@@ -82,6 +83,43 @@ pub enum Op {
     /// What the app knows of the agent in a console — its hooks and status
     /// line are the app's —, for whoever shows it from the tailnet.
     Agent { session: Uuid, agent: Option<AgentInfo> },
+    /// What can be opened from the tailnet (see Op::Open): none while
+    /// Termo isn't open here.
+    OpenChoices,
+    /// A new console, opened by the app as a tab of its own — the shell or
+    /// agent `choice` (one of OpenChoices'), in `cwd` or wherever it opens
+    /// by default. Answered with it once the daemon has it to show.
+    Open { choice: String, cwd: Option<String> },
+    /// From the app: this connection is the one that opens what the
+    /// tailnet asks for (see Open), and this is what it offers — and the
+    /// folders its agents ran in lately, to offer them first.
+    Opener {
+        choices: Vec<OpenChoice>,
+        #[serde(default)]
+        recent: Vec<String>,
+    },
+    /// From the app: what came of an Open it was asked (see
+    /// ServerMessage::Open): the console's id, or why not.
+    Opened { request: u64, result: Result<Uuid, String> },
+    /// Where a folder browser starts: home and the drives (see
+    /// commands/folder_commands.rs), to pick where a new console opens.
+    FolderRoots,
+    /// The folders inside `path`.
+    ListFolders { path: String },
+    /// A new folder `name` inside `parent`.
+    CreateFolder { parent: String, name: String },
+}
+
+/// A shell or an agent the app offers to open from the tailnet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenChoice {
+    /// The app's own name for it, sent back to open it.
+    pub id: String,
+    /// As its new-tab menu shows it: "PowerShell", "Claude Code"…
+    pub name: String,
+    /// "shell" or "agent".
+    pub kind: String,
 }
 
 /// An agent at work in a console, as the app's status bar shows it.
@@ -156,6 +194,12 @@ pub enum ServerMessage {
     /// Something the status bar shows of it changed: its folder, what runs
     /// in front, its agent.
     Info { info: SessionInfo },
+    /// To the app (see Op::Opener): someone on the tailnet asks for a new
+    /// console. Answered with Op::Opened and the same `request`.
+    Open { request: u64, choice: String, cwd: Option<String> },
+    /// To the app (see Op::Opener): someone on the tailnet closed one of
+    /// its consoles — its tab closes, as if closed here.
+    Close { session: Uuid },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -167,6 +211,15 @@ pub enum Reply {
     Sessions { sessions: Vec<SessionInfo> },
     Viewers { viewers: Vec<super::remote::Viewer> },
     Claimed { changed: bool },
+    OpenChoices {
+        choices: Vec<OpenChoice>,
+        #[serde(default)]
+        recent: Vec<String>,
+    },
+    FolderRoots { roots: FolderRoots },
+    Folders { folders: Vec<FolderEntry> },
+    Folder { folder: FolderEntry },
+    Opened { session: Uuid },
 }
 
 /// A console as the daemon knows it.

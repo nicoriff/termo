@@ -57,6 +57,36 @@ const WORDS = {
     branch: "Rama",
     dirty: "Con cambios sin commitear",
     foreground: "Corriendo ahora",
+    newConsole: "Abrir una consola",
+    newConsoleHint: "Abrir una consola nueva",
+    homeFolder: "Carpeta de inicio",
+    opening: "Abriendo {name}…",
+    openFailed: "No se pudo abrir: {reason}",
+    openNoApp: "Para abrir consolas desde acá, Termo tiene que estar abierto en esta computadora.",
+    openBadFolder: "Esa carpeta no existe en esta computadora.",
+    openTimeout: "Termo no la abrió a tiempo.",
+    openBusy: "Ya se están abriendo otras; probá de nuevo en un momento.",
+    pickFolder: "Elegir carpeta",
+    places: "Lugares",
+    back: "Atrás",
+    tagHome: "inicio",
+    tagDrive: "unidad",
+    tagCurrent: "actual",
+    recentFolders: "Recientes",
+    noSubfolders: "No tiene subcarpetas",
+    loadingFolders: "Cargando…",
+    useFolder: "Usar {folder}",
+    useThisFolder: "Usar esta carpeta",
+    newFolder: "Nueva carpeta",
+    newFolderName: "Nombre de la carpeta",
+    create: "Crear",
+    folderUnreadable: "No se pudo leer esta carpeta.",
+    folderBadName: "Ese nombre no sirve para una carpeta.",
+    folderExists: "Ya hay una carpeta con ese nombre.",
+    folderFailed: "No se pudo crear la carpeta.",
+    closeConsole: "Cerrar {name}",
+    closeConfirm: "¿Cerrar {name}? Se cierra también en la computadora, con lo que esté corriendo en ella.",
+    closeFailed: "No se pudo cerrar: {reason}",
   },
   en: {
     connecting: "Connecting…",
@@ -102,6 +132,36 @@ const WORDS = {
     branch: "Branch",
     dirty: "With uncommitted changes",
     foreground: "Running now",
+    newConsole: "Open a console",
+    newConsoleHint: "Open a new console",
+    homeFolder: "Home folder",
+    opening: "Opening {name}…",
+    openFailed: "Couldn't open it: {reason}",
+    openNoApp: "To open consoles from here, Termo has to be open on this computer.",
+    openBadFolder: "That folder doesn't exist on this computer.",
+    openTimeout: "Termo didn't open it in time.",
+    openBusy: "Others are opening already; try again in a moment.",
+    pickFolder: "Choose folder",
+    places: "Places",
+    back: "Back",
+    tagHome: "home",
+    tagDrive: "drive",
+    tagCurrent: "current",
+    recentFolders: "Recent",
+    noSubfolders: "No subfolders",
+    loadingFolders: "Loading…",
+    useFolder: "Use {folder}",
+    useThisFolder: "Use this folder",
+    newFolder: "New folder",
+    newFolderName: "Folder name",
+    create: "Create",
+    folderUnreadable: "This folder couldn't be read.",
+    folderBadName: "That name won't do for a folder.",
+    folderExists: "There's a folder by that name already.",
+    folderFailed: "The folder couldn't be created.",
+    closeConsole: "Close {name}",
+    closeConfirm: "Close {name}? It closes on the computer too, along with whatever runs in it.",
+    closeFailed: "Couldn't close it: {reason}",
   },
 };
 
@@ -348,6 +408,20 @@ const sizeLine = $("size");
 const fitButton = $("fit");
 const ctrlKey = $("ctrl");
 const altKey = $("alt");
+const newButton = $("new");
+const opener = $("opener");
+const folderRow = $("open-folder-row");
+const folderPick = $("open-folder");
+const folderPickName = $("open-folder-name");
+const folderPickPath = $("open-folder-path");
+const folderView = $("folders");
+const crumbsBar = $("crumbs");
+const folderList = $("folder-list");
+const folderError = $("folders-error");
+const useFolderButton = $("use-folder");
+const newFolderButton = $("new-folder");
+const choiceList = $("open-choices");
+const openStatus = $("open-status");
 $("host").textContent = location.hostname;
 
 /** How often the list of consoles is asked again: a console opened or
@@ -391,11 +465,12 @@ function label(session) {
   return folder || programName(session);
 }
 
+const KINDS = { powershell: "ps", pwsh: "ps", cmd: "cmd", bash: "sh", zsh: "sh", fish: "sh", sh: "sh", wsl: "wsl" };
+
 /** Up to three letters for what it runs: "ps", "cmd", "cla"(ude)… */
 function kind(session) {
   const name = programName(session).toLowerCase();
-  const known = { powershell: "ps", pwsh: "ps", cmd: "cmd", bash: "sh", zsh: "sh", fish: "sh", sh: "sh", wsl: "wsl" };
-  return known[name] ?? name.slice(0, 3);
+  return KINDS[name] ?? name.slice(0, 3);
 }
 
 /** A long folder path, cut in the middle: its drive or root and the last
@@ -476,7 +551,7 @@ async function connect() {
 
 async function listSessions() {
   if (!connection) return connect();
-  const reply = await connection.request({ op: "list" }).catch(() => null);
+  const [reply] = await Promise.all([connection.request({ op: "list" }).catch(() => null), listChoices()]);
   if (!reply) return;
   sessions = (reply.sessions ?? []).sort((a, b) => a.startedAt - b.startedAt);
   const current = sessions.find((session) => session.id === shown);
@@ -558,14 +633,459 @@ function render() {
         button.append(state);
       }
       button.onclick = () => void open(session);
+      item.className = "session-item";
+      item.classList.toggle("closing", closing.has(session.id));
       item.append(button);
+      // Closed from here as on the computer: its tab there closes too.
+      if (!readOnly()) {
+        const close = document.createElement("button");
+        close.className = "session-close";
+        close.setAttribute("aria-label", t("closeConsole", { name: label(session) }));
+        close.title = t("closeConsole", { name: label(session) });
+        close.disabled = closing.has(session.id);
+        close.append(svgIcon('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />'));
+        close.onclick = () => void closeConsole(session);
+        item.classList.add("closable");
+        item.append(close);
+      }
       return item;
+    }),
+  );
+  renderOpener();
+}
+
+// ---- A new console: asked of Termo on that computer, which opens it as a
+// tab of its own — a shell or an agent its new-tab menu offers —, then
+// shown here. Full access only, and only while Termo is open there.
+
+/** What Termo there offers to open: null until asked (or read-only), none
+ * while it isn't open. */
+let choices = null;
+/** The folders its agents ran in lately, offered first. */
+let recentFolders = [];
+/** The folder to open it in: "" for the shell's own; null until picked,
+ * which is the folder of the console shown. */
+let folderPicked = null;
+let opening = false;
+let openMessage = "";
+/** What the choices were last drawn from: redrawn only when it changes, so
+ * a list arriving doesn't eat a tap. */
+let choiceKey = "";
+
+async function listChoices() {
+  if (!connection || readOnly()) {
+    choices = null;
+    return;
+  }
+  const reply = await connection.request({ op: "open_choices" }).catch(() => null);
+  if (!reply) return;
+  choices = reply.choices ?? [];
+  recentFolders = reply.recent ?? [];
+}
+
+function choiceKind(choice) {
+  const name = choice.id.slice(choice.id.indexOf(":") + 1).toLowerCase();
+  return KINDS[name] ?? name.slice(0, 3);
+}
+
+function renderOpener() {
+  const can = Boolean(connection) && choices !== null;
+  newButton.hidden = !can;
+  opener.hidden = !can;
+  if (!can) return;
+  const offered = choices.length > 0;
+  folderRow.hidden = !offered;
+  openStatus.textContent = offered ? openMessage : t("openNoApp");
+
+  if (folderPicked === null) folderPicked = sessions.find((session) => session.id === shown)?.cwd ?? "";
+  folderPickName.textContent = folderPicked ? folderLabel(folderPicked) : t("homeFolder");
+  folderPickPath.textContent = folderPicked;
+  folderPick.title = folderPicked || t("homeFolder");
+
+  const nextChoiceKey = JSON.stringify([choices, opening]);
+  if (nextChoiceKey === choiceKey) return;
+  choiceKey = nextChoiceKey;
+  choiceList.replaceChildren(
+    ...choices.map((choice) => {
+      const button = document.createElement("button");
+      button.className = "open-choice";
+      button.disabled = opening;
+      const badge = document.createElement("span");
+      badge.className = "session-kind";
+      badge.textContent = choiceKind(choice);
+      const name = document.createElement("span");
+      name.className = "open-choice-name";
+      name.textContent = choice.name;
+      button.append(badge, name);
+      button.onclick = () => void openNew(choice);
+      return button;
     }),
   );
 }
 
+folderPick.onclick = () => openFolderBrowser();
+
+function openError(code) {
+  const known = { "no-app": "openNoApp", "bad-folder": "openBadFolder", timeout: "openTimeout", busy: "openBusy" };
+  return known[code] ? t(known[code]) : t("openFailed", { reason: code });
+}
+
+async function openNew(choice) {
+  if (!connection || opening) return;
+  opening = true;
+  openMessage = t("opening", { name: choice.name });
+  renderOpener();
+  let reply = null;
+  try {
+    reply = await connection.request({ op: "open", choice: choice.id, cwd: folderPicked || null });
+    openMessage = "";
+  } catch (err) {
+    openMessage = openError(err.message);
+  }
+  opening = false;
+  if (!reply) return renderOpener();
+  await listSessions();
+  const session = sessions.find((entry) => entry.id === reply.session);
+  if (session) void open(session);
+}
+
+// "+": the menu, at its part for a new console, offering the folder of the
+// console shown.
+newButton.onclick = () => {
+  folderPicked = null;
+  if (!opening) openMessage = "";
+  if (shown) setMenu(true);
+  else render();
+  requestAnimationFrame(() => opener.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+};
+
+// ---- Picking the folder: the desktop's folder browser, by touch. It starts
+// in the folder picked, its parents behind it in the crumbs; a tap on a
+// folder goes into it, the crumbs and ‹ go back up, and "Use …" picks the
+// one it's in. At the top, the places: the folder picked, home and the
+// drives, then the open consoles' folders and those agents ran in lately.
+
+// As the desktop's (src/lib/agent-launch/folder-nav.ts).
+const DRIVE_ROOT = /^[A-Za-z]:\\?$/;
+
+function trimSeparator(path) {
+  if (path === "/" || DRIVE_ROOT.test(path)) return path;
+  return path.replace(/[\\/]+$/, "");
+}
+
+/** The folder one level up; null at a drive or the root. */
+function parentPath(path) {
+  const trimmed = trimSeparator(path);
+  if (trimmed === "/" || DRIVE_ROOT.test(trimmed)) return null;
+  if (/^[A-Za-z]:/.test(trimmed)) {
+    const cut = trimmed.lastIndexOf("\\");
+    return cut <= 2 ? `${trimmed.slice(0, 2)}\\` : trimmed.slice(0, cut);
+  }
+  const cut = trimmed.lastIndexOf("/");
+  return cut <= 0 ? "/" : trimmed.slice(0, cut);
+}
+
+function samePath(a, b) {
+  const normalize = (path) => {
+    const trimmed = trimSeparator(path);
+    return /^[A-Za-z]:/.test(trimmed) ? trimmed.replace(/\//g, "\\").replace(/\\$/, "").toLowerCase() : trimmed;
+  };
+  return normalize(a) === normalize(b);
+}
+
+function folderLabel(path) {
+  const trimmed = trimSeparator(path);
+  if (trimmed === "/") return "/";
+  if (DRIVE_ROOT.test(trimmed)) return trimmed.slice(0, 2);
+  return trimmed.split(/[\\/]/).pop() || trimmed;
+}
+
+const ICONS = {
+  folder: '<path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" />',
+  home: '<path d="M2 8l6-5.5L14 8M3.8 6.5v7h8.4v-7" />',
+  drive: '<rect x="1.5" y="4.5" width="13" height="7" rx="1.5" /><circle cx="12" cy="8" r="0.6" />',
+};
+
+function svgIcon(markup, className = "") {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  element.setAttribute("viewBox", "0 0 16 16");
+  element.setAttribute("aria-hidden", "true");
+  if (className) element.setAttribute("class", className);
+  element.innerHTML = markup;
+  return element;
+}
+
+/** Each level walked into, from the places (path null) down to the one
+ * shown: its folders once read. */
+let walk = [];
+/** Folders already read while the browser is open. */
+const folderCache = new Map();
+let creatingFolder = false;
+let folderErrorTimer = null;
+
+function folderErrorText(code) {
+  const known = { unreadable: "folderUnreadable", "bad-name": "folderBadName", exists: "folderExists", failed: "folderFailed" };
+  return known[code] ? t(known[code]) : t("openFailed", { reason: code });
+}
+
+function showFolderError(text) {
+  folderError.textContent = text;
+  clearTimeout(folderErrorTimer);
+  folderErrorTimer = setTimeout(() => (folderError.textContent = ""), 3500);
+}
+
+async function placeItems() {
+  const reply = await connection.request({ op: "folder_roots" });
+  const items = [];
+  const place = (item) => {
+    if (!items.some((other) => samePath(other.path, item.path))) items.push(item);
+  };
+  if (folderPicked) place({ name: folderLabel(folderPicked), path: folderPicked, tag: "current" });
+  if (reply.roots.home) place({ ...reply.roots.home, tag: "home" });
+  for (const drive of reply.roots.drives) place({ ...drive, tag: "drive" });
+  for (const path of [...sessions.map((session) => session.cwd), ...recentFolders]) {
+    if (path) place({ name: folderLabel(path), path, tag: "recent" });
+  }
+  return items;
+}
+
+async function loadLevel(level) {
+  if (level.path !== null && folderCache.has(level.path)) {
+    level.items = folderCache.get(level.path);
+    level.status = "ready";
+    return;
+  }
+  level.status = "loading";
+  try {
+    level.items =
+      level.path === null
+        ? await placeItems()
+        : ((await connection.request({ op: "list_folders", path: level.path })).folders ?? []);
+    if (level.path !== null) folderCache.set(level.path, level.items);
+    level.status = "ready";
+  } catch (err) {
+    level.items = [];
+    level.status = "error";
+    level.error = folderErrorText(err.message);
+  }
+}
+
+function openFolderBrowser() {
+  if (!connection) return;
+  folderCache.clear();
+  creatingFolder = false;
+  folderError.textContent = "";
+  walk = [{ path: null }];
+  const chain = [];
+  for (let path = folderPicked || null; path !== null; path = parentPath(path)) chain.unshift({ path });
+  walk.push(...chain);
+  folderView.hidden = false;
+  void showLevel(walk.length - 1, null);
+}
+
+function closeFolderBrowser() {
+  folderView.hidden = true;
+  creatingFolder = false;
+}
+
+async function showLevel(index, direction) {
+  walk = walk.slice(0, index + 1);
+  const level = walk[index];
+  creatingFolder = false;
+  if (!level.items) {
+    level.status = "loading";
+    renderFolders(direction);
+    await loadLevel(level);
+    if (walk[walk.length - 1] !== level) return;
+    return renderFolders(null);
+  }
+  renderFolders(direction);
+}
+
+function goInto(item) {
+  walk.push({ path: item.path });
+  void showLevel(walk.length - 1, "forward");
+}
+
+function goBack() {
+  if (creatingFolder) {
+    creatingFolder = false;
+    return renderFolders(null);
+  }
+  if (walk.length <= 1) return closeFolderBrowser();
+  void showLevel(walk.length - 2, "back");
+}
+
+function useFolder(path) {
+  folderPicked = path;
+  closeFolderBrowser();
+  renderOpener();
+}
+
+function renderFolders(direction) {
+  const level = walk[walk.length - 1];
+  if (!level) return;
+
+  crumbsBar.replaceChildren(
+    ...walk.flatMap((step, index) => {
+      const last = index === walk.length - 1;
+      const crumb = document.createElement(last ? "span" : "button");
+      crumb.className = last ? "crumb current" : "crumb";
+      crumb.textContent = step.path === null ? t("places") : folderLabel(step.path);
+      if (!last) crumb.onclick = () => void showLevel(index, "back");
+      if (index === 0) return [crumb];
+      const separator = document.createElement("span");
+      separator.className = "crumb-sep";
+      separator.textContent = "›";
+      return [separator, crumb];
+    }),
+  );
+  crumbsBar.scrollLeft = crumbsBar.scrollWidth;
+
+  const rows = [];
+  if (creatingFolder) {
+    const row = document.createElement("form");
+    row.className = "new-folder-row";
+    const input = document.createElement("input");
+    input.placeholder = t("newFolderName");
+    input.setAttribute("aria-label", t("newFolderName"));
+    input.spellcheck = false;
+    input.autocapitalize = "off";
+    input.setAttribute("autocomplete", "off");
+    const create = document.createElement("button");
+    create.className = "pill primary";
+    create.style.flex = "0 0 auto";
+    create.textContent = t("create");
+    row.append(input, create);
+    row.onsubmit = (event) => {
+      event.preventDefault();
+      void commitFolder(input.value);
+    };
+    rows.push(row);
+    requestAnimationFrame(() => input.focus());
+  }
+  let inRecent = false;
+  for (const item of level.items ?? []) {
+    if (item.tag === "recent" && !inRecent) {
+      inRecent = true;
+      const title = document.createElement("p");
+      title.className = "folder-section";
+      title.textContent = t("recentFolders");
+      rows.push(title);
+    }
+    const row = document.createElement("button");
+    row.className = "folder-row";
+    row.title = item.path;
+    row.append(svgIcon(ICONS[item.tag === "home" || item.tag === "drive" ? item.tag : "folder"]));
+    const text = document.createElement("span");
+    text.className = "folder-row-text";
+    const name = document.createElement("span");
+    name.className = "folder-row-name";
+    name.textContent = item.name;
+    text.append(name);
+    if (item.tag === "recent" || item.tag === "current") {
+      const path = document.createElement("span");
+      path.className = "folder-row-path";
+      path.textContent = item.path;
+      text.append(path);
+    }
+    row.append(text);
+    const tags = { home: "tagHome", drive: "tagDrive", current: "tagCurrent" };
+    if (tags[item.tag]) {
+      const tag = document.createElement("span");
+      tag.className = "folder-tag";
+      tag.textContent = t(tags[item.tag]);
+      row.append(tag);
+    }
+    row.append(svgIcon('<path d="M1 1l4 4-4 4" />', "chevron"));
+    row.lastChild.setAttribute("viewBox", "0 0 6 10");
+    row.onclick = () => goInto(item);
+    rows.push(row);
+  }
+  if (!level.items?.length && !creatingFolder) {
+    const note = document.createElement("p");
+    note.className = "folder-note";
+    note.textContent =
+      level.status === "loading" ? t("loadingFolders") : level.status === "error" ? level.error : t("noSubfolders");
+    rows.push(note);
+  }
+  folderList.replaceChildren(...rows);
+  folderList.scrollTop = 0;
+  folderList.classList.remove("forward", "back");
+  if (direction) {
+    void folderList.offsetWidth;
+    folderList.classList.add(direction);
+  }
+
+  const inside = level.path !== null;
+  newFolderButton.disabled = !inside || level.status !== "ready" || creatingFolder;
+  useFolderButton.disabled = !inside;
+  useFolderButton.textContent = inside ? t("useFolder", { folder: folderLabel(level.path) }) : t("useThisFolder");
+}
+
+/** Creates it in the folder shown, and goes into it: likely where the new
+ * console goes. */
+async function commitFolder(name) {
+  const level = walk[walk.length - 1];
+  if (!name.trim() || !level?.path) {
+    creatingFolder = false;
+    return renderFolders(null);
+  }
+  try {
+    const reply = await connection.request({ op: "create_folder", parent: level.path, name });
+    folderCache.delete(level.path);
+    level.items = null;
+    await loadLevel(level);
+    creatingFolder = false;
+    goInto(reply.folder);
+  } catch (err) {
+    showFolderError(folderErrorText(err.message));
+  }
+}
+
+$("folders-back").onclick = () => goBack();
+newFolderButton.onclick = () => {
+  creatingFolder = true;
+  renderFolders(null);
+};
+useFolderButton.onclick = () => {
+  const level = walk[walk.length - 1];
+  if (level?.path) useFolder(level.path);
+};
+
+/** The consoles asked to close, until they're gone. */
+const closing = new Set();
+
+async function closeConsole(session) {
+  if (!connection || closing.has(session.id)) return;
+  if (!confirm(t("closeConfirm", { name: label(session) }))) return;
+  closing.add(session.id);
+  render();
+  try {
+    await connection.request({ op: "kill", session: session.id });
+  } catch (err) {
+    closing.delete(session.id);
+    render();
+    alert(t("closeFailed", { reason: err.message === "no-app" ? t("openNoApp") : err.message }));
+    return;
+  }
+  // Gone once Termo there has closed its tab: asked a few times until then.
+  for (const wait of [300, 900, 2500]) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    await listSessions();
+    if (!sessions.some((entry) => entry.id === session.id)) break;
+  }
+  closing.delete(session.id);
+  render();
+}
+
 function setMenu(open) {
   menuOpen = open;
+  // Opened again: a new console goes where the one shown is, by default.
+  if (open && !opening) {
+    folderPicked = null;
+    openMessage = "";
+  }
   render();
 }
 
@@ -913,7 +1433,8 @@ menuButton.onclick = () => {
 };
 backdrop.onclick = () => setMenu(false);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && menuOpen) setMenu(false);
+  if (event.key === "Escape" && !folderView.hidden) goBack();
+  else if (event.key === "Escape" && menuOpen) setMenu(false);
 });
 
 $("refresh").onclick = (event) => {

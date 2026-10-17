@@ -10,18 +10,22 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
-use super::protocol::{read_frame, read_frame_within, write_frame, AgentInfo, ClientMessage, Frame, Op, Reply, ServerMessage, SessionInfo, PROTOCOL};
+use super::protocol::{
+    read_frame, read_frame_within, write_frame, AgentInfo, ClientMessage, Frame, Op, OpenChoice, Reply, ServerMessage, SessionInfo,
+    PROTOCOL,
+};
 use super::remote::{self, Access, RemoteConfig, Viewer};
 use super::screen::Screen;
 use super::status;
 use super::tailscale::{self, Identity};
 use super::{web, DaemonInfo};
+use crate::commands::folder_commands;
 use crate::pty::{contains_cursor_report, ConsoleEvent, EventSink, PtySession, SpawnSpec};
 
 /// How much of a console's latest output it keeps as is, for a client that
@@ -189,6 +193,37 @@ pub struct Daemon {
     /// When the daemon last had a console or a connection.
     busy_at: Mutex<Instant>,
     remote: RemoteAccess,
+    /// The app's connection, which opens what the tailnet asks for (see
+    /// Op::Opener), while it's connected.
+    opener: Mutex<Option<Opener>>,
+    /// The new consoles asked of it and not answered yet: whose connection
+    /// was asked, and where its answer goes.
+    opening: Mutex<HashMap<u64, (u64, SyncSender<Result<Uuid, String>>)>>,
+    next_open: AtomicU64,
+}
+
+struct Opener {
+    client: Client,
+    choices: Vec<OpenChoice>,
+    recent: Vec<String>,
+}
+
+/// How long a new console asked from the tailnet may take to show up: the
+/// app opening its tab, and lending it to the daemon (see pty/sharing.rs).
+const OPEN_WAIT: Duration = Duration::from_secs(12);
+/// New consoles asked for at once, at most.
+const MAX_OPENING: usize = 4;
+/// What the app may offer to open, at most.
+const MAX_CHOICES: usize = 64;
+/// The folders of one folder sent to a folder browser, at most.
+const MAX_FOLDERS: usize = 5000;
+
+/// Whether a console may be opened in `cwd`: a folder of this computer's
+/// that is there. Not a network share: just looking would have Windows
+/// reach that server with the user's credentials.
+fn usable_folder(cwd: &str) -> bool {
+    let path = std::path::Path::new(cwd);
+    cwd.len() <= 4096 && !status::is_network_path(cwd) && path.is_absolute() && path.is_dir()
 }
 
 pub type Whois = Box<dyn Fn(SocketAddr) -> Option<Identity> + Send + Sync>;
@@ -243,9 +278,18 @@ impl Role {
             Role::Local => true,
             Role::Remote { access, .. } => match op {
                 Op::List | Op::Attach { .. } | Op::Detach { .. } => true,
-                Op::Resize { .. } | Op::Claim { .. } | Op::PromptRedraw { .. } | Op::Kill { .. } => *access == Access::Full,
-                // Starting consoles, and everything about the daemon itself,
-                // is this computer's alone.
+                Op::Resize { .. }
+                | Op::Claim { .. }
+                | Op::PromptRedraw { .. }
+                | Op::Kill { .. }
+                | Op::OpenChoices
+                | Op::Open { .. }
+                | Op::FolderRoots
+                | Op::ListFolders { .. }
+                | Op::CreateFolder { .. } => *access == Access::Full,
+                // Starting consoles other than through the app (see
+                // Op::Open), and everything about the daemon itself, is
+                // this computer's alone.
                 _ => false,
             },
         }
@@ -421,7 +465,57 @@ impl Daemon {
                 known: Mutex::new(HashMap::new()),
                 admitting: AtomicUsize::new(0),
             },
+            opener: Mutex::new(None),
+            opening: Mutex::new(HashMap::new()),
+            next_open: AtomicU64::new(1),
         })
+    }
+
+    /// A new console from the tailnet: asked of the app (see Op::Opener),
+    /// which opens it as one of its tabs; answered once the daemon has it to
+    /// show. Errors are words the web client translates.
+    fn open(&self, choice: &str, cwd: Option<String>) -> Result<Reply, String> {
+        let cwd = cwd.filter(|cwd| !cwd.trim().is_empty());
+        if cwd.as_deref().is_some_and(|cwd| !usable_folder(cwd)) {
+            return Err("bad-folder".into());
+        }
+        let opener = {
+            let opener = self.opener.locked();
+            let Some(opener) = opener.as_ref() else {
+                return Err("no-app".into());
+            };
+            if !opener.choices.iter().any(|offered| offered.id == choice) {
+                return Err("unknown-choice".into());
+            }
+            opener.client.clone()
+        };
+        let request = self.next_open.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = sync_channel(1);
+        {
+            let mut opening = self.opening.locked();
+            if opening.len() >= MAX_OPENING {
+                return Err("busy".into());
+            }
+            opening.insert(request, (opener.id, tx));
+        }
+        let deadline = Instant::now() + OPEN_WAIT;
+        let asked = opener.offer(Frame::Message(ServerMessage::Open { request, choice: choice.to_string(), cwd }));
+        let answer = if asked { rx.recv_timeout(OPEN_WAIT) } else { Err(RecvTimeoutError::Disconnected) };
+        self.opening.locked().remove(&request);
+        let session = match answer {
+            Ok(result) => result?,
+            Err(RecvTimeoutError::Timeout) => return Err("timeout".into()),
+            // The app went meanwhile.
+            Err(RecvTimeoutError::Disconnected) => return Err("no-app".into()),
+        };
+        // One the app runs itself is lent to the daemon a moment later.
+        while !self.sessions.locked().contains_key(&session) {
+            if Instant::now() >= deadline {
+                return Err("timeout".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Ok(Reply::Opened { session })
     }
 
     /// Applies the remote access settings (see remote_supervisor).
@@ -728,6 +822,17 @@ impl Daemon {
                         }
                     }
                 }
+                // It waits on the app: the connection goes on meanwhile.
+                Frame::Message(ClientMessage::Request { id, op: Op::Open { choice, cwd } })
+                    if role.may(&Op::Open { choice: String::new(), cwd: None }) =>
+                {
+                    let daemon = Arc::clone(&self);
+                    let tx = client.tx.clone();
+                    std::thread::spawn(move || {
+                        let result = daemon.open(&choice, cwd);
+                        let _ = tx.send(Frame::Message(ServerMessage::Reply { id, result }));
+                    });
+                }
                 Frame::Message(ClientMessage::Request { id, op }) => {
                     let shutdown = op == Op::Shutdown;
                     let result = if role.may(&op) {
@@ -764,6 +869,15 @@ impl Daemon {
         for session in hosted {
             let _ = self.kill(session);
         }
+        // Nobody opens consoles for the tailnet any more; whoever was
+        // waiting on it is told now.
+        {
+            let mut opener = self.opener.locked();
+            if opener.as_ref().is_some_and(|opener| opener.client.id == client.id) {
+                *opener = None;
+            }
+        }
+        self.opening.locked().retain(|_, (asked, _)| *asked != client.id);
         self.remote.viewers.locked().remove(&client.id);
         self.connections.fetch_sub(1, Ordering::SeqCst);
         self.touch();
@@ -827,8 +941,21 @@ impl Daemon {
                 Ok(Reply::Done)
             }
             Op::Kill { session } => {
+                let live = self.session(session)?;
+                // From the tailnet, a console the app shows closes as its
+                // tab would: the app is asked (see Op::Opener), and the
+                // console goes once it has closed it.
+                if matches!(role, Role::Remote { .. }) {
+                    let opener = self.opener.locked().as_ref().map(|opener| opener.client.clone());
+                    if let Some(opener) = opener {
+                        if !opener.offer(Frame::Message(ServerMessage::Close { session })) {
+                            return Err("no-app".into());
+                        }
+                        return Ok(Reply::Done);
+                    }
+                }
                 // The app's own consoles are closed there, not from here.
-                if self.session(session)?.host.is_some() {
+                if live.host.is_some() {
                     return Err("this console belongs to the app".into());
                 }
                 attached.remove(&session);
@@ -881,6 +1008,54 @@ impl Daemon {
                 Ok(Reply::Done)
             }
             Op::List => Ok(Reply::Sessions { sessions: self.list() }),
+            Op::OpenChoices => {
+                let opener = self.opener.locked();
+                let (choices, recent) =
+                    opener.as_ref().map(|opener| (opener.choices.clone(), opener.recent.clone())).unwrap_or_default();
+                Ok(Reply::OpenChoices { choices, recent })
+            }
+            // Where a new console opens, picked by walking folders (the web
+            // client's browser). Errors are words it translates.
+            Op::FolderRoots => Ok(Reply::FolderRoots { roots: folder_commands::folder_roots() }),
+            Op::ListFolders { path } => {
+                if !usable_folder(&path) {
+                    return Err("unreadable".into());
+                }
+                let mut folders = folder_commands::subfolders(std::path::Path::new(&path)).map_err(|_| "unreadable".to_string())?;
+                folders.truncate(MAX_FOLDERS);
+                Ok(Reply::Folders { folders })
+            }
+            Op::CreateFolder { parent, name } => {
+                if !usable_folder(&parent) {
+                    return Err("unreadable".into());
+                }
+                let name = name.trim();
+                if !folder_commands::is_valid_folder_name(name) {
+                    return Err("bad-name".into());
+                }
+                let parent = std::path::Path::new(&parent);
+                if parent.join(name).exists() {
+                    return Err("exists".into());
+                }
+                let folder = folder_commands::new_folder(parent, name).map_err(|_| "failed".to_string())?;
+                Ok(Reply::Folder { folder })
+            }
+            // Asked on a thread of its own (see handle_connection).
+            Op::Open { choice, cwd } => self.open(&choice, cwd),
+            Op::Opener { mut choices, mut recent } => {
+                choices.truncate(MAX_CHOICES);
+                recent.truncate(MAX_CHOICES);
+                *self.opener.locked() = Some(Opener { client: client.clone(), choices, recent });
+                Ok(Reply::Done)
+            }
+            Op::Opened { request, result } => {
+                if let Some((asked, answer)) = self.opening.locked().get(&request) {
+                    if *asked == client.id {
+                        let _ = answer.try_send(result);
+                    }
+                }
+                Ok(Reply::Done)
+            }
             Op::Shutdown => Ok(Reply::Done),
         }
     }

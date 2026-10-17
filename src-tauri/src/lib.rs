@@ -104,6 +104,20 @@ pub fn run() {
                     let _ = tauri::Emitter::emit(&handle, "sessions-daemon", answering);
                 });
             }
+            // A new console asked for from the tailnet: the window Termo
+            // opened with opens it as a tab (see remote-open.svelte.ts).
+            {
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_open(move |request, choice, cwd| {
+                    let asked = serde_json::json!({ "request": request, "choice": choice, "cwd": cwd });
+                    let _ = tauri::Emitter::emit(&handle, "remote-open", asked);
+                });
+                // And one closed from there: its tab closes.
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_close(move |session| {
+                    let _ = tauri::Emitter::emit(&handle, "remote-close", session.to_string());
+                });
+            }
             // With remote access on, the consoles the app runs itself are
             // shown from the tailnet too (see pty/sharing.rs).
             if let Some(dir) = mux::dir() {
@@ -167,6 +181,8 @@ pub fn run() {
             commands::remote_commands::remote_consoles,
             commands::remote_commands::remote_share_look,
             commands::remote_commands::remote_share_agents,
+            commands::remote_commands::remote_set_open_choices,
+            commands::remote_commands::remote_opened,
             commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,

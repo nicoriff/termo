@@ -118,6 +118,13 @@ export const en: Messages = {
     windowTitle: "Close window",
     windowWarning: "Closing this window closes its consoles and loses whatever they are doing. The other windows stay open.",
     windowConfirm: "Close anyway",
+    warningSome: "These don't keep running: quitting closes them and loses whatever they are doing.",
+    windowWarningSome: "These don't keep running: closing the window closes them and loses whatever they are doing.",
+    keptTitle: "Keep running in the background",
+    keptInfo: "Nothing is lost: they keep running, and come back where they were when you open Termo again.",
+    windowKeptInfo: "Nothing is lost: they keep running. Show them again from “In the background”, in a tab's ˅ menu.",
+    quitPlain: "Quit",
+    windowClosePlain: "Close",
   },
   edit: {
     title: "Edit",

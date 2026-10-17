@@ -74,11 +74,15 @@ pub enum Outgoing {
     Output { session: Uuid, bytes: Vec<u8> },
 }
 
-/// What the tailnet asks of one of the app's own consoles.
+/// What the tailnet asks of one of the app's own consoles — or of the app:
+/// a new one (see Op::Opener), to answer with `opened`.
 pub enum HostEvent {
     Input { session: Uuid, bytes: Vec<u8> },
     Resize { session: Uuid, cols: u16, rows: u16 },
     PromptRedraw { session: Uuid },
+    Open { request: u64, choice: String, cwd: Option<String> },
+    /// Closed from the tailnet: its tab closes.
+    Close { session: Uuid },
 }
 
 struct Shown {
@@ -263,6 +267,13 @@ impl MuxClient {
 
     pub fn on_host(&self, handle: impl Fn(HostEvent) + Send + Sync + 'static) {
         let _ = self.on_host.set(Box::new(handle));
+    }
+
+    /// What came of a new console the tailnet asked for (HostEvent::Open).
+    pub fn opened(&self, request: u64, result: Result<Uuid, String>) {
+        if let Ok(generation) = self.connected() {
+            self.post(generation, Outgoing::Op(Op::Opened { request, result }));
+        }
     }
 
     /// Sends a frame over connection `generation` without ever waiting: the
@@ -465,6 +476,16 @@ impl MuxClient {
         self.shown.iter().filter_map(|shown| Some((*shown.key(), shown.pid?))).collect()
     }
 
+    /// The consoles shown through it — every window's, or only `owner`'s
+    /// —, with their process ids once known.
+    pub fn shown_of(&self, owner: Option<&str>) -> Vec<(Uuid, Option<u32>)> {
+        self.shown
+            .iter()
+            .filter(|shown| owner.is_none_or(|owner| shown.owner == owner))
+            .map(|shown| (*shown.key(), shown.pid))
+            .collect()
+    }
+
     /// Tells every tab showing a console through this client that it's
     /// gone, and stops showing them.
     fn forget_all(&self) {
@@ -599,6 +620,16 @@ fn read_loop(client: Weak<MuxClient>, conn: Arc<Conn>, mut reader: TcpStream) {
             Frame::Message(ServerMessage::HostPromptRedraw { session }) => {
                 if let Some(handle) = client.on_host.get() {
                     handle(HostEvent::PromptRedraw { session });
+                }
+            }
+            Frame::Message(ServerMessage::Open { request, choice, cwd }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::Open { request, choice, cwd });
+                }
+            }
+            Frame::Message(ServerMessage::Close { session }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::Close { session });
                 }
             }
             Frame::Message(ServerMessage::Gone { session }) => {
@@ -934,6 +965,160 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A new console from the tailnet: the daemon asks the app, which opens
+    /// it as one of its own and lends it; the phone gets it to show. Only
+    /// with full access, only what the app offers, only in a folder here.
+    #[test]
+    fn a_console_asked_from_the_tailnet_is_opened_by_the_app() {
+        use crate::mux::protocol::OpenChoice;
+        use crate::mux::remote::{self, Access, Allowed, RemoteConfig};
+        use crate::mux::tailscale::Identity;
+
+        let dir = std::env::temp_dir().join(format!("termo-open-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = RemoteConfig {
+            enabled: true,
+            port: 0,
+            allowed: vec![
+                Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
+                Allowed { login: "friend@example.com".into(), node: None, access: Access::ReadOnly },
+            ],
+        };
+        remote::write_config(&dir, &config).unwrap();
+        let pretending: Arc<Mutex<Option<Identity>>> = Arc::default();
+        let whois = {
+            let pretending = Arc::clone(&pretending);
+            Box::new(move |_| pretending.lock().unwrap().clone())
+        };
+        let token = "open-test-token";
+        let (port, remote_port) = crate::mux::server::start_remote_for_test(token, &dir, whois).unwrap();
+        let remote_addr = SocketAddr::from(([127, 0, 0, 1], remote_port));
+        let pretend = |login: &str| {
+            *pretending.lock().unwrap() = Some(Identity { login: login.into(), node: "phone".into() });
+            // Connected now, as them: it would connect on its first call.
+            let client = MuxClient::new(Endpoint::Remote(remote_addr));
+            client.connected().unwrap();
+            client
+        };
+        let folder_of = |path: &std::path::Path| path.to_str().unwrap().to_string();
+        let open = |client: &MuxClient, choice: &str, cwd: Option<&str>| {
+            client.call(Op::Open { choice: choice.into(), cwd: cwd.map(String::from) })
+        };
+        let choices = |client: &MuxClient| match client.call(Op::OpenChoices).unwrap() {
+            Reply::OpenChoices { choices, .. } => choices,
+            other => panic!("{other:?}"),
+        };
+        let me = pretend("me@example.com");
+        let friend = pretend("friend@example.com");
+
+        // Termo isn't open: nothing to open.
+        assert!(choices(&me).is_empty());
+        assert_eq!(open(&me, "shell:pwsh", None), Err("no-app".into()));
+
+        // The app: opens what it's asked as one of its own consoles.
+        let app = client(port, token);
+        let asked = Arc::new(Mutex::new(Vec::<(String, Option<String>)>::new()));
+        let closed = Arc::new(Mutex::new(Vec::<Uuid>::new()));
+        {
+            let app_for_handler = Arc::downgrade(&app);
+            let asked = Arc::clone(&asked);
+            let closed = Arc::clone(&closed);
+            app.on_host(move |event| {
+                if let HostEvent::Close { session } = event {
+                    closed.lock().unwrap().push(session);
+                    return;
+                }
+                let HostEvent::Open { request, choice, cwd } = event else {
+                    return;
+                };
+                asked.lock().unwrap().push((choice, cwd.clone()));
+                let app = app_for_handler.clone();
+                std::thread::spawn(move || {
+                    let Some(app) = app.upgrade() else {
+                        return;
+                    };
+                    let id = Uuid::new_v4();
+                    let generation = app.connected().unwrap();
+                    let console = HostedConsole { path: "pwsh.exe".into(), cwd, started_at: 1, cols: 80, rows: 24, pid: None };
+                    app.post(generation, Outgoing::Op(Op::Host { session: id, console }));
+                    app.opened(request, Ok(id));
+                });
+            });
+        }
+        let offered = vec![OpenChoice { id: "shell:pwsh".into(), name: "PowerShell".into(), kind: "shell".into() }];
+        let generation = app.connected().unwrap();
+        app.post(generation, Outgoing::Op(Op::Opener { choices: offered.clone(), recent: Vec::new() }));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while choices(&me).is_empty() {
+            assert!(Instant::now() < deadline, "the app's choices never showed");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(choices(&me), offered);
+
+        // Read-only opens nothing; nor does anyone what isn't offered, or
+        // in a folder that isn't one here.
+        assert!(friend.call(Op::OpenChoices).is_err());
+        assert_eq!(open(&friend, "shell:pwsh", None), Err("not allowed".into()));
+        assert_eq!(open(&me, "shell:evil", None), Err("unknown-choice".into()));
+        let missing = dir.join("not-there");
+        assert_eq!(open(&me, "shell:pwsh", Some(missing.to_str().unwrap())), Err("bad-folder".into()));
+        assert_eq!(open(&me, "shell:pwsh", Some("\\\\evil\\share")), Err("bad-folder".into()));
+        assert_eq!(open(&me, "shell:pwsh", Some("relative\\folder")), Err("bad-folder".into()));
+        assert!(asked.lock().unwrap().is_empty(), "the app was never asked: {:?}", asked.lock().unwrap());
+
+        // Where to open it, by walking folders.
+        let Reply::FolderRoots { roots } = me.call(Op::FolderRoots).unwrap() else { panic!() };
+        assert!(!roots.drives.is_empty());
+        assert!(friend.call(Op::FolderRoots).is_err(), "read-only walks nothing");
+        let Reply::Folder { folder } = me.call(Op::CreateFolder { parent: folder_of(&dir), name: " made-here ".into() }).unwrap() else {
+            panic!()
+        };
+        assert_eq!(folder.name, "made-here");
+        assert!(dir.join("made-here").is_dir());
+        assert_eq!(me.call(Op::CreateFolder { parent: folder_of(&dir), name: "made-here".into() }), Err("exists".into()));
+        assert_eq!(me.call(Op::CreateFolder { parent: folder_of(&dir), name: "a/b".into() }), Err("bad-name".into()));
+        let Reply::Folders { folders } = me.call(Op::ListFolders { path: folder_of(&dir) }).unwrap() else { panic!() };
+        assert_eq!(folders.iter().map(|folder| folder.name.as_str()).collect::<Vec<_>>(), ["made-here"]);
+        assert_eq!(me.call(Op::ListFolders { path: "\\\\evil\\share".into() }), Err("unreadable".into()));
+        assert!(friend.call(Op::ListFolders { path: folder_of(&dir) }).is_err());
+        assert!(friend.call(Op::CreateFolder { parent: folder_of(&dir), name: "nope".into() }).is_err());
+        assert!(!dir.join("nope").exists());
+
+        // Opened: the phone gets it, there to show.
+        let folder = dir.to_str().unwrap().to_string();
+        let Ok(Reply::Opened { session }) = open(&me, "shell:pwsh", Some(&folder)) else {
+            panic!("not opened");
+        };
+        assert_eq!(*asked.lock().unwrap(), [("shell:pwsh".to_string(), Some(folder.clone()))]);
+        let listed = me.list().unwrap().into_iter().find(|info| info.id == session).expect("listed");
+        assert!(listed.hosted);
+        assert_eq!(listed.cwd.as_deref(), Some(folder.as_str()));
+        // Its own folder by default.
+        assert!(matches!(open(&me, "shell:pwsh", Some("  ")), Ok(Reply::Opened { .. })));
+        assert_eq!(asked.lock().unwrap().last().unwrap().1, None);
+
+        // Closed from the phone: the app is asked to close its tab; read-only
+        // closes nothing.
+        assert!(friend.kill(session).is_err());
+        me.kill(session).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while closed.lock().unwrap().is_empty() {
+            assert!(Instant::now() < deadline, "the app was never asked to close it");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*closed.lock().unwrap(), [session]);
+
+        // Termo closed: nothing to open again.
+        drop(app);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !choices(&me).is_empty() {
+            assert!(Instant::now() < deadline, "the choices outlived the app");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(open(&me, "shell:pwsh", None), Err("no-app".into()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_wrong_token_is_turned_away() {
         let port = crate::mux::server::start_for_test("right").unwrap();
@@ -954,6 +1139,8 @@ mod tests {
                 HostEvent::Input { bytes, .. } => format!("input {}", String::from_utf8_lossy(&bytes)),
                 HostEvent::Resize { cols, rows, .. } => format!("resize {cols}x{rows}"),
                 HostEvent::PromptRedraw { .. } => "redraw".to_string(),
+                HostEvent::Open { .. } => "open".to_string(),
+                HostEvent::Close { .. } => "close".to_string(),
             })
         });
         let generation = app.connected().unwrap();

@@ -11,6 +11,10 @@
 //!
 //! The agents' state goes the same way, for every console the app shows —
 //! the daemon's own too: it's the app that hears the agents' hooks.
+//!
+//! And the app is who opens a new console asked for from the tailnet (see
+//! Op::Opener): it tells the daemon what its new-tab menu offers, and opens
+//! what's asked as a tab of its own, which is then shared like the rest.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,7 +26,7 @@ use uuid::Uuid;
 
 use super::{ConsoleEvent, EventSink, SpawnSpec};
 use crate::mux::client::{MuxClient, Outgoing};
-use crate::mux::protocol::{AgentInfo, HostedConsole, Op};
+use crate::mux::protocol::{AgentInfo, HostedConsole, Op, OpenChoice};
 
 /// How much of a console's latest output is kept to show it anew.
 const TAIL_BYTES: usize = 256 * 1024;
@@ -45,6 +49,20 @@ struct Inner {
     agents: Mutex<HashMap<Uuid, AgentInfo>>,
     /// The daemon connection they were last all told over.
     agents_over: Mutex<Option<u64>>,
+    /// What the app offers to open from the tailnet (and the folders its
+    /// agents ran in lately), and the daemon connection it was last told
+    /// over.
+    choices: Mutex<(Vec<OpenChoice>, Vec<String>)>,
+    choices_over: Mutex<Option<u64>>,
+    /// Where a new console asked from the tailnet goes: the request, the
+    /// choice and the folder (see lib.rs).
+    on_open: OnceLock<Box<dyn Fn(u64, String, Option<String>) + Send + Sync>>,
+    /// Where a console closed from the tailnet goes: its tab closes.
+    on_close: OnceLock<Box<dyn Fn(Uuid) + Send + Sync>>,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 struct Shared {
@@ -77,6 +95,9 @@ impl Sharing {
             tap: Mutex::new(Tap { tail: Vec::new(), cols: spec.cols, rows: spec.rows, pid: None, foreground: None, over: None }),
         });
         self.inner.consoles.insert(id, Arc::clone(&shared));
+        // Shared at once rather than at the next look: it may be one the
+        // tailnet just asked for, and is waiting on.
+        self.wake();
         let consoles = Arc::downgrade(&self.inner);
         Arc::new(move |event| {
             match &event {
@@ -136,6 +157,48 @@ impl Sharing {
         }
     }
 
+    /// What the new-tab menu offers now, to open from the tailnet, and the
+    /// folders to offer first.
+    pub fn set_choices(&self, choices: Vec<OpenChoice>, recent: Vec<String>) {
+        {
+            let mut current = lock(&self.inner.choices);
+            if current.0 == choices && current.1 == recent {
+                return;
+            }
+            *current = (choices, recent);
+        }
+        *lock(&self.inner.choices_over) = None;
+        self.wake();
+    }
+
+    pub fn on_open(&self, handle: impl Fn(u64, String, Option<String>) + Send + Sync + 'static) {
+        let _ = self.inner.on_open.set(Box::new(handle));
+    }
+
+    /// The tailnet asks for a new console (see HostEvent::Open).
+    pub fn open(&self, request: u64, choice: String, cwd: Option<String>) {
+        if let Some(handle) = self.inner.on_open.get() {
+            handle(request, choice, cwd);
+        }
+    }
+
+    pub fn on_close(&self, handle: impl Fn(Uuid) + Send + Sync + 'static) {
+        let _ = self.inner.on_close.set(Box::new(handle));
+    }
+
+    /// The tailnet closed a console (see HostEvent::Close).
+    pub fn close(&self, session: Uuid) {
+        if let Some(handle) = self.inner.on_close.get() {
+            handle(session);
+        }
+    }
+
+    fn wake(&self) {
+        let (flag, wake) = &self.inner.wake;
+        *lock(flag) = true;
+        wake.notify_all();
+    }
+
     /// Remote access turned on or off: every console the app runs is
     /// shared, or stops being.
     pub fn set_enabled(&self, mux: Option<Arc<MuxClient>>, enabled: bool) {
@@ -147,9 +210,7 @@ impl Sharing {
             let inner = Arc::clone(&self.inner);
             std::thread::spawn(move || supervise(&inner, &mux));
         });
-        let (flag, wake) = &self.inner.wake;
-        *flag.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
-        wake.notify_all();
+        self.wake();
     }
 }
 
@@ -171,12 +232,19 @@ fn supervise(inner: &Inner, mux: &MuxClient) {
                     }
                     *over = Some(generation);
                 }
+                let mut over = lock(&inner.choices_over);
+                if *over != Some(generation) {
+                    let (choices, recent) = lock(&inner.choices).clone();
+                    mux.post(generation, Outgoing::Op(Op::Opener { choices, recent }));
+                    *over = Some(generation);
+                }
             }
         } else {
             for shared in consoles {
                 shared.unshare(Some(mux));
             }
             *inner.agents_over.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+            *lock(&inner.choices_over) = None;
         }
         let (flag, wake) = &inner.wake;
         let mut woken = flag.lock().unwrap_or_else(|poisoned| poisoned.into_inner());

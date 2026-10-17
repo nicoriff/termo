@@ -10,7 +10,7 @@ use std::net::{IpAddr, SocketAddr};
 use serde::Serialize;
 use tauri::Manager;
 
-use crate::mux::protocol::{AgentInfo, SessionInfo};
+use crate::mux::protocol::{AgentInfo, OpenChoice, SessionInfo};
 use crate::mux::remote::{self, Access, Allowed, Pending, RemoteConfig, Viewer, WebLook};
 use crate::mux::tailscale::{self, Machine, Status};
 use crate::state::AppState;
@@ -194,9 +194,6 @@ pub async fn remote_consoles(app: tauri::AppHandle, host: String, port: Option<u
         .map_err(|err| err.to_string())?
 }
 
-/// The theme and console font the app shows now, for the web client to
-/// look the same (see mux::remote::WebLook). The daemon reads it on each
-/// page load, so it's saved even with remote access off.
 /// One console's agent, as a window's status bar knows it.
 #[derive(serde::Deserialize)]
 pub struct ConsoleAgent {
@@ -216,9 +213,30 @@ pub fn remote_share_agents(app: tauri::AppHandle, agents: Vec<ConsoleAgent>) {
     }
 }
 
+/// The theme and console font the app shows now, for the web client to
+/// look the same (see mux::remote::WebLook). The daemon reads it on each
+/// page load, so it's saved even with remote access off.
 #[tauri::command]
 pub async fn remote_share_look(look: WebLook) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || remote::write_look(&dir()?, look).map_err(|err| err.to_string()))
         .await
         .map_err(|err| err.to_string())?
+}
+
+/// What the new-tab menu offers, to open from the tailnet (see
+/// pty/sharing.rs), and the folders the agents ran in lately.
+#[tauri::command]
+pub fn remote_set_open_choices(app: tauri::AppHandle, choices: Vec<OpenChoice>, recent: Vec<String>) {
+    app.state::<AppState>().pty.set_open_choices(choices, recent);
+}
+
+/// What came of a new console the tailnet asked for (the `remote-open`
+/// event): the console's id, or why not.
+#[tauri::command]
+pub async fn remote_opened(app: tauri::AppHandle, request: u64, console: Option<String>, error: Option<String>) {
+    let result = match console.as_deref().map(uuid::Uuid::parse_str) {
+        Some(Ok(id)) => Ok(id),
+        _ => Err(error.unwrap_or_else(|| "failed".to_string())),
+    };
+    let _ = tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.opened(request, result)).await;
 }

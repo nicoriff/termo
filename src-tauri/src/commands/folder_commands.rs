@@ -1,20 +1,21 @@
 //! What the folder browser in the agent-launch dialog walks: the places to
 //! start from, and the folders inside any one of them. Folders only — the
-//! browser picks where an agent runs, never a file.
+//! browser picks where an agent runs, never a file. The web client's
+//! browser walks the same, through the sessions daemon (see mux/server.rs).
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderEntry {
     pub name: String,
     pub path: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderRoots {
     /// Drives on Windows; `/` elsewhere.
@@ -48,7 +49,7 @@ pub async fn create_folder(parent: String, name: String) -> Result<FolderEntry, 
         .map_err(|err| err.to_string())?
 }
 
-fn new_folder(parent: &Path, name: &str) -> Result<FolderEntry, String> {
+pub(crate) fn new_folder(parent: &Path, name: &str) -> Result<FolderEntry, String> {
     use crate::i18n::{tr, Msg};
 
     let name = name.trim();
@@ -67,7 +68,7 @@ fn new_folder(parent: &Path, name: &str) -> Result<FolderEntry, String> {
 /// characters Windows forbids, not `.`/`..`, not a reserved device name
 /// (`CON`, `NUL`, `COM1`…), and no trailing dot or space, which Windows
 /// silently strips.
-fn is_valid_folder_name(name: &str) -> bool {
+pub(crate) fn is_valid_folder_name(name: &str) -> bool {
     const FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
     const RESERVED: &[&str] = &["CON", "PRN", "AUX", "NUL"];
     if name.is_empty() || name == "." || name == ".." || name.len() > 255 {
@@ -83,7 +84,7 @@ fn is_valid_folder_name(name: &str) -> bool {
     !(RESERVED.contains(&stem.as_str()) || numbered)
 }
 
-fn folder_roots() -> FolderRoots {
+pub(crate) fn folder_roots() -> FolderRoots {
     FolderRoots {
         drives: drives(),
         home: dirs::home_dir().map(|home| entry(display_name(&home), home)),
@@ -106,7 +107,7 @@ fn drives() -> Vec<FolderEntry> {
     vec![entry("/".to_string(), PathBuf::from("/"))]
 }
 
-fn subfolders(dir: &Path) -> Result<Vec<FolderEntry>, String> {
+pub(crate) fn subfolders(dir: &Path) -> Result<Vec<FolderEntry>, String> {
     let entries = fs::read_dir(dir).map_err(|err| {
         crate::i18n::tr(crate::i18n::Msg::FolderUnreadable(&dir.to_string_lossy(), &err.to_string()))
     })?;

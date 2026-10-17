@@ -40,7 +40,7 @@ pub fn last_cwd(bytes: &[u8]) -> Option<String> {
 /// `//server/share` (or with backslashes): looking in it would have this
 /// computer reach a server named by whatever the console printed — and
 /// Windows hand that server the user's credentials (NTLM) on the way.
-fn is_network_path(path: &str) -> bool {
+pub(super) fn is_network_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.len() >= 2 && matches!(bytes[0], b'/' | b'\\') && matches!(bytes[1], b'/' | b'\\')
 }

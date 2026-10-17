@@ -117,10 +117,21 @@ export function getPtyMemory(id: string): Promise<number | null> {
   return invoke("pty_memory", { id });
 }
 
+/** What closing does to the consoles (see src-tauri's busy_consoles). */
+export interface BusyConsoles {
+  /** Ended by closing, with a command running under their shell. */
+  lost: number;
+  /** Kept running in the background, with a command running. */
+  kept: number;
+  /** Every console kept running, busy or not. */
+  keptIds: string[];
+}
+
 /** How many consoles have a process running under their shell — a command in
- * progress, rather than a prompt sitting idle. Every window's, or with
+ * progress, rather than a prompt sitting idle —, among those closing would
+ * end and those it leaves running in the background. Every window's, or with
  * `thisWindow` only this window's (what closing it would end). */
-export function busyConsoles(thisWindow = false): Promise<number> {
+export function busyConsoles(thisWindow = false): Promise<BusyConsoles> {
   return invoke("busy_consoles", { thisWindow });
 }
 

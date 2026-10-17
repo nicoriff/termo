@@ -48,6 +48,8 @@ impl Consoles {
                     HostEvent::PromptRedraw { session } => {
                         let _ = local.prompt_redraw(session, shell_is_idle);
                     }
+                    HostEvent::Open { request, choice, cwd } => sharing.open(request, choice, cwd),
+                    HostEvent::Close { session } => sharing.close(session),
                 });
                 Some(mux)
             })
@@ -63,6 +65,29 @@ impl Consoles {
     /// Remote access turned on or off (see sharing.rs).
     pub fn share(&self, enabled: bool) {
         self.sharing.set_enabled(self.mux().cloned(), enabled);
+    }
+
+    /// What can be opened from the tailnet: what the new-tab menu offers,
+    /// and the folders to offer first.
+    pub fn set_open_choices(&self, choices: Vec<crate::mux::protocol::OpenChoice>, recent: Vec<String>) {
+        self.sharing.set_choices(choices, recent);
+    }
+
+    /// Where a new console asked from the tailnet goes (see sharing.rs).
+    pub fn on_open(&self, handle: impl Fn(u64, String, Option<String>) + Send + Sync + 'static) {
+        self.sharing.on_open(handle);
+    }
+
+    /// Where a console closed from the tailnet goes (see sharing.rs).
+    pub fn on_close(&self, handle: impl Fn(Uuid) + Send + Sync + 'static) {
+        self.sharing.on_close(handle);
+    }
+
+    /// What came of it: the new console's id, or why not.
+    pub fn opened(&self, request: u64, result: Result<Uuid, String>) {
+        if let Some(mux) = self.mux_if_used() {
+            mux.opened(request, result);
+        }
     }
 
     /// Starts a console in the app itself.
@@ -244,6 +269,17 @@ impl Consoles {
             Some(mux) => Ok(mux.pid(id)),
             None => self.local.pid(id),
         }
+    }
+
+    /// The consoles closing Termo (or `owner`'s window) leaves running: in
+    /// this computer's daemon, or another computer's — with their process
+    /// ids here, none for another computer's.
+    pub fn kept(&self, owner: Option<&str>) -> Vec<(Uuid, Option<u32>)> {
+        let mut kept = self.mux_if_used().map(|mux| mux.shown_of(owner)).unwrap_or_default();
+        for remote in self.remotes.iter() {
+            kept.extend(remote.shown_of(owner).into_iter().map(|(id, _)| (id, None)));
+        }
+        kept
     }
 
     /// The process ids of the consoles quitting would end: this process's.
