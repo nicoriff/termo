@@ -279,6 +279,9 @@ fn supervise(inner: &Inner, mux: &MuxClient) {
                 let mut over = lock(&inner.choices_over);
                 if *over != Some(generation) {
                     let (choices, recent) = lock(&inner.choices).clone();
+                    // A new connection: nobody watches the agents on it
+                    // until the daemon says so (ServerMessage::AgentsWatch).
+                    inner.agents_watched.store(false, Ordering::SeqCst);
                     mux.post(generation, Outgoing::Op(Op::Opener { choices, recent, agents: true }));
                     *over = Some(generation);
                 }

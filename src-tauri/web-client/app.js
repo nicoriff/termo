@@ -1660,4 +1660,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 void loadLook();
-void connect();
+// Once agents.js has run too (it's loaded after this one): connecting uses
+// what it sets up.
+document.addEventListener("DOMContentLoaded", () => void connect());

@@ -150,6 +150,9 @@ pub fn run() {
                     std::thread::spawn(move || {
                         let result = if mux::agents::RUNTIME_CALLS.contains(&name.as_str()) {
                             agents::host::client::call_where_they_run(&handle, &name, args)
+                        } else if name == "agent_save" {
+                            // Saved here: its git hook names this program.
+                            commands::agent_commands::save_from_tailnet(&handle, args)
                         } else {
                             Err(format!("unknown call: {name}"))
                         };

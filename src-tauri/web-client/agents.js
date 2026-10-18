@@ -137,6 +137,8 @@ const AGENT_WORDS = {
     errTooLong: "El texto es demasiado largo.",
     errTimeout: "No contestó a tiempo.",
     errBusy: "Está ocupado; probá de nuevo en un momento.",
+    errNeedsApp: "Este agente corre con git: para cambiarlo, Termo tiene que estar abierto en esta computadora.",
+    errBadArguments: "Algún dato del formulario no sirve.",
   },
   en: {
     consolesPart: "Consoles",
@@ -267,6 +269,8 @@ const AGENT_WORDS = {
     errTooLong: "The text is too long.",
     errTimeout: "It didn't answer in time.",
     errBusy: "It's busy; try again in a moment.",
+    errNeedsApp: "This agent runs on git: to change it, Termo has to be open on this computer.",
+    errBadArguments: "Something in the form won't do.",
   },
 };
 
@@ -307,6 +311,10 @@ const agentsUi = (() => {
   /** How often the list is asked again while it's shown: a schedule's
    * next run, a run that started on its own. Events say the rest. */
   const OVERVIEW_EVERY_MS = 5000;
+  /** A run's steps kept on the page, as many as the daemon sends at first. */
+  const MAX_LOG_EVENTS = 400;
+  /** Minutes the form sends at most: whole ones that fit what the daemon reads. */
+  const MAX_MINUTES = 1_000_000_000;
   const ENGINES = [
     ["claude", "Claude Code"],
     ["codex", "Codex"],
@@ -341,6 +349,8 @@ const agentsUi = (() => {
     "too-long": "errTooLong",
     timeout: "errTimeout",
     busy: "errBusy",
+    "needs-app": "errNeedsApp",
+    "bad-arguments": "errBadArguments",
   };
 
   let part = remembered.get("part") === "agents" ? "agents" : "consoles";
@@ -512,12 +522,19 @@ const agentsUi = (() => {
   showConsolesButton.onclick = () => setPart("consoles");
   showAgentsButton.onclick = () => setPart("agents");
 
+  /** One overview at a time: a slow answer (Termo busy, the agents'
+   * process restarting) mustn't pile up a new one every few seconds. */
+  let refreshing = false;
+
   async function refresh() {
-    if (!connection) return;
+    if (!connection || refreshing) return;
+    refreshing = true;
     try {
       overview = await call("overview");
     } catch {
       return;
+    } finally {
+      refreshing = false;
     }
     if (!watching) {
       watching = true;
@@ -972,7 +989,11 @@ const agentsUi = (() => {
     steps.id = "run-steps";
     if (!log) steps.append(el("p", "hint", at("loading")));
     else {
-      if (log.skipped) steps.append(el("p", "hint", at("earlierSteps", { count: log.skipped })));
+      if (log.skipped) {
+        const note = el("p", "hint", at("earlierSteps", { count: log.skipped }));
+        note.id = "run-skipped";
+        steps.append(note);
+      }
       for (const event of log.events) {
         const step = stepElement(event);
         if (step) steps.append(step);
@@ -1171,10 +1192,9 @@ const agentsUi = (() => {
     const timeout = el("input");
     timeout.type = "number";
     timeout.min = "1";
-    timeout.max = "1440";
     timeout.inputMode = "numeric";
     timeout.value = String(form.timeoutMin);
-    timeout.oninput = () => (form.timeoutMin = Math.max(1, Number(timeout.value) || 15));
+    timeout.oninput = () => (form.timeoutMin = Math.min(MAX_MINUTES, Math.max(1, Math.round(Number(timeout.value) || 15))));
     more.append(field(at("timeout"), timeout));
     fields.push(more);
 
@@ -1240,7 +1260,7 @@ const agentsUi = (() => {
         minutes.min = "1";
         minutes.inputMode = "numeric";
         minutes.value = String(schedule.minutes);
-        minutes.oninput = () => (schedule.minutes = Math.max(1, Math.round(Number(minutes.value) || 60)));
+        minutes.oninput = () => (schedule.minutes = Math.min(MAX_MINUTES, Math.max(1, Math.round(Number(minutes.value) || 60))));
         const wrap = el("label", "field inline");
         wrap.append(el("span", "field-label", at("minutes")), minutes);
         details.append(wrap);
@@ -1341,6 +1361,13 @@ const agentsUi = (() => {
       const log = logs.get(payload.runId);
       if (!log) return;
       log.events.push(payload.event);
+      // As many as the daemon sends at first: a long run's log can hold
+      // thousands, and a phone shows the latest.
+      const dropped = Math.max(0, log.events.length - MAX_LOG_EVENTS);
+      if (dropped) {
+        log.events.splice(0, dropped);
+        log.skipped += dropped;
+      }
       const top = stack[stack.length - 1];
       if (top?.kind !== "run" || top.runId !== payload.runId) return;
       const steps = document.getElementById("run-steps");
@@ -1349,6 +1376,17 @@ const agentsUi = (() => {
       steps.querySelector(".hint:only-child")?.remove();
       const atBottom = panelBody.scrollHeight - panelBody.scrollTop - panelBody.clientHeight < 80;
       steps.append(step);
+      const shown = steps.querySelectorAll(".step");
+      for (let index = 0; index < shown.length - MAX_LOG_EVENTS; index++) shown[index].remove();
+      if (log.skipped) {
+        let note = document.getElementById("run-skipped");
+        if (!note) {
+          note = el("p", "hint");
+          note.id = "run-skipped";
+          steps.prepend(note);
+        }
+        note.textContent = at("earlierSteps", { count: log.skipped });
+      }
       if (atBottom) panelBody.scrollTop = panelBody.scrollHeight;
     } else if (name === "agent-question") {
       if (!overview) return;

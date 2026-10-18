@@ -91,6 +91,19 @@ pub fn agents_save(app: tauri::AppHandle, spec: AgentSpec) -> Result<Vec<AgentSp
     save_agent(&root(&app)?, spec)
 }
 
+/// An agent changed from the tailnet that has a git hook, which the
+/// sessions daemon hands to the app (see mux/server.rs Daemon::save_agent):
+/// `{ "spec": … }`, already checked there.
+pub(crate) fn save_from_tailnet(app: &tauri::AppHandle, args: serde_json::Value) -> Result<serde_json::Value, String> {
+    #[derive(serde::Deserialize)]
+    struct Args {
+        spec: AgentSpec,
+    }
+    let Args { spec } = serde_json::from_value(args).map_err(|err| format!("bad arguments: {err}"))?;
+    save_agent(&root(app)?, spec)?;
+    Ok(serde_json::Value::Null)
+}
+
 #[tauri::command]
 pub async fn agents_delete(app: tauri::AppHandle, id: String) -> Result<Vec<AgentSpec>, String> {
     dispatch(app, "agents_delete", json!({ "id": id })).await

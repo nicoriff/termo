@@ -514,6 +514,11 @@ impl Daemon {
             Need::Edit if !edit_allowed && !matches!(role, Role::Local) => return Err("edit-off".into()),
             _ => {}
         }
+        // What the daemon says itself (a save that failed) in the language
+        // the app's windows speak (see window_commands::set_ui_language).
+        if let Some(language) = self.folder().and_then(|dir| std::fs::read_to_string(dir.join(super::LANGUAGE_FILE)).ok()) {
+            crate::i18n::set(if language.trim() == "en" { crate::i18n::Lang::En } else { crate::i18n::Lang::Es });
+        }
         let root = crate::agents::host::agents_root().ok_or("no-agents")?;
         let spec_of = |id: &str| store::get_in(&root, id).ok_or_else(|| "not-found".to_string());
         let value = match call {
@@ -527,14 +532,18 @@ impl Daemon {
                 let spec = spec_of(&id)?;
                 json!({ "form": remote_agents::form_of(&spec), "advanced": remote_agents::advanced(&spec) })
             }
+            // Only of an agent that's there: reading a history makes its
+            // folder, and an id from the tailnet mustn't make folders.
             "runs" => {
                 let AgentRef { agent_id } = remote_agents::args(args)?;
+                spec_of(&agent_id)?;
                 let mut runs = store::list_runs_in(&root, &agent_id);
                 runs.truncate(remote_agents::MAX_RUNS);
                 json!(runs)
             }
             "run_log" => {
                 let RunRef { agent_id, run_id } = remote_agents::args(args)?;
+                spec_of(&agent_id)?;
                 let events = store::read_log_in(&root, &agent_id, &run_id);
                 let skip = events.len().saturating_sub(remote_agents::MAX_LOG_EVENTS);
                 json!({ "events": &events[skip..], "skipped": skip })
@@ -559,9 +568,10 @@ impl Daemon {
             "save" => {
                 let SaveArgs { form } = remote_agents::args(args)?;
                 let base = if form.id.is_empty() { None } else { Some(spec_of(&form.id)?) };
+                let had_git = base.as_ref().is_some_and(|spec| spec.triggers.git.is_some());
                 let spec = remote_agents::apply(form, base, usable_folder)?;
                 let id = spec.id.clone();
-                crate::commands::agent_commands::save_agent(&root, spec)?;
+                self.save_agent(&root, had_git, spec)?;
                 self.agents_changed();
                 json!({ "id": id })
             }
@@ -569,23 +579,22 @@ impl Daemon {
                 let EnabledArgs { id, enabled } = remote_agents::args(args)?;
                 let mut spec = spec_of(&id)?;
                 spec.enabled = enabled;
-                crate::commands::agent_commands::save_agent(&root, spec)?;
+                let had_git = spec.triggers.git.is_some();
+                self.save_agent(&root, had_git, spec)?;
                 self.agents_changed();
                 Value::Null
             }
             "delete" => {
                 let IdArgs { id } = remote_agents::args(args)?;
                 spec_of(&id)?;
-                // Where its runs are, so one going is stopped; with the
-                // agents not running anywhere, nothing of it runs.
-                match self.agents_runtime("agents_delete", json!({ "id": id })) {
-                    Err(error) if error == "no-runtime" => {
-                        let idle = crate::agents::runner::Runner::default();
-                        crate::commands::agent_commands::delete_agent(&root, &idle, &id)?;
-                    }
-                    result => {
-                        result?;
-                    }
+                // Where its runs are, so one going is stopped. Deleted here
+                // only when nobody runs the agents for sure, asked before:
+                // a call that fails on the way is an error, not "nobody".
+                if self.agents_runtime_kind().is_some() {
+                    self.agents_runtime("agents_delete", json!({ "id": id }))?;
+                } else {
+                    let idle = crate::agents::runner::Runner::default();
+                    crate::commands::agent_commands::delete_agent(&root, &idle, &id)?;
                 }
                 self.agents_changed();
                 Value::Null
@@ -654,16 +663,39 @@ impl Daemon {
         })
     }
 
+    /// Saves an agent changed from the tailnet. One with a git trigger, now
+    /// or before, is saved by the app: saving rewrites its git hook with the
+    /// running program's path, which here would be the daemon's own copy —
+    /// one an update may later remove, and the hook then fails silently.
+    fn save_agent(self: &Arc<Self>, root: &std::path::Path, had_git: bool, spec: crate::agents::spec::AgentSpec) -> Result<(), String> {
+        if had_git || spec.triggers.git.is_some() {
+            let app = self.app_for_agents().ok_or("needs-app")?;
+            self.ask_app(&app, "agent_save", json!({ "spec": spec }))?;
+            return Ok(());
+        }
+        crate::commands::agent_commands::save_agent(root, spec).map(|_| ())
+    }
+
+    /// The app's connection, when it answers for the agents.
+    fn app_for_agents(&self) -> Option<Client> {
+        self.opener.locked().as_ref().filter(|opener| opener.agents).map(|opener| opener.client.clone())
+    }
+
     /// One of ops::call's, run by whoever runs the agents: the app while
     /// it's connected, else their own process.
     fn agents_runtime(self: &Arc<Self>, name: &str, args: Value) -> Result<Value, String> {
         if !remote_agents::RUNTIME_CALLS.contains(&name) {
             return Err("unknown-call".into());
         }
-        let app = self.opener.locked().as_ref().filter(|opener| opener.agents).map(|opener| opener.client.clone());
-        let Some(app) = app else {
-            return self.host_link().call(name, args);
-        };
+        match self.app_for_agents() {
+            Some(app) => self.ask_app(&app, name, args),
+            None => self.host_link().call(name, args),
+        }
+    }
+
+    /// Asks the app one of the calls it answers for the agents (see
+    /// agents::RUNTIME_CALLS and APP_CALLS), and waits for the answer.
+    fn ask_app(&self, app: &Client, name: &str, args: Value) -> Result<Value, String> {
         let request = self.next_agents.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = sync_channel(1);
         {
@@ -723,7 +755,16 @@ impl Daemon {
             return;
         }
         let message = ServerMessage::AgentEvent { name, payload };
-        self.agent_watchers.locked().retain(|_, watcher| watcher.offer(Frame::Message(message.clone())));
+        let emptied = {
+            let mut watchers = self.agent_watchers.locked();
+            let before = watchers.len();
+            watchers.retain(|_, watcher| watcher.offer(Frame::Message(message.clone())));
+            before > 0 && watchers.is_empty()
+        };
+        // The last one went (it stopped reading): the app stops too.
+        if emptied {
+            self.tell_app_watching(false);
+        }
     }
 
     /// The app's agents lists are read again: one changed from here.

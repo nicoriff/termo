@@ -60,6 +60,10 @@ pub fn need(call: &str) -> Option<Need> {
 /// The calls handed to whoever runs the agents (see ops.rs), and only these.
 pub const RUNTIME_CALLS: &[&str] = &["agent_start", "agent_stop", "agent_answer_question", "agent_questions", "agents_running", "agents_delete"];
 
+/// What only the app is asked, even with the agents in their own process:
+/// saving an agent that has a git hook (see Daemon::save_agent).
+pub const APP_CALLS: &[&str] = &["agent_save"];
+
 /// The events the web client hears, of all the agents say.
 pub fn worth_passing_on(event: &str) -> bool {
     matches!(event, "agent-run" | "agent-run-event" | "agent-question")
@@ -109,8 +113,6 @@ pub fn form_of(spec: &AgentSpec) -> Form {
     }
 }
 
-/// The longest a run may be given from there: a day.
-const MAX_TIMEOUT_MIN: u32 = 24 * 60;
 const MAX_NAME: usize = 120;
 const MAX_TEXT: usize = 64 * 1024;
 /// The icon a new agent gets, as the desktop's first (agent-spec.ts).
@@ -147,14 +149,17 @@ pub fn apply(form: Form, base: Option<AgentSpec>, usable_folder: impl Fn(&str) -
     spec.autonomy = form.autonomy;
     spec.tools.web = form.web;
     spec.triggers.schedule = form.schedule;
-    spec.limits.timeout_min = form.timeout_min.clamp(1, MAX_TIMEOUT_MIN);
+    // As the desktop's wizard allows it: at least a minute, and no ceiling —
+    // an agent made there with a long one keeps it.
+    spec.limits.timeout_min = form.timeout_min.max(1);
     spec.enabled = form.enabled;
     Ok(spec)
 }
 
 fn check_schedule(schedule: &Schedule) -> Result<(), String> {
     let fine = match schedule {
-        Schedule::Interval { minutes } => (1..=7 * 24 * 60).contains(minutes),
+        // As the desktop's wizard allows it: at least a minute.
+        Schedule::Interval { minutes } => *minutes >= 1,
         Schedule::Daily { at, weekdays } => {
             let time = at.split_once(':').and_then(|(hours, minutes)| {
                 let (hours, minutes) = (hours.parse::<u32>().ok()?, minutes.parse::<u32>().ok()?);
@@ -452,8 +457,13 @@ mod tests {
         assert!(crate::agents::spec::is_valid_id(&spec.id));
         assert_eq!(spec.icon, NEW_ICON);
         assert_eq!(spec.autonomy, Autonomy::Read, "only looks unless told otherwise");
-        assert_eq!(spec.limits.timeout_min, MAX_TIMEOUT_MIN);
+        assert_eq!(spec.limits.timeout_min, 9999, "no ceiling, as on the desktop");
         assert_eq!(spec.created_at, 0, "the store sets it");
+        let none = apply(Form { name: "x".into(), timeout_min: 0, ..Form::default() }, None, |_| true).unwrap();
+        assert_eq!(none.limits.timeout_min, 1);
+        // Two weeks apart, as the desktop allows: editing it from there keeps it.
+        let fortnightly = Form { name: "x".into(), schedule: Some(Schedule::Interval { minutes: 20160 }), ..Form::default() };
+        assert!(apply(fortnightly, None, |_| true).is_ok());
     }
 
     #[test]

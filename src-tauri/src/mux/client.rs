@@ -1287,11 +1287,38 @@ mod tests {
         let bad = json!({ "form": { "name": "x", "workDir": "\\\\evil\\share" } });
         assert_eq!(ask(&me, "save", bad), Err("bad-folder".into()));
 
+        // One with a git hook is saved by the app: the hook names the
+        // program that saves it.
+        let mut hooked = store::get_in(&root, "a1").unwrap();
+        hooked.triggers.git = Some(crate::agents::spec::GitTrigger { repo_path: "C:\\repo".into(), event: Default::default() });
+        store::save_in(&root, hooked).unwrap();
+        ask(&me, "set_enabled", json!({ "id": "a1", "enabled": false })).unwrap();
+        {
+            let asked = asked.lock().unwrap();
+            let (_, args) = asked.iter().find(|(name, _)| name == "agent_save").expect("the app saves it");
+            assert_eq!(args["spec"]["id"], "a1");
+            assert_eq!(args["spec"]["enabled"], false);
+        }
+        assert!(store::get_in(&root, "a1").unwrap().enabled, "not saved by the daemon itself");
+
+        // A history only of an agent that's there: no folders made for others.
+        assert_eq!(ask(&friend, "runs", json!({ "agentId": "made-up" })), Err("not-found".into()));
+        assert!(!root.join("made-up").exists());
+
         // Deleted: where its runs are.
         ask(&me, "delete", json!({ "id": id })).unwrap();
         assert!(asked.lock().unwrap().iter().any(|(name, args)| name == "agents_delete" && args["id"] == id.as_str()));
 
+        // Nobody runs the agents: deleted here, and one with a git hook
+        // can't be changed until Termo is open.
         drop(app);
+        wait_for("the app outlived its connection", &|| {
+            ask(&me, "overview", json!({})).is_ok_and(|overview| overview["runtime"] == Value::Null)
+        });
+        assert_eq!(ask(&me, "set_enabled", json!({ "id": "a1", "enabled": false })), Err("needs-app".into()));
+        store::save_in(&root, AgentSpec { id: "a2".into(), name: "Plain".into(), ..AgentSpec::default() }).unwrap();
+        ask(&me, "delete", json!({ "id": "a2" })).unwrap();
+        assert!(store::get_in(&root, "a2").is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
