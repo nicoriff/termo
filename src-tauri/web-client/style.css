@@ -1,0 +1,1315 @@
+/* Termo's look, from the theme the app shows on the computer the consoles
+   run on (/look.json, applied by app.js). These are its default theme's
+   colors until that arrives. Sized for a phone first; on a large screen
+   with a mouse it tightens to the desktop app's own proportions. */
+
+/* Nerd Fonts' symbols — the icons in prompts like Oh My Posh's —, which a
+   phone doesn't have. Only those glyphs: letters still come from the
+   console's own font. */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@v3.4.0/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFontMono-Regular.ttf")
+    format("truetype");
+  font-display: block;
+}
+
+:root {
+  --bg: #1e1e1e;
+  --fg: #d4d4d4;
+  --active-bg: #1e1e1e;
+  --active-fg: #f0f0f0;
+  --border: #2a2a2a;
+  --accent: #3a6df0;
+  --hover: rgba(255, 255, 255, 0.08);
+  --terminal-bg: #1e1e1e;
+  --warning: #f5a623;
+  --danger: #f14c4c;
+  --ok: #23d18b;
+
+  /* Built from those: surfaces a step above the window's own. */
+  --raised: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  --raised-strong: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
+  --muted: color-mix(in srgb, var(--fg) 60%, transparent);
+
+  --top-height: 46px;
+  --status-height: 26px;
+  --key-height: 36px;
+  --radius: 10px;
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The visible part of the page: with the phone's keyboard up, only what's
+   above it (app.js keeps --app-height to the visual viewport). */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: var(--app-height, 100dvh);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- Top bar: the menu, the consoles as tabs, the connection */
+
+.topbar {
+  position: relative;
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  height: calc(var(--top-height) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.menu-button {
+  flex-shrink: 0;
+  width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border);
+}
+
+.menu-button:active {
+  background: var(--hover);
+}
+
+/* Three lines that turn into a cross while the menu is open. */
+.menu-icon {
+  position: relative;
+  width: 18px;
+  height: 14px;
+}
+
+.menu-icon span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition:
+    transform 220ms var(--ease),
+    opacity 160ms ease,
+    top 220ms var(--ease);
+}
+
+.menu-icon span:nth-child(1) {
+  top: 0;
+}
+.menu-icon span:nth-child(2) {
+  top: 6px;
+}
+.menu-icon span:nth-child(3) {
+  top: 12px;
+}
+
+.menu-button[aria-expanded="true"] .menu-icon span:nth-child(1) {
+  top: 6px;
+  transform: rotate(45deg);
+}
+.menu-button[aria-expanded="true"] .menu-icon span:nth-child(2) {
+  opacity: 0;
+}
+.menu-button[aria-expanded="true"] .menu-icon span:nth-child(3) {
+  top: 6px;
+  transform: rotate(-45deg);
+}
+
+.tab-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 190px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 150ms ease;
+}
+
+.tab.active {
+  color: var(--active-fg);
+}
+
+/* The console shown now: an accent line under it, like a selected tab. */
+.tab::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 200ms var(--ease);
+}
+
+.tab.active::after {
+  transform: scaleX(1);
+}
+
+.tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-kind {
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.tab.active .tab-kind {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.tab.ended .tab-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.new-button {
+  flex-shrink: 0;
+  width: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+}
+
+.new-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.new-button:active {
+  background: var(--hover);
+}
+
+.link-dot {
+  flex-shrink: 0;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  margin: 0 16px 0 10px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 22%, transparent);
+  transition:
+    background 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.link-dot.up {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent);
+}
+
+.link-dot.down {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+/* ---- Where the console and the menu go */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--terminal-bg);
+}
+
+.console {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/* The console keeps its own size unless fitted (see app.js): wider than
+   the screen, it scrolls sideways. */
+.terminal-frame {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 6px 6px 10px;
+}
+
+#terminal {
+  display: inline-block;
+}
+
+/* Fitted, there's nothing for the browser to pan: a drag scrolls the
+   console (see app.js). */
+.terminal-frame.fitted {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.terminal-frame.fitted #terminal {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/* ---- The menu: this computer and its consoles. A page of its own while
+   no console is shown; over the console, opened from ☰, otherwise. */
+
+.home {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
+  background: var(--terminal-bg);
+}
+
+.home.sheet {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  right: 0;
+  max-height: 82%;
+  padding-top: 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  animation: sheet-in 220ms var(--ease);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.42);
+  animation: fade-in 180ms ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.home-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 4px 18px;
+}
+
+.app-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.home-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.app-name {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--active-fg);
+}
+
+.host {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round-button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--raised);
+  transition: background 120ms ease;
+}
+
+.round-button:active {
+  background: var(--raised-strong);
+}
+
+.round-button.spinning svg {
+  animation: spin 600ms linear;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status {
+  margin: 4px 4px 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.status:empty {
+  display: none;
+}
+
+.home-heading {
+  margin: 0 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* The row is the console's button; ✕ sits inside it, on its right. */
+.session-item {
+  position: relative;
+  min-width: 0;
+  transition: opacity 150ms ease;
+}
+
+.session-item.closing {
+  opacity: 0.45;
+}
+
+.session-item.closable .session {
+  padding-right: 54px;
+}
+
+.session-close {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  color: var(--muted);
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.session-close:active {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.session {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: var(--raised);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.session:active {
+  transform: scale(0.985);
+  background: var(--raised-strong);
+}
+
+.session.current {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--accent-soft);
+}
+
+.session-kind {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.session-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--active-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-state {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--raised-strong);
+  color: var(--muted);
+}
+
+.session-state.ended {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+/* ---- A new console */
+
+.opener {
+  margin-top: 24px;
+}
+
+.open-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.open-folder[hidden] {
+  display: none;
+}
+
+.folder-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--active-fg);
+  text-align: left;
+}
+
+.folder-pick:active {
+  background: var(--raised-strong);
+}
+
+.folder-pick > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-pick .chevron {
+  width: 7px;
+  height: 11px;
+}
+
+.folder-pick-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.folder-pick-name {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-pick-path {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-pick-path:empty {
+  display: none;
+}
+
+/* ---- The folder browser */
+
+.folders {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: sheet-in 200ms var(--ease);
+}
+
+.folders[hidden] {
+  display: none;
+}
+
+.folders-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 6px;
+}
+
+.folders-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--active-fg);
+}
+
+.crumbs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 14px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.crumb {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.crumb:active {
+  background: var(--hover);
+}
+
+.crumb.current {
+  color: var(--active-fg);
+  font-weight: 600;
+}
+
+.crumb-sep {
+  flex-shrink: 0;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.folder-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.folder-list.forward {
+  animation: slide-forward 170ms var(--ease);
+}
+
+.folder-list.back {
+  animation: slide-back 170ms var(--ease);
+}
+
+@keyframes slide-forward {
+  from {
+    transform: translateX(40px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes slide-back {
+  from {
+    transform: translateX(-40px);
+    opacity: 0.4;
+  }
+}
+
+.folder-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 15px;
+  color: var(--active-fg);
+}
+
+.folder-row:active {
+  background: var(--hover);
+}
+
+.folder-row > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-row .chevron {
+  width: 7px;
+  height: 11px;
+  opacity: 0.6;
+}
+
+.folder-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.folder-row-name,
+.folder-row-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-row-path {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.folder-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--raised-strong);
+  color: var(--muted);
+}
+
+.folder-section {
+  margin: 14px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.folder-note {
+  margin: 18px 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.new-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 10px;
+}
+
+.new-folder-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--raised);
+  color: var(--active-fg);
+  font: inherit;
+  /* Below 16px, iOS zooms the page in on it. */
+  font-size: 16px;
+  outline: none;
+}
+
+.folders-error {
+  margin: 0 14px 10px;
+}
+
+.folders-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 14px;
+  color: var(--active-fg);
+  white-space: nowrap;
+}
+
+.pill:active {
+  background: var(--raised-strong);
+}
+
+.pill:disabled {
+  opacity: 0.45;
+}
+
+.pill.primary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.open-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
+}
+
+.open-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  text-align: left;
+  font-size: 14px;
+  color: var(--active-fg);
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.open-choice:active {
+  transform: scale(0.985);
+  background: var(--raised-strong);
+}
+
+.open-choice:disabled {
+  opacity: 0.5;
+}
+
+.open-choice .session-kind {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.open-choice-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-status {
+  margin-top: 12px;
+}
+
+/* ---- The keys a phone's keyboard lacks */
+
+.keys {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.keys::-webkit-scrollbar {
+  display: none;
+}
+
+.key-group {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.keys button {
+  min-width: 42px;
+  height: var(--key-height);
+  padding: 0 11px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 100ms ease,
+    transform 100ms ease;
+}
+
+.keys button.arrow {
+  min-width: 38px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.keys button:active {
+  background: var(--raised-strong);
+  transform: scale(0.94);
+}
+
+.keys button.toggle.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.keys button.danger {
+  color: var(--danger);
+}
+
+/* ---- Status bar, like the desktop app's */
+
+/* On a phone, two rows: the console's details across the whole width,
+   then access and the controls. A computer's screen has room for one. */
+.statusbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  column-gap: 2px;
+  padding: 0 6px env(safe-area-inset-bottom) 14px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status-item {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-item.size {
+  font-variant-numeric: tabular-nums;
+  margin-right: 4px;
+}
+
+/* The console's details: as many as fit, the rest a swipe away, fading at
+   the edge so it reads as more rather than cut. */
+.statusbar > * {
+  height: var(--status-height);
+}
+
+.status-info {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+
+.status-info::-webkit-scrollbar {
+  display: none;
+}
+
+.status-details {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 18px;
+}
+
+.status-info:has(.status-details:empty) {
+  display: none;
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-icon {
+  font-family: "Symbols Nerd Font Mono", var(--ui-font);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.agent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.agent.running {
+  color: var(--fg);
+}
+
+.agent.running .agent-dot {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.agent.awaiting {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.agent.awaiting .agent-dot {
+  background: var(--warning);
+}
+
+.agent.error {
+  color: var(--danger);
+}
+
+.agent.error .agent-dot {
+  background: var(--danger);
+}
+
+.agent.finished .agent-dot {
+  background: var(--ok);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent.running .agent-dot {
+    animation: none;
+  }
+}
+
+.gauge-label {
+  margin-left: 2px;
+}
+
+/* A small bar with its number on it, like the desktop's. */
+.gauge {
+  position: relative;
+  width: 38px;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--raised-strong);
+}
+
+.gauge::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fill);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.gauge-text {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.branch .dirty {
+  color: var(--warning);
+  font-size: 9px;
+}
+
+.access-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.access-dot.read-only {
+  background: var(--warning);
+}
+
+.status-button {
+  height: var(--status-height);
+  padding: 0 9px;
+  border-radius: 6px;
+}
+
+.status-button:active {
+  background: var(--hover);
+}
+
+.status-button.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* With the keyboard up the status bar gives its room to the console. */
+body.typing .statusbar {
+  display: none;
+}
+
+/* A phone on its side: every row counts. */
+@media (pointer: coarse) and (max-height: 480px) {
+  :root {
+    --top-height: 40px;
+    --key-height: 32px;
+  }
+
+  .statusbar {
+    display: none;
+  }
+}
+
+/* ---- A large screen with a mouse: the desktop app's proportions */
+
+@media (pointer: fine) and (min-width: 720px) {
+  :root {
+    --top-height: 32px;
+    --status-height: 22px;
+  }
+
+  .menu-button {
+    width: 40px;
+  }
+
+  .new-button {
+    width: 38px;
+  }
+
+  .new-button:hover,
+  .open-choice:hover,
+  .folder-row:hover,
+  .crumb:hover {
+    background: var(--hover);
+  }
+
+  .folders {
+    inset: 24px auto auto 50%;
+    width: 520px;
+    height: min(620px, calc(100% - 48px));
+    transform: translateX(-50%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    animation: none;
+  }
+
+  .tab {
+    font-size: 12px;
+    padding: 0 12px;
+  }
+
+  .tab:hover {
+    color: var(--active-fg);
+    background: var(--hover);
+  }
+
+  .home {
+    padding: 28px;
+  }
+
+  .home.sheet {
+    right: auto;
+    width: 420px;
+    max-height: 70%;
+    border-right: 1px solid var(--border);
+    border-radius: 0 0 14px 0;
+  }
+
+  .session-list {
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    max-width: 1100px;
+  }
+
+  .home.sheet .session-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session:hover {
+    background: var(--raised-strong);
+  }
+
+  .session-close {
+    width: 30px;
+    height: 30px;
+  }
+
+  .session-item.closable .session {
+    padding-right: 46px;
+  }
+
+  .session-close:hover {
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    color: var(--danger);
+  }
+
+  .statusbar {
+    flex-wrap: nowrap;
+    font-size: 11px;
+  }
+
+  /* One row, like the desktop's: access, the details, the controls. */
+  #access {
+    order: -1;
+    margin-right: 14px;
+  }
+
+  .status-info {
+    flex: 1 1 auto;
+  }
+
+  .status-spacer {
+    display: none;
+  }
+
+  /* A real keyboard is there: no need for the extra keys. */
+  .keys {
+    display: none;
+  }
+}

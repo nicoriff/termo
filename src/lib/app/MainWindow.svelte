@@ -10,6 +10,7 @@
   import { favoriteDraftForFocusedTab } from "$lib/ai-mode/favorites-store.svelte";
   import FavoritesManagerDialog from "$lib/ai-mode/FavoritesManagerDialog.svelte";
   import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
+  import RemoteConnectDialog from "$lib/remote/RemoteConnectDialog.svelte";
   import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
   import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
   import QuitDialog from "./QuitDialog.svelte";
@@ -47,6 +48,11 @@
   import QuickAsk from "$lib/companion/QuickAsk.svelte";
   import { quickAskStore } from "$lib/companion/quick-ask-store.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
+  import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
+  import { remoteWatch } from "$lib/remote/remote-watch.svelte";
+  import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
+  import { startAgentSharing } from "$lib/remote/agent-share";
+  import { startRemoteOpen } from "$lib/remote/remote-open.svelte";
   import AiModePanel from "$lib/ai-mode/AiModePanel.svelte";
   import StatusBar from "$lib/statusbar/StatusBar.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -64,6 +70,8 @@
   import { startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
+  import { shareRemoteLook } from "$lib/core/remote-client";
+  import { themeStore } from "$lib/theme/theme-store.svelte";
 
   /** The quick question is there only with every switch it hangs from on. */
   const quickAskAvailable = $derived(appConfigStore.aiModeEnabled && appConfigStore.companionEnabled && appConfigStore.quickAskEnabled);
@@ -77,6 +85,12 @@
   onMount(() => {
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
+    let stopSessionKeeper: (() => void) | null = null;
+    let stopRemoteWatch: (() => void) | null = null;
+    const stopSessionsDaemon = sessionsDaemon.start();
+    const stopAgentSharing = startAgentSharing();
+    // Consoles asked for from the tailnet open as tabs of the first window.
+    const stopRemoteOpen = isFirstWindow() ? startRemoteOpen() : () => {};
     const stopAgentAttention = startAgentAttention();
     const stopAgentRunAttention = startAgentRunAttention();
     const stopNotificationClicks = startNotificationClicks();
@@ -102,12 +116,20 @@
         isFirstWindow() && appConfigStore.defaultLayout
           ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
           : undefined;
-      if (preset) {
+      // Before either: consoles this window had open that are still running
+      // (see session-keeper) come back where they were.
+      const restored = await sessionKeeper.restore();
+      if (!restored && preset) {
         layoutsStore.apply(preset);
-      } else {
+      } else if (!restored) {
         const shell = await resolveDefaultShell();
         workspaceStore.initRoot(shell.path, shell.args, shell.title);
       }
+
+      stopSessionKeeper = sessionKeeper.start();
+      // Someone asking to connect from the tailnet is told about once: by
+      // the first window.
+      stopRemoteWatch = remoteWatch.start(isFirstWindow());
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);
@@ -132,6 +154,11 @@
       appConfigStore.stopSystemAppearanceSync();
       clearTimeout(resizeDebounce);
       unlisten?.();
+      stopSessionKeeper?.();
+      stopRemoteWatch?.();
+      stopSessionsDaemon();
+      stopAgentSharing();
+      stopRemoteOpen();
       stopAgentAttention();
       stopAgentRunAttention();
       stopNotificationClicks();
@@ -147,6 +174,20 @@
   $effect(() => {
     if (!appConfigStore.loaded) return;
     void setBackgroundBlur(appConfigStore.backgroundBlur).catch(() => {});
+  });
+
+  // The web client (a phone's browser, over the tailnet) looks like this:
+  // same theme, same console font. Told by the first window only.
+  $effect(() => {
+    if (!isFirstWindow()) return;
+    const theme = themeStore.current;
+    void shareRemoteLook({
+      appearance: theme.appearance,
+      colors: { ...theme.colors },
+      ui: { ...theme.ui },
+      fontFamily: themeStore.effectiveFontFamily,
+      lineHeight: theme.font.lineHeight,
+    }).catch(() => {});
   });
 
   // Modo IA is the switch for every AI feature: turned off (here or from
@@ -429,6 +470,9 @@
     {/if}
     {#if uiState.restoreLayoutTarget}
       <RestoreLayoutDialog />
+    {/if}
+    {#if uiState.remoteConnect}
+      <RemoteConnectDialog />
     {/if}
     {#if uiState.deleteLayoutTarget}
       <DeleteLayoutDialog />

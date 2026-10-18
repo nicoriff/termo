@@ -96,6 +96,7 @@ export interface AppConfig {
   oh_my_posh_enabled: boolean;
   oh_my_posh_theme: string;
   zsh_menu_complete: boolean;
+  persistent_sessions: boolean;
   ai_mode_enabled: boolean;
   ai_notify_awaiting: boolean;
   ai_notify_error: boolean;
@@ -127,6 +128,7 @@ export interface AppConfig {
   agents_from_any_console?: boolean;
   marketplace_source?: string;
   keep_awake_button: boolean;
+  remote_button?: boolean;
   /** Where the user installed an agent's CLI when not npm's own folder, by
    * agent. Absent in configs from before Termo could install them. */
   agent_install_dirs?: Record<string, string>;

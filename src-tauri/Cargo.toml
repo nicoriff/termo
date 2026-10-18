@@ -44,6 +44,11 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 notify = "8"
 # The agents' local webhook (127.0.0.1 only).
 tiny_http = "0.12"
+# The sessions daemon's copy of each console's screen, to hand a window that
+# attaches to it the screen as it is (see mux/server.rs).
+vt100 = "=0.16.2"
+# The web client's connection to the sessions daemon (see mux/web.rs).
+tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
 # Updates from "Check for updates": signed builds from the GitHub releases
 # (see plugins.updater in tauri.conf.json), and the restart after one.
 tauri-plugin-updater = "2"

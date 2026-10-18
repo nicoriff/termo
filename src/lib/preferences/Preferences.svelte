@@ -9,6 +9,7 @@
   import AppearanceSection from "./sections/AppearanceSection.svelte";
   import FontSection from "./sections/FontSection.svelte";
   import ConsoleSection from "./sections/ConsoleSection.svelte";
+  import RemoteSection from "./sections/RemoteSection.svelte";
   import ShortcutsSection from "./sections/ShortcutsSection.svelte";
   import OhMyPoshSection from "./sections/OhMyPoshSection.svelte";
   import AiModeSection from "./sections/AiModeSection.svelte";
@@ -31,6 +32,7 @@
     | "appearance"
     | "font"
     | "console"
+    | "remote"
     | "shortcuts"
     | "git"
     | "oh-my-posh"
@@ -69,6 +71,7 @@
       id: "console",
       label: "preferences.sidebar.console",
       children: [
+        { id: "remote", label: "preferences.sidebar.remote" },
         { id: "mac", label: "preferences.sidebar.mac" },
         { id: "windows", label: "preferences.sidebar.windows" },
         { id: "linux", label: "preferences.sidebar.linux" },
@@ -137,6 +140,9 @@
       if (event.payload === "marketplace") {
         selected = "marketplace";
         expanded = { ...expanded, integrations: true };
+      } else if (event.payload === "remote") {
+        selected = "remote";
+        expanded = { ...expanded, console: true };
       }
     }).then((stop) => (unlisten = stop));
     return () => unlisten?.();
@@ -230,6 +236,8 @@
         <FontSection />
       {:else if selected === "console"}
         <ConsoleSection />
+      {:else if selected === "remote"}
+        <RemoteSection />
       {:else if selected === "shortcuts"}
         <ShortcutsSection />
       {:else if selected === "git"}

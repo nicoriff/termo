@@ -16,5 +16,7 @@ pub mod oh_my_posh_commands;
 pub mod orchestration_commands;
 pub mod project_commands;
 pub mod pty_commands;
+pub mod remote_commands;
 pub mod window_commands;
+pub mod zellij_commands;
 pub mod window_shape;

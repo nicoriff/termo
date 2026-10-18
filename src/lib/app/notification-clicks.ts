@@ -1,5 +1,6 @@
 import { onNotificationOpened, type NotificationTarget } from "$lib/core/notification-client";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
+import { openPreferencesWindow } from "$lib/core/window-client";
 
 function open(target: NotificationTarget) {
   switch (target.kind) {
@@ -12,6 +13,9 @@ function open(target: NotificationTarget) {
       break;
     case "orchestration":
       workspaceStore.openOrchestration(target.orchestrationId, target.title);
+      break;
+    case "preferences":
+      void openPreferencesWindow(target.section);
       break;
   }
 }

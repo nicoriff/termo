@@ -209,6 +209,18 @@ pub fn start_watcher(app: tauri::AppHandle) {
     });
 }
 
+/// Sends a console's last snapshot again: the app attached to a console the
+/// sessions daemon kept, and the snapshot it wrote meanwhile was sent to no
+/// one (see agent_hooks::restore).
+pub fn restore(app: &tauri::AppHandle, dir: &std::path::Path, id: &str) {
+    let path = dir.join(format!("{id}{SNAPSHOT_SUFFIX}"));
+    let Some(snapshot) = fs::read_to_string(path).ok().and_then(|text| serde_json::from_str::<StatusSnapshot>(&text).ok())
+    else {
+        return;
+    };
+    let _ = app.emit("agent-status", StatusEvent { session_id: id.to_string(), snapshot });
+}
+
 fn claude_settings_file() -> anyhow::Result<PathBuf> {
     let home = dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!(crate::i18n::tr(crate::i18n::Msg::HomeDirNotFound)))?;

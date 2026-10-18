@@ -3,11 +3,12 @@ use tauri::Manager;
 use uuid::Uuid;
 
 use crate::config::store;
+use crate::mux::protocol::SessionInfo;
 use crate::pty::agent_launch::{self, AgentLaunch};
 use crate::pty::{
     agent_hooks, bash_color_env, console_shims, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
     utf8_console, zsh_init,
-    PtyEvent, ShellInfo,
+    channel_sink, PtyEvent, ShellInfo, SpawnSpec,
 };
 use crate::state::AppState;
 
@@ -74,6 +75,50 @@ fn spawn_console(
     on_event: Channel<PtyEvent>,
 ) -> Result<String, String> {
     let state = app.state::<AppState>();
+    let persistent = store::load(app).persistent_sessions;
+    let (spec, token) = prepare_console(app, shell_path, shell_args, cwd, cols, rows, agent)?;
+    match state.pty.spawn(owner, &spec, channel_sink(on_event), persistent) {
+        Ok(id) => {
+            // The user's agents, reachable from this console (see
+            // agents/console_bridge.rs).
+            if let Some(token) = &token {
+                crate::agents::console_bridge::bind(token, &id.to_string());
+            }
+            Ok(id.to_string())
+        }
+        Err(err) => {
+            // Never ran: its token goes now.
+            if let Some(token) = &token {
+                crate::agents::console_bridge::discard(token);
+            }
+            Err(err.to_string())
+        }
+    }
+}
+
+/// Works out everything a console needs before it starts — the shell or
+/// agent to run, its integrations, its environment — into a spec anyone can
+/// start, plus the agents' bridge token to bind to it once it has an id.
+#[allow(clippy::too_many_arguments)]
+fn prepare_console(
+    app: &tauri::AppHandle,
+    shell_path: Option<String>,
+    shell_args: Option<Vec<String>>,
+    cwd: Option<String>,
+    cols: u16,
+    rows: u16,
+    agent: Option<AgentLaunch>,
+) -> Result<(SpawnSpec, Option<String>), String> {
+    let spec = |path: String, args: Vec<String>, env: Vec<(&str, String)>, prompt_redraw: Option<Vec<u8>>| SpawnSpec {
+        path,
+        args,
+        env: env.into_iter().map(|(key, value)| (key.to_string(), value)).collect(),
+        cwd: cwd.clone(),
+        cols,
+        rows,
+        prompt_redraw,
+        extra_path: crate::pty::bin_search::extra_dirs(),
+    };
     if let Some(agent) = agent {
         let preparing = PREPARING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         // The user's agents, reachable from this console (see
@@ -92,22 +137,7 @@ fn spawn_console(
             env.push(("TERMO_EVENTS_DIR", dir.to_string_lossy().into_owned()));
         }
         drop(preparing);
-        let spawned = state.pty.spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, None, on_event);
-        return match spawned {
-            Ok(id) => {
-                if let Some(token) = &extras.token {
-                    crate::agents::console_bridge::bind(token, &id.to_string());
-                }
-                Ok(id.to_string())
-            }
-            Err(err) => {
-                // Never ran: its token goes now.
-                if let Some(token) = &extras.token {
-                    crate::agents::console_bridge::discard(token);
-                }
-                Err(err.to_string())
-            }
-        };
+        return Ok((spec(path, args, env, None), extras.token));
     }
     let preparing = PREPARING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (path, args) = match shell_path {
@@ -179,21 +209,80 @@ fn spawn_console(
     // installed (see cwd_report).
     cwd_report::apply(&path, &mut args, &mut env);
     drop(preparing);
+    Ok((spec(path, args, env, prompt_redraw), console_token))
+}
 
-    match state.pty.spawn(owner, &path, &args, &env, cwd.as_deref(), cols, rows, prompt_redraw, on_event) {
-        Ok(id) => {
-            if let Some(token) = &console_token {
-                crate::agents::console_bridge::bind(token, &id.to_string());
-            }
-            Ok(id.to_string())
-        }
-        Err(err) => {
-            if let Some(token) = &console_token {
-                crate::agents::console_bridge::discard(token);
-            }
-            Err(err.to_string())
-        }
+/// Shows, in this window, a console the sessions daemon kept running: what
+/// it printed so far, then everything new. With `host` (an address on the
+/// tailnet), another computer's. Off the main thread: the first request may
+/// have to wait for the daemon.
+#[tauri::command]
+pub async fn pty_attach(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    host: Option<String>,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, String> {
+    let id = parse_id(&id)?;
+    let host = host.map(|host| host.parse::<std::net::SocketAddr>().map_err(|err| err.to_string())).transpose()?;
+    // Another computer's console is only ever reached over the tailnet.
+    if host.is_some_and(|host| !crate::mux::tailscale::is_tailnet_address(host.ip())) {
+        return Err("not on the tailnet".into());
     }
+    let owner = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().pty.attach(&owner, id, channel_sink(on_event), host).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Where the agent in a console the app just attached to stood (see
+/// agent_hooks::restore), sent as the usual events.
+#[tauri::command]
+pub fn agent_events_restore(app: tauri::AppHandle, id: String) {
+    agent_hooks::restore(&app, &id);
+}
+
+/// The consoles the sessions daemon runs, shown in some window or not.
+/// None when it isn't running: asking doesn't start it.
+#[tauri::command]
+pub async fn pty_background(app: tauri::AppHandle) -> Result<Vec<SessionInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.background())
+        .await
+        .map_err(|err| err.to_string())
+}
+
+/// Whether the sessions daemon answered the last time it was asked. The
+/// `sessions-daemon` event says when that changes.
+#[tauri::command]
+pub fn sessions_daemon_answering(state: tauri::State<'_, AppState>) -> bool {
+    state.pty.local_daemon().is_none_or(|mux| mux.is_answering())
+}
+
+/// Replaces a sessions daemon that stopped answering with a new one; the
+/// consoles it ran end with it.
+#[tauri::command]
+pub async fn sessions_daemon_restart(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mux = state.pty.local_daemon().ok_or("no folder for the sessions daemon")?;
+        mux.restart()
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Ends a console the sessions daemon runs, whether or not a tab shows it.
+#[tauri::command]
+pub async fn pty_kill_background(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let id = parse_id(&id)?;
+    agent_hooks::forget_session(&app, id);
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().pty.kill_kept(id))
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
 }
 
 /// Asks the console's shell to redraw its prompt at the size it now has,
@@ -221,6 +310,19 @@ pub fn pty_write(state: tauri::State<'_, AppState>, id: String, data: String) ->
         .pty
         .write(id, data.as_bytes())
         .map_err(|err| err.to_string())
+}
+
+/// The console back to its tab's size if someone on the tailnet sized it
+/// meanwhile (see Consoles::claim_size): whether it changed. Waits on the
+/// daemon, hence the thread.
+#[tauri::command]
+pub async fn pty_claim_size(app: tauri::AppHandle, id: String, cols: u16, rows: u16) -> Result<bool, String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>().pty.claim_size(id, cols, rows).map_err(|err| err.to_string())
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
@@ -296,16 +398,29 @@ pub async fn pty_kill_tree(app: tauri::AppHandle, id: String) -> Result<usize, S
     .map_err(|err| err.to_string())
 }
 
-/// How many consoles have something running under their shell: every
-/// window's (quitting), or with `this_window` only the asking window's
-/// (closing it). Off the main thread for the same reason as pty_memory: it
-/// refreshes the process table.
+/// What closing Termo (or a window) does to the consoles: those it ends,
+/// and those that keep running in the background (see mux/).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusyConsoles {
+    /// Ended, with something running under their shell.
+    pub lost: usize,
+    /// Kept running, with something running under their shell.
+    pub kept: usize,
+    /// Every console kept running, busy or not: whose agents keep going too.
+    pub kept_ids: Vec<String>,
+}
+
+/// How many consoles have something running under their shell, among those
+/// closing ends and those it leaves running: every window's (quitting), or
+/// with `this_window` only the asking window's (closing it). Off the main
+/// thread for the same reason as pty_memory: it refreshes the process table.
 #[tauri::command]
 pub async fn busy_consoles(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     this_window: Option<bool>,
-) -> Result<usize, String> {
+) -> Result<BusyConsoles, String> {
     let owner = this_window.unwrap_or(false).then(|| window.label().to_string());
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -313,7 +428,13 @@ pub async fn busy_consoles(
             Some(owner) => state.pty.pids_of(owner),
             None => state.pty.pids(),
         };
-        state.memory.busy_roots(&pids).len()
+        let kept = state.pty.kept(owner.as_deref());
+        let kept_pids: Vec<u32> = kept.iter().filter_map(|(_, pid)| *pid).collect();
+        BusyConsoles {
+            lost: state.memory.busy_roots(&pids).len(),
+            kept: state.memory.busy_roots(&kept_pids).len(),
+            kept_ids: kept.iter().map(|(id, _)| id.to_string()).collect(),
+        }
     })
     .await
     .map_err(|err| err.to_string())

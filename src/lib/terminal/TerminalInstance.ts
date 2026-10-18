@@ -8,7 +8,18 @@ import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
-import { killPty, promptRedrawPty, resizePty, spawnPty, windowsBuild, writePty } from "../core/pty-client";
+import {
+  attachPty,
+  claimPtySize,
+  killPty,
+  promptRedrawPty,
+  resizePty,
+  restoreAgentEvents,
+  spawnPty,
+  windowsBuild,
+  writePty,
+} from "../core/pty-client";
+import { remoteAddress } from "../core/remote-client";
 import { eventMatchesKeybinding, isCopyChord, isPasteChord, isPlainCtrlC, isPlainCtrlV } from "../core/shortcuts";
 import { workspaceStore } from "../layout/workspace-store.svelte";
 import type { AgentLaunch } from "../layout/split-tree";
@@ -46,6 +57,9 @@ const OLD_CONPTY_BEFORE_BUILD = 21376;
 // its whole screen, so a split drag or the 140ms zoom animation, which
 // resize many times in a row, would otherwise scramble the output.
 const PTY_RESIZE_SETTLE_MS = 100;
+
+/** How often typing takes the console's size back at most (see claimSize). */
+const CLAIM_EVERY_MS = 3000;
 
 // An agent console stays covered until its CLI draws (see setStarting):
 // how long after its first text, so the screen is whole, and the longest it
@@ -91,6 +105,8 @@ export class TerminalInstance {
   private container: HTMLElement | null = null;
   private lastPtySize: { cols: number; rows: number } | null = null;
   private ptyResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When it last took its size back (see claimSize). */
+  private lastClaimAt = 0;
   /** Identifies the most recent font whose load we're waiting on, so a
    * quick succession of font changes only re-measures for the last one. */
   private fontToken = 0;
@@ -128,6 +144,7 @@ export class TerminalInstance {
     this.term.onData((data) => {
       if (this.sessionId) void writePty(this.sessionId, data);
       else this.pendingInput.push(data);
+      this.claimSize();
     });
 
     // Typing at a console that's still covered uncovers it: whatever the
@@ -337,14 +354,25 @@ export class TerminalInstance {
     shellArgs?: string[],
     cwd?: string,
     agent?: AgentLaunch,
+    attach?: string,
+    /** With `attach`: the tailnet address of the computer whose console it is. */
+    attachHost?: string,
   ): Promise<void> {
     this.container = container;
     this.term.open(container);
+    // Taken up again — its tab chosen, the window back in front, clicked
+    // into: the size a phone may have taken meanwhile comes back.
+    this.term.textarea?.addEventListener("focus", () => this.claimSize({ now: true }));
     this.fit.fit();
     void this.remeasureWhenFontLoads(
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
     );
     await this.matchConPty();
+    if (this.disposed) return;
+
+    // A console the sessions daemon kept running: shown again as it is. If
+    // it's gone by now, the tab starts its shell anew, in its folder.
+    if (attach && (await this.start({ shellPath, shellArgs, cwd, attach, attachHost }))) return;
     if (this.disposed) return;
 
     if (agent) {
@@ -409,56 +437,81 @@ export class TerminalInstance {
     await this.start({ shellPath, shellArgs, cwd });
   }
 
-  /** Spawns the console's process. False when an agent couldn't be started,
-   * with the reason written to the console. `afterExit` replaces `onExit`. */
+  /** Spawns the console's process — or, with `attach`, shows one the
+   * sessions daemon kept running. False when an agent couldn't be started,
+   * with the reason written to the console, or the console to attach to is
+   * gone. `afterExit` replaces `onExit`. */
   private async start(
-    opts: { shellPath?: string; shellArgs?: string[]; cwd?: string; agent?: AgentLaunch },
+    opts: {
+      shellPath?: string;
+      shellArgs?: string[];
+      cwd?: string;
+      agent?: AgentLaunch;
+      attach?: string;
+      attachHost?: string;
+    },
     afterExit?: () => void,
   ): Promise<boolean> {
     const { shellPath } = opts;
     const spawnSize = { cols: this.term.cols, rows: this.term.rows };
+    // Every callback below bails once this instance is gone. A console being
+    // torn down keeps producing output (and finally an exit) for a moment,
+    // and writing that into an already-disposed xterm throws — inside the
+    // Tauri channel's message handler, which is the same dispatch every
+    // other console's output rides on. Restoring a layout is exactly when
+    // that matters: consoles are created while others are being killed.
+    const handlers = {
+      onForegroundProcess: (path: string | null) => {
+        if (this.disposed) return;
+        this.lastForegroundProcessPath = path;
+        tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
+      },
+      onData: (bytes: Uint8Array) => {
+        if (this.disposed) return;
+        const decoded = this.decoder.decode(bytes, { stream: true });
+        const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
+        this.term.write(
+          themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
+          this.starting ? () => this.uncoverWhenDrawn() : undefined,
+        );
+      },
+      onExit: (code: number) => {
+        if (this.disposed) return;
+        if (afterExit) afterExit();
+        else this.onExit?.(code);
+      },
+    };
     let spawned: string;
+    // The size the console has: the one it was started with, or the one the
+    // console being attached to was left at.
+    let consoleSize = spawnSize;
+    let exitedMeanwhile: number | null = null;
     try {
-      spawned = await spawnPty({
-        ...opts,
-        ...spawnSize,
-        // Every callback below bails once this instance is gone. A console being
-        // torn down keeps producing output (and finally an exit) for a moment,
-        // and writing that into an already-disposed xterm throws — inside the
-        // Tauri channel's message handler, which is the same dispatch every
-        // other console's output rides on. Restoring a layout is exactly when
-        // that matters: consoles are created while others are being killed.
-        onForegroundProcess: (path) => {
-          if (this.disposed) return;
-          this.lastForegroundProcessPath = path;
-          tabTitleStore.setForegroundProcess(this.tabId, path, shellPath);
-        },
-        onData: (bytes) => {
-          if (this.disposed) return;
-          const decoded = this.decoder.decode(bytes, { stream: true });
-          const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
-          this.term.write(
-            themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
-            this.starting ? () => this.uncoverWhenDrawn() : undefined,
-          );
-        },
-        onExit: (code) => {
-          if (this.disposed) return;
-          if (afterExit) afterExit();
-          else this.onExit?.(code);
-        },
-      });
+      if (opts.attach) {
+        const kept = await attachPty(
+          opts.attach,
+          handlers,
+          opts.attachHost ? remoteAddress(opts.attachHost) : undefined,
+        );
+        spawned = kept.id;
+        consoleSize = { cols: kept.cols, rows: kept.rows };
+        exitedMeanwhile = kept.exitCode;
+      } else {
+        spawned = await spawnPty({ ...opts, ...spawnSize, ...handlers });
+      }
     } catch (err) {
       this.setStarting(false);
+      if (opts.attach) return false;
       if (!opts.agent || this.disposed) throw err;
       this.term.write(`\x1b[31m${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
       return false;
     }
     // Disposed while the spawn was in flight (a layout restore replaces tiles
     // faster than a console starts): adopt the session only to kill it, or it
-    // would outlive its terminal as an orphan shell.
+    // would outlive its terminal as an orphan shell. One that was attached
+    // to keeps running: it was never this tab's to end.
     if (this.disposed) {
-      void killPty(spawned);
+      if (!opts.attach) void killPty(spawned);
       return true;
     }
     this.sessionId = spawned;
@@ -481,7 +534,14 @@ export class TerminalInstance {
       clear: () => this.term.clear(),
       focus: () => this.focus(),
     });
-    this.lastPtySize = spawnSize;
+    this.lastPtySize = consoleSize;
+    if (opts.attach) {
+      // What its agent did while no window showed it — this computer's
+      // consoles only: another's report there.
+      if (!opts.attachHost) void restoreAgentEvents(spawned).catch(() => {});
+      // Its process ended meanwhile: the tab does what it does on an exit.
+      if (exitedMeanwhile !== null) handlers.onExit(exitedMeanwhile);
+    }
 
     // resize() no-ops while sessionId is still null, so a ResizeObserver
     // tick landing during the spawnPty() await above (e.g. surrounding
@@ -571,6 +631,24 @@ export class TerminalInstance {
     const id = this.sessionId;
     void resizePty(id, cols, rows)
       .then(() => promptRedrawPty(id))
+      .catch(() => {});
+  }
+
+  /** A console has one size wherever it's shown: someone on the tailnet
+   * (a phone) may have sized it to their screen. Taken up again here, it
+   * gets this tab's back — on focus, and on typing, for when the window
+   * never lost it; that one at most every few seconds. */
+  private claimSize(options?: { now?: boolean }): void {
+    if (this.disposed || !this.sessionId || !this.lastPtySize || this.ptyResizeTimer) return;
+    const { cols, rows } = this.term;
+    // A resize of its own on the way: that one sizes it.
+    if (this.lastPtySize.cols !== cols || this.lastPtySize.rows !== rows) return;
+    const at = Date.now();
+    if (!options?.now && at - this.lastClaimAt < CLAIM_EVERY_MS) return;
+    this.lastClaimAt = at;
+    const id = this.sessionId;
+    void claimPtySize(id, cols, rows)
+      .then((changed) => (changed ? promptRedrawPty(id) : undefined))
       .catch(() => {});
   }
 

@@ -130,6 +130,9 @@ pub struct AppConfig {
     /// Opt-in (macOS/Linux): new zsh sessions get a navigable completion
     /// menu on Tab, Tab — see pty/zsh_init.rs.
     pub zsh_menu_complete: bool,
+    /// Opt-in: new consoles run in the sessions daemon (see mux/), so they
+    /// keep running when their window closes or Termo quits or updates.
+    pub persistent_sessions: bool,
     /// On by default: the master switch for everything AI (see ai_mode.rs) —
     /// tracking the agent CLIs' sessions (running/awaiting/error/finished) in
     /// tabs, the panel and the status bar, plus agents and extensions.
@@ -194,6 +197,9 @@ pub struct AppConfig {
     pub agent_clis_known: std::collections::BTreeMap<String, String>,
     /// The keep-awake button in the title bar (see keep_awake.rs).
     pub keep_awake_button: bool,
+    /// The remote access button in the title bar (Tailscale, who's
+    /// connected, the address to open from a phone).
+    pub remote_button: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
     /// Everything git: the panel, the status bar's item, the diff and graph
@@ -266,6 +272,7 @@ impl Default for AppConfig {
             oh_my_posh_enabled: false,
             oh_my_posh_theme: "jandedobbeleer".into(),
             zsh_menu_complete: false,
+            persistent_sessions: false,
             ai_mode_enabled: true,
             ai_notify_awaiting: true,
             ai_notify_error: true,
@@ -300,6 +307,7 @@ impl Default for AppConfig {
             agent_install_dirs: std::collections::BTreeMap::new(),
             agent_clis_known: std::collections::BTreeMap::new(),
             keep_awake_button: true,
+            remote_button: true,
             tabs_fill_width: false,
             git_enabled: true,
             git_in_activity_bar: true,

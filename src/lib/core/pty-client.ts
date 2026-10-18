@@ -15,17 +15,66 @@ export interface SpawnOptions {
   onForegroundProcess?: (path: string | null) => void;
 }
 
-export async function spawnPty(opts: SpawnOptions): Promise<string> {
+type ConsoleHandlers = Pick<SpawnOptions, "onData" | "onExit" | "onForegroundProcess">;
+
+function eventChannel(handlers: ConsoleHandlers): Channel<PtyEvent> {
   const channel = new Channel<PtyEvent>();
   channel.onmessage = (event) => {
     if (event.type === "data") {
-      opts.onData(base64ToBytes(event.data));
+      handlers.onData(base64ToBytes(event.data));
     } else if (event.type === "exit") {
-      opts.onExit(event.code);
+      handlers.onExit(event.code);
     } else {
-      opts.onForegroundProcess?.(event.path);
+      handlers.onForegroundProcess?.(event.path);
     }
   };
+  return channel;
+}
+
+/** A console the sessions daemon runs (see src-tauri/src/mux/). */
+export interface KeptConsole {
+  id: string;
+  pid: number | null;
+  /** What it runs: the shell or the agent's CLI. */
+  path: string;
+  cwd: string | null;
+  /** Unix seconds. */
+  startedAt: number;
+  cols: number;
+  rows: number;
+  /** The last title the console set, if any. */
+  title: string | null;
+  /** How many windows (here or elsewhere) are showing it. */
+  attached: number;
+  exitCode: number | null;
+}
+
+/** Shows a console the sessions daemon kept running: what it printed so
+ * far arrives through `onData` first, then everything new. With `host` (an
+ * address on the tailnet, `ip:port`), another computer's. */
+export function attachPty(id: string, handlers: ConsoleHandlers, host?: string): Promise<KeptConsole> {
+  return invoke<KeptConsole>("pty_attach", { id, host: host ?? null, onEvent: eventChannel(handlers) });
+}
+
+/** Every console the sessions daemon runs, shown or not. Empty when it
+ * isn't running: asking doesn't start it. */
+export function keptConsoles(): Promise<KeptConsole[]> {
+  return invoke("pty_background");
+}
+
+/** Ends a console the sessions daemon runs, whether a tab shows it or not. */
+export function killKeptConsole(id: string): Promise<void> {
+  return invoke("pty_kill_background", { id });
+}
+
+/** Asks for where the agent in a console just attached to stood: it comes
+ * back as the usual `agent-event`/`agent-status`, marked restored. */
+export function restoreAgentEvents(id: string): Promise<void> {
+  return invoke("agent_events_restore", { id });
+}
+
+export async function spawnPty(opts: SpawnOptions): Promise<string> {
+  const channel = eventChannel(opts);
 
   return invoke<string>("pty_spawn", {
     shellPath: opts.shellPath,
@@ -46,6 +95,12 @@ export function resizePty(id: string, cols: number, rows: number): Promise<void>
   return invoke("pty_resize", { id, cols, rows });
 }
 
+/** The console back to its tab's size, if someone on the tailnet (a phone)
+ * sized it meanwhile. Whether it changed. */
+export function claimPtySize(id: string, cols: number, rows: number): Promise<boolean> {
+  return invoke("pty_claim_size", { id, cols, rows });
+}
+
 /** Asks the shell to redraw its prompt at the console's new size. A no-op
  * for shells that redraw on their own, so callers can just always ask. */
 export function promptRedrawPty(id: string): Promise<void> {
@@ -62,10 +117,21 @@ export function getPtyMemory(id: string): Promise<number | null> {
   return invoke("pty_memory", { id });
 }
 
+/** What closing does to the consoles (see src-tauri's busy_consoles). */
+export interface BusyConsoles {
+  /** Ended by closing, with a command running under their shell. */
+  lost: number;
+  /** Kept running in the background, with a command running. */
+  kept: number;
+  /** Every console kept running, busy or not. */
+  keptIds: string[];
+}
+
 /** How many consoles have a process running under their shell — a command in
- * progress, rather than a prompt sitting idle. Every window's, or with
+ * progress, rather than a prompt sitting idle —, among those closing would
+ * end and those it leaves running in the background. Every window's, or with
  * `thisWindow` only this window's (what closing it would end). */
-export function busyConsoles(thisWindow = false): Promise<number> {
+export function busyConsoles(thisWindow = false): Promise<BusyConsoles> {
   return invoke("busy_consoles", { thisWindow });
 }
 

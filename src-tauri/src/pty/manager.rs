@@ -1,8 +1,7 @@
 use dashmap::DashMap;
-use tauri::ipc::Channel;
 use uuid::Uuid;
 
-use super::{PtyEvent, PtySession};
+use super::{EventSink, PtySession, SpawnSpec};
 
 #[derive(Default)]
 pub struct PtyManager {
@@ -13,20 +12,14 @@ pub struct PtyManager {
 }
 
 impl PtyManager {
-    #[allow(clippy::too_many_arguments)]
-    pub fn spawn(
-        &self,
-        owner: &str,
-        shell_path: &str,
-        shell_args: &[String],
-        env: &[(&str, String)],
-        cwd: Option<&str>,
-        cols: u16,
-        rows: u16,
-        prompt_redraw: Option<Vec<u8>>,
-        channel: Channel<PtyEvent>,
-    ) -> anyhow::Result<Uuid> {
-        let session = PtySession::spawn(shell_path, shell_args, env, cwd, cols, rows, prompt_redraw, channel)?;
+    #[cfg(test)]
+    pub fn spawn(&self, owner: &str, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
+        self.spawn_as(owner, Uuid::new_v4(), spec, sink)
+    }
+
+    /// The same, with an id chosen beforehand.
+    pub fn spawn_as(&self, owner: &str, id: Uuid, spec: &SpawnSpec, sink: EventSink) -> anyhow::Result<Uuid> {
+        let session = PtySession::spawn(id, spec, sink)?;
         let id = session.id;
         self.sessions.insert(id, session);
         self.owners.insert(id, owner.to_string());
@@ -72,6 +65,14 @@ impl PtyManager {
         session.write(data)
     }
 
+    pub fn size(&self, id: Uuid) -> anyhow::Result<(u16, u16)> {
+        let session = self
+            .sessions
+            .get(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown pty session: {id}"))?;
+        Ok(session.size())
+    }
+
     pub fn resize(&self, id: Uuid, cols: u16, rows: u16) -> anyhow::Result<()> {
         let session = self
             .sessions
@@ -105,7 +106,7 @@ impl PtyManager {
     /// away with it, and without this every shell it had open — and anything
     /// running under it, `claude`/`codex` included — would keep running with
     /// nothing left able to reach or close it. Other windows' stay.
-    pub fn kill_owned_by(&self, owner: &str) {
+    pub fn kill_owned_by(&self, owner: &str) -> Vec<Uuid> {
         let ids: Vec<Uuid> = self
             .owners
             .iter()
@@ -113,7 +114,7 @@ impl PtyManager {
             .map(|entry| *entry.key())
             .collect();
         let mut gone = Vec::new();
-        for id in ids {
+        for &id in &ids {
             self.owners.remove(&id);
             crate::agents::console_bridge::release(&id.to_string());
             if let Some((_, session)) = self.sessions.remove(&id) {
@@ -121,6 +122,7 @@ impl PtyManager {
             }
         }
         dispose(gone);
+        ids
     }
 }
 
@@ -146,14 +148,9 @@ fn dispose(sessions: Vec<PtySession>) {
 mod tests {
     use super::*;
 
-    fn discarding_channel() -> Channel<PtyEvent> {
-        Channel::new(|_| Ok(()))
-    }
-
     fn spawn_sleeper(manager: &PtyManager, owner: &str) -> Uuid {
-        manager
-            .spawn(owner, "/bin/sh", &["-c".into(), "sleep 30".into()], &[], None, 80, 24, None, discarding_channel())
-            .unwrap()
+        let spec = crate::pty::session::tests::shell_spec("sleep 30", &[]);
+        manager.spawn(owner, &spec, std::sync::Arc::new(|_| true)).unwrap()
     }
 
     /// The reload and close paths this exists for (window_commands::

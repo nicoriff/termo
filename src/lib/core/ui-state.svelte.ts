@@ -6,6 +6,16 @@ import type { ChangelogEntry } from "$lib/app/release-notes";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 import { appConfigStore } from "./app-config.svelte";
 
+/** What closing would end (consoles with a command running, agents at
+ * work) and, apart, what keeps running in the background (see quit.ts). */
+export interface QuitPrompt {
+  consoles: number;
+  agents: number;
+  keptConsoles: number;
+  keptAgents: number;
+  scope: "app" | "window";
+}
+
 class UiState {
   maximized = $state(false);
   commandPaletteOpen = $state(false);
@@ -49,6 +59,9 @@ class UiState {
   projectDialog = $state<{ project: Project | null } | null>(null);
   /** "New orchestration": the work to plan (see OrchestrationDialog). */
   orchestrationDialog = $state(false);
+  /** "Another computer…": which tile gets the tab with the console picked
+   * on another computer of the tailnet (see RemoteConnectDialog). */
+  remoteConnect = $state<{ tileId: string } | null>(null);
   /** The extensions browser, sliding in from the right. Part of
    * `overlayOpen` below: it owns a search box, so every window-level
    * shortcut has to stand down while it's up. */
@@ -63,7 +76,7 @@ class UiState {
   /** What quitting (`scope: "app"`) or closing this window would interrupt,
    * when it's worth asking about (see app/quit.ts). Null while no such
    * question is on screen. */
-  quitPrompt = $state<{ consoles: number; agents: number; scope: "app" | "window" } | null>(null);
+  quitPrompt = $state<QuitPrompt | null>(null);
   /** Where the console's right-click Edit menu is open, in window
    * coordinates. Deliberately not part of `overlayOpen`: it never takes the
    * keyboard from the console, so shortcuts keep working under it. */
@@ -94,6 +107,7 @@ class UiState {
       this.agentWizard !== null ||
       this.projectDialog !== null ||
       this.orchestrationDialog ||
+      this.remoteConnect !== null ||
       this.marketplaceOpen ||
       this.quickAskOpen ||
       this.missingAgents !== null ||
@@ -105,6 +119,14 @@ class UiState {
 
   setMaximized(value: boolean): void {
     this.maximized = value;
+  }
+
+  openRemoteConnect(tileId: string): void {
+    this.remoteConnect = { tileId };
+  }
+
+  closeRemoteConnect(): void {
+    this.remoteConnect = null;
   }
 
   openCommandPalette(): void {
@@ -159,7 +181,7 @@ class UiState {
     this.deleteLayoutTarget = null;
   }
 
-  askBeforeQuit(counts: { consoles: number; agents: number; scope: "app" | "window" }): void {
+  askBeforeQuit(counts: QuitPrompt): void {
     this.quitPrompt = counts;
   }
 

@@ -143,6 +143,8 @@ class AppConfigStore {
   ohMyPoshEnabled = $state(false);
   ohMyPoshTheme = $state("jandedobbeleer");
   zshMenuComplete = $state(false);
+  /** New consoles run in the sessions daemon and outlive the app (see mux/). */
+  persistentSessions = $state(false);
   backgroundBlur = $state(false);
   aiModeEnabled = $state(true);
   aiNotifyAwaiting = $state(true);
@@ -180,6 +182,8 @@ class AppConfigStore {
   marketplaceSource = $state<"official" | "smithery">("official");
   /** The keep-awake button in the title bar. */
   keepAwakeButton = $state(true);
+  /** The remote access button in the title bar. */
+  remoteButton = $state(true);
   tabsFillWidth = $state(false);
   /** Everything git: the panel, the status bar's item, the diff and graph tabs. */
   gitEnabled = $state(true);
@@ -274,6 +278,7 @@ class AppConfigStore {
     this.ohMyPoshEnabled = config.oh_my_posh_enabled;
     this.ohMyPoshTheme = config.oh_my_posh_theme;
     this.zshMenuComplete = config.zsh_menu_complete;
+    this.persistentSessions = config.persistent_sessions ?? false;
     this.backgroundBlur = config.background_blur;
     this.aiModeEnabled = config.ai_mode_enabled;
     this.aiNotifyAwaiting = config.ai_notify_awaiting;
@@ -324,6 +329,7 @@ class AppConfigStore {
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
     this.keepAwakeButton = config.keep_awake_button ?? true;
+    this.remoteButton = config.remote_button ?? true;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
     this.gitEnabled = config.git_enabled ?? true;
@@ -415,6 +421,11 @@ class AppConfigStore {
 
   setZshMenuComplete(enabled: boolean): void {
     this.zshMenuComplete = enabled;
+    void this.persist();
+  }
+
+  setPersistentSessions(enabled: boolean): void {
+    this.persistentSessions = enabled;
     void this.persist();
   }
 
@@ -517,6 +528,11 @@ class AppConfigStore {
 
   setKeepAwakeButton(visible: boolean): void {
     this.keepAwakeButton = visible;
+    void this.persist();
+  }
+
+  setRemoteButton(visible: boolean): void {
+    this.remoteButton = visible;
     void this.persist();
   }
 
@@ -645,6 +661,7 @@ class AppConfigStore {
       oh_my_posh_enabled: this.ohMyPoshEnabled,
       oh_my_posh_theme: this.ohMyPoshTheme,
       zsh_menu_complete: this.zshMenuComplete,
+      persistent_sessions: this.persistentSessions,
       background_blur: this.backgroundBlur,
       ai_mode_enabled: this.aiModeEnabled,
       ai_notify_awaiting: this.aiNotifyAwaiting,
@@ -677,6 +694,7 @@ class AppConfigStore {
       agents_from_any_console: this.agentsFromAnyConsole,
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
+      remote_button: this.remoteButton,
       tabs_fill_width: this.tabsFillWidth,
       git_enabled: this.gitEnabled,
       git_in_activity_bar: this.gitInActivityBar,

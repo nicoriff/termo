@@ -20,7 +20,8 @@
   import type { AgentSession } from "$lib/core/agent-sessions-client";
   import type { AgentFavorite } from "$lib/core/agent-favorites-client";
   import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
-  import { newTabOptions } from "./new-tab-options.svelte";
+  import { backgroundLabel, newTabOptions, programName } from "./new-tab-options.svelte";
+  import { killKeptConsole, type KeptConsole } from "$lib/core/pty-client";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { requestAgentLaunch, requestLaunch } from "$lib/agent-launch/request-launch";
@@ -164,19 +165,46 @@
     appConfigStore.aiModeEnabled ? favoritesStore.favorites.filter(canRestore) : [],
   );
 
-  /** Which of the picker's two flyouts is open. */
-  let submenu = $state<"recent" | "favorites" | null>(null);
+  /** Which of the picker's flyouts is open. */
+  type Submenu = "recent" | "favorites" | "background" | "zellij";
+  let submenu = $state<Submenu | null>(null);
   const recentOpen = $derived(submenu === "recent");
   let recentPos = $state({ top: 0, left: 0 });
   // $state (unlike addButtonEl): these rows live inside an {#if}, so bind:this
   // reassigns them as the rows appear and disappear.
   let recentRowEl = $state<HTMLButtonElement | undefined>(undefined);
   let favoritesRowEl = $state<HTMLButtonElement | undefined>(undefined);
+  let backgroundRowEl = $state<HTMLButtonElement | undefined>(undefined);
+  let zellijRowEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  /** A Zellij session in a new tab: an existing one (`name`), or a new one. */
+  function pickZellij(name?: string) {
+    const zellij = newTabOptions.zellij;
+    if (!zellij) return;
+    closeShellPicker();
+    const title = name ? `${t("tabs.zellij")} · ${name}` : t("tabs.zellij");
+    workspaceStore.addTab(tile.id, zellij.path, name ? ["attach", name] : [], title);
+  }
+
+  /** Consoles still running that no window shows (see src-tauri/src/mux/). */
+  const backgroundConsoles = $derived(newTabOptions.background);
+
+  function pickBackground(kept: KeptConsole) {
+    closeShellPicker();
+    workspaceStore.attachTab(tile.id, kept.id, backgroundLabel(kept), kept.cwd ?? undefined);
+  }
+
+  async function closeBackground(kept: KeptConsole) {
+    await killKeptConsole(kept.id).catch(() => {});
+    await newTabOptions.refreshBackground();
+    if (newTabOptions.background.length === 0) submenu = null;
+  }
 
   /** Flies out beside the picker, flipping to its left when the window edge is
    * too close — same clamping idea as the picker itself. */
-  function openSubmenu(kind: "recent" | "favorites") {
-    const row = kind === "recent" ? recentRowEl : favoritesRowEl;
+  function openSubmenu(kind: Submenu) {
+    const rows = { recent: recentRowEl, favorites: favoritesRowEl, background: backgroundRowEl, zellij: zellijRowEl };
+    const row = rows[kind];
     if (!row) return;
     const box = row.getBoundingClientRect();
     const toTheRight = box.right + 4;
@@ -189,7 +217,7 @@
     submenu = kind;
   }
 
-  function toggleSubmenu(kind: "recent" | "favorites") {
+  function toggleSubmenu(kind: Submenu) {
     if (submenu === kind) submenu = null;
     else openSubmenu(kind);
   }
@@ -653,8 +681,56 @@
             {/if}
           </button>
         {/each}
-        {#if recentSessions.length > 0 || favoriteSessions.length > 0}
+        {#if recentSessions.length > 0 || favoriteSessions.length > 0 || backgroundConsoles.length > 0 || newTabOptions.tailscale || newTabOptions.zellij}
           <div class="shell-picker-divider"></div>
+        {/if}
+        {#if newTabOptions.zellij}
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={submenu === "zellij"}
+            role="menuitem"
+            bind:this={zellijRowEl}
+            aria-haspopup="menu"
+            aria-expanded={submenu === "zellij"}
+            onmouseenter={() => openSubmenu("zellij")}
+            onclick={() => toggleSubmenu("zellij")}
+          >
+            <span>{t("tabs.zellij")}</span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+        {/if}
+        {#if newTabOptions.tailscale}
+          <button
+            class="shell-picker-item"
+            role="menuitem"
+            onmouseenter={() => (submenu = null)}
+            onclick={() => {
+              closeShellPicker();
+              uiState.openRemoteConnect(tile.id);
+            }}
+          >
+            <span class="shell-picker-label">{t("remote.connectMenu")}</span>
+          </button>
+        {/if}
+        {#if backgroundConsoles.length > 0}
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={submenu === "background"}
+            role="menuitem"
+            title={t("tabs.backgroundHint")}
+            bind:this={backgroundRowEl}
+            aria-haspopup="menu"
+            aria-expanded={submenu === "background"}
+            onmouseenter={() => openSubmenu("background")}
+            onclick={() => toggleSubmenu("background")}
+          >
+            <span>{t("tabs.background")} ({backgroundConsoles.length})</span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
         {/if}
         {#if favoriteSessions.length > 0}
           <button
@@ -691,6 +767,63 @@
           </button>
         {/if}
       </div>
+      {#if submenu === "zellij" && newTabOptions.zellij}
+        <div
+          class="recent-submenu"
+          style="top:{recentPos.top}px; left:{recentPos.left}px"
+          role="menu"
+          use:menuKeys={{ close: closeShellPicker, back: () => (submenu = null) }}
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
+          <button class="shell-picker-item" role="menuitem" onclick={() => pickZellij()}>
+            <span class="shell-picker-label">{t("tabs.zellijNew")}</span>
+          </button>
+          {#each newTabOptions.zellij.sessions as session (session.name)}
+            <button class="shell-picker-item" role="menuitem" onclick={() => pickZellij(session.name)}>
+              <span class="shell-picker-label">{session.name}</span>
+              {#if session.exited}
+                <span class="shell-picker-note">{t("tabs.zellijExited")}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if submenu === "background"}
+        <div
+          class="recent-submenu"
+          style="top:{recentPos.top}px; left:{recentPos.left}px"
+          role="menu"
+          use:menuKeys={{ close: closeShellPicker, back: () => (submenu = null) }}
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
+          {#each backgroundConsoles as kept (kept.id)}
+            {@const label = backgroundLabel(kept)}
+            <div class="shell-picker-row">
+              <button
+                class="shell-picker-item"
+                role="menuitem"
+                title={kept.cwd ?? kept.path}
+                onclick={() => pickBackground(kept)}
+              >
+                <ConsoleIcon kind={programName(kept.path)} />
+                <span class="shell-picker-label">{label}</span>
+              </button>
+              <button
+                class="shell-picker-elsewhere"
+                tabindex="-1"
+                data-menu-skip
+                title={t("tabs.closeBackground", { name: label })}
+                aria-label={t("tabs.closeBackground", { name: label })}
+                onclick={() => void closeBackground(kept)}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" />
+                </svg>
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
       {#if submenu === "favorites"}
         <div
           class="recent-submenu"

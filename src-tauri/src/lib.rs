@@ -13,6 +13,7 @@ mod keep_awake;
 mod layouts;
 mod marketplace;
 mod migration;
+mod mux;
 mod pty;
 mod state;
 mod terminal_windows;
@@ -42,6 +43,13 @@ pub fn run_cli_mode_from_args() -> bool {
         }
         [flag, ..] if flag == pty::status_line::STATUS_LINE_FLAG => {
             pty::status_line::run_status_line_cli();
+            true
+        }
+        // The sessions daemon (see mux/): before anything of the app's own
+        // startup — the single-instance check would hand it to the running
+        // Termo, and nothing else of it (hooks, watchers) is the daemon's.
+        [flag, rest @ ..] if flag == mux::MUX_FLAG => {
+            mux::server::run(rest.first().map_or("", String::as_str), rest.get(1).map(String::as_str));
             true
         }
         _ => false,
@@ -88,13 +96,47 @@ pub fn run() {
             if let Some(window) = app.get_webview_window(terminal_windows::MAIN) {
                 commands::window_shape::attach(&window);
             }
-            pty::agent_hooks::start_watcher(app.handle().clone());
+            // The status bar says when the sessions daemon stops answering
+            // (new consoles then open in the app) and offers to restart it.
+            {
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_daemon_health(move |answering| {
+                    let _ = tauri::Emitter::emit(&handle, "sessions-daemon", answering);
+                });
+            }
+            // A new console asked for from the tailnet: the window Termo
+            // opened with opens it as a tab (see remote-open.svelte.ts).
+            {
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_open(move |request, choice, cwd| {
+                    let asked = serde_json::json!({ "request": request, "choice": choice, "cwd": cwd });
+                    let _ = tauri::Emitter::emit(&handle, "remote-open", asked);
+                });
+                // And one closed from there: its tab closes.
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_close(move |session| {
+                    let _ = tauri::Emitter::emit(&handle, "remote-close", session.to_string());
+                });
+            }
+            // With remote access on, the consoles the app runs itself are
+            // shown from the tailnet too (see pty/sharing.rs).
+            if let Some(dir) = mux::dir() {
+                if mux::remote::read_config(&dir).enabled {
+                    app.state::<AppState>().pty.share(true);
+                }
+            }
+            // The consoles of an earlier run that the sessions daemon still
+            // runs (see mux/): what belongs to them stays.
+            let kept: std::collections::HashSet<String> =
+                app.state::<AppState>().pty.background().into_iter().map(|session| session.id.to_string()).collect();
+            pty::agent_hooks::start_watcher(app.handle().clone(), kept.clone());
             pty::status_line::start_watcher(app.handle().clone());
             // Before any run can start: files a run killed with Termo left.
             agents::runner::remove_leftovers(app.handle());
-            // Consoles' token files from before: their tokens died with it.
+            // Consoles' token files from before: their tokens died with it,
+            // but for those of consoles still running.
             if let Ok(root) = agents::store::root(app.handle()) {
-                agents::console_bridge::remove_leftovers(&root);
+                agents::console_bridge::remove_leftovers(&root, &kept);
             }
             agents::orchestration::executor::recover(app.handle());
             // The agents, their local server and refreshing the hooks: only
@@ -120,8 +162,30 @@ pub fn run() {
             commands::pty_commands::pty_spawn,
             commands::pty_commands::pty_write,
             commands::pty_commands::pty_resize,
+            commands::pty_commands::pty_claim_size,
             commands::pty_commands::pty_prompt_redraw,
             commands::pty_commands::pty_kill,
+            commands::pty_commands::pty_attach,
+            commands::pty_commands::pty_background,
+            commands::pty_commands::pty_kill_background,
+            commands::pty_commands::sessions_daemon_answering,
+            commands::pty_commands::sessions_daemon_restart,
+            commands::pty_commands::agent_events_restore,
+            commands::remote_commands::remote_overview,
+            commands::remote_commands::remote_activity,
+            commands::remote_commands::remote_set_enabled,
+            commands::remote_commands::remote_set_allowed,
+            commands::remote_commands::remote_answer_pending,
+            commands::remote_commands::remote_disconnect_all,
+            commands::remote_commands::remote_machines,
+            commands::remote_commands::remote_consoles,
+            commands::remote_commands::remote_share_look,
+            commands::remote_commands::remote_share_agents,
+            commands::remote_commands::remote_set_open_choices,
+            commands::remote_commands::remote_opened,
+            commands::remote_commands::tailscale_connect,
+            commands::remote_commands::tailscale_disconnect,
+            commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,
             commands::pty_commands::windows_build,
@@ -198,6 +262,8 @@ pub fn run() {
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,
+            commands::layout_commands::save_window_session,
+            commands::layout_commands::window_session,
             commands::agent_commands::agents_list,
             commands::agent_commands::agents_save,
             commands::agent_commands::agents_delete,

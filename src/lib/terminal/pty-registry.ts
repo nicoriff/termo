@@ -15,6 +15,11 @@ export function getPtyId(tabId: string): string | undefined {
   return ptyIdByTab.get(tabId);
 }
 
+/** Every tab's PTY id, by tab id. */
+export function ptyIdsByTab(): Record<string, string> {
+  return Object.fromEntries(ptyIdByTab);
+}
+
 export function getTabId(ptyId: string): string | undefined {
   for (const [tabId, id] of ptyIdByTab) {
     if (id === ptyId) return tabId;

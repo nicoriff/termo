@@ -73,6 +73,15 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.general.keepAwakeButtonHint")}</p>
+  <label class="row toggle-row">
+    <span>{t("preferences.general.remoteButton")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.remoteButton}
+      onchange={(e) => appConfigStore.setRemoteButton(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.general.remoteButtonHint")}</p>
 </section>
 
 <style>

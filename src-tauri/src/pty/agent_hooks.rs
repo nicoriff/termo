@@ -665,19 +665,46 @@ struct AgentEventPayload {
     session_id: String,
     #[serde(flatten)]
     update: AgentUpdate,
+    /// Where things stood when the app attached to a console the sessions
+    /// daemon kept (see restore): not news, so nothing to notify about.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    restored: bool,
+}
+
+/// The console a file in the events dir belongs to: its name up to the
+/// first dot (`<id>.jsonl`, `<id>.status.json`).
+fn file_session(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    Some(name.split('.').next()?.to_string())
 }
 
 /// Polls the events dir and emits `agent-event` for every new line.
-pub fn start_watcher(app: tauri::AppHandle) {
+/// `kept` are the consoles still running in the sessions daemon: their
+/// files stay, and only what they write from now on is news (what they
+/// wrote before comes back through `restore`).
+pub fn start_watcher(app: tauri::AppHandle, kept: std::collections::HashSet<String>) {
     let Ok(dir) = events_dir(&app) else {
         return;
     };
-    // Files left by a previous run belong to consoles that no longer exist.
-    let _ = fs::remove_dir_all(&dir);
+    // Files left by a previous run belong to consoles that no longer exist,
+    // unless the daemon still runs them.
+    let mut offsets: HashMap<PathBuf, u64> = HashMap::new();
+    if kept.is_empty() {
+        let _ = fs::remove_dir_all(&dir);
+    } else if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if file_session(&path).is_some_and(|session| kept.contains(&session)) {
+                let len = entry.metadata().map_or(0, |meta| meta.len());
+                offsets.insert(path, len);
+            } else {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
     let _ = fs::create_dir_all(&dir);
 
     std::thread::spawn(move || {
-        let mut offsets: HashMap<PathBuf, u64> = HashMap::new();
         loop {
             std::thread::sleep(Duration::from_millis(250));
             let Ok(entries) = fs::read_dir(&dir) else {
@@ -709,6 +736,7 @@ pub fn start_watcher(app: tauri::AppHandle) {
                         AgentEventPayload {
                             session_id: session_id.clone(),
                             update,
+                            restored: false,
                         },
                     );
                 }
@@ -716,6 +744,42 @@ pub fn start_watcher(app: tauri::AppHandle) {
             offsets.retain(|path, _| path.exists());
         }
     });
+}
+
+/// Tells the app where an agent in a console stood — its status, its
+/// conversation, its last note — once the app has attached to a console the
+/// sessions daemon kept running: all it reported while no window showed it,
+/// folded into one event.
+pub fn restore(app: &tauri::AppHandle, id: &str) {
+    let Ok(dir) = events_dir(app) else {
+        return;
+    };
+    let mut offset = 0;
+    let updates = read_new_lines(&dir.join(format!("{id}.jsonl")), &mut offset);
+    if let Some(update) = fold(updates) {
+        let payload = AgentEventPayload { session_id: id.to_string(), update, restored: true };
+        let _ = app.emit("agent-event", payload);
+    }
+    super::status_line::restore(app, &dir, id);
+}
+
+/// The state a run of updates leaves a console in: the last status (and the
+/// tool and note that came with it), the last conversation that was named.
+fn fold(updates: Vec<AgentUpdate>) -> Option<AgentUpdate> {
+    let mut agent_session_id = None;
+    let mut agent_cwd = None;
+    let mut last = None;
+    for update in updates {
+        if update.agent_session_id.is_some() {
+            agent_session_id.clone_from(&update.agent_session_id);
+        }
+        if update.agent_cwd.is_some() {
+            agent_cwd.clone_from(&update.agent_cwd);
+        }
+        last = Some(update);
+    }
+    let last = last?;
+    Some(AgentUpdate { agent_session_id, agent_cwd, ..last })
 }
 
 fn read_new_lines(path: &Path, offset: &mut u64) -> Vec<AgentUpdate> {
@@ -761,6 +825,36 @@ mod tests {
     use super::*;
 
     const EXE: &str = "/Applications/Termo.app/Contents/MacOS/termo";
+
+    /// What a console's agent reported while no window showed it comes back
+    /// as where it ended up: its last status and note, and the conversation
+    /// even if the last event didn't name it.
+    #[test]
+    fn a_restored_console_reports_where_its_agent_stood() {
+        let update = |status, session: Option<&str>, note: Option<&str>| AgentUpdate {
+            tool: "claude".into(),
+            status,
+            agent_session_id: session.map(str::to_owned),
+            agent_cwd: session.map(|_| "E:/proj".to_owned()),
+            note: note.map(str::to_owned),
+        };
+        let folded = fold(vec![
+            update(Some(AgentStatus::Running), Some("conv-1"), None),
+            update(Some(AgentStatus::Awaiting), None, Some("May I run npm test?")),
+        ])
+        .unwrap();
+        assert_eq!(folded.status, Some(AgentStatus::Awaiting));
+        assert_eq!(folded.note.as_deref(), Some("May I run npm test?"));
+        assert_eq!(folded.agent_session_id.as_deref(), Some("conv-1"));
+        assert_eq!(folded.agent_cwd.as_deref(), Some("E:/proj"));
+        assert!(fold(Vec::new()).is_none());
+    }
+
+    #[test]
+    fn files_are_told_apart_by_their_console() {
+        assert_eq!(file_session(Path::new("/x/abc-123.jsonl")).as_deref(), Some("abc-123"));
+        assert_eq!(file_session(Path::new("/x/abc-123.status.json")).as_deref(), Some("abc-123"));
+    }
 
     fn exe() -> &'static Path {
         Path::new(EXE)

@@ -1,0 +1,3 @@
+# The web client's files: a dev build serves them from disk (see mux/web.rs),
+# so a change to them needs no rebuild — nor a restart of the sessions daemon.
+web-client/

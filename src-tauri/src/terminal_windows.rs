@@ -74,10 +74,11 @@ pub fn open_new(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// A console window is gone: its consoles end with it, its count leaves the
-/// badge, and with the last one goes the app.
+/// A console window is gone: its consoles end with it (the ones the
+/// sessions daemon runs keep running), its count leaves the badge, and with
+/// the last one goes the app.
 pub fn on_destroyed(app: &tauri::AppHandle, label: &str) {
-    app.state::<AppState>().pty.kill_owned_by(label);
+    app.state::<AppState>().pty.release_owned_by(label);
     set_pending(app, label, 0);
     if labels(app).iter().all(|other| other == label) {
         app.exit(0);

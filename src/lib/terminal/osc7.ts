@@ -25,6 +25,10 @@ export function parseOsc7(payload: string): string | null {
     // A stray % that isn't an escape: better the raw path than nothing.
   }
   if (path === "") return null;
+  // "//server/share" (or with backslashes): opening it would have this
+  // computer reach a server named by whatever the console printed — and
+  // Windows hand that server the user's credentials (NTLM) on the way.
+  if (/^[/\\]{2}/.test(path)) return null;
 
   // "/C:/Users/x" is a Windows path wearing URL clothes; "/home/x" is not.
   return /^\/[A-Za-z]:\//.test(path) ? path.slice(1).replace(/\//g, "\\") : path;

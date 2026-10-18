@@ -176,9 +176,11 @@ pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoad
         // — with no chance for their normal teardown (TerminalInstance.dispose,
         // which calls killPty) to run. Without this, each one orphans its
         // shell process, and anything running under it, for the rest of the
-        // app's lifetime. Only that window's: the others keep theirs.
+        // app's lifetime. Only that window's: the others keep theirs. The
+        // ones the sessions daemon runs stay running, unshown, for the
+        // reloaded page to attach to again (see pty/consoles.rs).
         (_, PageLoadEvent::Started) if crate::terminal_windows::is_terminal(label) => {
-            webview.app_handle().state::<crate::state::AppState>().pty.kill_owned_by(label);
+            webview.app_handle().state::<crate::state::AppState>().pty.release_owned_by(label);
         }
         (_, PageLoadEvent::Finished) if crate::terminal_windows::is_terminal(label) => {
             let app = webview.app_handle().clone();

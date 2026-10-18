@@ -22,7 +22,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -142,7 +142,8 @@ pub fn set_global(on: bool) {
 }
 
 struct Grant {
-    created: Instant,
+    /// Wall-clock, since it's saved (see save_grants).
+    created: SystemTime,
     /// A shell's lasts as long as the shell: it can't be handed a new one,
     /// and tabs stay open for days.
     expires: bool,
@@ -165,9 +166,11 @@ fn forget(grant: Grant) {
 
 /// Ties a console's token to the console Termo started with it.
 pub fn bind(token: &str, console: &str) {
-    if let Some(grant) = grants().lock().unwrap().get_mut(token) {
+    let mut grants = grants().lock().unwrap();
+    if let Some(grant) = grants.get_mut(token) {
         grant.console = Some(console.to_string());
     }
+    save_grants(&grants);
 }
 
 /// The console closed: its token stops working and its files go.
@@ -178,10 +181,13 @@ pub fn release(console: &str) {
         .filter(|(_, grant)| grant.console.as_deref() == Some(console))
         .map(|(token, _)| token.clone())
         .collect();
-    for token in tokens {
-        if let Some(grant) = grants.remove(&token) {
+    for token in &tokens {
+        if let Some(grant) = grants.remove(token) {
             forget(grant);
         }
+    }
+    if !tokens.is_empty() {
+        save_grants(&grants);
     }
 }
 
@@ -192,9 +198,84 @@ pub fn discard(token: &str) {
     }
 }
 
-/// Files of consoles from an earlier run of Termo: their tokens died with it.
-pub fn remove_leftovers(root: &Path) {
-    let _ = std::fs::remove_dir_all(root.join("console-mcp"));
+/// The folder of the consoles' token files (`<agents root>/console-mcp`).
+fn grants_dir() -> &'static OnceLock<PathBuf> {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    &DIR
+}
+
+const GRANTS_FILE: &str = "grants.json";
+
+/// A token as saved: a console the sessions daemon runs outlives Termo, and
+/// its token has to keep working when Termo opens again (see mux/).
+#[derive(Serialize, serde::Deserialize)]
+struct SavedGrant {
+    token: String,
+    /// Unix seconds.
+    created: u64,
+    expires: bool,
+    files: Vec<PathBuf>,
+    console: String,
+}
+
+/// Saves the tokens given to running consoles.
+fn save_grants(grants: &HashMap<String, Grant>) {
+    let Some(dir) = grants_dir().get() else {
+        return;
+    };
+    let saved: Vec<SavedGrant> = grants
+        .iter()
+        .filter_map(|(token, grant)| {
+            Some(SavedGrant {
+                token: token.clone(),
+                created: grant.created.duration_since(UNIX_EPOCH).ok()?.as_secs(),
+                expires: grant.expires,
+                files: grant.files.clone(),
+                console: grant.console.clone()?,
+            })
+        })
+        .collect();
+    if let Ok(text) = serde_json::to_string(&saved) {
+        let _ = replace_file(&dir.join(GRANTS_FILE), &text);
+    }
+}
+
+/// Files of consoles from an earlier run of Termo: their tokens died with
+/// it — but for the consoles still running in the sessions daemon (`kept`),
+/// whose tokens keep working.
+pub fn remove_leftovers(root: &Path, kept: &std::collections::HashSet<String>) {
+    let dir = root.join("console-mcp");
+    let _ = grants_dir().set(dir.clone());
+    let saved: Vec<SavedGrant> = std::fs::read_to_string(dir.join(GRANTS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    let mut grants = grants().lock().unwrap();
+    let mut keep_files: Vec<PathBuf> = Vec::new();
+    for grant in saved.into_iter().filter(|grant| kept.contains(&grant.console)) {
+        keep_files.extend(grant.files.iter().cloned());
+        grants.insert(
+            grant.token,
+            Grant {
+                created: UNIX_EPOCH + Duration::from_secs(grant.created),
+                expires: grant.expires,
+                files: grant.files,
+                console: Some(grant.console),
+            },
+        );
+    }
+    if keep_files.is_empty() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if !keep_files.contains(&entry.path()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    save_grants(&grants);
 }
 
 /// Whether a request's bearer token lets a console in: one Termo gave a
@@ -207,11 +288,14 @@ pub fn is_console_token(root: &Path, given: &str) -> bool {
     {
         let mut grants = grants().lock().unwrap();
         let expired: Vec<String> =
-            grants.iter().filter(|(_, grant)| grant.expires && grant.created.elapsed() > GRANT_TTL).map(|(token, _)| token.clone()).collect();
-        for token in expired {
-            if let Some(grant) = grants.remove(&token) {
+            grants.iter().filter(|(_, grant)| grant.expires && grant.created.elapsed().unwrap_or_default() > GRANT_TTL).map(|(token, _)| token.clone()).collect();
+        for token in &expired {
+            if let Some(grant) = grants.remove(token) {
                 forget(grant);
             }
+        }
+        if !expired.is_empty() {
+            save_grants(&grants);
         }
         if grants.keys().any(|token| webhook::token_matches(given, token)) {
             return true;
@@ -627,7 +711,7 @@ pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
         }
         return Extras::default();
     };
-    grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), expires: true, files, console: None });
+    grants().lock().unwrap().insert(token.clone(), Grant { created: SystemTime::now(), expires: true, files, console: None });
     Extras { args, env, token: Some(token) }
 }
 
@@ -681,7 +765,7 @@ pub fn shell_extras(root: &Path, global: bool) -> Extras {
         env.push((var, path.to_string_lossy().into_owned()));
         files.push(path);
     }
-    grants().lock().unwrap().insert(token.clone(), Grant { created: Instant::now(), expires: false, files, console: None });
+    grants().lock().unwrap().insert(token.clone(), Grant { created: SystemTime::now(), expires: false, files, console: None });
     Extras { args: Vec::new(), env, token: Some(token) }
 }
 
@@ -914,7 +998,7 @@ mod tests {
         let token = fresh_token();
         grants().lock().unwrap().insert(
             token.clone(),
-            Grant { created: Instant::now(), expires: true, files: Vec::new(), console: None },
+            Grant { created: SystemTime::now(), expires: true, files: Vec::new(), console: None },
         );
         bind(&token, "pty-1");
         assert!(is_console_token(&root, &token));
@@ -1003,7 +1087,7 @@ mod tests {
     #[test]
     fn a_shells_token_outlives_the_day_and_a_discarded_one_is_gone() {
         let root = std::env::temp_dir();
-        let Some(old) = Instant::now().checked_sub(GRANT_TTL + Duration::from_secs(60)) else { return };
+        let Some(old) = SystemTime::now().checked_sub(GRANT_TTL + Duration::from_secs(60)) else { return };
         let (shell, agent_console) = (fresh_token(), fresh_token());
         {
             let mut grants = grants().lock().unwrap();
