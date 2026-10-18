@@ -17,8 +17,13 @@ use serde::{Deserialize, Serialize};
 
 use super::tailscale::Identity;
 
-/// Where the daemon listens on the tailnet unless told otherwise.
+/// Where an installed Termo's daemon listens on the tailnet unless told
+/// otherwise: where another computer's daemon is asked.
 pub const DEFAULT_PORT: u16 = 47830;
+/// Where this build's daemon listens unless told otherwise. A dev build's
+/// (see mux::dir) is one port up: on the same one, whichever starts first
+/// takes the address, and the other one's consoles can't be reached.
+pub const OWN_PORT: u16 = if cfg!(debug_assertions) { DEFAULT_PORT + 1 } else { DEFAULT_PORT };
 /// How many pending requests are kept: someone retrying shouldn't fill the
 /// file.
 const MAX_PENDING: usize = 20;
@@ -51,7 +56,7 @@ pub struct RemoteConfig {
 
 impl Default for RemoteConfig {
     fn default() -> Self {
-        Self { enabled: false, port: DEFAULT_PORT, allowed: Vec::new() }
+        Self { enabled: false, port: OWN_PORT, allowed: Vec::new() }
     }
 }
 
@@ -301,7 +306,7 @@ mod tests {
     #[test]
     fn an_old_or_partial_file_still_reads() {
         let config: RemoteConfig = serde_json::from_str(r#"{ "enabled": true }"#).unwrap();
-        assert_eq!(config.port, DEFAULT_PORT);
+        assert_eq!(config.port, OWN_PORT);
         assert!(config.allowed.is_empty());
     }
 }
