@@ -1,6 +1,6 @@
 [
   {
-    "version": "0.24.1",
+    "version": "0.25.0",
     "date": "2026-10-18",
     "es": [
       "**Tus agentes, desde el celular**: en el acceso remoto, «Agentes» muestra tus agentes locales con lo que están haciendo, su historial y lo que hizo cada corrida, paso a paso mientras corre. Con acceso total podés correrlos (con indicaciones extra para esa vez), detenerlos y responder lo que preguntan. Funciona con Termo abierto, o cerrado con «Seguir corriendo los agentes con Termo cerrado».",
