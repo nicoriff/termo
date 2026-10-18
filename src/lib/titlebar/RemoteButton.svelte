@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { encode } from "uqr";
   import { t } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -191,7 +191,7 @@
     void act(async () => {
       const result = await connectTailscale();
       if (result.kind === "login") {
-        await openUrl(result.url);
+        await openLink(result.url);
         message = { text: t("titlebar.remote.loginOpened"), error: false };
         return;
       }
@@ -322,7 +322,7 @@
             class="icon-button"
             title={t("titlebar.remote.download")}
             aria-label={t("titlebar.remote.download")}
-            onclick={() => void openUrl("https://tailscale.com/download")}
+            onclick={() => void openLink("https://tailscale.com/download")}
           >
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
               <path d="M8 2.5v8M4.8 7.5L8 10.7l3.2-3.2M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />

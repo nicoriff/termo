@@ -20,7 +20,7 @@
   import { groupByProject, projectTone } from "./project-spec";
   import { newAgentSpec } from "./agent-spec";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { agentsStore, type AgentsSection } from "./agents-store.svelte";
   import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
@@ -522,7 +522,7 @@
                   title={t("agents.github.openActions")}
                   onclick={(e) => {
                     e.stopPropagation();
-                    if (agent.deploy.github?.repo) void openUrl(`https://github.com/${agent.deploy.github.repo}/actions`);
+                    if (agent.deploy.github?.repo) void openLink(`https://github.com/${agent.deploy.github.repo}/actions`);
                   }}>GitHub</button
                 >
               {/if}

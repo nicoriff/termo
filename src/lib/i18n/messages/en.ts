@@ -2473,6 +2473,14 @@ export const en: Messages = {
       keepAwakeButtonHint: "The cup in the title bar. Hiding it also turns the mode off if it was on.",
       remoteButton: "Remote access button",
       remoteButtonHint: "The antenna in the title bar: Tailscale's state, who's connected and the address to open the consoles from a phone.",
+      links: "Links",
+      linkBrowser: "Open links with",
+      linkBrowserTry: "Try it",
+      linkBrowserHint: "Links in the consoles and in Termo open in this browser. The system's default is the one chosen in the computer's settings.",
+      systemBrowser: "System default browser",
+      otherBrowser: "Other…",
+      otherBrowserTitle: "Choose the browser",
+      programs: "Programs",
     },
     appearance: {
       theme: "Theme",
@@ -2504,6 +2512,8 @@ export const en: Messages = {
     },
     console: {
       defaultShell: "Default console",
+      defaultShellLabel: "Console for new tabs",
+      defaultShellHint: "The one + or the new-tab shortcut opens. The others are still at hand in each tab's ˅ menu.",
       searching: "Looking for available consoles...",
       output: "Console output",
       highlight: "Highlight IPs, URLs, paths, errors...",

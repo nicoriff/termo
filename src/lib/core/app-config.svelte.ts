@@ -184,6 +184,8 @@ class AppConfigStore {
   keepAwakeButton = $state(true);
   /** The remote access button in the title bar. */
   remoteButton = $state(true);
+  /** The browser links open with (see core/links.ts); null for the system's. */
+  linkBrowser = $state<string | null>(null);
   tabsFillWidth = $state(false);
   /** Everything git: the panel, the status bar's item, the diff and graph tabs. */
   gitEnabled = $state(true);
@@ -330,6 +332,7 @@ class AppConfigStore {
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
     this.keepAwakeButton = config.keep_awake_button ?? true;
     this.remoteButton = config.remote_button ?? true;
+    this.linkBrowser = config.link_browser ?? null;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
     this.gitEnabled = config.git_enabled ?? true;
@@ -536,6 +539,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setLinkBrowser(path: string | null): void {
+    this.linkBrowser = path;
+    void this.persist();
+  }
+
   /** Null: npm's own folder, which needs no remembering. */
   setAgentInstallDir(tool: ToolId, dir: string | null): void {
     const { [tool]: _previous, ...others } = this.agentInstallDirs;
@@ -695,6 +703,7 @@ class AppConfigStore {
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
       remote_button: this.remoteButton,
+      link_browser: this.linkBrowser,
       tabs_fill_width: this.tabsFillWidth,
       git_enabled: this.gitEnabled,
       git_in_activity_bar: this.gitInActivityBar,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from "$lib/i18n/i18n.svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { mcpDetail, searchMcp, type CatalogItem, type McpDetail, type SourceId } from "$lib/core/marketplace-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
@@ -195,7 +195,7 @@
       <span class="result-meta">{metaOf(chosen)}</span>
       <span class="result-text">{chosen.description}</span>
       {#if chosen.homepage}
-        <button class="link" onclick={() => void openUrl(chosen!.homepage!)}>{t("agents.integrations.source")} ↗</button>
+        <button class="link" onclick={() => void openLink(chosen!.homepage!)}>{t("agents.integrations.source")} ↗</button>
       {/if}
     </div>
     {#each specs as spec (spec.name)}

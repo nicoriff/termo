@@ -3,7 +3,7 @@
   import { fade, fly } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import type { ToolId } from "$lib/ai-mode/pattern-table";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
@@ -165,7 +165,7 @@
     {:else if !info.npm}
       <p class="text">{t("agentInstall.needsNode")}</p>
       <div class="actions">
-        <button class="button" onclick={() => void openUrl("https://nodejs.org/")}>{t("agentInstall.getNode")}</button>
+        <button class="button" onclick={() => void openLink("https://nodejs.org/")}>{t("agentInstall.getNode")}</button>
         <button class="button primary" onclick={close}>{t("agentInstall.close")}</button>
       </div>
     {:else if screen === "where"}

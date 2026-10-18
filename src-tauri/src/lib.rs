@@ -2,6 +2,7 @@ mod agent_favorites;
 mod agent_sessions;
 mod ai_mode;
 mod agents;
+mod browser;
 mod commands;
 mod companion;
 mod config;
@@ -185,6 +186,8 @@ pub fn run() {
             commands::remote_commands::remote_opened,
             commands::remote_commands::tailscale_connect,
             commands::remote_commands::tailscale_disconnect,
+            commands::link_commands::open_link,
+            commands::link_commands::list_browsers,
             commands::zellij_commands::zellij_sessions,
             commands::pty_commands::pty_memory,
             commands::pty_commands::list_shells,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { menuKeys } from "$lib/core/menu-keys";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { gitBranches, type Branch, type GitOp } from "$lib/core/git-client";
   import { uiState } from "$lib/core/ui-state.svelte";
@@ -91,7 +91,7 @@
 
   function browse(url: string | null | undefined) {
     close();
-    if (url && /^https?:\/\//i.test(url)) void openUrl(url);
+    if (url && /^https?:\/\//i.test(url)) void openLink(url);
   }
 
   function onKeydown(event: KeyboardEvent) {

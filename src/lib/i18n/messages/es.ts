@@ -2474,6 +2474,14 @@ export const es = {
       keepAwakeButtonHint: "La taza de la barra de título. Ocultarla también desactiva el modo si estaba activo.",
       remoteButton: "Botón de acceso remoto",
       remoteButtonHint: "La antena de la barra de título: el estado de Tailscale, quién está conectado y la dirección para abrir las consolas desde el celular.",
+      links: "Links",
+      linkBrowser: "Abrir los links con",
+      linkBrowserTry: "Probar",
+      linkBrowserHint: "Los links de las consolas y los de Termo se abren en este navegador. El predeterminado del sistema es el que elegiste en la configuración de la computadora.",
+      systemBrowser: "Navegador predeterminado del sistema",
+      otherBrowser: "Otro…",
+      otherBrowserTitle: "Elegir el navegador",
+      programs: "Programas",
     },
     appearance: {
       theme: "Tema",
@@ -2505,6 +2513,8 @@ export const es = {
     },
     console: {
       defaultShell: "Consola por defecto",
+      defaultShellLabel: "Consola de las pestañas nuevas",
+      defaultShellHint: "La que abre + o el atajo de pestaña nueva. Las demás siguen a mano en el menú ˅ de cada pestaña.",
       searching: "Buscando consolas disponibles...",
       output: "Salida de la consola",
       highlight: "Resaltar IPs, URLs, rutas, errores...",
