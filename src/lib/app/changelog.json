@@ -8,7 +8,8 @@
       "**Arrancarlos al iniciar sesión**: con la opción de arriba, «Arrancarlos al iniciar sesión» hace que corran aunque no abras Termo después de prender la computadora.",
       "**El aviso al cerrar cuenta a los agentes**: si hay agentes trabajando, el aviso al salir lo dice. Con la opción de arriba aparecen entre lo que sigue en segundo plano; sin ella, entre lo que se corta.",
       "**Los links se abren en tu navegador**: los links de las consolas (también los que marcan los programas, como `ls --hyperlink` o los agentes) se abren en el navegador del sistema, y ya no en una ventana de Termo. En Preferencias → General → Links se puede elegir otro, entre los instalados o cualquier programa.",
-      "**La consola por defecto, en una lista desplegable**: en Preferencias → Consola, para sistemas con muchas consolas instaladas."
+      "**La consola por defecto, en una lista desplegable**: en Preferencias → Consola, para sistemas con muchas consolas instaladas.",
+      "**Íconos en el acceso remoto**: desde el navegador o el celular, las pestañas, la lista de consolas y el menú para abrir una nueva muestran el ícono de cada consola o agente, como en Termo, en lugar de unas letras."
     ],
     "en": [
       "**Agents that keep running with Termo closed** (experimental): with “Keep agents running when Termo closes”, in Preferences → AI Mode → Agents, the agents run in a process of their own that keeps going when you close Termo. Those on a schedule run at their time, those watching a folder keep watching it, and git hooks, the webhook and other agents' messages keep setting them off. What was running when you closed it finishes and stays in its history. The notifications come as with Termo open, and clicking one opens Termo on that run.",
@@ -16,7 +17,8 @@
       "**Start them when you sign in**: with the option above, “Start them when you sign in” has them running even if you don't open Termo after turning the computer on.",
       "**The quit prompt counts the agents**: if agents are at work, the prompt on quitting says so. With the option above they're among what keeps running in the background; without it, among what quitting cuts short.",
       "**Links open in your browser**: links in the consoles (those programs mark too, like `ls --hyperlink` or the agents') open in the system's browser, no longer in a Termo window. In Preferences → General → Links you can pick another one, among those installed or any program.",
-      "**The default console, in a drop-down**: in Preferences → Console, for systems with many consoles installed."
+      "**The default console, in a drop-down**: in Preferences → Console, for systems with many consoles installed.",
+      "**Icons in remote access**: from the browser or the phone, the tabs, the list of consoles and the menu to open a new one show each console's or agent's icon, as in Termo, instead of a few letters."
     ]
   },
   {
