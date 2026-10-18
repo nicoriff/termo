@@ -46,7 +46,16 @@ export interface KeptConsole {
   title: string | null;
   /** How many windows (here or elsewhere) are showing it. */
   attached: number;
+  /** How many of them are this computer's Termo, not someone on the
+   * tailnet (a phone); absent from a sessions daemon older than 0.24.1. */
+  attachedHere?: number;
   exitCode: number | null;
+}
+
+/** Whether a Termo window on this computer shows it: someone on the
+ * tailnet watching it from a phone doesn't count. */
+export function shownHere(kept: KeptConsole): boolean {
+  return (kept.attachedHere ?? kept.attached) > 0;
 }
 
 /** Shows a console the sessions daemon kept running: what it printed so

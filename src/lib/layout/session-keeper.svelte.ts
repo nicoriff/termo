@@ -2,7 +2,7 @@ import { resumeInTab } from "$lib/ai-mode/restore-session";
 import { tabAgentSessions } from "$lib/ai-mode/tab-sessions.svelte";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { saveWindowSession, windowSession } from "$lib/core/layouts-client";
-import { keptConsoles } from "$lib/core/pty-client";
+import { keptConsoles, shownHere } from "$lib/core/pty-client";
 import { ptyIdsByTab } from "$lib/terminal/pty-registry";
 import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
 import { hydrateLayout, snapshotLayout, type LayoutNode } from "./layout-snapshot";
@@ -74,8 +74,9 @@ class SessionKeeper {
    */
   async restore(): Promise<boolean> {
     const running = await keptConsoles().catch(() => []);
-    // Not one another window shows already.
-    const free = new Set(running.filter((console) => console.attached === 0).map((console) => console.id));
+    // Not one another window shows already; one a phone on the tailnet is
+    // watching still comes back here.
+    const free = new Set(running.filter((console) => !shownHere(console)).map((console) => console.id));
     if (free.size === 0) return false;
     const saved = await windowSession().catch(() => null);
     if (!saved || !mentionsAny(saved, free)) return false;

@@ -383,6 +383,8 @@ impl State {
 #[derive(Clone)]
 struct Client {
     id: u64,
+    /// This computer's own Termo, not someone on the tailnet.
+    local: bool,
     tx: SyncSender<Frame<ServerMessage>>,
     /// Ends the connection: a client that stopped reading, one no longer
     /// allowed in.
@@ -761,6 +763,7 @@ impl Daemon {
         let (tx, rx) = sync_channel::<Frame<ServerMessage>>(CLIENT_QUEUE);
         let client = Client {
             id: self.next_client.fetch_add(1, Ordering::SeqCst),
+            local: matches!(role, Role::Local),
             tx,
             kick,
         };
@@ -1321,6 +1324,7 @@ impl Live {
             rows: state.rows,
             title: state.title.clone(),
             attached: state.clients.len() as u32,
+            attached_here: Some(state.clients.iter().filter(|client| client.local).count() as u32),
             exit_code: state.exit_code,
             hosted: self.host.is_some(),
             foreground: state.foreground.clone(),

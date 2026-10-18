@@ -241,6 +241,11 @@ pub struct SessionInfo {
     pub title: Option<String>,
     /// How many connections are showing it now.
     pub attached: u32,
+    /// How many of them are this computer's own Termo, not someone on the
+    /// tailnet (a phone): what tells whether a window here shows it. None
+    /// from a daemon older than 0.24.1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attached_here: Option<u32>,
     /// Its exit code, once its process has ended.
     pub exit_code: Option<i32>,
     /// One the app runs itself and shares while it's open (see Op::Host).

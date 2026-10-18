@@ -898,6 +898,11 @@ mod tests {
         assert!(seen_by_friend.wait_for(|seen| seen.text().contains("got-from-me")));
         assert!(!seen_here.text().contains("from-friend"), "the read-only typing went nowhere");
 
+        // Three show it, one of them here: the phones don't make it a console
+        // a window here has open (see session-keeper.svelte.ts).
+        let listed = local.list().unwrap().into_iter().find(|session| session.id == id).unwrap();
+        assert_eq!((listed.attached, listed.attached_here), (3, Some(1)));
+
         // Sized to the phone's screen while it shows it, and given its own
         // size back when the phone leaves.
         let size = || local.list().unwrap().into_iter().find(|session| session.id == id).map(|s| (s.cols, s.rows)).unwrap();

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { keptConsoles, listShells, type KeptConsole } from "$lib/core/pty-client";
+import { keptConsoles, listShells, shownHere, type KeptConsole } from "$lib/core/pty-client";
 import { remoteOverview, tailscaleRunning } from "$lib/core/remote-client";
 import { marketplaceStatus } from "$lib/core/marketplace-client";
 import type { ShellInfo } from "$lib/core/types";
@@ -47,7 +47,7 @@ class NewTabOptions {
   refreshBackground(): Promise<void> {
     return keptConsoles()
       .then((list) => {
-        this.background = list.filter((kept) => kept.attached === 0);
+        this.background = list.filter((kept) => !shownHere(kept));
       })
       .catch(() => {});
   }

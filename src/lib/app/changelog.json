@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.24.1",
+    "date": "2026-10-18",
+    "es": [
+      "**Las consolas vuelven a su pestaña aunque las mires desde el celular**: si al abrir Termo una consola que sigue corriendo estaba abierta en el navegador de otro dispositivo de la tailnet, quedaba en segundo plano en vez de volver a su pestaña. Ahora vuelve igual."
+    ],
+    "en": [
+      "**Consoles come back to their tab even while you watch them from your phone**: if, when you opened Termo, a console that kept running was open in another tailnet device's browser, it stayed in the background instead of coming back to its tab. Now it comes back all the same."
+    ]
+  },
+  {
     "version": "0.24.0",
     "date": "2026-10-18",
     "es": [
