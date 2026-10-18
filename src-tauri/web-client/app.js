@@ -580,11 +580,13 @@ async function connect() {
       if (shown === message.session) showHome();
       else render();
     }
+    if (message.type === "agent_event") agentsUi.event(message.name, message.payload);
   };
   connection.onClose = () => {
     connection = null;
     clearInterval(listTimer);
     setLink("down");
+    agentsUi.disconnected();
     showHome();
     setStatus(t("disconnected"));
   };
@@ -597,6 +599,7 @@ async function connect() {
   }
   setLink("up");
   renderAccess();
+  agentsUi.connected();
   await listSessions();
   listTimer = setInterval(() => void listSessions(), LIST_EVERY_MS);
   // Back where it was: the console shown last time, or the only one.
@@ -620,7 +623,7 @@ async function listSessions() {
 // ---- Drawing the tabs and the menu.
 
 function render() {
-  if (connection) setStatus(sessions.length ? "" : t("noConsoles"));
+  if (connection) setStatus(sessions.length || agentsUi.shown() ? "" : t("noConsoles"));
   homeHeading.hidden = !sessions.length;
 
   // The menu: a page of its own with no console shown, else over it.
@@ -890,7 +893,7 @@ async function placeItems() {
   const place = (item) => {
     if (!items.some((other) => samePath(other.path, item.path))) items.push(item);
   };
-  if (folderPicked) place({ name: folderLabel(folderPicked), path: folderPicked, tag: "current" });
+  if (folderStart) place({ name: folderLabel(folderStart), path: folderStart, tag: "current" });
   if (reply.roots.home) place({ ...reply.roots.home, tag: "home" });
   for (const drive of reply.roots.drives) place({ ...drive, tag: "drive" });
   for (const path of [...sessions.map((session) => session.cwd), ...recentFolders]) {
@@ -920,14 +923,22 @@ async function loadLevel(level) {
   }
 }
 
-function openFolderBrowser() {
+/** Where the browser started, and what gets the folder picked: a new
+ * console's, unless another part of the page asked (an agent's folder,
+ * see agents.js). */
+let folderStart = "";
+let folderOnPick = null;
+
+function openFolderBrowser(start = folderPicked, onPick = null) {
   if (!connection) return;
+  folderStart = start || "";
+  folderOnPick = onPick;
   folderCache.clear();
   creatingFolder = false;
   folderError.textContent = "";
   walk = [{ path: null }];
   const chain = [];
-  for (let path = folderPicked || null; path !== null; path = parentPath(path)) chain.unshift({ path });
+  for (let path = folderStart || null; path !== null; path = parentPath(path)) chain.unshift({ path });
   walk.push(...chain);
   folderView.hidden = false;
   void showLevel(walk.length - 1, null);
@@ -967,8 +978,9 @@ function goBack() {
 }
 
 function useFolder(path) {
-  folderPicked = path;
   closeFolderBrowser();
+  if (folderOnPick) return folderOnPick(path);
+  folderPicked = path;
   renderOpener();
 }
 
@@ -1648,4 +1660,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 void loadLook();
-void connect();
+// Once agents.js has run too (it's loaded after this one): connecting uses
+// what it sets up.
+document.addEventListener("DOMContentLoaded", () => void connect());

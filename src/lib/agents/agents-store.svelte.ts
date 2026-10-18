@@ -16,6 +16,7 @@ import {
   moveAgent,
   onAgentQuestion,
   onAgentRun,
+  onAgentsChanged,
   restoreProject,
   runAgent,
   runningAgents,
@@ -115,6 +116,11 @@ class AgentsStore {
     await onAgentQuestion((question) => {
       const others = this.questions.filter((candidate) => candidate.id !== question.id);
       this.questions = question.state === "pending" ? [...others, question] : others;
+    });
+    // Saved or deleted from the web client: shown here too.
+    await onAgentsChanged(() => {
+      void this.reload();
+      void this.refreshNextRuns();
     });
     this.questions = await agentQuestions().catch(() => []);
     this.agents = await listAgents().catch(() => []);

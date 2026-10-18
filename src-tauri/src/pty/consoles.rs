@@ -50,6 +50,9 @@ impl Consoles {
                     }
                     HostEvent::Open { request, choice, cwd } => sharing.open(request, choice, cwd),
                     HostEvent::Close { session } => sharing.close(session),
+                    HostEvent::AgentsCall { request, name, args } => sharing.agents_call(request, name, args),
+                    HostEvent::AgentsWatch { on } => sharing.set_agents_watched(on),
+                    HostEvent::AgentsChanged => sharing.agents_changed(),
                 });
                 Some(mux)
             })
@@ -88,6 +91,28 @@ impl Consoles {
         if let Some(mux) = self.mux_if_used() {
             mux.opened(request, result);
         }
+    }
+
+    /// Where what the tailnet asks of the agents goes (see sharing.rs).
+    pub fn on_agents_call(&self, handle: impl Fn(u64, String, serde_json::Value) + Send + Sync + 'static) {
+        self.sharing.on_agents_call(handle);
+    }
+
+    /// What came of it.
+    pub fn agents_answer(&self, request: u64, result: Result<serde_json::Value, String>) {
+        if let Some(mux) = self.mux_if_used() {
+            mux.agents_answer(request, result);
+        }
+    }
+
+    /// Where an agent saved or deleted from the tailnet is told.
+    pub fn on_agents_changed(&self, handle: impl Fn() + Send + Sync + 'static) {
+        self.sharing.on_agents_changed(handle);
+    }
+
+    /// What an agent said, for whoever watches from the tailnet.
+    pub fn agent_event(&self, name: &str, payload: serde_json::Value) {
+        self.sharing.agent_event(self.mux_if_used().map(Arc::as_ref), name, payload);
     }
 
     /// Starts a console in the app itself.

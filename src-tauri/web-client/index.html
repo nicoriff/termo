@@ -44,6 +44,12 @@
             </button>
           </div>
           <p id="status" class="status"></p>
+          <!-- Consoles or agents (see agents.js). -->
+          <div id="parts" class="parts" role="tablist" hidden>
+            <button id="show-consoles" class="part" role="tab" data-text="consolesPart"></button>
+            <button id="show-agents" class="part" role="tab" data-text="agentsPart"></button>
+          </div>
+          <div id="consoles-part">
           <h2 id="home-heading" class="home-heading" data-text="consoles" hidden></h2>
           <ul id="sessions" class="session-list"></ul>
           <!-- A new console, opened by Termo on that computer as a tab of
@@ -64,7 +70,35 @@
             <div id="open-choices" class="open-choices"></div>
             <p id="open-status" class="status open-status"></p>
           </section>
+          </div>
+          <!-- The agents on that computer: what they wait on, and each one. -->
+          <div id="agents-part" class="agents-part" hidden>
+            <p id="agents-note" class="status"></p>
+            <div id="agent-questions" class="agent-questions"></div>
+            <div class="agents-head">
+              <h2 class="home-heading" data-text="agentsHeading"></h2>
+              <button id="new-agent" class="pill compact" hidden>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" /></svg>
+                <span data-text="newAgent"></span>
+              </button>
+            </div>
+            <ul id="agent-list" class="session-list"></ul>
+            <p id="agents-edit-off" class="hint" data-text="editOffHint" hidden></p>
+          </div>
         </aside>
+
+        <!-- An agent, one of its runs, or the form to create or change one. -->
+        <section id="agent-panel" class="agent-panel" hidden>
+          <header class="folders-head">
+            <button id="agent-back" class="round-button" data-label="back">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+            </button>
+            <h2 id="agent-panel-title" class="folders-title panel-title"></h2>
+            <span id="agent-panel-actions" class="panel-actions"></span>
+          </header>
+          <div id="agent-panel-body" class="panel-body"></div>
+          <footer id="agent-panel-foot" class="folders-actions" hidden></footer>
+        </section>
 
         <!-- Where a new console opens: the desktop's folder browser, by touch. -->
         <section id="folders" class="folders" hidden>
@@ -134,5 +168,6 @@
     <script src="/xterm.js"></script>
     <script src="/addon-fit.js"></script>
     <script src="/app.js"></script>
+    <script src="/agents.js"></script>
   </body>
 </html>

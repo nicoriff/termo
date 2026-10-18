@@ -32,17 +32,18 @@ const HELLO_MAX: usize = 4096;
 /// starts on its own (at sign-in).
 const LANGUAGE_FILE: &str = "language";
 
-/// The apps connected, each with what's waiting to be written to it.
+/// The apps connected — and observers (see ToHost::Hello) —, each with
+/// what's waiting to be written to it and whether it only watches.
 #[derive(Default)]
 struct Clients {
     next: AtomicU64,
-    senders: Mutex<HashMap<u64, Sender<FromHost>>>,
+    senders: Mutex<HashMap<u64, (Sender<FromHost>, bool)>>,
 }
 
 impl Clients {
-    fn add(&self, sender: Sender<FromHost>) -> u64 {
+    fn add(&self, sender: Sender<FromHost>, observer: bool) -> u64 {
         let id = self.next.fetch_add(1, Ordering::SeqCst);
-        self.senders.lock().unwrap().insert(id, sender);
+        self.senders.lock().unwrap().insert(id, (sender, observer));
         id
     }
 
@@ -50,12 +51,13 @@ impl Clients {
         self.senders.lock().unwrap().remove(&id);
     }
 
+    /// Whether an app is there to tell the user what happens.
     fn any(&self) -> bool {
-        !self.senders.lock().unwrap().is_empty()
+        self.senders.lock().unwrap().values().any(|(_, observer)| !observer)
     }
 
     fn broadcast(&self, message: &FromHost) {
-        self.senders.lock().unwrap().retain(|_, sender| sender.send(message.clone()).is_ok());
+        self.senders.lock().unwrap().retain(|_, (sender, _)| sender.send(message.clone()).is_ok());
     }
 }
 
@@ -232,7 +234,7 @@ mod tests {
 
         // A wrong token gets nothing at all.
         let mut stranger = TcpStream::connect(("127.0.0.1", info.port)).unwrap();
-        let hello = ToHost::Hello { protocol: PROTOCOL, token: "nope".into(), build: "x".into() };
+        let hello = ToHost::Hello { protocol: PROTOCOL, token: "nope".into(), build: "x".into(), observer: false };
         write_frame(&mut stranger, &Frame::Message(hello)).unwrap();
         stranger.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         assert!(matches!(read_frame::<FromHost>(&mut stranger), Ok(None) | Err(_)));
@@ -241,7 +243,7 @@ mod tests {
         reader.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
         let mut writer = reader.try_clone().unwrap();
         let mut send = |message: ToHost| write_frame(&mut writer, &Frame::Message(message)).unwrap();
-        send(ToHost::Hello { protocol: PROTOCOL, token: info.token.clone(), build: "test-build".into() });
+        send(ToHost::Hello { protocol: PROTOCOL, token: info.token.clone(), build: "test-build".into(), observer: false });
         let mut next = || loop {
             match read_frame::<FromHost>(&mut reader).unwrap() {
                 // Status comes whenever it changes; the replies are what's asked.
@@ -262,6 +264,12 @@ mod tests {
         assert!(matches!(next(), FromHost::Reply { id: 4, result: Err(_) }));
         send(ToHost::Call { id: 5, name: "agents_delete".into(), args: serde_json::json!({ "id": "nobody" }) });
         assert_eq!(next(), FromHost::Reply { id: 5, result: Ok(serde_json::json!([])) });
+
+        // The sessions daemon, for the web client: reaches it as an observer.
+        std::env::set_var("TERMO_AGENTS_HOST_DIR", &dir);
+        let link = crate::mux::agents::HostLink::new(|_, _| {});
+        assert_eq!(link.call("agents_running", serde_json::json!({})), Ok(serde_json::json!([])));
+        std::env::remove_var("TERMO_AGENTS_HOST_DIR");
 
         // Asked to leave with nothing running: it does, and its info goes.
         send(ToHost::Retire);
@@ -346,7 +354,7 @@ impl Host {
         let _ = stream.set_nodelay(true);
         let Ok(mut reader) = stream.try_clone() else { return };
         let _ = reader.set_read_timeout(Some(Duration::from_secs(5)));
-        let Ok(Some(Frame::Message(ToHost::Hello { token, .. }))) = read_frame_within::<ToHost>(&mut reader, HELLO_MAX) else {
+        let Ok(Some(Frame::Message(ToHost::Hello { token, observer, .. }))) = read_frame_within::<ToHost>(&mut reader, HELLO_MAX) else {
             return;
         };
         if !webhook::token_matches(&token, &self.token) {
@@ -367,7 +375,7 @@ impl Host {
         let status = self.current_status();
         *self.status.lock().unwrap() = status.clone();
         let _ = sender.send(FromHost::Status(status));
-        let id = self.clients.add(sender.clone());
+        let id = self.clients.add(sender.clone(), observer);
 
         while let Ok(Some(Frame::Message(message))) = read_frame::<ToHost>(&mut reader) {
             match message {

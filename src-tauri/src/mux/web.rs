@@ -26,6 +26,7 @@ use super::server::{Daemon, Role};
 
 const INDEX: &[u8] = include_bytes!("../../web-client/index.html");
 const APP: &[u8] = include_bytes!("../../web-client/app.js");
+const AGENTS: &[u8] = include_bytes!("../../web-client/agents.js");
 const STYLE: &[u8] = include_bytes!("../../web-client/style.css");
 const XTERM_JS: &[u8] = include_bytes!("../../../node_modules/@xterm/xterm/lib/xterm.js");
 const XTERM_CSS: &[u8] = include_bytes!("../../../node_modules/@xterm/xterm/css/xterm.css");
@@ -87,6 +88,7 @@ pub fn serve(daemon: Arc<Daemon>, mut stream: TcpStream, own: &[String], role: R
     let file = match path.as_str() {
         "/" | "/index.html" => Some((INDEX, "text/html; charset=utf-8")),
         "/app.js" => Some((APP, "text/javascript; charset=utf-8")),
+        "/agents.js" => Some((AGENTS, "text/javascript; charset=utf-8")),
         "/style.css" => Some((STYLE, "text/css; charset=utf-8")),
         "/xterm.js" => Some((XTERM_JS, "text/javascript; charset=utf-8")),
         "/xterm.css" => Some((XTERM_CSS, "text/css; charset=utf-8")),
@@ -111,6 +113,7 @@ fn from_disk_in_dev(path: &str) -> Option<Vec<u8>> {
     let name = match path {
         "/" | "/index.html" => "index.html",
         "/app.js" => "app.js",
+        "/agents.js" => "agents.js",
         "/style.css" => "style.css",
         _ => return None,
     };
@@ -293,6 +296,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let config = RemoteConfig {
             enabled: true,
+            agents_edit: false,
             port: 0,
             allowed: vec![Allowed { login: "me@example.com".into(), node: None, access: Access::ReadOnly }],
         };

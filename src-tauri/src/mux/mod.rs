@@ -14,6 +14,7 @@
 //! Each protocol version has its own daemon and info file, so an app that
 //! updated keeps the consoles of the old one running (see protocol.rs).
 
+pub mod agents;
 pub mod client;
 pub mod protocol;
 pub mod remote;
@@ -40,6 +41,18 @@ pub const MUX_FLAG: &str = "--mux";
 /// The same folder Tauri's `app_data_dir` names (tauri.conf.json's
 /// identifier); the daemon has no AppHandle to ask.
 const IDENTIFIER: &str = "com.ln.termo";
+
+/// The language the app's windows speak ("es" or "en"), in the daemon's
+/// folder, for what the daemon says itself (see mux/agents.rs).
+pub const LANGUAGE_FILE: &str = "language";
+
+/// Leaves the windows' language for the daemon (see LANGUAGE_FILE).
+pub fn set_language(language: &str) {
+    if let Some(dir) = dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join(LANGUAGE_FILE), language);
+    }
+}
 
 /// What a running daemon leaves for the app to find it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

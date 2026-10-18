@@ -3,9 +3,13 @@
     "version": "0.24.1",
     "date": "2026-10-18",
     "es": [
+      "**Tus agentes, desde el celular**: en el acceso remoto, «Agentes» muestra tus agentes locales con lo que están haciendo, su historial y lo que hizo cada corrida, paso a paso mientras corre. Con acceso total podés correrlos (con indicaciones extra para esa vez), detenerlos y responder lo que preguntan. Funciona con Termo abierto, o cerrado con «Seguir corriendo los agentes con Termo cerrado».",
+      "**Crear y editar agentes desde el celular**: con «Permitir crear y editar agentes desde ahí», en Preferencias → Consola → Acceso remoto, quien tenga acceso total también puede crear, cambiar, duplicar y borrar agentes: nombre, motor y modelo, carpeta, tarea, instrucciones, cuánto puede hacer solo, horario, internet y límite de tiempo. Viene apagado.",
       "**Las consolas vuelven a su pestaña aunque las mires desde el celular**: si al abrir Termo una consola que sigue corriendo estaba abierta en el navegador de otro dispositivo de la tailnet, quedaba en segundo plano en vez de volver a su pestaña. Ahora vuelve igual."
     ],
     "en": [
+      "**Your agents, from your phone**: in remote access, “Agents” shows your local agents with what they're doing, their history and what each run did, step by step as it runs. With full access you can run them (with extra instructions for that once), stop them and answer what they ask. It works with Termo open, or closed with “Keep agents running when Termo closes”.",
+      "**Create and edit agents from your phone**: with “Allow creating and editing agents from there”, in Preferences → Console → Remote access, anyone with full access can also create, change, duplicate and delete agents: name, engine and model, folder, task, instructions, how much it can do on its own, schedule, web access and time limit. It's off by default.",
       "**Consoles come back to their tab even while you watch them from your phone**: if, when you opened Termo, a console that kept running was open in another tailnet device's browser, it stayed in the background instead of coming back to its tab. Now it comes back all the same."
     ]
   },

@@ -5,6 +5,7 @@
     answerRemotePending,
     disconnectAllRemote,
     remoteOverview,
+    setRemoteAgentsEdit,
     setRemoteAllowed,
     setRemoteEnabled,
     tailscaleRunning,
@@ -182,6 +183,24 @@
         <li class="empty">{t("preferences.remote.noOneAllowed")}</li>
       {/each}
     </ul>
+  </section>
+
+  <section>
+    <h3>{t("preferences.remote.agents")}</h3>
+    <p class="setting-hint first">{t("preferences.remote.agentsHint")}</p>
+    <label class="toggle-row">
+      <span class="enable-label">{t("preferences.remote.agentsEdit")}</span>
+      <input
+        type="checkbox"
+        checked={config.agentsEdit}
+        disabled={working}
+        onchange={(e) => {
+          const enabled = e.currentTarget.checked;
+          void change(() => setRemoteAgentsEdit(enabled));
+        }}
+      />
+    </label>
+    <p class="setting-hint">{t("preferences.remote.agentsEditHint")}</p>
   </section>
 
   {#if overview && overview.pending.length > 0}

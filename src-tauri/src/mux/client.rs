@@ -83,6 +83,13 @@ pub enum HostEvent {
     Open { request: u64, choice: String, cwd: Option<String> },
     /// Closed from the tailnet: its tab closes.
     Close { session: Uuid },
+    /// One of ops::call's, asked from the tailnet: answered with
+    /// `agents_answer`.
+    AgentsCall { request: u64, name: String, args: serde_json::Value },
+    /// Whether someone on the tailnet watches the agents now.
+    AgentsWatch { on: bool },
+    /// An agent was saved or deleted from there.
+    AgentsChanged,
 }
 
 struct Shown {
@@ -273,6 +280,13 @@ impl MuxClient {
     pub fn opened(&self, request: u64, result: Result<Uuid, String>) {
         if let Ok(generation) = self.connected() {
             self.post(generation, Outgoing::Op(Op::Opened { request, result }));
+        }
+    }
+
+    /// What came of a call about the agents (HostEvent::AgentsCall).
+    pub fn agents_answer(&self, request: u64, result: Result<serde_json::Value, String>) {
+        if let Ok(generation) = self.connected() {
+            self.post(generation, Outgoing::Op(Op::AgentsAnswer { request, result }));
         }
     }
 
@@ -632,6 +646,21 @@ fn read_loop(client: Weak<MuxClient>, conn: Arc<Conn>, mut reader: TcpStream) {
                     handle(HostEvent::Close { session });
                 }
             }
+            Frame::Message(ServerMessage::AgentsCall { request, name, args }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::AgentsCall { request, name, args });
+                }
+            }
+            Frame::Message(ServerMessage::AgentsWatch { on }) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::AgentsWatch { on });
+                }
+            }
+            Frame::Message(ServerMessage::AgentsChanged) => {
+                if let Some(handle) = client.on_host.get() {
+                    handle(HostEvent::AgentsChanged);
+                }
+            }
             Frame::Message(ServerMessage::Gone { session }) => {
                 if let Some((_, shown)) = client.shown.remove(&session) {
                     (shown.sink)(ConsoleEvent::Exit(-1));
@@ -849,6 +878,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let config = RemoteConfig {
             enabled: true,
+            agents_edit: false,
             port: 0,
             allowed: vec![
                 Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
@@ -983,6 +1013,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let config = RemoteConfig {
             enabled: true,
+            agents_edit: false,
             port: 0,
             allowed: vec![
                 Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
@@ -1052,7 +1083,7 @@ mod tests {
         }
         let offered = vec![OpenChoice { id: "shell:pwsh".into(), name: "PowerShell".into(), kind: "shell".into() }];
         let generation = app.connected().unwrap();
-        app.post(generation, Outgoing::Op(Op::Opener { choices: offered.clone(), recent: Vec::new() }));
+        app.post(generation, Outgoing::Op(Op::Opener { choices: offered.clone(), recent: Vec::new(), agents: false }));
         let deadline = Instant::now() + Duration::from_secs(5);
         while choices(&me).is_empty() {
             assert!(Instant::now() < deadline, "the app's choices never showed");
@@ -1124,6 +1155,173 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The agents from the tailnet (see mux/agents.rs): anyone let in sees
+    /// them; running one takes full access and someone running the agents —
+    /// the app, asked through the daemon —; creating one takes the user's
+    /// say-so besides. It points the agents' folder and the config at
+    /// folders of its own, process-wide.
+    #[test]
+    fn the_agents_are_reached_from_the_tailnet() {
+        use crate::agents::spec::AgentSpec;
+        use crate::agents::store;
+        use crate::mux::remote::{self, Access, Allowed, RemoteConfig};
+        use crate::mux::tailscale::Identity;
+        use serde_json::{json, Value};
+
+        let dir = std::env::temp_dir().join(format!("termo-remote-agents-{}", Uuid::new_v4().simple()));
+        let (root, host_dir, config_path) = (dir.join("agents"), dir.join("host"), dir.join("config.json"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&config_path, r#"{ "ai_mode_enabled": true }"#).unwrap();
+        std::env::set_var("TERMO_AGENTS_ROOT", &root);
+        std::env::set_var("TERMO_AGENTS_HOST_DIR", &host_dir);
+        std::env::set_var("TERMO_CONFIG_PATH", &config_path);
+        store::save_in(&root, AgentSpec { id: "a1".into(), name: "Reviewer".into(), task: "Review".into(), ..AgentSpec::default() })
+            .unwrap();
+
+        let mut config = RemoteConfig {
+            enabled: true,
+            port: 0,
+            allowed: vec![
+                Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
+                Allowed { login: "friend@example.com".into(), node: None, access: Access::ReadOnly },
+            ],
+            agents_edit: false,
+        };
+        remote::write_config(&dir, &config).unwrap();
+        let pretending: Arc<Mutex<Option<Identity>>> = Arc::default();
+        let whois = {
+            let pretending = Arc::clone(&pretending);
+            Box::new(move |_| pretending.lock().unwrap().clone())
+        };
+        let token = "agents-test-token";
+        let (port, remote_port) = crate::mux::server::start_remote_for_test(token, &dir, whois).unwrap();
+        let remote_addr = SocketAddr::from(([127, 0, 0, 1], remote_port));
+        let pretend = |login: &str| {
+            *pretending.lock().unwrap() = Some(Identity { login: login.into(), node: "phone".into() });
+            let client = MuxClient::new(Endpoint::Remote(remote_addr));
+            client.connected().unwrap();
+            client
+        };
+        let ask = |client: &MuxClient, call: &str, args: Value| match client.call(Op::Agents { call: call.into(), args }) {
+            Ok(Reply::Agents { value }) => Ok(value),
+            Ok(other) => panic!("{other:?}"),
+            Err(error) => Err(error),
+        };
+        let wait_for = |what: &str, done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() {
+                assert!(Instant::now() < deadline, "{what}");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        };
+        let me = pretend("me@example.com");
+        let friend = pretend("friend@example.com");
+
+        // Nobody runs the agents: they're there to see, not to run.
+        let overview = ask(&me, "overview", json!({})).unwrap();
+        assert_eq!(overview["agents"][0]["id"], "a1");
+        assert_eq!(overview["runtime"], Value::Null);
+        assert_eq!(overview["canRun"], false);
+        assert_eq!(overview["editOff"], true);
+        assert_eq!(ask(&me, "start", json!({ "agentId": "a1" })), Err("no-runtime".into()));
+        assert_eq!(ask(&friend, "start", json!({ "agentId": "a1" })), Err("not-allowed".into()));
+        assert_eq!(ask(&me, "agent_start", json!({})), Err("unknown-call".into()));
+        assert_eq!(ask(&me, "agent", json!({ "id": "a1" })).unwrap()["form"]["task"], "Review");
+        assert_eq!(ask(&me, "agent", json!({ "id": "../x" })), Err("not-found".into()));
+
+        // The app: runs what it's asked where its agents run.
+        let app = client(port, token);
+        let asked = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
+        let told = Arc::new(Mutex::new(Vec::<String>::new()));
+        {
+            let app_for_handler = Arc::downgrade(&app);
+            let (asked, told) = (Arc::clone(&asked), Arc::clone(&told));
+            app.on_host(move |event| match event {
+                HostEvent::AgentsCall { request, name, args } => {
+                    asked.lock().unwrap().push((name.clone(), args));
+                    let answer = if name == "agent_start" { json!({ "id": "run1" }) } else { json!([]) };
+                    if let Some(app) = app_for_handler.upgrade() {
+                        app.agents_answer(request, Ok(answer));
+                    }
+                }
+                HostEvent::AgentsWatch { on } => told.lock().unwrap().push(format!("watch {on}")),
+                HostEvent::AgentsChanged => told.lock().unwrap().push("changed".into()),
+                _ => {}
+            });
+        }
+        let generation = app.connected().unwrap();
+        app.post(generation, Outgoing::Op(Op::Opener { choices: Vec::new(), recent: Vec::new(), agents: true }));
+        wait_for("the app never showed as running the agents", &|| {
+            ask(&me, "overview", json!({})).is_ok_and(|overview| overview["runtime"] == "app")
+        });
+        let started = ask(&me, "start", json!({ "agentId": "a1", "context": " now " })).unwrap();
+        assert_eq!(started["id"], "run1");
+        {
+            let asked = asked.lock().unwrap();
+            let (name, args) = asked.iter().find(|(name, _)| name == "agent_start").expect("asked to start");
+            assert_eq!(name, "agent_start");
+            assert_eq!(args["spec"]["id"], "a1");
+            assert_eq!(args["trigger"], "manual");
+            assert_eq!(args["context"], "now");
+        }
+        assert_eq!(ask(&friend, "stop", json!({ "agentId": "a1" })), Err("not-allowed".into()));
+
+        // Watching: the app is asked to pass on what the agents say.
+        ask(&friend, "watch", json!({})).unwrap();
+        wait_for("the app was never asked to pass the agents on", &|| told.lock().unwrap().contains(&"watch true".to_string()));
+
+        // Creating one: not until the user allows it, and never read-only.
+        let form = json!({ "form": { "name": "From the phone", "task": "Say hi", "workDir": dir.to_str().unwrap() } });
+        assert_eq!(ask(&me, "save", form.clone()), Err("edit-off".into()));
+        config.agents_edit = true;
+        remote::write_config(&dir, &config).unwrap();
+        client(port, token).reload_remote().unwrap();
+        wait_for("allowing it never took", &|| ask(&me, "overview", json!({})).is_ok_and(|overview| overview["canEdit"] == true));
+        assert_eq!(ask(&friend, "save", form.clone()), Err("not-allowed".into()));
+        let saved = ask(&me, "save", form).unwrap();
+        let id = saved["id"].as_str().unwrap().to_string();
+        let spec = store::get_in(&root, &id).expect("saved");
+        assert_eq!(spec.name, "From the phone");
+        assert_eq!(spec.work_dir, dir.to_str().unwrap());
+        wait_for("the app never heard of it", &|| told.lock().unwrap().contains(&"changed".to_string()));
+        let bad = json!({ "form": { "name": "x", "workDir": "\\\\evil\\share" } });
+        assert_eq!(ask(&me, "save", bad), Err("bad-folder".into()));
+
+        // One with a git hook is saved by the app: the hook names the
+        // program that saves it.
+        let mut hooked = store::get_in(&root, "a1").unwrap();
+        hooked.triggers.git = Some(crate::agents::spec::GitTrigger { repo_path: "C:\\repo".into(), event: Default::default() });
+        store::save_in(&root, hooked).unwrap();
+        ask(&me, "set_enabled", json!({ "id": "a1", "enabled": false })).unwrap();
+        {
+            let asked = asked.lock().unwrap();
+            let (_, args) = asked.iter().find(|(name, _)| name == "agent_save").expect("the app saves it");
+            assert_eq!(args["spec"]["id"], "a1");
+            assert_eq!(args["spec"]["enabled"], false);
+        }
+        assert!(store::get_in(&root, "a1").unwrap().enabled, "not saved by the daemon itself");
+
+        // A history only of an agent that's there: no folders made for others.
+        assert_eq!(ask(&friend, "runs", json!({ "agentId": "made-up" })), Err("not-found".into()));
+        assert!(!root.join("made-up").exists());
+
+        // Deleted: where its runs are.
+        ask(&me, "delete", json!({ "id": id })).unwrap();
+        assert!(asked.lock().unwrap().iter().any(|(name, args)| name == "agents_delete" && args["id"] == id.as_str()));
+
+        // Nobody runs the agents: deleted here, and one with a git hook
+        // can't be changed until Termo is open.
+        drop(app);
+        wait_for("the app outlived its connection", &|| {
+            ask(&me, "overview", json!({})).is_ok_and(|overview| overview["runtime"] == Value::Null)
+        });
+        assert_eq!(ask(&me, "set_enabled", json!({ "id": "a1", "enabled": false })), Err("needs-app".into()));
+        store::save_in(&root, AgentSpec { id: "a2".into(), name: "Plain".into(), ..AgentSpec::default() }).unwrap();
+        ask(&me, "delete", json!({ "id": "a2" })).unwrap();
+        assert!(store::get_in(&root, "a2").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_wrong_token_is_turned_away() {
         let port = crate::mux::server::start_for_test("right").unwrap();
@@ -1146,6 +1344,7 @@ mod tests {
                 HostEvent::PromptRedraw { .. } => "redraw".to_string(),
                 HostEvent::Open { .. } => "open".to_string(),
                 HostEvent::Close { .. } => "close".to_string(),
+                HostEvent::AgentsCall { .. } | HostEvent::AgentsWatch { .. } | HostEvent::AgentsChanged => "agents".to_string(),
             })
         });
         let generation = app.connected().unwrap();

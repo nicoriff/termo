@@ -134,6 +134,22 @@ pub async fn remote_set_allowed(app: tauri::AppHandle, allowed: Vec<Allowed>) ->
     .map_err(|err| err.to_string())?
 }
 
+/// Whether whoever has full access may also create, change and delete
+/// agents from there (see mux/agents.rs).
+#[tauri::command]
+pub async fn remote_set_agents_edit(app: tauri::AppHandle, enabled: bool) -> Result<RemoteConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = dir()?;
+        let mut config = remote::read_config(&dir);
+        config.agents_edit = enabled;
+        remote::write_config(&dir, &config).map_err(|err| err.to_string())?;
+        reload(&app);
+        Ok(config)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
 /// Answers someone turned away: let in from that computer with `access`,
 /// or (none) just forgotten.
 #[tauri::command]

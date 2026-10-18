@@ -153,6 +153,7 @@ pub async fn set_ui_language(app: tauri::AppHandle, language: String) -> Result<
 
     i18n::set(if language == "en" { Lang::En } else { Lang::Es });
     crate::agents::host::client::set_language(&language);
+    crate::mux::set_language(&language);
     if let Some(window) = app.get_webview_window(PREFERENCES) {
         window
             .set_title(&i18n::tr(Msg::PreferencesTitle))
