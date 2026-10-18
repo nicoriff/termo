@@ -536,6 +536,12 @@ export function onAgentRun(handler: (run: RunRecord) => void): Promise<UnlistenF
   return listen<RunRecord>("agent-run", (event) => handler(event.payload));
 }
 
+/** An agent was saved or deleted from the web client (see
+ * src-tauri/src/mux/agents.rs). */
+export function onAgentsChanged(handler: () => void): Promise<UnlistenFn> {
+  return listen("agents-changed", () => handler());
+}
+
 export function onAgentRunEvent(
   handler: (step: { agentId: string; runId: string; event: RunEvent }) => void,
 ): Promise<UnlistenFn> {

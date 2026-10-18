@@ -14,6 +14,7 @@
 //! Each protocol version has its own daemon and info file, so an app that
 //! updated keeps the consoles of the old one running (see protocol.rs).
 
+pub mod agents;
 pub mod client;
 pub mod protocol;
 pub mod remote;

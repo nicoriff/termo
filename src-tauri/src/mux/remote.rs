@@ -52,11 +52,15 @@ pub struct RemoteConfig {
     pub enabled: bool,
     pub port: u16,
     pub allowed: Vec<Allowed>,
+    /// Whoever has full access may also create, change and delete agents
+    /// from there (see mux/agents.rs), not only run them. Off unless the
+    /// user says so: an agent's task runs on this computer.
+    pub agents_edit: bool,
 }
 
 impl Default for RemoteConfig {
     fn default() -> Self {
-        Self { enabled: false, port: OWN_PORT, allowed: Vec::new() }
+        Self { enabled: false, port: OWN_PORT, allowed: Vec::new(), agents_edit: false }
     }
 }
 
@@ -261,6 +265,7 @@ mod tests {
     fn lets_in_whom_the_list_names_and_no_one_else() {
         let config = RemoteConfig {
             enabled: true,
+            agents_edit: false,
             port: DEFAULT_PORT,
             allowed: vec![
                 Allowed { login: "me@example.com".into(), node: None, access: Access::Full },
@@ -278,6 +283,7 @@ mod tests {
     fn the_broadest_grant_wins() {
         let config = RemoteConfig {
             enabled: true,
+            agents_edit: false,
             port: DEFAULT_PORT,
             allowed: vec![
                 Allowed { login: "me@x".into(), node: Some("phone".into()), access: Access::ReadOnly },

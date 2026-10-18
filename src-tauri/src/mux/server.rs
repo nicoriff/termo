@@ -14,8 +14,10 @@ use std::sync::mpsc::{sync_channel, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use serde_json::{json, Value};
 use uuid::Uuid;
 
+use super::agents::{self as remote_agents, HostLink, Need};
 use super::protocol::{
     read_frame, read_frame_within, write_frame, AgentInfo, ClientMessage, Frame, Op, OpenChoice, Reply, ServerMessage, SessionInfo,
     PROTOCOL,
@@ -200,13 +202,28 @@ pub struct Daemon {
     /// was asked, and where its answer goes.
     opening: Mutex<HashMap<u64, (u64, SyncSender<Result<Uuid, String>>)>>,
     next_open: AtomicU64,
+    /// The web clients watching the agents (see agents.rs), by client id.
+    agent_watchers: Mutex<HashMap<u64, Client>>,
+    /// The agents' calls asked of the app and not answered yet, as
+    /// `opening` is for consoles.
+    agents_asking: Mutex<HashMap<u64, (u64, SyncSender<Result<Value, String>>)>>,
+    next_agents: AtomicU64,
+    /// The agents' own process, reached while the app isn't connected.
+    host_link: OnceLock<Arc<HostLink>>,
 }
 
 struct Opener {
     client: Client,
     choices: Vec<OpenChoice>,
     recent: Vec<String>,
+    /// It answers for the agents too (see Op::Opener).
+    agents: bool,
 }
+
+/// How long a call about the agents waits on the app.
+const AGENTS_WAIT: Duration = Duration::from_secs(30);
+/// The agents' calls asked of the app at once, at most.
+const MAX_AGENTS_ASKING: usize = 16;
 
 /// How long a new console asked from the tailnet may take to show up: the
 /// app opening its tab, and lending it to the daemon (see pty/sharing.rs).
@@ -287,6 +304,8 @@ impl Role {
                 | Op::FolderRoots
                 | Op::ListFolders { .. }
                 | Op::CreateFolder { .. } => *access == Access::Full,
+                // What each call takes is the call's (see Daemon::agents).
+                Op::Agents { .. } => true,
                 // Starting consoles other than through the app (see
                 // Op::Open), and everything about the daemon itself, is
                 // this computer's alone.
@@ -470,7 +489,249 @@ impl Daemon {
             opener: Mutex::new(None),
             opening: Mutex::new(HashMap::new()),
             next_open: AtomicU64::new(1),
+            agent_watchers: Mutex::new(HashMap::new()),
+            agents_asking: Mutex::new(HashMap::new()),
+            next_agents: AtomicU64::new(1),
+            host_link: OnceLock::new(),
         })
+    }
+
+    /// Something about the user's agents, asked from the web client (see
+    /// agents.rs). Errors are words it translates, or the agents' own.
+    fn agents(self: &Arc<Self>, client: &Client, role: &Role, call: &str, args: Value) -> Result<Reply, String> {
+        use crate::agents::store;
+        use remote_agents::{AgentRef, Answer, EnabledArgs, EngineArgs, IdArgs, RunRef, SaveArgs, StartArgs};
+
+        let need = remote_agents::need(call).ok_or("unknown-call")?;
+        let edit_allowed = self.remote.config.locked().agents_edit;
+        let full = match role {
+            Role::Local => true,
+            Role::Remote { access, .. } => *access == Access::Full,
+        };
+        match need {
+            Need::Look => {}
+            Need::Run | Need::Edit if !full => return Err("not-allowed".into()),
+            Need::Edit if !edit_allowed && !matches!(role, Role::Local) => return Err("edit-off".into()),
+            _ => {}
+        }
+        let root = crate::agents::host::agents_root().ok_or("no-agents")?;
+        let spec_of = |id: &str| store::get_in(&root, id).ok_or_else(|| "not-found".to_string());
+        let value = match call {
+            "overview" => self.agents_overview(&root, full, edit_allowed),
+            "watch" => {
+                self.watch_agents(client);
+                Value::Null
+            }
+            "agent" => {
+                let IdArgs { id } = remote_agents::args(args)?;
+                let spec = spec_of(&id)?;
+                json!({ "form": remote_agents::form_of(&spec), "advanced": remote_agents::advanced(&spec) })
+            }
+            "runs" => {
+                let AgentRef { agent_id } = remote_agents::args(args)?;
+                let mut runs = store::list_runs_in(&root, &agent_id);
+                runs.truncate(remote_agents::MAX_RUNS);
+                json!(runs)
+            }
+            "run_log" => {
+                let RunRef { agent_id, run_id } = remote_agents::args(args)?;
+                let events = store::read_log_in(&root, &agent_id, &run_id);
+                let skip = events.len().saturating_sub(remote_agents::MAX_LOG_EVENTS);
+                json!({ "events": &events[skip..], "skipped": skip })
+            }
+            "models" => {
+                let EngineArgs { engine } = remote_agents::args(args)?;
+                json!(crate::agents::models::available(engine))
+            }
+            "start" => {
+                let StartArgs { agent_id, context } = remote_agents::args(args)?;
+                let spec = spec_of(&agent_id)?;
+                self.agents_runtime("agent_start", remote_agents::start_args(&spec, context))?
+            }
+            "stop" => {
+                let AgentRef { agent_id } = remote_agents::args(args)?;
+                self.agents_runtime("agent_stop", json!({ "agent_id": agent_id }))?
+            }
+            "answer" => {
+                let Answer { question_id, answer } = remote_agents::args(args)?;
+                self.agents_runtime("agent_answer_question", json!({ "question_id": question_id, "answer": answer }))?
+            }
+            "save" => {
+                let SaveArgs { form } = remote_agents::args(args)?;
+                let base = if form.id.is_empty() { None } else { Some(spec_of(&form.id)?) };
+                let spec = remote_agents::apply(form, base, usable_folder)?;
+                let id = spec.id.clone();
+                crate::commands::agent_commands::save_agent(&root, spec)?;
+                self.agents_changed();
+                json!({ "id": id })
+            }
+            "set_enabled" => {
+                let EnabledArgs { id, enabled } = remote_agents::args(args)?;
+                let mut spec = spec_of(&id)?;
+                spec.enabled = enabled;
+                crate::commands::agent_commands::save_agent(&root, spec)?;
+                self.agents_changed();
+                Value::Null
+            }
+            "delete" => {
+                let IdArgs { id } = remote_agents::args(args)?;
+                spec_of(&id)?;
+                // Where its runs are, so one going is stopped; with the
+                // agents not running anywhere, nothing of it runs.
+                match self.agents_runtime("agents_delete", json!({ "id": id })) {
+                    Err(error) if error == "no-runtime" => {
+                        let idle = crate::agents::runner::Runner::default();
+                        crate::commands::agent_commands::delete_agent(&root, &idle, &id)?;
+                    }
+                    result => {
+                        result?;
+                    }
+                }
+                self.agents_changed();
+                Value::Null
+            }
+            _ => return Err("unknown-call".into()),
+        };
+        Ok(Reply::Agents { value })
+    }
+
+    /// The agents for the web client's list, with what only whoever runs
+    /// them knows (what runs now, what waits on an answer) when someone does.
+    fn agents_overview(self: &Arc<Self>, root: &std::path::Path, full: bool, edit_allowed: bool) -> Value {
+        let config = crate::agents::host::config_path().map(|path| crate::config::store::load_from(&path)).unwrap_or_default();
+        let runtime = if !config.ai_mode_enabled { None } else { self.agents_runtime_kind() };
+        let (running, questions) = match runtime {
+            Some(_) => (
+                self.agents_runtime("agents_running", json!({})).unwrap_or_else(|_| json!([])),
+                self.agents_runtime("agent_questions", json!({})).unwrap_or_else(|_| json!([])),
+            ),
+            None => (json!([]), json!([])),
+        };
+        // The agent CLIs installed here, as the app's new-tab menu offers
+        // them; unknown while it isn't connected.
+        let engines: Option<Vec<String>> = self.opener.locked().as_ref().map(|opener| {
+            opener
+                .choices
+                .iter()
+                .filter(|choice| choice.kind == "agent")
+                .filter_map(|choice| choice.id.strip_prefix("agent:").map(str::to_string))
+                .collect()
+        });
+        json!({
+            "agents": remote_agents::summaries(root),
+            "running": running,
+            "questions": questions,
+            "runtime": runtime,
+            "aiMode": config.ai_mode_enabled,
+            "canRun": full && runtime.is_some(),
+            "canEdit": full && edit_allowed,
+            "editOff": full && !edit_allowed,
+            "engines": engines,
+        })
+    }
+
+    /// Who runs the agents now, as far as the tailnet can reach them: the
+    /// app ("app"), their own process ("host"), or nobody.
+    fn agents_runtime_kind(self: &Arc<Self>) -> Option<&'static str> {
+        if self.opener.locked().as_ref().is_some_and(|opener| opener.agents) {
+            return Some("app");
+        }
+        self.host_link().reach().then_some("host")
+    }
+
+    fn host_link(self: &Arc<Self>) -> &Arc<HostLink> {
+        self.host_link.get_or_init(|| {
+            let daemon = Arc::downgrade(self);
+            HostLink::new(move |name, payload| {
+                // While the app is connected, it's the one that passes on
+                // what the agents say (Op::AgentsEvent): not twice.
+                if let Some(daemon) = daemon.upgrade() {
+                    if !daemon.opener.locked().as_ref().is_some_and(|opener| opener.agents) {
+                        daemon.pass_on_agent_event(name, payload);
+                    }
+                }
+            })
+        })
+    }
+
+    /// One of ops::call's, run by whoever runs the agents: the app while
+    /// it's connected, else their own process.
+    fn agents_runtime(self: &Arc<Self>, name: &str, args: Value) -> Result<Value, String> {
+        if !remote_agents::RUNTIME_CALLS.contains(&name) {
+            return Err("unknown-call".into());
+        }
+        let app = self.opener.locked().as_ref().filter(|opener| opener.agents).map(|opener| opener.client.clone());
+        let Some(app) = app else {
+            return self.host_link().call(name, args);
+        };
+        let request = self.next_agents.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = sync_channel(1);
+        {
+            let mut asking = self.agents_asking.locked();
+            if asking.len() >= MAX_AGENTS_ASKING {
+                return Err("busy".into());
+            }
+            asking.insert(request, (app.id, tx));
+        }
+        let asked = app.offer(Frame::Message(ServerMessage::AgentsCall { request, name: name.to_string(), args }));
+        let answer = if asked { rx.recv_timeout(AGENTS_WAIT) } else { Err(RecvTimeoutError::Disconnected) };
+        self.agents_asking.locked().remove(&request);
+        match answer {
+            Ok(result) => result,
+            Err(RecvTimeoutError::Timeout) => Err("timeout".into()),
+            Err(RecvTimeoutError::Disconnected) => Err("no-runtime".into()),
+        }
+    }
+
+    /// From now on `client` hears what the agents say. The app is asked to
+    /// pass it on once someone watches; their own process, reached now,
+    /// tells it anyway.
+    fn watch_agents(self: &Arc<Self>, client: &Client) {
+        let first = {
+            let mut watchers = self.agent_watchers.locked();
+            let first = watchers.is_empty();
+            watchers.insert(client.id, client.clone());
+            first
+        };
+        if first {
+            self.tell_app_watching(true);
+        }
+        if !self.opener.locked().as_ref().is_some_and(|opener| opener.agents) {
+            let _ = self.host_link().reach();
+        }
+    }
+
+    fn unwatch_agents(&self, client: u64) {
+        let last = {
+            let mut watchers = self.agent_watchers.locked();
+            watchers.remove(&client).is_some() && watchers.is_empty()
+        };
+        if last {
+            self.tell_app_watching(false);
+        }
+    }
+
+    fn tell_app_watching(&self, on: bool) {
+        let app = self.opener.locked().as_ref().filter(|opener| opener.agents).map(|opener| opener.client.clone());
+        if let Some(app) = app {
+            app.offer(Frame::Message(ServerMessage::AgentsWatch { on }));
+        }
+    }
+
+    fn pass_on_agent_event(&self, name: String, payload: Value) {
+        if !remote_agents::worth_passing_on(&name) {
+            return;
+        }
+        let message = ServerMessage::AgentEvent { name, payload };
+        self.agent_watchers.locked().retain(|_, watcher| watcher.offer(Frame::Message(message.clone())));
+    }
+
+    /// The app's agents lists are read again: one changed from here.
+    fn agents_changed(&self) {
+        let app = self.opener.locked().as_ref().filter(|opener| opener.agents).map(|opener| opener.client.clone());
+        if let Some(app) = app {
+            app.offer(Frame::Message(ServerMessage::AgentsChanged));
+        }
     }
 
     /// A new console from the tailnet: asked of the app (see Op::Opener),
@@ -836,6 +1097,15 @@ impl Daemon {
                         let _ = tx.send(Frame::Message(ServerMessage::Reply { id, result }));
                     });
                 }
+                // Some wait on the app or the agents' process: the same.
+                Frame::Message(ClientMessage::Request { id, op: Op::Agents { call, args } }) => {
+                    let (daemon, client, role) = (Arc::clone(&self), client.clone(), role.clone());
+                    std::thread::spawn(move || {
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| daemon.agents(&client, &role, &call, args)))
+                            .unwrap_or_else(|_| Err("the sessions daemon failed at this".to_string()));
+                        let _ = client.tx.send(Frame::Message(ServerMessage::Reply { id, result }));
+                    });
+                }
                 Frame::Message(ClientMessage::Request { id, op }) => {
                     let shutdown = op == Op::Shutdown;
                     let result = if role.may(&op) {
@@ -881,6 +1151,8 @@ impl Daemon {
             }
         }
         self.opening.locked().retain(|_, (asked, _)| *asked != client.id);
+        self.agents_asking.locked().retain(|_, (asked, _)| *asked != client.id);
+        self.unwatch_agents(client.id);
         self.remote.viewers.locked().remove(&client.id);
         self.connections.fetch_sub(1, Ordering::SeqCst);
         self.touch();
@@ -1045,12 +1317,33 @@ impl Daemon {
             }
             // Asked on a thread of its own (see handle_connection).
             Op::Open { choice, cwd } => self.open(&choice, cwd),
-            Op::Opener { mut choices, mut recent } => {
+            Op::Opener { mut choices, mut recent, agents } => {
                 choices.truncate(MAX_CHOICES);
                 recent.truncate(MAX_CHOICES);
-                *self.opener.locked() = Some(Opener { client: client.clone(), choices, recent });
+                *self.opener.locked() = Some(Opener { client: client.clone(), choices, recent, agents });
+                // Someone was watching the agents already.
+                if agents && !self.agent_watchers.locked().is_empty() {
+                    client.offer(Frame::Message(ServerMessage::AgentsWatch { on: true }));
+                }
                 Ok(Reply::Done)
             }
+            Op::AgentsAnswer { request, result } => {
+                if let Some((asked, answer)) = self.agents_asking.locked().get(&request) {
+                    if *asked == client.id {
+                        let _ = answer.try_send(result);
+                    }
+                }
+                Ok(Reply::Done)
+            }
+            Op::AgentsEvent { name, payload } => {
+                let from_app = self.opener.locked().as_ref().is_some_and(|opener| opener.client.id == client.id);
+                if from_app {
+                    self.pass_on_agent_event(name, payload);
+                }
+                Ok(Reply::Done)
+            }
+            // Asked on a thread of its own (see handle_connection).
+            Op::Agents { call, args } => self.agents(client, role, &call, args),
             Op::Opened { request, result } => {
                 if let Some((asked, answer)) = self.opening.locked().get(&request) {
                     if *asked == client.id {

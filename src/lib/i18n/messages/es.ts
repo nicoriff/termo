@@ -2553,6 +2553,12 @@ export const es = {
       readOnly: "Solo lectura",
       remove: "Quitar",
       noOneAllowed: "Nadie todavía.",
+      agents: "Agentes",
+      agentsHint:
+        "La página web también muestra tus agentes: quien tenga acceso total puede ejecutarlos, detenerlos y responder lo que pregunten.",
+      agentsEdit: "Permitir crear y editar agentes desde ahí",
+      agentsEditHint:
+        "Quien tenga acceso total también puede crear, cambiar y borrar agentes, que después corren en esta computadora.",
       pending: "Esperando respuesta",
       pendingHint: "Intentaron conectarse y no están en la lista.",
       allow: "Permitir",

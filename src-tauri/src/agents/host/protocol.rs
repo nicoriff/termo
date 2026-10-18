@@ -14,8 +14,16 @@ pub const PROTOCOL: u32 = 1;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToHost {
     /// The first message on a connection: `token` is the one in the info
-    /// file, which only this user can read.
-    Hello { protocol: u32, token: String, build: String },
+    /// file, which only this user can read. An `observer` (the sessions
+    /// daemon, for the web client: see mux/agents.rs) isn't an app: with
+    /// only observers there, this process still notifies the user itself.
+    Hello {
+        protocol: u32,
+        token: String,
+        build: String,
+        #[serde(default)]
+        observer: bool,
+    },
     /// The language the app's windows speak ("es" or "en"), for what this
     /// process says itself (a notification, an error).
     Language { language: String },

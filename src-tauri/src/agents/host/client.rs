@@ -208,7 +208,7 @@ fn connect(dir: &Path) -> Result<(), String> {
     let mut reader = stream.try_clone().map_err(|err| err.to_string())?;
     let mut writer = stream;
     let ours = build();
-    write_frame(&mut writer, &Frame::Message(ToHost::Hello { protocol: PROTOCOL, token: info.token.clone(), build: ours.clone() }))
+    write_frame(&mut writer, &Frame::Message(ToHost::Hello { protocol: PROTOCOL, token: info.token.clone(), build: ours.clone(), observer: false }))
         .map_err(|err| err.to_string())?;
     let _ = reader.set_read_timeout(Some(Duration::from_secs(5)));
     let Ok(Some(Frame::Message(FromHost::Welcome { protocol, build, .. }))) = read_frame::<FromHost>(&mut reader) else {
@@ -322,6 +322,16 @@ pub async fn dispatch<T: DeserializeOwned + Send + 'static>(app: tauri::AppHandl
     })
     .await
     .map_err(|err| err.to_string())?
+}
+
+/// The same, waiting on this thread, with the answer as JSON: for what the
+/// tailnet asks through the sessions daemon (see mux/agents.rs).
+pub fn call_where_they_run(app: &tauri::AppHandle, name: &str, args: Value) -> Result<Value, String> {
+    if active() {
+        call(name, args)
+    } else {
+        ops::call(&local(app)?, name, args)
+    }
 }
 
 fn local(app: &tauri::AppHandle) -> Result<Agents, String> {

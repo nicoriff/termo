@@ -59,6 +59,13 @@ struct Inner {
     on_open: OnceLock<Box<dyn Fn(u64, String, Option<String>) + Send + Sync>>,
     /// Where a console closed from the tailnet goes: its tab closes.
     on_close: OnceLock<Box<dyn Fn(Uuid) + Send + Sync>>,
+    /// Where what the tailnet asks of the agents goes (see mux/agents.rs):
+    /// the request, the call and its arguments.
+    on_agents_call: OnceLock<Box<dyn Fn(u64, String, serde_json::Value) + Send + Sync>>,
+    /// Where an agent saved or deleted from there is told.
+    on_agents_changed: OnceLock<Box<dyn Fn() + Send + Sync>>,
+    /// Someone on the tailnet watches the agents: what they say is passed on.
+    agents_watched: AtomicBool,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -193,6 +200,43 @@ impl Sharing {
         }
     }
 
+    pub fn on_agents_call(&self, handle: impl Fn(u64, String, serde_json::Value) + Send + Sync + 'static) {
+        let _ = self.inner.on_agents_call.set(Box::new(handle));
+    }
+
+    /// The tailnet asks something of the agents (see HostEvent::AgentsCall).
+    pub fn agents_call(&self, request: u64, name: String, args: serde_json::Value) {
+        if let Some(handle) = self.inner.on_agents_call.get() {
+            handle(request, name, args);
+        }
+    }
+
+    pub fn on_agents_changed(&self, handle: impl Fn() + Send + Sync + 'static) {
+        let _ = self.inner.on_agents_changed.set(Box::new(handle));
+    }
+
+    pub fn agents_changed(&self) {
+        if let Some(handle) = self.inner.on_agents_changed.get() {
+            handle();
+        }
+    }
+
+    pub fn set_agents_watched(&self, on: bool) {
+        self.inner.agents_watched.store(on, Ordering::SeqCst);
+    }
+
+    /// What an agent said, passed on while someone on the tailnet watches —
+    /// over the connection the daemon knows this app opens things on.
+    pub fn agent_event(&self, mux: Option<&MuxClient>, name: &str, payload: serde_json::Value) {
+        if !self.inner.agents_watched.load(Ordering::SeqCst) || !self.inner.enabled.load(Ordering::SeqCst) {
+            return;
+        }
+        let over = *lock(&self.inner.choices_over);
+        if let (Some(mux), Some(generation)) = (mux, over) {
+            mux.post(generation, Outgoing::Op(Op::AgentsEvent { name: name.to_string(), payload }));
+        }
+    }
+
     fn wake(&self) {
         let (flag, wake) = &self.inner.wake;
         *lock(flag) = true;
@@ -235,7 +279,7 @@ fn supervise(inner: &Inner, mux: &MuxClient) {
                 let mut over = lock(&inner.choices_over);
                 if *over != Some(generation) {
                     let (choices, recent) = lock(&inner.choices).clone();
-                    mux.post(generation, Outgoing::Op(Op::Opener { choices, recent }));
+                    mux.post(generation, Outgoing::Op(Op::Opener { choices, recent, agents: true }));
                     *over = Some(generation);
                 }
             }

@@ -97,6 +97,11 @@ pub enum Op {
         choices: Vec<OpenChoice>,
         #[serde(default)]
         recent: Vec<String>,
+        /// It also answers for the agents (see ServerMessage::AgentsCall):
+        /// an app older than that would drop the connection on a message
+        /// it doesn't know.
+        #[serde(default)]
+        agents: bool,
     },
     /// From the app: what came of an Open it was asked (see
     /// ServerMessage::Open): the console's id, or why not.
@@ -108,6 +113,19 @@ pub enum Op {
     ListFolders { path: String },
     /// A new folder `name` inside `parent`.
     CreateFolder { parent: String, name: String },
+    /// From the web client: something about the user's agents (see
+    /// mux/agents.rs), by name with its arguments.
+    Agents {
+        call: String,
+        #[serde(default)]
+        args: serde_json::Value,
+    },
+    /// From the app: what came of a call it was asked (see
+    /// ServerMessage::AgentsCall).
+    AgentsAnswer { request: u64, result: Result<serde_json::Value, String> },
+    /// From the app, while asked to (see ServerMessage::AgentsWatch): what
+    /// its agents said, for the web client.
+    AgentsEvent { name: String, payload: serde_json::Value },
 }
 
 /// A shell or an agent the app offers to open from the tailnet.
@@ -200,6 +218,18 @@ pub enum ServerMessage {
     /// To the app (see Op::Opener): someone on the tailnet closed one of
     /// its consoles — its tab closes, as if closed here.
     Close { session: Uuid },
+    /// To the app (see Op::Opener): one of ops::call's, asked from the
+    /// tailnet. Answered with Op::AgentsAnswer and the same `request`.
+    AgentsCall { request: u64, name: String, args: serde_json::Value },
+    /// To the app: whether someone on the tailnet is watching the agents
+    /// now, for it to pass on what they say (Op::AgentsEvent) or stop.
+    AgentsWatch { on: bool },
+    /// To the app: an agent was saved or deleted from the tailnet; its
+    /// lists are read again.
+    AgentsChanged,
+    /// To the web client: what an agent said ("agent-run",
+    /// "agent-run-event", "agent-question"), as the app's windows hear it.
+    AgentEvent { name: String, payload: serde_json::Value },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -220,6 +250,7 @@ pub enum Reply {
     Folders { folders: Vec<FolderEntry> },
     Folder { folder: FolderEntry },
     Opened { session: Uuid },
+    Agents { value: serde_json::Value },
 }
 
 /// A console as the daemon knows it.

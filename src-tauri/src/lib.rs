@@ -139,6 +139,36 @@ pub fn run() {
                     let _ = tauri::Emitter::emit(&handle, "remote-close", session.to_string());
                 });
             }
+            // The agents, from the tailnet (see mux/agents.rs): what's asked
+            // of them is run where they run, as the windows' own calls are;
+            // what they say goes there while someone watches; and an agent
+            // saved or deleted from there shows in the sidebar.
+            {
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_agents_call(move |request, name, args| {
+                    let handle = handle.clone();
+                    std::thread::spawn(move || {
+                        let result = if mux::agents::RUNTIME_CALLS.contains(&name.as_str()) {
+                            agents::host::client::call_where_they_run(&handle, &name, args)
+                        } else {
+                            Err(format!("unknown call: {name}"))
+                        };
+                        handle.state::<AppState>().pty.agents_answer(request, result);
+                    });
+                });
+                let handle = app.handle().clone();
+                app.state::<AppState>().pty.on_agents_changed(move || {
+                    let _ = tauri::Emitter::emit(&handle, "agents-changed", ());
+                });
+                for event in ["agent-run", "agent-run-event", "agent-question"] {
+                    let handle = app.handle().clone();
+                    tauri::Listener::listen_any(app.handle(), event, move |heard| {
+                        if let Ok(payload) = serde_json::from_str(heard.payload()) {
+                            handle.state::<AppState>().pty.agent_event(event, payload);
+                        }
+                    });
+                }
+            }
             // With remote access on, the consoles the app runs itself are
             // shown from the tailnet too (see pty/sharing.rs).
             if let Some(dir) = mux::dir() {
@@ -215,6 +245,7 @@ pub fn run() {
             commands::remote_commands::remote_activity,
             commands::remote_commands::remote_set_enabled,
             commands::remote_commands::remote_set_allowed,
+            commands::remote_commands::remote_set_agents_edit,
             commands::remote_commands::remote_answer_pending,
             commands::remote_commands::remote_disconnect_all,
             commands::remote_commands::remote_machines,

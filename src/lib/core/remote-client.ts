@@ -25,6 +25,8 @@ export interface RemoteConfig {
   enabled: boolean;
   port: number;
   allowed: RemoteAllowed[];
+  /** Full access may also create, change and delete agents from there. */
+  agentsEdit: boolean;
 }
 
 /** Someone turned away, waiting for an answer. */
@@ -87,6 +89,10 @@ export function setRemoteEnabled(enabled: boolean): Promise<RemoteConfig> {
 
 export function setRemoteAllowed(allowed: RemoteAllowed[]): Promise<RemoteConfig> {
   return invoke("remote_set_allowed", { allowed });
+}
+
+export function setRemoteAgentsEdit(enabled: boolean): Promise<RemoteConfig> {
+  return invoke("remote_set_agents_edit", { enabled });
 }
 
 /** Lets someone pending in with `access`, or (null) forgets them. */
