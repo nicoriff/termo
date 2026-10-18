@@ -24,4 +24,7 @@ pub struct AppState {
     /// The Harness panel's questions to an agent under way, by repository
     /// (see harness/assist.rs).
     pub harness_asks: Arc<Asks>,
+    /// What a notification Termo was started from was about (see
+    /// agents/host/notify.rs), until the main window takes it.
+    pub opened_by: std::sync::Mutex<Option<serde_json::Value>>,
 }

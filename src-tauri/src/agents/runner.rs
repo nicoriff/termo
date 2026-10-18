@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::Emitter;
 
 use crate::i18n::{tr, Msg};
 use crate::marketplace::agent_cli;
@@ -23,6 +22,7 @@ use crate::marketplace::model::AgentTarget;
 
 use super::diagnose::{diagnose, Facts};
 use super::events::{EventKind, Outcome, Parser, RunEvent, SessionInfo};
+use super::hub::Hub;
 use super::secrets;
 use super::spec::{build_invocation, copilot_foreign_server_args, with_team_server, AgentSpec, Engine, GIT_SAFETY_ENV, TEAM_TOKEN_VAR};
 use super::store::{self, now_millis, RunLink, RunRecord, RunStatus, RunTrigger};
@@ -76,10 +76,9 @@ pub(super) fn target(engine: Engine) -> AgentTarget {
 /// logic for Claude, a CLI's settings, which for Copilot hold the agent's
 /// secrets): a run that ended normally already took its own, so whatever is
 /// left at startup is from one Termo didn't see end — it was closed or
-/// crashed mid-run.
-pub fn remove_leftovers(app: &tauri::AppHandle) {
-    let Ok(root) = store::root(app) else { return };
-    let Ok(agents) = std::fs::read_dir(&root) else { return };
+/// crashed mid-run. Only for whoever runs the agents, as it starts.
+pub fn remove_leftovers(root: &std::path::Path) {
+    let Ok(agents) = std::fs::read_dir(root) else { return };
     for agent in agents.flatten() {
         let Ok(files) = std::fs::read_dir(agent.path().join("runs")) else { continue };
         for file in files.flatten() {
@@ -182,12 +181,12 @@ impl Runner {
     /// background.
     pub fn start(
         self: &Arc<Self>,
-        app: &tauri::AppHandle,
+        hub: &Hub,
         spec: &AgentSpec,
         trigger: RunTrigger,
         context: Option<&str>,
     ) -> Result<RunRecord, String> {
-        self.start_linked(app, spec, trigger, context, None, false)
+        self.start_linked(hub, spec, trigger, context, None, false)
     }
 
     /// The same, for a run another agent's run set off (see team.rs), or a
@@ -195,7 +194,7 @@ impl Runner {
     /// when the run that set it off was one.
     pub fn start_linked(
         self: &Arc<Self>,
-        app: &tauri::AppHandle,
+        hub: &Hub,
         spec: &AgentSpec,
         trigger: RunTrigger,
         context: Option<&str>,
@@ -209,7 +208,7 @@ impl Runner {
         if spec.task.trim().is_empty() {
             return Err(tr(Msg::AgentTaskMissing));
         }
-        let root = store::root(app).map_err(|err| tr(Msg::AgentRunFailed(&err.to_string())))?;
+        let root = hub.root().to_path_buf();
         if trigger != RunTrigger::Test {
             projects::check_daily_limit(&root, spec)?;
         }
@@ -385,9 +384,9 @@ impl Runner {
         );
         drop(active);
 
-        let _ = app.emit("agent-run", &record);
+        hub.emit("agent-run", &record);
         let log = Logger {
-            app: app.clone(),
+            hub: hub.clone(),
             root: root.clone(),
             agent_id: spec.id.clone(),
             run_id: record.id.clone(),
@@ -436,7 +435,7 @@ impl Runner {
                         }
                         if let Some(activity) = activity {
                             record.activity = activity;
-                            let _ = log.app.emit("agent-run", &*record);
+                            log.hub.emit("agent-run", &*record);
                         }
                         drop(record);
                         log.step(event);
@@ -593,7 +592,7 @@ impl Runner {
                 ..RunEvent::default()
             });
             runner.active.lock().unwrap().remove(&agent_id);
-            let _ = log.app.emit("agent-run", &finished);
+            log.hub.emit("agent-run", &finished);
             // The agents that come after this one.
             team::on_finished(&log.root, &finished, &agent_name);
         });
@@ -604,15 +603,15 @@ impl Runner {
 
 /// A step of a run that didn't come from its CLI's output (a question to
 /// the user: see run_questions.rs), into its log and to the UI like the rest.
-pub fn log_step(app: &tauri::AppHandle, root: &std::path::Path, agent_id: &str, run_id: &str, event: RunEvent) {
-    let log = Logger { app: app.clone(), root: root.to_path_buf(), agent_id: agent_id.to_string(), run_id: run_id.to_string() };
+pub fn log_step(hub: &Hub, root: &std::path::Path, agent_id: &str, run_id: &str, event: RunEvent) {
+    let log = Logger { hub: hub.clone(), root: root.to_path_buf(), agent_id: agent_id.to_string(), run_id: run_id.to_string() };
     log.step(event);
 }
 
 /// Writes a run's steps to its log file and forwards them to the UI.
 #[derive(Clone)]
 struct Logger {
-    app: tauri::AppHandle,
+    hub: Hub,
     root: PathBuf,
     agent_id: String,
     run_id: String,
@@ -621,9 +620,9 @@ struct Logger {
 impl Logger {
     fn step(&self, event: RunEvent) {
         let _ = store::append_log_in(&self.root, &self.agent_id, &self.run_id, &event);
-        let _ = self.app.emit(
+        self.hub.emit(
             "agent-run-event",
-            StepPayload {
+            &StepPayload {
                 agent_id: &self.agent_id,
                 run_id: &self.run_id,
                 event: &event,

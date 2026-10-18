@@ -465,12 +465,68 @@ function label(session) {
   return folder || programName(session);
 }
 
-const KINDS = { powershell: "ps", pwsh: "ps", cmd: "cmd", bash: "sh", zsh: "sh", fish: "sh", sh: "sh", wsl: "wsl" };
+const AGENTS = ["claude", "codex", "gemini", "copilot", "grok"];
 
-/** Up to three letters for what it runs: "ps", "cmd", "cla"(ude)… */
+/** What kind of console it is, as the desktop's tabs tell it
+ * (src/lib/terminal/tab-title.ts): the agent running in it, else its
+ * shell. */
 function kind(session) {
+  const tool = session.agent?.tool?.split(" ")[0].toLowerCase();
+  if (AGENTS.includes(tool)) return tool;
   const name = programName(session).toLowerCase();
-  return KINDS[name] ?? name.slice(0, 3);
+  if (AGENTS.includes(name)) return name;
+  if (name === "bash" && /[\\/]git[\\/]/i.test(session.path)) return "git-bash";
+  return name === "wsl" ? "wsl-" : name;
+}
+
+// The desktop's console icons (src/lib/agent-launch/ConsoleIcon.svelte),
+// drawn the same.
+const PROMPT = (color) =>
+  `<path d="M4.2 5.2l3 2.8-3 2.8" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>` +
+  `<line x1="8.4" y1="10.8" x2="11.8" y2="10.8" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>`;
+const CONSOLE_ICONS = {
+  claude:
+    '<g stroke="#d97757" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="1.5" x2="8" y2="14.5"/>' +
+    '<line x1="1.5" y1="8" x2="14.5" y2="8"/><line x1="3.4" y1="3.4" x2="12.6" y2="12.6"/>' +
+    '<line x1="12.6" y1="3.4" x2="3.4" y2="12.6"/></g>',
+  codex:
+    '<path d="M8 1.2l5.9 3.4v6.8L8 14.8l-5.9-3.4V4.6z" fill="none" stroke="#10a37f" stroke-width="1.4"/>' +
+    '<path d="M5.6 6.2l2 1.8-2 1.8M8.8 10h1.8" fill="none" stroke="#10a37f" stroke-width="1.3" stroke-linecap="round"/>',
+  gemini: '<path d="M8 1c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7z" fill="#4796e3"/>',
+  copilot:
+    '<g fill="none" stroke="#8957e5" stroke-width="1.4"><rect x="1.5" y="4.5" width="5.6" height="5" rx="2.2"/>' +
+    '<rect x="8.9" y="4.5" width="5.6" height="5" rx="2.2"/>' +
+    '<path d="M7.1 7h1.8M3 12.5c1.4 1 3.2 1.5 5 1.5s3.6-.5 5-1.5" stroke-linecap="round"/></g>',
+  grok:
+    '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="4.6"/>' +
+    '<line x1="2.4" y1="13.6" x2="13.6" y2="2.4"/></g>',
+  powershell: `<rect x="1" y="2" width="14" height="12" rx="2" fill="#2671be"/>${PROMPT("#fff")}`,
+  cmd:
+    '<rect x="1" y="2" width="14" height="12" rx="2" fill="#2b2b2b" stroke="#8a8a8a" stroke-width="1"/>' +
+    '<path d="M4 5.5l2.4 2.5L4 10.5" fill="none" stroke="#e0e0e0" stroke-width="1.3" stroke-linecap="round"/>' +
+    '<line x1="7.8" y1="10.5" x2="11.5" y2="10.5" stroke="#e0e0e0" stroke-width="1.3" stroke-linecap="round"/>',
+  git:
+    '<rect x="3" y="3" width="10" height="10" rx="1.6" transform="rotate(45 8 8)" fill="#f05032"/>' +
+    '<g stroke="#fff" stroke-width="1.1" stroke-linecap="round" fill="#fff"><line x1="6.6" y1="5.4" x2="6.6" y2="10.6"/>' +
+    '<line x1="6.6" y1="6.6" x2="9.4" y2="8.6"/><circle cx="6.6" cy="10.6" r="0.9"/><circle cx="9.4" cy="8.6" r="0.9"/></g>',
+  wsl: `<rect x="1" y="2" width="14" height="12" rx="2" fill="#e95420"/>${PROMPT("#fff")}`,
+  posix: `<rect x="1" y="2" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.1"/>${PROMPT("currentColor")}`,
+};
+
+function family(kind) {
+  if (AGENTS.includes(kind)) return kind;
+  if (kind === "pwsh" || kind === "powershell") return "powershell";
+  if (kind === "cmd") return "cmd";
+  if (kind === "git-bash") return "git";
+  return kind.startsWith("wsl-") ? "wsl" : "posix";
+}
+
+/** The icon for a kind of console, in `className`'s box. */
+function kindIcon(kind, className, size) {
+  const box = document.createElement("span");
+  box.className = className;
+  box.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 16 16" aria-hidden="true">${CONSOLE_ICONS[family(kind)]}</svg>`;
+  return box;
 }
 
 /** A long folder path, cut in the middle: its drive or root and the last
@@ -580,9 +636,7 @@ function render() {
       tab.className = "tab";
       tab.classList.toggle("active", session.id === shown);
       tab.classList.toggle("ended", ended(session));
-      const badge = document.createElement("span");
-      badge.className = "tab-kind";
-      badge.textContent = kind(session);
+      const badge = kindIcon(kind(session), "tab-kind", 12);
       const title = document.createElement("span");
       title.className = "tab-title";
       title.textContent = label(session);
@@ -601,9 +655,7 @@ function render() {
       const button = document.createElement("button");
       button.className = "session";
       button.classList.toggle("current", session.id === shown);
-      const icon = document.createElement("span");
-      icon.className = "session-kind";
-      icon.textContent = kind(session);
+      const icon = kindIcon(kind(session), "session-kind", 22);
       const text = document.createElement("span");
       text.className = "session-text";
       const name = document.createElement("span");
@@ -683,9 +735,9 @@ async function listChoices() {
   recentFolders = reply.recent ?? [];
 }
 
+/** A choice's id is "shell:<the shell's id>" or "agent:<the tool>". */
 function choiceKind(choice) {
-  const name = choice.id.slice(choice.id.indexOf(":") + 1).toLowerCase();
-  return KINDS[name] ?? name.slice(0, 3);
+  return choice.id.slice(choice.id.indexOf(":") + 1);
 }
 
 function renderOpener() {
@@ -710,9 +762,7 @@ function renderOpener() {
       const button = document.createElement("button");
       button.className = "open-choice";
       button.disabled = opening;
-      const badge = document.createElement("span");
-      badge.className = "session-kind";
-      badge.textContent = choiceKind(choice);
+      const badge = kindIcon(choiceKind(choice), "session-kind", 18);
       const name = document.createElement("span");
       name.className = "open-choice-name";
       name.textContent = choice.name;

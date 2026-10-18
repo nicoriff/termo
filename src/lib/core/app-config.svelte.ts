@@ -178,6 +178,10 @@ class AppConfigStore {
   companionMuted = $state<string[]>([]);
   /** The user's agents also in consoles opened outside Termo. */
   agentsFromAnyConsole = $state(false);
+  /** The agents keep running with Termo closed (see agents/host/). Changed
+   * by the backend (setBackgroundAgents), which moves them. */
+  backgroundAgents = $state(false);
+  backgroundAgentsAtLogin = $state(false);
   /** Where the marketplace searches MCP servers first. */
   marketplaceSource = $state<"official" | "smithery">("official");
   /** The keep-awake button in the title bar. */
@@ -329,6 +333,8 @@ class AppConfigStore {
     this.quickAskWithExchange = config.quick_ask_with_exchange ?? false;
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
+    this.backgroundAgents = config.background_agents ?? false;
+    this.backgroundAgentsAtLogin = config.background_agents_at_login ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
     this.keepAwakeButton = config.keep_awake_button ?? true;
     this.remoteButton = config.remote_button ?? true;
@@ -539,6 +545,18 @@ class AppConfigStore {
     void this.persist();
   }
 
+  /** Once the backend moved the agents (agents-client's setBackgroundAgents,
+   * which saves the setting itself): the rest of the windows hear it. */
+  backgroundAgentsMoved(enabled: boolean): void {
+    this.backgroundAgents = enabled;
+    void this.persist();
+  }
+
+  setBackgroundAgentsAtLogin(enabled: boolean): void {
+    this.backgroundAgentsAtLogin = enabled;
+    void this.persist();
+  }
+
   setLinkBrowser(path: string | null): void {
     this.linkBrowser = path;
     void this.persist();
@@ -700,6 +718,8 @@ class AppConfigStore {
       quick_ask_with_exchange: this.quickAskWithExchange,
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
+      background_agents: this.backgroundAgents,
+      background_agents_at_login: this.backgroundAgentsAtLogin,
       marketplace_source: this.marketplaceSource,
       keep_awake_button: this.keepAwakeButton,
       remote_button: this.remoteButton,

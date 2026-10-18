@@ -1,6 +1,7 @@
 import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { busyConsoles } from "$lib/core/pty-client";
+import { agentsHostState, runningAgents } from "$lib/core/agents-client";
 import { uiState } from "$lib/core/ui-state.svelte";
 import { closeWindow, quitApp } from "$lib/core/window-client";
 import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
@@ -12,10 +13,18 @@ import { ptyIdsByTab } from "$lib/terminal/pty-registry";
  * same of what it leaves running: consoles in the sessions daemon ("Keep
  * consoles running", see src-tauri/src/mux/) keep going, their agents too.
  * With `thisWindow`, only this window's consoles (what closing it would end).
- * Agent sessions are this window's either way: each window tracks its own. */
-export async function runningWork(
-  thisWindow = false,
-): Promise<{ consoles: number; agents: number; keptConsoles: number; keptAgents: number }> {
+ * Agent sessions are this window's either way: each window tracks its own.
+ * The runs of the user's agents count for Termo as a whole: cut short when
+ * they run in the app, kept going when they run in their own process (see
+ * src-tauri/src/agents/host/). */
+export async function runningWork(thisWindow = false): Promise<{
+  consoles: number;
+  agents: number;
+  keptConsoles: number;
+  keptAgents: number;
+  runs: number;
+  keptRuns: number;
+}> {
   const busy = await busyConsoles(thisWindow).catch(() => ({ lost: 0, kept: 0, keptIds: [] }));
   const kept = new Set(busy.keptIds);
   const ptyIds = ptyIdsByTab();
@@ -29,7 +38,21 @@ export async function runningWork(
       else agents++;
     }
   }
-  return { consoles: busy.lost, agents, keptConsoles: busy.kept, keptAgents };
+  let runs = 0;
+  let keptRuns = 0;
+  if (!thisWindow && appConfigStore.aiModeEnabled) {
+    const host = await agentsHostState().catch(() => null);
+    if (host?.enabled) {
+      keptRuns = (host.status?.runningRuns ?? 0) + (host.status?.runningOrchestrations ?? 0);
+    } else {
+      runs = (await runningAgents().catch(() => [])).length;
+    }
+  }
+  return { consoles: busy.lost, agents, keptConsoles: busy.kept, keptAgents, runs, keptRuns };
+}
+
+function anything(work: Awaited<ReturnType<typeof runningWork>>): boolean {
+  return work.consoles + work.agents + work.keptConsoles + work.keptAgents + work.runs + work.keptRuns > 0;
 }
 
 /**
@@ -47,7 +70,7 @@ export async function requestQuit(): Promise<void> {
   // session-keeper), not as they were a moment ago.
   await sessionKeeper.save();
   const work = await runningWork();
-  if (work.consoles + work.agents + work.keptConsoles + work.keptAgents === 0) {
+  if (!anything(work)) {
     void quitApp();
     return;
   }
@@ -60,7 +83,7 @@ export async function requestQuit(): Promise<void> {
 export async function requestCloseWindow(): Promise<void> {
   await sessionKeeper.save();
   const work = await runningWork(true);
-  if (work.consoles + work.agents + work.keptConsoles + work.keptAgents === 0) {
+  if (!anything(work)) {
     void closeWindow();
     return;
   }

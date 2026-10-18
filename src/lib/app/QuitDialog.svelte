@@ -9,8 +9,8 @@
   const closingWindow = $derived(counts?.scope === "window");
   /** Work closing ends, and work it leaves running in the background ("Keep
    * consoles running"): only the first is a warning. */
-  const losing = $derived(!!counts && counts.consoles + counts.agents > 0);
-  const keeping = $derived(!!counts && counts.keptConsoles + counts.keptAgents > 0);
+  const losing = $derived(!!counts && counts.consoles + counts.agents + counts.runs > 0);
+  const keeping = $derived(!!counts && counts.keptConsoles + counts.keptAgents + counts.keptRuns > 0);
 
   let cancelEl: HTMLButtonElement | undefined = $state();
   let confirmEl: HTMLButtonElement | undefined = $state();
@@ -69,6 +69,9 @@
         {#if counts.agents > 0}
           <li>{t("quit.busyAgents", { count: String(counts.agents) })}</li>
         {/if}
+        {#if counts.runs > 0}
+          <li>{t("quit.busyRuns", { count: String(counts.runs) })}</li>
+        {/if}
       </ul>
       <p class="dialog-text">
         {#if keeping}
@@ -92,6 +95,9 @@
             {/if}
             {#if counts.keptAgents > 0}
               <li>{t("quit.busyAgents", { count: String(counts.keptAgents) })}</li>
+            {/if}
+            {#if counts.keptRuns > 0}
+              <li>{t("quit.busyRuns", { count: String(counts.keptRuns) })}</li>
             {/if}
           </ul>
           <p class="dialog-text">{t(closingWindow ? "quit.windowKeptInfo" : "quit.keptInfo")}</p>

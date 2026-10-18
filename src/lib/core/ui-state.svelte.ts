@@ -13,6 +13,10 @@ export interface QuitPrompt {
   agents: number;
   keptConsoles: number;
   keptAgents: number;
+  /** Runs of the user's agents (the Agents panel's): cut short when they
+   * run in the app, kept when they run in their own process. */
+  runs: number;
+  keptRuns: number;
   scope: "app" | "window";
 }
 

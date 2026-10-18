@@ -88,6 +88,22 @@ pub enum Msg<'a> {
     AgentStopped,
     /// minutes
     AgentTimedOut(u32),
+    /// agent's name: notifications from the agents' own process (see
+    /// agents/host/notify.rs), as the app's windows word them.
+    AgentNotifySuccess(&'a str),
+    AgentNotifyFailed(&'a str),
+    AgentNotifyQuestion(&'a str),
+    /// agent, orchestration
+    OrchestrationNotifyQuestion(&'a str, &'a str),
+    OrchestrationNotifyDone(&'a str),
+    OrchestrationNotifyAwaitingApproval(&'a str),
+    OrchestrationNotifyPaused(&'a str),
+    OrchestrationNotifyFailed(&'a str),
+    /// The agents run in their own process, and it isn't answering.
+    AgentsHostDown,
+    /// Switching where the agents run while some run.
+    AgentsHostBusy,
+    AgentsHostStartFailed(&'a str),
     /// exit code
     AgentExitedWith(&'a str),
     AgentSecretFailed(&'a str),
@@ -376,6 +392,30 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (AgentTimedOut(minutes), Es) => format!("Se cortó a los {minutes} min (el límite de tiempo)"),
         (AgentTimedOut(minutes), En) => format!("Cut off after {minutes} min (the time limit)"),
+
+        (AgentNotifySuccess(name), Es) => format!("{name} terminó"),
+        (AgentNotifySuccess(name), En) => format!("{name} finished"),
+        (AgentNotifyFailed(name), Es) => format!("{name} falló"),
+        (AgentNotifyFailed(name), En) => format!("{name} failed"),
+        (AgentNotifyQuestion(name), Es) => format!("{name} tiene una pregunta"),
+        (AgentNotifyQuestion(name), En) => format!("{name} has a question"),
+        (OrchestrationNotifyQuestion(agent, name), Es) => format!("{agent} tiene una pregunta · {name}"),
+        (OrchestrationNotifyQuestion(agent, name), En) => format!("{agent} has a question · {name}"),
+        (OrchestrationNotifyDone(name), Es) => format!("{name}: terminó"),
+        (OrchestrationNotifyDone(name), En) => format!("{name}: done"),
+        (OrchestrationNotifyAwaitingApproval(name), Es) => format!("{name}: necesita tu aprobación"),
+        (OrchestrationNotifyAwaitingApproval(name), En) => format!("{name}: needs your approval"),
+        (OrchestrationNotifyPaused(name), Es) => format!("{name}: en pausa por presupuesto"),
+        (OrchestrationNotifyPaused(name), En) => format!("{name}: paused over budget"),
+        (OrchestrationNotifyFailed(name), Es) => format!("{name}: falló"),
+        (OrchestrationNotifyFailed(name), En) => format!("{name}: failed"),
+
+        (AgentsHostDown, Es) => "Los agentes en segundo plano no responden. Probá de nuevo en un momento.".into(),
+        (AgentsHostDown, En) => "The background agents aren't answering. Try again in a moment.".into(),
+        (AgentsHostBusy, Es) => "Hay agentes trabajando: esperá a que terminen para cambiar dónde corren.".into(),
+        (AgentsHostBusy, En) => "Agents are at work: wait for them to finish to change where they run.".into(),
+        (AgentsHostStartFailed(error), Es) => format!("No se pudieron arrancar los agentes en segundo plano: {error}"),
+        (AgentsHostStartFailed(error), En) => format!("The background agents couldn't start: {error}"),
 
         (AgentExitedWith(code), Es) => format!("Terminó con el código {code}"),
         (AgentExitedWith(code), En) => format!("Exited with code {code}"),
@@ -680,6 +720,17 @@ mod tests {
             Msg::AgentSaveFailed("disk full"),
             Msg::AgentStopped,
             Msg::AgentTimedOut(15),
+            Msg::AgentNotifySuccess("A"),
+            Msg::AgentNotifyFailed("A"),
+            Msg::AgentNotifyQuestion("A"),
+            Msg::OrchestrationNotifyQuestion("A", "O"),
+            Msg::OrchestrationNotifyDone("O"),
+            Msg::OrchestrationNotifyAwaitingApproval("O"),
+            Msg::OrchestrationNotifyPaused("O"),
+            Msg::OrchestrationNotifyFailed("O"),
+            Msg::AgentsHostDown,
+            Msg::AgentsHostBusy,
+            Msg::AgentsHostStartFailed("x"),
             Msg::AgentExitedWith("1"),
             Msg::AgentSecretFailed("locked"),
             Msg::AgentDraftFailed("timeout"),

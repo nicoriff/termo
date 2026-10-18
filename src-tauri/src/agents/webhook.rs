@@ -16,6 +16,7 @@ use std::time::Duration;
 use serde_json::json;
 use tiny_http::{Header, Method, Response, Server};
 
+use super::hub::Hub;
 use super::mcp_server;
 use super::runner::Runner;
 use super::spec::is_valid_id;
@@ -36,9 +37,22 @@ const MAX_IN_FLIGHT: usize = 8;
 static MCP_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 const MAX_MCP_IN_FLIGHT: usize = 16;
 
-/// Whether the webhook could take its port (another program may hold it).
+/// The same, said by the agents' own process when they run there (see
+/// host/client.rs): consoles the app opens get the server only if it's up.
+static ELSEWHERE: AtomicBool = AtomicBool::new(false);
+
+/// Whether the webhook could take its port (another program may hold it),
+/// here or in the agents' process.
 pub fn listening() -> bool {
-    LISTENING.load(Ordering::Relaxed)
+    if super::host::runs_here() {
+        LISTENING.load(Ordering::Relaxed)
+    } else {
+        ELSEWHERE.load(Ordering::Relaxed)
+    }
+}
+
+pub fn set_listening_elsewhere(listening: bool) {
+    ELSEWHERE.store(listening, Ordering::Relaxed);
 }
 
 /// Where agent runs reach Termo's MCP server.
@@ -83,9 +97,9 @@ fn reply(request: tiny_http::Request, status: u16, body: serde_json::Value) {
 static SERVER: Mutex<Option<Arc<Server>>> = Mutex::new(None);
 
 /// Listens until `stop` (Modo IA turned off; see ai_mode.rs).
-pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
+pub fn start(hub: Hub, runner: Arc<Runner>) {
     std::thread::spawn(move || {
-        let Ok(root) = store::root(&app) else { return };
+        let root = hub.root().to_path_buf();
         // Turned back on right after being turned off, the old socket may
         // take a moment to be let go.
         let Some(server) = (0..10).find_map(|attempt| {
@@ -115,12 +129,12 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
                 reply(request, 503, json!({ "error": "busy" }));
                 continue;
             }
-            let (app, runner, root) = (app.clone(), runner.clone(), root.clone());
+            let (hub, runner, root) = (hub.clone(), runner.clone(), root.clone());
             std::thread::spawn(move || {
                 if mcp {
-                    mcp_server::handle(request, &app, &runner, &root);
+                    mcp_server::handle(request, &hub, &runner, &root);
                 } else {
-                    handle(request, &app, &runner, &root);
+                    handle(request, &hub, &runner, &root);
                 }
                 counter.fetch_sub(1, Ordering::SeqCst);
             });
@@ -137,7 +151,7 @@ pub fn stop() {
     }
 }
 
-fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &Arc<Runner>, root: &std::path::Path) {
+fn handle(mut request: tiny_http::Request, hub: &Hub, runner: &Arc<Runner>, root: &std::path::Path) {
     if request.method() == &Method::Get && request.url() == "/health" {
         return reply(request, 200, json!({ "ok": true }));
     }
@@ -163,7 +177,7 @@ fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &Arc<
     }
     let mut body = String::new();
     let _ = request.as_reader().take(MAX_BODY).read_to_string(&mut body);
-    match runner.start(app, &spec, RunTrigger::Webhook, Some(&body)) {
+    match runner.start(hub, &spec, RunTrigger::Webhook, Some(&body)) {
         Ok(run) => reply(request, 202, json!({ "runId": run.id })),
         Err(error) => reply(request, 409, json!({ "error": error })),
     }

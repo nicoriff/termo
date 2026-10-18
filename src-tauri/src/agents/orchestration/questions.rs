@@ -11,8 +11,8 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use tauri::Emitter;
 
+use super::super::hub::Hub;
 use super::super::project_ai::clip;
 use super::super::store::now_millis;
 use super::super::team::{self, Session};
@@ -45,13 +45,13 @@ fn task_of(root: &Path, session: &Session) -> Option<(Orchestration, String)> {
     })
 }
 
-fn emit(app: &tauri::AppHandle, orchestration: &Orchestration) {
-    let _ = app.emit("orchestration", orchestration);
+fn emit(hub: &Hub, orchestration: &Orchestration) {
+    hub.emit("orchestration", orchestration);
 }
 
 /// Closes a question that will get no answer now (the run ended, time ran
 /// out), so the plan stops showing it as waiting.
-fn close(app: &tauri::AppHandle, root: &Path, id: &str, question_id: &str) {
+fn close(hub: &Hub, root: &Path, id: &str, question_id: &str) {
     let updated = store::update_in(root, id, |orchestration| {
         if let Some(question) = orchestration.questions.iter_mut().find(|question| question.id == question_id) {
             if question.state == QuestionState::Pending {
@@ -60,7 +60,7 @@ fn close(app: &tauri::AppHandle, root: &Path, id: &str, question_id: &str) {
         }
     });
     if let Some(orchestration) = updated {
-        emit(app, &orchestration);
+        emit(hub, &orchestration);
     }
 }
 
@@ -87,7 +87,7 @@ pub fn tidy(question: &str, options: &[String]) -> (String, Vec<String>) {
 /// user's answer. A run that isn't an orchestration's task asks on the run
 /// itself (see run_questions.rs).
 pub fn ask(
-    app: &tauri::AppHandle,
+    hub: &Hub,
     root: &Path,
     token: &str,
     session: &Session,
@@ -102,7 +102,7 @@ pub fn ask(
         return Ok("Rehearsal: nobody is asked. Say in your answer what you would have asked.".into());
     }
     let Some((orchestration, task_key)) = task_of(root, session) else {
-        return super::super::run_questions::ask(app, root, token, session, question, options);
+        return super::super::run_questions::ask(hub, root, token, session, question, options);
     };
     let (question, options) = tidy(question, options);
     let asked = UserQuestion {
@@ -118,13 +118,13 @@ pub fn ask(
     let id = orchestration.id.clone();
     let saved = store::update_in(root, &id, |orchestration| orchestration.questions.push(asked))
         .ok_or("The orchestration is gone.")?;
-    emit(app, &saved);
+    emit(hub, &saved);
 
     let deadline = Instant::now() + WAIT;
     loop {
         std::thread::sleep(POLL);
         if team::session(token).is_none() {
-            close(app, root, &id, &question_id);
+            close(hub, root, &id, &question_id);
             return Err("Your run ended.".into());
         }
         let Some(current) = store::get_in(root, &id) else { return Err("The orchestration is gone.".into()) };
@@ -139,7 +139,7 @@ pub fn ask(
         // Stopped from the plan: the runner ends the run, and with it this.
         let task_running = current.plan.tasks.iter().any(|task| task.run_id == session.run_id && task.status == TaskStatus::Running);
         if Instant::now() >= deadline || (current.status != Status::Running && !task_running) {
-            close(app, root, &id, &question_id);
+            close(hub, root, &id, &question_id);
             return Ok(NO_ANSWER.into());
         }
     }

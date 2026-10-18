@@ -24,6 +24,11 @@ pub fn save_config(
     crate::marketplace::agent_install::apply(&config.agent_install_dirs);
     // Modo IA switched in Preferences: the agents and their server follow at once.
     crate::ai_mode::set(&app, &app.state::<AppState>().agents, config.ai_mode_enabled);
+    // Where the agents run in their own process, it follows too.
+    crate::agents::host::client::config_saved(&app, &config);
+    if config.background_agents {
+        crate::agents::host::login::sync(&config);
+    }
     // Lets every other open window (e.g. Preferences vs. the main window)
     // pick up the change live. `source` lets the saving window drop its own
     // echo: re-applying it can race a newer local edit and revert it.

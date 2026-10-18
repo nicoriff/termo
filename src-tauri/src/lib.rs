@@ -53,8 +53,22 @@ pub fn run_cli_mode_from_args() -> bool {
             mux::server::run(rest.first().map_or("", String::as_str), rest.get(1).map(String::as_str));
             true
         }
+        // The agents' own process (see agents/host/): the same, for agents
+        // that keep running with Termo closed.
+        [flag, rest @ ..] if flag == agents::host::HOST_FLAG => {
+            agents::host::server::run(rest.first().map_or("", String::as_str), rest.get(1).map(String::as_str));
+            true
+        }
         _ => false,
     }
+}
+
+/// What a notification of the agents' process was about, when Termo was
+/// started from one (`--open-notification <target>`).
+fn notification_target(args: impl Iterator<Item = String>) -> Option<serde_json::Value> {
+    let mut args = args.skip_while(|arg| arg != agents::host::OPEN_FLAG);
+    args.next()?;
+    serde_json::from_str(&args.next()?).ok().filter(serde_json::Value::is_object)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,7 +82,13 @@ pub fn run() {
     // each blind to the other's runs. First, as the plugin asks. Left out of
     // debug builds, so a dev build can run beside the installed one.
     #[cfg(not(debug_assertions))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        // Started by a click on a notification of the agents' process:
+        // the main window shows what it was about, as for its own.
+        if let Some(target) = notification_target(args.into_iter()) {
+            commands::notification_commands::open_target(app, terminal_windows::MAIN, target);
+            return;
+        }
         // Called on the main thread, where building a window deadlocks on
         // Windows.
         let app = app.clone();
@@ -132,21 +152,40 @@ pub fn run() {
                 app.state::<AppState>().pty.background().into_iter().map(|session| session.id.to_string()).collect();
             pty::agent_hooks::start_watcher(app.handle().clone(), kept.clone());
             pty::status_line::start_watcher(app.handle().clone());
-            // Before any run can start: files a run killed with Termo left.
-            agents::runner::remove_leftovers(app.handle());
-            // Consoles' token files from before: their tokens died with it,
-            // but for those of consoles still running.
+            let loaded = config::store::load(app.handle());
+            // With "Keep agents running when Termo closes", the agents run in
+            // their own process (see agents/host/): it cleans up after itself,
+            // and may be running some right now.
+            agents::host::set_runs_here(!loaded.background_agents);
             if let Ok(root) = agents::store::root(app.handle()) {
+                if !loaded.background_agents {
+                    // Before any run can start: files a run killed with Termo left.
+                    agents::runner::remove_leftovers(&root);
+                    agents::orchestration::executor::recover(&root);
+                }
+                // Consoles' token files from before: their tokens died with it,
+                // but for those of consoles still running.
                 agents::console_bridge::remove_leftovers(&root, &kept);
             }
-            agents::orchestration::executor::recover(app.handle());
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
-            let loaded = config::store::load(app.handle());
             // Before anything looks for an agent's CLI.
             marketplace::agent_install::apply(&loaded.agent_install_dirs);
             let ai_mode_on = loaded.ai_mode_enabled;
             ai_mode::init(app.handle(), &app.state::<AppState>().agents, ai_mode_on);
+            if loaded.background_agents && ai_mode_on {
+                agents::host::client::start(app.handle());
+            }
+            // The entry that starts them at sign-in points at this build.
+            {
+                let loaded = loaded.clone();
+                std::thread::spawn(move || agents::host::login::sync(&loaded));
+            }
+            // Opened by a notification the agents' process showed (see
+            // agents/host/notify.rs): what it was about, once a window asks.
+            if let Some(target) = notification_target(std::env::args()) {
+                *app.state::<AppState>().opened_by.lock().unwrap() = Some(target);
+            }
             // Every console's CLI settings point at this Termo (its port and
             // token), like the hooks do.
             agents::console_bridge::set_global(ai_mode_on && loaded.agents_from_any_console);
@@ -186,6 +225,9 @@ pub fn run() {
             commands::remote_commands::remote_opened,
             commands::remote_commands::tailscale_connect,
             commands::remote_commands::tailscale_disconnect,
+            commands::agent_commands::agents_background_set,
+            commands::agent_commands::agents_host_state,
+            commands::notification_commands::notification_take_opened,
             commands::link_commands::open_link,
             commands::link_commands::list_browsers,
             commands::zellij_commands::zellij_sessions,

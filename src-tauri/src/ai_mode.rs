@@ -15,6 +15,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::agents::host;
+use crate::agents::hub::Hub;
 use crate::agents::runner::Runner;
 use crate::agents::{scheduler, webhook};
 use crate::pty;
@@ -35,35 +37,58 @@ pub fn set_enabled_for_tests(on: bool) {
 /// way and idles while Modo IA is off, so turning it on later needs nothing
 /// more from it.
 pub fn init(app: &tauri::AppHandle, runner: &Arc<Runner>, on: bool) {
-    ENABLED.store(on, Ordering::SeqCst);
-    scheduler::start(app.clone(), runner.clone());
+    let Ok(hub) = Hub::for_app(app) else {
+        ENABLED.store(on, Ordering::SeqCst);
+        return;
+    };
+    init_agents(&hub, runner, on);
     if on {
-        turn_on(app, runner);
+        refresh_hooks(app);
+    }
+}
+
+/// The agents' part, wherever they run: the scheduler's thread (which only
+/// acts in the process that runs the agents, see host::runs_here) and,
+/// switched on, their local server.
+pub fn init_agents(hub: &Hub, runner: &Arc<Runner>, on: bool) {
+    ENABLED.store(on, Ordering::SeqCst);
+    scheduler::start(hub.clone(), runner.clone());
+    if on && host::runs_here() {
+        webhook::start(hub.clone(), runner.clone());
     }
 }
 
 /// A saved config: acts only when the switch actually moved.
 pub fn set(app: &tauri::AppHandle, runner: &Arc<Runner>, on: bool) {
-    if ENABLED.swap(on, Ordering::SeqCst) == on {
-        return;
-    }
-    if on {
-        turn_on(app, runner);
-    } else {
-        turn_off(runner);
+    let Ok(hub) = Hub::for_app(app) else { return };
+    if set_agents(&hub, runner, on) && on {
+        refresh_hooks(app);
     }
 }
 
-fn turn_on(app: &tauri::AppHandle, runner: &Arc<Runner>) {
-    webhook::start(app.clone(), runner.clone());
+/// The agents' part of switching; false when it didn't move. Where the
+/// agents run elsewhere, that process follows the config on its own.
+pub fn set_agents(hub: &Hub, runner: &Arc<Runner>, on: bool) -> bool {
+    if ENABLED.swap(on, Ordering::SeqCst) == on {
+        return false;
+    }
+    if !host::runs_here() {
+        return true;
+    }
+    if on {
+        webhook::start(hub.clone(), runner.clone());
+    } else {
+        webhook::stop();
+        for run in runner.running() {
+            runner.stop(&run.agent_id);
+        }
+    }
+    true
+}
+
+/// The consoles' part: their CLIs' hooks and status line point at this Termo.
+fn refresh_hooks(app: &tauri::AppHandle) {
     pty::agent_hooks::refresh_installed(app);
     pty::status_line::refresh_installed(app);
     pty::copilot_status::refresh_installed();
-}
-
-fn turn_off(runner: &Arc<Runner>) {
-    webhook::stop();
-    for run in runner.running() {
-        runner.stop(&run.agent_id);
-    }
 }

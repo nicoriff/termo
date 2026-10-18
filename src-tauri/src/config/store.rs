@@ -15,7 +15,13 @@ pub fn load(app: &tauri::AppHandle) -> AppConfig {
     let Ok(path) = config_path(app) else {
         return AppConfig::default();
     };
-    fs::read_to_string(&path)
+    load_from(&path)
+}
+
+/// The config at `path`: for a process of Termo's that has no AppHandle
+/// (the agents', see agents/host/).
+pub fn load_from(path: &std::path::Path) -> AppConfig {
+    fs::read_to_string(path)
         .ok()
         .and_then(|contents| serde_json::from_str(&contents).ok())
         .unwrap_or_default()

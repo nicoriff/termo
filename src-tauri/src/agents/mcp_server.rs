@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use tiny_http::{Header, Method, Response};
 
 use super::console_bridge;
+use super::hub::Hub;
 use super::orchestration::questions;
 use super::projects;
 use super::runner::Runner;
@@ -48,7 +49,7 @@ fn bearer(request: &tiny_http::Request) -> String {
         .unwrap_or_default()
 }
 
-pub fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path) {
+pub fn handle(mut request: tiny_http::Request, hub: &Hub, runner: &Arc<Runner>, root: &Path) {
     // No server-initiated stream (GET) and no sessions to end (DELETE).
     if request.method() != &Method::Post {
         return respond(request, 405, None);
@@ -67,8 +68,8 @@ pub fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &
         return respond(request, 400, Some(error_reply(Value::Null, -32700, "Parse error")));
     };
     let answer = |message: &Value| match &session {
-        Some(session) => Context { app, runner, root, token: &token, session }.answer(message),
-        None => console_answer(app, runner, root, message),
+        Some(session) => Context { hub, runner, root, token: &token, session }.answer(message),
+        None => console_answer(hub, runner, root, message),
     };
     match message {
         Value::Array(batch) => {
@@ -88,7 +89,7 @@ pub fn handle(mut request: tiny_http::Request, app: &tauri::AppHandle, runner: &
 }
 
 /// A message from one of the user's consoles (see console_bridge.rs).
-fn console_answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, message: &Value) -> Option<Value> {
+fn console_answer(hub: &Hub, runner: &Arc<Runner>, root: &Path, message: &Value) -> Option<Value> {
     let id = message.get("id")?.clone();
     let params = message.get("params").cloned().unwrap_or(Value::Null);
     let reply = match message.get("method").and_then(Value::as_str).unwrap_or_default() {
@@ -104,7 +105,7 @@ fn console_answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, mes
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
-            let (text, is_error) = match console_bridge::call(app, runner, root, name, &args) {
+            let (text, is_error) = match console_bridge::call(hub, runner, root, name, &args) {
                 Ok(text) => (text, false),
                 Err(text) => (text, true),
             };
@@ -124,7 +125,7 @@ fn result_reply(id: Value, result: Value) -> Value {
 }
 
 struct Context<'a> {
-    app: &'a tauri::AppHandle,
+    hub: &'a Hub,
     runner: &'a Arc<Runner>,
     root: &'a Path,
     token: &'a str,
@@ -177,7 +178,7 @@ impl Context<'_> {
             "ask_agent" if !collaboration.contacts.is_empty() => {
                 let target = contact(&agents())?;
                 let message = needs_message()?;
-                team::ask(self.app, self.runner, self.root, self.token, self.session, &target, &message)
+                team::ask(self.hub, self.runner, self.root, self.token, self.session, &target, &message)
             }
             "send_message" if !collaboration.contacts.is_empty() => {
                 let target = contact(&agents())?;
@@ -202,7 +203,7 @@ impl Context<'_> {
                     .and_then(Value::as_array)
                     .map(|options| options.iter().filter_map(Value::as_str).map(str::to_string).collect())
                     .unwrap_or_default();
-                questions::ask(self.app, self.root, self.token, self.session, &text("question"), &options)
+                questions::ask(self.hub, self.root, self.token, self.session, &text("question"), &options)
             }
             _ => Err(format!("There's no tool called \"{name}\".")),
         }

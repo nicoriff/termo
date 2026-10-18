@@ -14,9 +14,9 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::Emitter;
 
 use super::events::{EventKind, RunEvent};
+use super::hub::Hub;
 use super::orchestration::plan::QuestionState;
 use super::orchestration::questions::{answer_text, tidy, NO_ANSWER, WAIT};
 use super::runner;
@@ -29,7 +29,7 @@ const POLL: Duration = Duration::from_secs(1);
 const ROOM_TO_FINISH: Duration = Duration::from_secs(2 * 60);
 
 /// Something a run asked the user and is waiting on.
-#[derive(Serialize, Clone, Debug, PartialEq, Default)]
+#[derive(Serialize, serde::Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RunQuestion {
     pub id: String,
@@ -88,29 +88,29 @@ fn settle(question_id: &str, state: QuestionState, answer: &str) -> Option<RunQu
 }
 
 /// The user's answer to a question still waiting. Returns whether it was.
-pub fn answer(app: &tauri::AppHandle, question_id: &str, answer: &str) -> bool {
+pub fn answer(hub: &Hub, question_id: &str, answer: &str) -> bool {
     let (answer, _) = tidy(answer, &[]);
     if answer.is_empty() {
         return false;
     }
     match settle(question_id, QuestionState::Answered, &answer) {
         Some(question) => {
-            let _ = app.emit("agent-question", &question);
+            hub.emit("agent-question", &question);
             true
         }
         None => false,
     }
 }
 
-fn log(app: &tauri::AppHandle, root: &Path, question: &RunQuestion, kind: EventKind, text: &str) {
+fn log(hub: &Hub, root: &Path, question: &RunQuestion, kind: EventKind, text: &str) {
     let event = RunEvent { kind, text: text.to_string(), at: now_millis(), ..RunEvent::default() };
-    runner::log_step(app, root, &question.agent_id, &question.run_id, event);
+    runner::log_step(hub, root, &question.agent_id, &question.run_id, event);
 }
 
 /// `ask_user`, from a run that isn't an orchestration's task: shows the
 /// question on the run and waits for the user's answer.
 pub fn ask(
-    app: &tauri::AppHandle,
+    hub: &Hub,
     root: &Path,
     token: &str,
     session: &Session,
@@ -133,8 +133,8 @@ pub fn ask(
         ..RunQuestion::default()
     };
     questions().lock().unwrap().push(asked.clone());
-    let _ = app.emit("agent-question", &asked);
-    log(app, root, &asked, EventKind::Question, &asked.question);
+    hub.emit("agent-question", &asked);
+    log(hub, root, &asked, EventKind::Question, &asked.question);
 
     let deadline = Instant::now() + wait;
     let settled = loop {
@@ -149,14 +149,14 @@ pub fn ask(
         if team::session(token).is_none() || Instant::now() >= deadline {
             let expired = settle(&asked.id, QuestionState::Expired, "");
             if let Some(expired) = &expired {
-                let _ = app.emit("agent-question", expired);
+                hub.emit("agent-question", &expired);
             }
             break expired.unwrap_or_else(|| RunQuestion { state: QuestionState::Expired, ..asked.clone() });
         }
     };
     questions().lock().unwrap().retain(|question| question.id != asked.id);
     let answered = settled.state == QuestionState::Answered;
-    log(app, root, &asked, EventKind::Answer, if answered { &settled.answer } else { "" });
+    log(hub, root, &asked, EventKind::Answer, if answered { &settled.answer } else { "" });
     if team::session(token).is_none() {
         return Err("Your run ended.".into());
     }

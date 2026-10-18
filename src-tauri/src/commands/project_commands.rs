@@ -1,13 +1,13 @@
-use tauri::State;
+use serde_json::json;
 
+use crate::agents::host::client::dispatch;
 use crate::agents::portable::{self, ImportReport};
 use crate::agents::project_ai::{self, GeneratedProject, Improvement};
 use crate::agents::projects::{self, Project, Stats, VersionInfo};
 use crate::agents::spec::{is_valid_id, AgentSpec, Engine};
-use crate::agents::store::{self, RunRecord, RunTrigger};
-use crate::commands::agent_commands::{delete_agent, root, save_agent};
+use crate::agents::store::{self, RunRecord};
+use crate::commands::agent_commands::{root, save_agent};
 use crate::i18n::{tr, Msg};
-use crate::state::AppState;
 
 fn project(root: &std::path::Path, id: &str) -> Result<Project, String> {
     projects::get_in(root, id).ok_or_else(|| tr(Msg::ProjectNotFound))
@@ -35,23 +35,8 @@ pub fn project_save(app: tauri::AppHandle, project: Project) -> Result<Vec<Proje
 /// Deletes a project, and its agents too when `delete_agents`; otherwise
 /// they're left outside any project. Returns both lists.
 #[tauri::command]
-pub fn project_delete(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    delete_agents: bool,
-) -> Result<(Vec<Project>, Vec<AgentSpec>), String> {
-    let root = root(&app)?;
-    for mut spec in projects::agents_of(&root, &id) {
-        if delete_agents {
-            delete_agent(&root, &state.agents, &spec.id)?;
-        } else {
-            spec.project_id = String::new();
-            save_agent(&root, spec)?;
-        }
-    }
-    let list = saved(projects::delete_in(&root, &id))?;
-    Ok((list, store::list_in(&root)))
+pub async fn project_delete(app: tauri::AppHandle, id: String, delete_agents: bool) -> Result<(Vec<Project>, Vec<AgentSpec>), String> {
+    dispatch(app, "project_delete", json!({ "id": id, "delete_agents": delete_agents })).await
 }
 
 /// Moves an agent into a project (or out of any, with an empty id).
@@ -84,27 +69,14 @@ pub fn project_set_enabled(app: tauri::AppHandle, id: String, enabled: bool) -> 
 /// Starts the project's entry agent; a rehearsal runs the whole
 /// conversation it sets off as "only look".
 #[tauri::command]
-pub fn project_run(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    rehearsal: bool,
-) -> Result<RunRecord, String> {
-    let root = root(&app)?;
-    let project = project(&root, &id)?;
-    let entry = store::get_in(&root, &project.entry_agent_id)
-        .filter(|spec| spec.project_id == id)
-        .ok_or_else(|| tr(Msg::ProjectNoEntry))?;
-    state.agents.start_linked(&app, &entry, RunTrigger::Manual, None, None, rehearsal)
+pub async fn project_run(app: tauri::AppHandle, id: String, rehearsal: bool) -> Result<RunRecord, String> {
+    dispatch(app, "project_run", json!({ "id": id, "rehearsal": rehearsal })).await
 }
 
 /// Stops every run of the project's agents.
 #[tauri::command]
-pub fn project_stop(app: tauri::AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
-    for spec in projects::agents_of(&root(&app)?, &id) {
-        state.agents.stop(&spec.id);
-    }
-    Ok(())
+pub async fn project_stop(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    dispatch(app, "project_stop", json!({ "id": id })).await
 }
 
 #[tauri::command]

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, Datelike, Local, NaiveTime, TimeZone};
 use notify::{EventKind, RecursiveMode, Watcher};
 
+use super::hub::Hub;
 use super::runner::Runner;
 use super::spec::{AgentSpec, Schedule};
 use super::queue;
@@ -91,9 +92,9 @@ struct Watched {
     _watcher: notify::RecommendedWatcher,
 }
 
-pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
+pub fn start(hub: Hub, runner: Arc<Runner>) {
     std::thread::spawn(move || {
-        let Ok(root) = store::root(&app) else { return };
+        let root = hub.root().to_path_buf();
         // agent id → when its folder last changed, while a run is pending.
         let changed: Arc<Mutex<HashMap<String, Instant>>> = Arc::default();
         let mut watchers: HashMap<String, Watched> = HashMap::new();
@@ -104,6 +105,13 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
             // on, and folders stop being watched (see ai_mode.rs).
             if !crate::ai_mode::enabled() {
                 let _ = queue::take(&queue::dir_for(&root), |_| false);
+                watchers.clear();
+                changed.lock().unwrap().clear();
+                continue;
+            }
+            // The agents run in their own process (see host/): it takes the
+            // requests and watches the folders, not this one.
+            if !super::host::runs_here() {
                 watchers.clear();
                 changed.lock().unwrap().clear();
                 continue;
@@ -125,7 +133,7 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
                     _ => false,
                 };
                 if spec.enabled && still_wanted {
-                    let _ = runner.start_linked(&app, spec, trigger, Some(&context), link, false);
+                    let _ = runner.start_linked(&hub, spec, trigger, Some(&context), link, false);
                 }
             }
 
@@ -134,7 +142,7 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
                     continue;
                 }
                 if agent_next_run(&root, spec).is_some_and(|due| due <= now) {
-                    let _ = runner.start(&app, spec, RunTrigger::Schedule, None);
+                    let _ = runner.start(&hub, spec, RunTrigger::Schedule, None);
                     continue;
                 }
                 let settled = {
@@ -151,7 +159,7 @@ pub fn start(app: tauri::AppHandle, runner: Arc<Runner>) {
                         .and_then(|run| run.ended_at)
                         .is_some_and(|ended| now - ended < QUIET_AFTER_RUN_MS);
                     if !ended_recently {
-                        let _ = runner.start(&app, spec, RunTrigger::Watch, None);
+                        let _ = runner.start(&hub, spec, RunTrigger::Watch, None);
                     }
                 }
             }

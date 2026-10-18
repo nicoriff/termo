@@ -75,6 +75,12 @@ windows-sys = { version = "0.59", features = [
 # but can't tell when it's clicked (commands/notification_commands.rs).
 tauri-winrt-notification = "0.7"
 
+[target.'cfg(not(windows))'.dependencies]
+# Already in the graph through tauri-plugin-notification (same version), for
+# the notifications the agents' own process shows with Termo closed
+# (agents/host/notify.rs), where there's no app for the plugin.
+notify-rust = "4"
+
 [target.'cfg(unix)'.dependencies]
 # Already resolved transitively via portable-pty, so declaring it directly
 # for the Modo IA foreground-process lookup (pty/foreground.rs) adds no new

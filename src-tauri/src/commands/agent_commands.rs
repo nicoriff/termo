@@ -1,17 +1,17 @@
 use std::path::Path;
 
-use tauri::State;
+use serde_json::json;
 
 use crate::agents::draft::{self, Draft};
 use crate::agents::events::RunEvent;
 use crate::agents::git_hooks;
+use crate::agents::host::client::dispatch;
 use crate::agents::github::{self, GithubPreview};
-use crate::agents::webhook;
 use crate::agents::integrations::{self, AgentMcpRequest, AgentMcpServer, CustomMcpRequest};
 use crate::agents::scheduler;
 use crate::agents::portable::{self, ImportReport};
 use crate::agents::projects;
-use crate::agents::run_questions::{self, RunQuestion};
+use crate::agents::run_questions::RunQuestion;
 use crate::agents::runner::Runner;
 use crate::agents::secrets;
 use crate::agents::models;
@@ -19,7 +19,6 @@ use crate::agents::spec::{AgentSpec, Engine};
 use crate::agents::store::{self, RunRecord, RunTrigger};
 use crate::agents::team;
 use crate::i18n::{tr, Msg};
-use crate::state::AppState;
 
 pub(crate) fn root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     store::root(app).map_err(|err| tr(Msg::AgentSaveFailed(&err.to_string())))
@@ -93,8 +92,8 @@ pub fn agents_save(app: tauri::AppHandle, spec: AgentSpec) -> Result<Vec<AgentSp
 }
 
 #[tauri::command]
-pub fn agents_delete(app: tauri::AppHandle, state: State<'_, AppState>, id: String) -> Result<Vec<AgentSpec>, String> {
-    delete_agent(&root(&app)?, &state.agents, &id)
+pub async fn agents_delete(app: tauri::AppHandle, id: String) -> Result<Vec<AgentSpec>, String> {
+    dispatch(app, "agents_delete", json!({ "id": id })).await
 }
 
 /// The models the engine's CLI offers this account.
@@ -128,36 +127,31 @@ pub fn agents_board_remove(app: tauri::AppHandle, project_id: Option<String>, ke
 /// Runs the spec as given rather than the saved one, so the wizard can try
 /// out an agent before it's saved.
 #[tauri::command]
-pub fn agent_run(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    spec: AgentSpec,
-    trigger: RunTrigger,
-) -> Result<RunRecord, String> {
-    state.agents.start(&app, &spec, trigger, None)
+pub async fn agent_run(app: tauri::AppHandle, spec: AgentSpec, trigger: RunTrigger) -> Result<RunRecord, String> {
+    dispatch(app, "agent_start", json!({ "spec": spec, "trigger": trigger })).await
 }
 
 /// The questions agents' runs are waiting on the user for (see
 /// agents/run_questions.rs).
 #[tauri::command]
-pub fn agent_questions() -> Vec<RunQuestion> {
-    run_questions::pending()
+pub async fn agent_questions(app: tauri::AppHandle) -> Result<Vec<RunQuestion>, String> {
+    dispatch(app, "agent_questions", json!({})).await
 }
 
 /// The user's answer to one of them. False when it wasn't waiting any more.
 #[tauri::command]
-pub fn agent_answer_question(app: tauri::AppHandle, question_id: String, answer: String) -> bool {
-    run_questions::answer(&app, &question_id, &answer)
+pub async fn agent_answer_question(app: tauri::AppHandle, question_id: String, answer: String) -> Result<bool, String> {
+    dispatch(app, "agent_answer_question", json!({ "question_id": question_id, "answer": answer })).await
 }
 
 #[tauri::command]
-pub fn agent_stop(state: State<'_, AppState>, agent_id: String) {
-    state.agents.stop(&agent_id);
+pub async fn agent_stop(app: tauri::AppHandle, agent_id: String) -> Result<(), String> {
+    dispatch(app, "agent_stop", json!({ "agent_id": agent_id })).await
 }
 
 #[tauri::command]
-pub fn agents_running(state: State<'_, AppState>) -> Vec<RunRecord> {
-    state.agents.running()
+pub async fn agents_running(app: tauri::AppHandle) -> Result<Vec<RunRecord>, String> {
+    dispatch(app, "agents_running", json!({})).await
 }
 
 /// When each scheduled agent runs next on its own (Unix milliseconds).
@@ -266,8 +260,23 @@ pub fn agents_import(app: tauri::AppHandle, paths: Vec<String>) -> Result<(Vec<A
 
 /// The local webhook's port, and whether it could take it.
 #[tauri::command]
-pub fn agents_webhook() -> serde_json::Value {
-    serde_json::json!({ "port": webhook::PORT, "listening": webhook::listening() })
+pub async fn agents_webhook(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    dispatch(app, "agents_webhook", json!({})).await
+}
+
+/// "Keep agents running when Termo closes" switched: they move to their own
+/// process, or back into the app (see agents/host/).
+#[tauri::command]
+pub async fn agents_background_set(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::agents::host::client::switch(&app, enabled))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+/// Where the agents run, and how their own process is doing.
+#[tauri::command]
+pub fn agents_host_state() -> crate::agents::host::client::HostState {
+    crate::agents::host::client::state()
 }
 
 /// Which of these secrets have no value on this machine.

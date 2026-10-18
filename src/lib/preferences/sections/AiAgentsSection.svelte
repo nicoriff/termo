@@ -3,10 +3,60 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { isMac } from "$lib/core/platform";
-  import { rotateConsoleToken, setAgentsInEveryConsole, type ConsoleRegistration } from "$lib/core/agents-client";
+  import {
+    agentsHostState,
+    onAgentsHost,
+    rotateConsoleToken,
+    setAgentsInEveryConsole,
+    setBackgroundAgents,
+    type AgentsHostState,
+    type ConsoleRegistration,
+  } from "$lib/core/agents-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
+  import { onMount } from "svelte";
 
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleAgents"), isMac));
+
+  /** Where the agents run, as the backend last said. */
+  let host = $state<AgentsHostState | null>(null);
+  let moving = $state(false);
+  let moveError = $state<string | null>(null);
+
+  onMount(() => {
+    void agentsHostState().then((state) => (host = state));
+    const unlisten = onAgentsHost((state) => (host = state));
+    return () => void unlisten.then((stop) => stop());
+  });
+
+  async function setBackground(enabled: boolean) {
+    moving = true;
+    moveError = null;
+    try {
+      await setBackgroundAgents(enabled);
+      appConfigStore.backgroundAgentsMoved(enabled);
+    } catch (reason) {
+      moveError = String(reason);
+    } finally {
+      moving = false;
+      host = await agentsHostState().catch(() => host);
+    }
+  }
+
+  /** What the process has on its hands, in a line. */
+  const hostSummary = $derived.by(() => {
+    const status = host?.status;
+    if (!status) return "";
+    const parts = [
+      status.runningRuns + status.runningOrchestrations > 0
+        ? t("preferences.agents.hostWorking", { count: String(status.runningRuns + status.runningOrchestrations) })
+        : null,
+      status.scheduled > 0 ? t("preferences.agents.hostScheduled", { count: String(status.scheduled) }) : null,
+      status.watching > 0 ? t("preferences.agents.hostWatching", { count: String(status.watching) }) : null,
+      status.onGit > 0 ? t("preferences.agents.hostGit", { count: String(status.onGit) }) : null,
+      status.onWebhook > 0 ? t("preferences.agents.hostWebhook", { count: String(status.onWebhook) }) : null,
+    ].filter((part): part is string => part !== null);
+    return parts.length > 0 ? parts.join(" · ") : t("preferences.agents.hostIdle");
+  });
 
   /** How registering in each CLI's settings went, after a change. */
   let results = $state<ConsoleRegistration[] | null>(null);
@@ -53,6 +103,51 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.agents.inActivityBarHint", { shortcut })}</p>
+</section>
+
+<section>
+  <h3>{t("preferences.agents.background")}</h3>
+  <label class="toggle-row">
+    <span>{t("preferences.agents.keepRunning")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.backgroundAgents}
+      disabled={moving}
+      onchange={(e) => void setBackground(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.agents.keepRunningHint")}</p>
+  {#if moving}
+    <p class="setting-hint">{t("preferences.agents.switching")}</p>
+  {:else if moveError}
+    <p class="setting-hint error">{moveError}</p>
+  {:else if appConfigStore.backgroundAgents}
+    {#if !appConfigStore.aiModeEnabled}
+      <p class="setting-hint">{t("preferences.agents.hostAiOff")}</p>
+    {:else if host?.connected}
+      <p class="host-state">
+        <span class="dot ok" aria-hidden="true"></span>{t("preferences.agents.hostConnected")}
+        <span class="host-summary">{hostSummary}</span>
+      </p>
+      {#if host.status?.retiring}
+        <p class="setting-hint">{t("preferences.agents.hostRetiring")}</p>
+      {/if}
+    {:else if host?.enabled}
+      <p class="host-state"><span class="dot" aria-hidden="true"></span>{t("preferences.agents.hostStarting")}</p>
+    {:else}
+      <p class="host-state"><span class="dot bad" aria-hidden="true"></span>{t("preferences.agents.hostDown")}</p>
+    {/if}
+  {/if}
+  <label class="toggle-row login-row" class:disabled={!appConfigStore.backgroundAgents}>
+    <span>{t("preferences.agents.atLogin")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.backgroundAgentsAtLogin}
+      disabled={!appConfigStore.backgroundAgents}
+      onchange={(e) => appConfigStore.setBackgroundAgentsAtLogin(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.agents.atLoginHint")}</p>
 </section>
 
 <section>
@@ -166,5 +261,48 @@
 
   .results .bad {
     color: var(--error-fg, #f48771);
+  }
+
+  .setting-hint.error {
+    color: var(--error-fg, #f48771);
+    opacity: 1;
+  }
+
+  .login-row {
+    margin-top: 12px;
+  }
+
+  .login-row.disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .host-state {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0;
+    font-size: 11px;
+  }
+
+  .host-summary {
+    opacity: 0.6;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--warning-fg, #d7ba7d);
+    flex-shrink: 0;
+  }
+
+  .dot.ok {
+    background: var(--success-fg, #89d185);
+  }
+
+  .dot.bad {
+    background: var(--error-fg, #f48771);
   }
 </style>

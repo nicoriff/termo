@@ -203,6 +203,11 @@ pub struct AppConfig {
     /// The browser links open with (a `browser::Browser::path`); none for
     /// the system's default one.
     pub link_browser: Option<String>,
+    /// The agents run in a process of their own that keeps going with Termo
+    /// closed (see agents/host/).
+    pub background_agents: bool,
+    /// That process starts when the user signs in, with no Termo opened.
+    pub background_agents_at_login: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
     /// Everything git: the panel, the status bar's item, the diff and graph
@@ -312,6 +317,8 @@ impl Default for AppConfig {
             keep_awake_button: true,
             remote_button: true,
             link_browser: None,
+            background_agents: false,
+            background_agents_at_login: false,
             tabs_fill_width: false,
             git_enabled: true,
             git_in_activity_bar: true,
