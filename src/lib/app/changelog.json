@@ -1,7 +1,7 @@
 [
   {
     "version": "0.23.0",
-    "date": "2026-10-16",
+    "date": "2026-10-17",
     "es": [
       "**Consolas que siguen corriendo** (experimental): con «Mantener las consolas abiertas al cerrar Termo», en Preferencias → Consola, las consolas nuevas siguen vivas, con lo que tengan adentro, cuando cerrás la ventana o Termo, o lo actualizás. Al volver a abrirlo, cada una vuelve a su pestaña tal como estaba: la pantalla, lo que había más arriba y el agente donde lo dejaste. No sobreviven a un reinicio de la computadora.",
       "**En segundo plano**: las consolas que siguen corriendo sin ninguna ventana que las muestre aparecen en el menú ˅ de cada pestaña, para abrirlas en una pestaña o cerrarlas.",
