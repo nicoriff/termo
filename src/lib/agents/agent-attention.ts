@@ -1,4 +1,4 @@
-import { onAgentQuestion, onAgentRun, type RunQuestion, type RunRecord } from "$lib/core/agents-client";
+import { onAgentQuestion, onAgentRun, type RunQuestion, type RunRecord, type RunTrigger } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { notify } from "$lib/core/notification-client";
 import { isPrimaryWindow } from "$lib/core/window-client";
@@ -11,6 +11,28 @@ import { agentsStore } from "./agents-store.svelte";
 
 /** How much of the answer goes in the notification. */
 const MAX_BODY = 140;
+
+/** Runs the user started, and is waiting on. */
+const ASKED: ReadonlySet<RunTrigger> = new Set(["manual", "console"]);
+
+/** Agents whose run on their own failed and already said so. */
+const failing = new Set<string>();
+
+/** Whether an ended run is worth telling. One the user started, always; one
+ * that ran on its own (a schedule, a folder, git, a webhook, another agent)
+ * only when it fails, and once: a broken agent on a schedule says it the
+ * first time, not on every run, until it works again. Keeps `failed` up to
+ * date either way. */
+export function worthTelling(run: RunRecord, failed: Set<string>): boolean {
+  if (run.status === "success") {
+    failed.delete(run.agentId);
+    return ASKED.has(run.trigger);
+  }
+  if (ASKED.has(run.trigger)) return true;
+  if (failed.has(run.agentId)) return false;
+  failed.add(run.agentId);
+  return true;
+}
 
 /** Whether the user is already looking at this agent's runs. */
 function watching(agentId: string): boolean {
@@ -28,7 +50,7 @@ async function announce(run: RunRecord) {
   // user's own doing; a task of an orchestration is announced by its
   // orchestration, not one by one (see orchestration-attention.ts).
   const quiet = run.trigger === "test" || run.trigger === "orchestrator" || run.status === "stopped";
-  if (!agent || quiet || watching(run.agentId)) return;
+  if (!agent || quiet || !worthTelling(run, failing) || watching(run.agentId)) return;
   const ok = run.status === "success";
   // Same switches and sounds as the engine's console sessions (Preferences →
   // Modo IA → Notifications).
@@ -65,8 +87,9 @@ async function announceQuestion(question: RunQuestion) {
   );
 }
 
-/** Tells the user when an agent that ran on its own is done, and when one
- * is waiting on them. Returns a teardown function. */
+/** Tells the user when an agent's run they started is done, when one that
+ * ran on its own fails, and when one is waiting on them. Returns a teardown
+ * function. */
 export function startAgentRunAttention(): () => void {
   const unlisten: (() => void)[] = [];
   let stopped = false;

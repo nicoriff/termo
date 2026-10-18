@@ -5,9 +5,29 @@
 //! it sent along (a tab, an agent's run, an orchestration — the window knows
 //! what to do with it, see src/lib/app/notification-clicks.ts).
 
+use tauri::{Emitter, Manager};
+
 /// What a window hears when one of its notifications is clicked.
-#[cfg(windows)]
 const OPENED: &str = "notification-opened";
+
+/// The window `label` in front, told what was clicked. Gone by now,
+/// there's nowhere to go.
+pub fn open_target(app: &tauri::AppHandle, label: &str, target: serde_json::Value) {
+    let Some(window) = app.get_webview_window(label) else { return };
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = app.emit_to(label, OPENED, target);
+}
+
+/// What the notification Termo was started from was about, if it was:
+/// asked once by the main window when it's ready.
+#[tauri::command]
+pub fn notification_take_opened(state: tauri::State<'_, crate::state::AppState>) -> Option<serde_json::Value> {
+    state.opened_by.lock().unwrap().take()
+}
 
 /// Shows a system notification on behalf of the asking window. Async, so the
 /// toast isn't built on the main thread.
@@ -36,10 +56,7 @@ pub async fn notify(
 mod toast {
     use std::path::MAIN_SEPARATOR as SEP;
 
-    use tauri::{Emitter, Manager};
     use tauri_winrt_notification::{Duration, Toast};
-
-    use super::OPENED;
 
     /// The toast the plugin would have shown (same id, texts and silence:
     /// the sounds are Termo's own), plus what a click does.
@@ -58,7 +75,7 @@ mod toast {
             .sound(None)
             .duration(Duration::Short)
             .on_activated(move |_| {
-                open(&clicked, &label, &target);
+                super::open_target(&clicked, &label, target.clone());
                 Ok(())
             })
             .show()
@@ -80,15 +97,4 @@ mod toast {
         }
     }
 
-    /// The window that sent the notification, in front, told what was
-    /// clicked. Gone by now, there's nowhere to go.
-    fn open(app: &tauri::AppHandle, label: &str, target: &serde_json::Value) {
-        let Some(window) = app.get_webview_window(label) else { return };
-        if window.is_minimized().unwrap_or(false) {
-            let _ = window.unminimize();
-        }
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = app.emit_to(label, OPENED, target);
-    }
 }

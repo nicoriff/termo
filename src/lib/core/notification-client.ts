@@ -16,6 +16,12 @@ export function notify(title: string, body: string, target: NotificationTarget):
   return invoke("notify", { title, body, target });
 }
 
+/** What a notification Termo was started from was about (one the agents'
+ * own process showed with Termo closed), once. */
+export function takeOpenedNotification(): Promise<NotificationTarget | null> {
+  return invoke("notification_take_opened");
+}
+
 /** One of this window's notifications was clicked. */
 export function onNotificationOpened(handler: (target: NotificationTarget) => void): Promise<() => void> {
   return getCurrentWebviewWindow().listen<NotificationTarget>("notification-opened", ({ payload }) => handler(payload));

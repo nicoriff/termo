@@ -276,9 +276,8 @@ pub fn fixing_spec(agent: AgentSpec, root: &str) -> Result<AgentSpec, String> {
 /// Hands a finding to one of the user's agents to fix: a run of that agent
 /// like any other (see agents/runner.rs), in the repository.
 #[tauri::command]
-pub fn git_review_fix(
+pub async fn git_review_fix(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
     root: String,
     review_id: String,
     finding_id: String,
@@ -289,7 +288,8 @@ pub fn git_review_fix(
     let agents = store::root(&app).map_err(|err| tr(Msg::GitReviewFailed(&err.to_string())))?;
     let agent = store::get_in(&agents, &agent_id).ok_or_else(|| tr(Msg::GitReviewAgentGone))?;
     let spec = fixing_spec(agent, &root)?;
-    state.agents.start(&app, &spec, RunTrigger::Manual, Some(&review::fix_context(&finding)))
+    let args = serde_json::json!({ "spec": spec, "trigger": RunTrigger::Manual, "context": review::fix_context(&finding) });
+    crate::agents::host::client::dispatch(app, "agent_start", args).await
 }
 
 /// git, gh and glab: which are installed and signed in to (Preferences).

@@ -1,4 +1,4 @@
-import { onNotificationOpened, type NotificationTarget } from "$lib/core/notification-client";
+import { onNotificationOpened, takeOpenedNotification, type NotificationTarget } from "$lib/core/notification-client";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { openPreferencesWindow } from "$lib/core/window-client";
 
@@ -18,6 +18,13 @@ function open(target: NotificationTarget) {
       void openPreferencesWindow(target.section);
       break;
   }
+}
+
+/** Termo was started from a notification (one the agents' own process
+ * showed with it closed): what it was about, once the window is ready. */
+export async function openStartedFrom(): Promise<void> {
+  const target = await takeOpenedNotification().catch(() => null);
+  if (target) open(target);
 }
 
 /** Clicking a notification leads to what it was about: the tab that needs

@@ -574,3 +574,38 @@ export function answerAgentQuestion(questionId: string, answer: string): Promise
 export function onAgentQuestion(handler: (question: RunQuestion) => void): Promise<UnlistenFn> {
   return listen<RunQuestion>("agent-question", (event) => handler(event.payload));
 }
+
+/** How the agents' own process is doing (mirrors agents/host/protocol.rs). */
+export interface AgentsHostStatus {
+  listening: boolean;
+  runningRuns: number;
+  runningOrchestrations: number;
+  scheduled: number;
+  watching: number;
+  onGit: number;
+  onWebhook: number;
+  /** From another build: it leaves once nothing runs. */
+  retiring: boolean;
+}
+
+/** Where the agents run (mirrors agents/host/client.rs). */
+export interface AgentsHostState {
+  /** In their own process, which keeps going with Termo closed. */
+  enabled: boolean;
+  connected: boolean;
+  status: AgentsHostStatus | null;
+}
+
+export function agentsHostState(): Promise<AgentsHostState> {
+  return invoke("agents_host_state");
+}
+
+export function onAgentsHost(handler: (state: AgentsHostState) => void): Promise<UnlistenFn> {
+  return listen<AgentsHostState>("agents-host", (event) => handler(event.payload));
+}
+
+/** Moves the agents to their own process, or back into the app. Refused
+ * while some are at work. */
+export function setBackgroundAgents(enabled: boolean): Promise<void> {
+  return invoke("agents_background_set", { enabled });
+}

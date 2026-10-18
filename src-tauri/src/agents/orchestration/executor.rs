@@ -14,12 +14,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::Emitter;
 
 use crate::commands::agent_commands::save_agent;
 use crate::i18n::{tr, Msg};
 
 use super::super::diagnose::{provider_name, Failure};
+use super::super::hub::Hub;
 use super::super::project_ai::clip;
 use super::super::projects::{self, Project};
 use super::super::runner::Runner;
@@ -46,8 +46,8 @@ pub struct Orchestrator {
     active: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
-fn emit(app: &tauri::AppHandle, orchestration: &Orchestration) {
-    let _ = app.emit("orchestration", orchestration);
+fn emit(hub: &Hub, orchestration: &Orchestration) {
+    hub.emit("orchestration", orchestration);
 }
 
 fn money(usd: f64) -> String {
@@ -140,10 +140,9 @@ fn request_for(orchestration: &Orchestration, task: &PlannedTask) -> (String, Op
 }
 
 /// Left as it is when Termo closed mid-run: nothing is running it any more.
-pub fn recover(app: &tauri::AppHandle) {
-    let Ok(root) = agent_store::root(app) else { return };
-    for orchestration in store::list_in(&root).into_iter().filter(|orchestration| orchestration.status == Status::Running) {
-        store::update_in(&root, &orchestration.id, |orchestration| {
+pub fn recover(root: &std::path::Path) {
+    for orchestration in store::list_in(root).into_iter().filter(|orchestration| orchestration.status == Status::Running) {
+        store::update_in(root, &orchestration.id, |orchestration| {
             release_running(orchestration);
             questions::expire_pending(orchestration);
             orchestration.status = Status::Stopped;
@@ -151,8 +150,8 @@ pub fn recover(app: &tauri::AppHandle) {
         });
     }
     // A report Termo closed in the middle of: it can be asked for again.
-    for orchestration in store::list_in(&root).into_iter().filter(|orchestration| orchestration.reporting) {
-        store::update_in(&root, &orchestration.id, |orchestration| orchestration.reporting = false);
+    for orchestration in store::list_in(root).into_iter().filter(|orchestration| orchestration.reporting) {
+        store::update_in(root, &orchestration.id, |orchestration| orchestration.reporting = false);
     }
 }
 
@@ -171,6 +170,11 @@ impl Orchestrator {
         self.active.lock().unwrap().contains_key(id)
     }
 
+    /// How many it's driving right now.
+    pub fn active_count(&self) -> usize {
+        self.active.lock().unwrap().len()
+    }
+
     /// Asks its thread to stop: it stops the running agents and leaves the
     /// orchestration as stopped.
     pub fn stop(&self, id: &str) {
@@ -181,7 +185,7 @@ impl Orchestrator {
 
     /// Runs the orchestration from where its file says it is, until it ends,
     /// stops or needs the user. Nothing happens if it's already running.
-    pub fn start(self: &Arc<Self>, app: &tauri::AppHandle, runner: &Arc<Runner>, id: &str) {
+    pub fn start(self: &Arc<Self>, hub: &Hub, runner: &Arc<Runner>, id: &str) {
         let stop = Arc::new(AtomicBool::new(false));
         {
             let mut active = self.active.lock().unwrap();
@@ -190,11 +194,8 @@ impl Orchestrator {
             }
             active.insert(id.to_string(), stop.clone());
         }
-        let Ok(root) = agent_store::root(app) else {
-            self.active.lock().unwrap().remove(id);
-            return;
-        };
-        let run = Run { app: app.clone(), runner: runner.clone(), root, id: id.to_string(), stop, blocked: Mutex::new(None) };
+        let root = hub.root().to_path_buf();
+        let run = Run { hub: hub.clone(), runner: runner.clone(), root, id: id.to_string(), stop, blocked: Mutex::new(None) };
         let orchestrator = self.clone();
         std::thread::spawn(move || {
             run.drive();
@@ -204,14 +205,14 @@ impl Orchestrator {
             orchestrator.active.lock().unwrap().remove(&run.id);
             // A stop that arrived as the thread was ending still shows.
             if let Some(orchestration) = store::get_in(&run.root, &run.id) {
-                emit(&run.app, &orchestration);
+                emit(&run.hub, &orchestration);
             }
         });
     }
 }
 
 struct Run {
-    app: tauri::AppHandle,
+    hub: Hub,
     runner: Arc<Runner>,
     root: PathBuf,
     id: String,
@@ -225,7 +226,7 @@ struct Run {
 impl Run {
     fn update(&self, change: impl FnOnce(&mut Orchestration)) -> Option<Orchestration> {
         let orchestration = store::update_in(&self.root, &self.id, change)?;
-        emit(&self.app, &orchestration);
+        emit(&self.hub, &orchestration);
         Some(orchestration)
     }
 
@@ -307,7 +308,7 @@ impl Run {
                 Some(mut spec) => {
                     let (request, context) = request_for(orchestration, task);
                     spec.task = request;
-                    self.runner.start_linked(&self.app, &spec, RunTrigger::Orchestrator, context.as_deref(), None, false)
+                    self.runner.start_linked(&self.hub, &spec, RunTrigger::Orchestrator, context.as_deref(), None, false)
                 }
                 None => Err(tr(Msg::AgentRunFailed("agent missing"))),
             };

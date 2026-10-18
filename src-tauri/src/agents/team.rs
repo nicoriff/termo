@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use super::hub::Hub;
 use super::projects;
 use super::queue;
 use super::runner::Runner;
@@ -283,7 +284,7 @@ fn from_agent(sender: &str, verb: &str, message: &str) -> String {
 /// `ask_agent`: runs `target` with the question and waits for its answer.
 /// Gives up when the asking run ends (and stops the one it started then).
 pub fn ask(
-    app: &tauri::AppHandle,
+    hub: &Hub,
     runner: &Arc<Runner>,
     root: &Path,
     token: &str,
@@ -299,7 +300,7 @@ pub fn ask(
             return Err("Your run ended.".into());
         }
         if !runner.is_running(&target.id) {
-            match runner.start_linked(app, target, RunTrigger::Agent, Some(&context), Some(session.child_link()), false) {
+            match runner.start_linked(hub, target, RunTrigger::Agent, Some(&context), Some(session.child_link()), false) {
                 Ok(run) => break run,
                 // Something else started it first: wait for that one too.
                 Err(_) if runner.is_running(&target.id) => {}

@@ -67,7 +67,7 @@
   } from "$lib/core/window-client";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import { startAgentAttention } from "$lib/ai-mode/attention";
-  import { startNotificationClicks } from "./notification-clicks";
+  import { openStartedFrom, startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
   import { shareRemoteLook } from "$lib/core/remote-client";
@@ -130,6 +130,9 @@
       // Someone asking to connect from the tailnet is told about once: by
       // the first window.
       stopRemoteWatch = remoteWatch.start(isFirstWindow());
+      // Started from a notification of the agents' own process: what it
+      // was about, now that there's a workspace to show it in.
+      if (isFirstWindow()) void openStartedFrom();
 
       unlisten = await onWindowResized(() => {
         clearTimeout(resizeDebounce);

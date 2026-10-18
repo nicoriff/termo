@@ -200,11 +200,16 @@ pub fn launch(dir: &Path, exe: &Path) -> io::Result<()> {
 /// still runs from it (one of an older protocol, kept for its consoles)
 /// does a copy named after the build stand in.
 fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
+    program_copy(&dir.join("bin"), DAEMON_EXE, DAEMON_BUILD, exe, build)
+}
+
+/// The same, for any process of Termo's that outlives the app (the agents'
+/// too, see agents/host/): `name` in `bin`, which holds nothing else.
+pub(crate) fn program_copy(bin: &Path, name: &str, stamp_name: &str, exe: &Path, build: &str) -> io::Result<PathBuf> {
     if cfg!(windows) {
-        let bin = dir.join("bin");
-        std::fs::create_dir_all(&bin)?;
-        let fixed = bin.join(DAEMON_EXE);
-        let stamp = bin.join(DAEMON_BUILD);
+        std::fs::create_dir_all(bin)?;
+        let fixed = bin.join(name);
+        let stamp = bin.join(stamp_name);
         // The build it says it is, and byte for byte this executable: the
         // folder is the user's to write in, and the firewall lets what's
         // at that path listen — something else put there mustn't run.
@@ -223,10 +228,10 @@ fn daemon_program(dir: &Path, exe: &Path, build: &str) -> io::Result<PathBuf> {
         };
         // Copies no daemon runs from any more. One that's running can't be
         // deleted, which is what keeps it.
-        if let Ok(entries) = std::fs::read_dir(&bin) {
+        if let Ok(entries) = std::fs::read_dir(bin) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path != program && path != bin.join(DAEMON_EXE) && path != stamp {
+                if path != program && path != bin.join(name) && path != stamp {
                     let _ = std::fs::remove_file(path);
                 }
             }
@@ -279,7 +284,7 @@ fn replace(exe: &Path, to: &Path) -> io::Result<()> {
 /// out of the app's process group (and job, on Windows), so that ending
 /// the app — or the terminal it was started from — doesn't end it.
 #[cfg(windows)]
-fn detach(command: &mut Command) -> io::Result<()> {
+pub(crate) fn detach(command: &mut Command) -> io::Result<()> {
     use std::os::windows::process::CommandExt;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
@@ -296,7 +301,7 @@ fn detach(command: &mut Command) -> io::Result<()> {
 }
 
 #[cfg(unix)]
-fn detach(command: &mut Command) -> io::Result<()> {
+pub(crate) fn detach(command: &mut Command) -> io::Result<()> {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid is async-signal-safe, as pre_exec requires.
     unsafe {
@@ -313,7 +318,7 @@ fn detach(command: &mut Command) -> io::Result<()> {
 }
 
 /// A random token for the info file: two v4 UUIDs, 244 random bits.
-fn new_token() -> String {
+pub(crate) fn new_token() -> String {
     format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
 }
 

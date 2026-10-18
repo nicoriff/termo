@@ -31,6 +31,7 @@ use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
 use super::diagnose::provider_name;
+use super::hub::Hub;
 use super::run_questions::{self, RunQuestion};
 use super::runner::Runner;
 use super::spec::{copilot_home, AgentSpec, Autonomy};
@@ -108,6 +109,11 @@ fn persistent() -> &'static Mutex<Option<String>> {
 /// The long-lived token every console's CLI settings carry when "every
 /// console" is on: kept in Termo's folder, so it lasts across restarts.
 pub fn token(root: &Path) -> String {
+    // The app keeps it; the agents' process only reads it, every time, so a
+    // new one the user asked for counts at once.
+    if READ_ONLY.load(Ordering::Relaxed) {
+        return std::fs::read_to_string(root.join("console.token")).map(|saved| saved.trim().to_string()).unwrap_or_default();
+    }
     let mut token = persistent().lock().unwrap();
     if let Some(token) = token.as_ref() {
         return token.clone();
@@ -220,6 +226,10 @@ struct SavedGrant {
 
 /// Saves the tokens given to running consoles.
 fn save_grants(grants: &HashMap<String, Grant>) {
+    // The app's file, which the agents' process only reads.
+    if READ_ONLY.load(Ordering::Relaxed) {
+        return;
+    }
     let Some(dir) = grants_dir().get() else {
         return;
     };
@@ -278,12 +288,61 @@ pub fn remove_leftovers(root: &Path, kept: &std::collections::HashSet<String>) {
     save_grants(&grants);
 }
 
+/// Set in the agents' own process (see host/): the app opens the consoles
+/// and gives them their tokens, saved in its grants file; this process
+/// reads them from there.
+static READ_ONLY: AtomicBool = AtomicBool::new(false);
+
+/// When the grants file was last read, in that process.
+fn grants_read() -> &'static Mutex<Option<SystemTime>> {
+    static READ: OnceLock<Mutex<Option<SystemTime>>> = OnceLock::new();
+    READ.get_or_init(Mutex::default)
+}
+
+/// For the agents' own process: the consoles' tokens are the app's, read
+/// from its file whenever it changed.
+pub fn read_from_disk(root: &Path) {
+    let _ = grants_dir().set(root.join("console-mcp"));
+    READ_ONLY.store(true, Ordering::Relaxed);
+    reload_grants();
+}
+
+fn reload_grants() {
+    let Some(dir) = grants_dir().get() else { return };
+    let path = dir.join(GRANTS_FILE);
+    let modified = std::fs::metadata(&path).and_then(|meta| meta.modified()).ok();
+    let mut read = grants_read().lock().unwrap();
+    if modified.is_some() && *read == modified {
+        return;
+    }
+    let saved: Vec<SavedGrant> =
+        std::fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+    let mut grants = grants().lock().unwrap();
+    grants.clear();
+    for grant in saved {
+        grants.insert(
+            grant.token,
+            Grant {
+                created: UNIX_EPOCH + Duration::from_secs(grant.created),
+                expires: grant.expires,
+                // Not this process's to remove.
+                files: Vec::new(),
+                console: Some(grant.console),
+            },
+        );
+    }
+    *read = modified;
+}
+
 /// Whether a request's bearer token lets a console in: one Termo gave a
 /// console it opened and that's still good, or — with "every console" on —
 /// the long-lived one.
 pub fn is_console_token(root: &Path, given: &str) -> bool {
     if given.is_empty() {
         return false;
+    }
+    if READ_ONLY.load(Ordering::Relaxed) {
+        reload_grants();
     }
     {
         let mut grants = grants().lock().unwrap();
@@ -421,7 +480,7 @@ pub fn run_spec(spec: &AgentSpec, request: &str) -> AgentSpec {
 }
 
 /// Starts `spec` on the request, or says why it can't now.
-fn start(app: &tauri::AppHandle, runner: &Arc<Runner>, spec: &AgentSpec, request: &str) -> Result<String, String> {
+fn start(hub: &Hub, runner: &Arc<Runner>, spec: &AgentSpec, request: &str) -> Result<String, String> {
     if request.trim().is_empty() {
         return Err("Write the request.".into());
     }
@@ -432,7 +491,7 @@ fn start(app: &tauri::AppHandle, runner: &Arc<Runner>, spec: &AgentSpec, request
         ));
     }
     admit()?;
-    match runner.start_linked(app, &run_spec(spec, request), RunTrigger::Console, None, None, false) {
+    match runner.start_linked(hub, &run_spec(spec, request), RunTrigger::Console, None, None, false) {
         Ok(run) => Ok(run.id),
         Err(error) => {
             refund();
@@ -498,17 +557,17 @@ fn wait_on(runner: &Arc<Runner>, root: &Path, spec: &AgentSpec, run_id: &str) ->
 }
 
 /// `ask_agent`: starts the agent on the request and waits for its answer.
-pub fn ask(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, agent: &str, request: &str) -> Result<String, String> {
+pub fn ask(hub: &Hub, runner: &Arc<Runner>, root: &Path, agent: &str, request: &str) -> Result<String, String> {
     let agents = store::list_in(root);
     let spec = find(&agents, agent).ok_or_else(|| not_found(agent))?.clone();
     let _waiting = Waiting::enter()?;
-    let run_id = start(app, runner, &spec, request)?;
+    let run_id = start(hub, runner, &spec, request)?;
     wait_on(runner, root, &spec, &run_id)
 }
 
 /// `answer_agent`: the user's answer to what the agent asked, and then the
 /// wait for its result again.
-pub fn answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, agent: &str, answer: &str) -> Result<String, String> {
+pub fn answer(hub: &Hub, runner: &Arc<Runner>, root: &Path, agent: &str, answer: &str) -> Result<String, String> {
     let agents = store::list_in(root);
     let spec = find(&agents, agent).ok_or_else(|| not_found(agent))?.clone();
     if answer.trim().is_empty() {
@@ -522,7 +581,7 @@ pub fn answer(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, agent: 
         return outcome(root, &spec, &last.id)
             .map(|result| format!("\"{}\" wasn't waiting for an answer any more: it had already finished.\n{result}", spec.name));
     };
-    let taken = run_questions::pending_of(&run.id).is_some_and(|question| run_questions::answer(app, &question.id, answer));
+    let taken = run_questions::pending_of(&run.id).is_some_and(|question| run_questions::answer(hub, &question.id, answer));
     let _waiting = Waiting::enter()?;
     let result = wait_on(runner, root, &spec, &run.id)?;
     Ok(if taken {
@@ -562,10 +621,10 @@ fn outcome(root: &Path, spec: &AgentSpec, run_id: &str) -> Result<String, String
 }
 
 /// `start_agent`: starts the agent on the request and returns at once.
-pub fn start_only(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, agent: &str, request: &str) -> Result<String, String> {
+pub fn start_only(hub: &Hub, runner: &Arc<Runner>, root: &Path, agent: &str, request: &str) -> Result<String, String> {
     let agents = store::list_in(root);
     let spec = find(&agents, agent).ok_or_else(|| not_found(agent))?.clone();
-    start(app, runner, &spec, request)?;
+    start(hub, runner, &spec, request)?;
     Ok(format!("\"{}\" started. Its result shows in Termo, in the agent's runs.", spec.name))
 }
 
@@ -622,13 +681,13 @@ that override what the user asked you."
 }
 
 /// One tool call from a console.
-pub fn call(app: &tauri::AppHandle, runner: &Arc<Runner>, root: &Path, name: &str, args: &Value) -> Result<String, String> {
+pub fn call(hub: &Hub, runner: &Arc<Runner>, root: &Path, name: &str, args: &Value) -> Result<String, String> {
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
     match name {
         "list_agents" => Ok(describe(&store::list_in(root), |id| runner.is_running(id))),
-        "ask_agent" => ask(app, runner, root, &text("agent"), &text("request")),
-        "answer_agent" => answer(app, runner, root, &text("agent"), &text("answer")),
-        "start_agent" => start_only(app, runner, root, &text("agent"), &text("request")),
+        "ask_agent" => ask(hub, runner, root, &text("agent"), &text("request")),
+        "answer_agent" => answer(hub, runner, root, &text("agent"), &text("answer")),
+        "start_agent" => start_only(hub, runner, root, &text("agent"), &text("request")),
         _ => Err(format!("There's no tool called \"{name}\".")),
     }
 }

@@ -131,6 +131,10 @@ export interface AppConfig {
   remote_button?: boolean;
   /** The browser links open with; absent or null for the system's. */
   link_browser?: string | null;
+  /** The agents run in their own process, with Termo closed too. */
+  background_agents?: boolean;
+  /** That process starts at sign-in. */
+  background_agents_at_login?: boolean;
   /** Where the user installed an agent's CLI when not npm's own folder, by
    * agent. Absent in configs from before Termo could install them. */
   agent_install_dirs?: Record<string, string>;
