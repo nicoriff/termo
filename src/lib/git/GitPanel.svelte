@@ -3,7 +3,7 @@
   import { untrack } from "svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { t } from "$lib/i18n/i18n.svelte";
   import { ago } from "$lib/agents/agent-spec";
@@ -210,7 +210,7 @@
   }
 
   function open(url: string | null | undefined) {
-    if (url && /^https?:\/\//i.test(url)) void openUrl(url);
+    if (url && /^https?:\/\//i.test(url)) void openLink(url);
   }
 
   function onKeydown(event: KeyboardEvent) {

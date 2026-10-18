@@ -200,6 +200,9 @@ pub struct AppConfig {
     /// The remote access button in the title bar (Tailscale, who's
     /// connected, the address to open from a phone).
     pub remote_button: bool,
+    /// The browser links open with (a `browser::Browser::path`); none for
+    /// the system's default one.
+    pub link_browser: Option<String>,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
     /// Everything git: the panel, the status bar's item, the diff and graph
@@ -308,6 +311,7 @@ impl Default for AppConfig {
             agent_clis_known: std::collections::BTreeMap::new(),
             keep_awake_button: true,
             remote_button: true,
+            link_browser: None,
             tabs_fill_width: false,
             git_enabled: true,
             git_in_activity_bar: true,

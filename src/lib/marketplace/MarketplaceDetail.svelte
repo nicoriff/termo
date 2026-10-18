@@ -2,7 +2,7 @@
   import { fly } from "svelte/transition";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
   import type { AgentTarget, CatalogItem, ComponentClass } from "$lib/core/marketplace-client";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
 
   import InstallTargetPicker from "./InstallTargetPicker.svelte";
   import ItemIcon from "./ItemIcon.svelte";
@@ -167,7 +167,7 @@
     {/if}
     {#if origin}
       <dt>{t("marketplace.origin")}</dt>
-      <dd><button class="link" onclick={() => void openUrl(origin)}>{origin}</button></dd>
+      <dd><button class="link" onclick={() => void openLink(origin)}>{origin}</button></dd>
     {/if}
     {#if item.extra?.installName && isMcp}
       <dt>{t("marketplace.installName")}</dt>
@@ -176,7 +176,7 @@
   </dl>
   {#if item.extra?.listingUrl}
     {@const listing = item.extra.listingUrl}
-    <button class="link listing" onclick={() => void openUrl(listing)}>
+    <button class="link listing" onclick={() => void openLink(listing)}>
       {t("marketplace.viewOn", { source: item.sourceLabel })} ↗
     </button>
   {/if}

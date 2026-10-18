@@ -8,6 +8,7 @@ import { tabAgentSessions } from "../ai-mode/tab-sessions.svelte";
 import { classify, type ClassifyState } from "../ai-mode/classifier";
 import { appConfigStore } from "../core/app-config.svelte";
 import { isMac, isWindows } from "../core/platform";
+import { openLink } from "../core/links";
 import {
   attachPty,
   claimPtySize,
@@ -122,10 +123,15 @@ export class TerminalInstance {
       fontSize: themeStore.effectiveFontSize,
       lineHeight: theme.font.lineHeight,
       scrollback: 5000,
+      // Links a program marks (OSC 8, as `ls --hyperlink` or an agent print
+      // them) open where every other link does, without xterm's confirm().
+      linkHandler: { activate: (_event, uri) => void openLink(uri).catch(() => {}) },
     });
     this.fit = new FitAddon();
     this.term.loadAddon(this.fit);
-    this.term.loadAddon(new WebLinksAddon());
+    // The addon's own handler would open the link in a window of the web
+    // view, not the user's browser.
+    this.term.loadAddon(new WebLinksAddon((_event, uri) => void openLink(uri).catch(() => {})));
 
     // Unicode 15 widths, and grapheme clusters taken as one character: a ZWJ
     // family (👨‍👩‍👧), a flag, a skin tone, a newer emoji (🫠) take the cells

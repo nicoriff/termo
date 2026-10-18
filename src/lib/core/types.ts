@@ -129,6 +129,8 @@ export interface AppConfig {
   marketplace_source?: string;
   keep_awake_button: boolean;
   remote_button?: boolean;
+  /** The browser links open with; absent or null for the system's. */
+  link_browser?: string | null;
   /** Where the user installed an agent's CLI when not npm's own folder, by
    * agent. Absent in configs from before Termo could install them. */
   agent_install_dirs?: Record<string, string>;

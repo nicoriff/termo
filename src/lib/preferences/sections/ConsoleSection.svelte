@@ -6,8 +6,10 @@
   import type { ShellInfo } from "$lib/core/types";
   import { t } from "$lib/i18n/i18n.svelte";
   import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
+  import SettingDropdown from "../SettingDropdown.svelte";
 
   let shells = $state<ShellInfo[]>([]);
+  const shellOptions = $derived(shells.map((shell) => ({ value: shell.id, label: shell.display_name })));
 
   onMount(() => {
     void listShells().then((list) => (shells = list));
@@ -28,20 +30,20 @@
 
 <section>
   <h3>{t("preferences.console.defaultShell")}</h3>
-  <div class="shell-list">
-    {#each shells as shell (shell.id)}
-      <button
-        class="shell-item"
-        class:selected={(appConfigStore.defaultShellId ?? shells[0]?.id) === shell.id}
-        onclick={() => appConfigStore.setDefaultShell(shell.id)}
-      >
-        {shell.display_name}
-      </button>
-    {/each}
-    {#if shells.length === 0}
-      <p class="setting-hint">{t("preferences.console.searching")}</p>
-    {/if}
-  </div>
+  {#if shells.length === 0}
+    <p class="setting-hint">{t("preferences.console.searching")}</p>
+  {:else}
+    <!-- A combo, not a list: some systems have a dozen consoles. -->
+    <div class="row">
+      <span>{t("preferences.console.defaultShellLabel")}</span>
+      <SettingDropdown
+        options={shellOptions}
+        value={appConfigStore.defaultShellId ?? shells[0].id}
+        onpick={(id) => appConfigStore.setDefaultShell(id)}
+      />
+    </div>
+    <p class="setting-hint">{t("preferences.console.defaultShellHint")}</p>
+  {/if}
 </section>
 
 <section>
@@ -94,29 +96,12 @@
     margin: 0 0 8px;
   }
 
-  .shell-list {
+  .row {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .shell-item {
-    text-align: left;
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: inherit;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     font-size: 12px;
-    cursor: pointer;
-  }
-
-  .shell-item:hover {
-    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
-  }
-
-  .shell-item.selected {
-    border-color: var(--pane-active-border, #3a6df0);
   }
 
   .toggle-row {

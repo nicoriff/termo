@@ -67,6 +67,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Power",
     # Short (8.3) paths for agent hooks any shell can run (agent_hooks.rs).
     "Win32_Storage_FileSystem",
+    # The installed browsers, for where links open (browser.rs).
+    "Win32_System_Registry",
 ] }
 
 # Already in the graph through tauri-plugin-notification, which shows a toast

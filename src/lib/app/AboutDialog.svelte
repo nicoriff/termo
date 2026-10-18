@@ -2,7 +2,7 @@
   import { fade, fly } from "svelte/transition";
   import { getTauriVersion, getVersion } from "@tauri-apps/api/app";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { isMac, isWindows } from "$lib/core/platform";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -78,7 +78,7 @@
 
     <p class="about-copyright">
       © {YEAR}
-      <button class="about-link" onclick={() => void openUrl("https://github.com/nicoriff")}>@nicoriff</button>
+      <button class="about-link" onclick={() => void openLink("https://github.com/nicoriff")}>@nicoriff</button>
     </p>
 
     <div class="dialog-actions">

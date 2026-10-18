@@ -3,10 +3,14 @@
   import MainWindow from "$lib/app/MainWindow.svelte";
   import Preferences from "$lib/preferences/Preferences.svelte";
   import { startI18nSync } from "$lib/i18n/i18n.svelte";
+  import { routeWindowOpen } from "$lib/core/links";
 
   const isPreferences = location.hash === "#preferences";
 
-  onMount(() => startI18nSync());
+  onMount(() => {
+    routeWindowOpen();
+    startI18nSync();
+  });
 </script>
 
 {#if isPreferences}

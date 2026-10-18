@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { openLink } from "$lib/core/links";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import {
     clearSourceKey,
@@ -120,7 +120,7 @@
       {/if}
       {#if KEY_PAGES[source.id]}
         {@const page = KEY_PAGES[source.id]!}
-        <button class="link" onclick={() => void openUrl(page)}>{t("preferences.marketplace.getKey")} ↗</button>
+        <button class="link" onclick={() => void openLink(page)}>{t("preferences.marketplace.getKey")} ↗</button>
       {/if}
       <p class="setting-hint">{t("preferences.marketplace.keychain")}</p>
     {/if}
