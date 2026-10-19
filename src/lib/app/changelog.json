@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.25.1",
+    "date": "2026-10-18",
+    "es": [
+      "Abrir desde el celular una consola con emojis u otros caracteres anchos en el borde derecho (como la de Claude Code) ya no cierra las consolas que siguen corriendo en segundo plano."
+    ],
+    "en": [
+      "Opening a console from your phone that has emoji or other wide characters at its right edge (like Claude Code's) no longer closes the consoles kept running in the background."
+    ]
+  },
+  {
     "version": "0.25.0",
     "date": "2026-10-18",
     "es": [
