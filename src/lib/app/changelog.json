@@ -3,9 +3,11 @@
     "version": "0.25.1",
     "date": "2026-10-18",
     "es": [
+      "**Primeros pasos**: un paso nuevo, «Remoto», muestra cómo las consolas siguen corriendo con Termo cerrado y cómo usarlas desde el celular con Tailscale.",
       "Abrir desde el celular una consola con emojis u otros caracteres anchos en el borde derecho (como la de Claude Code) ya no cierra las consolas que siguen corriendo en segundo plano."
     ],
     "en": [
+      "**Getting started**: a new step, “Remote”, shows how consoles keep running with Termo closed and how to use them from your phone with Tailscale.",
       "Opening a console from your phone that has emoji or other wide characters at its right edge (like Claude Code's) no longer closes the consoles kept running in the background."
     ]
   },

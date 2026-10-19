@@ -2081,11 +2081,12 @@ export const en: Messages = {
     welcome: {
       titleFirst: "Let's set up Termo for the first time",
       titleAgain: "Let's set up Termo again",
-      intro: "Five short steps. What you choose applies right away, and you can change it later in Preferences.",
+      intro: "Six short steps. What you choose applies right away, and you can change it later in Preferences.",
       pathLabel: "What we'll go through",
       items: {
         navigation: "How to move between tiles and tabs",
         team: "Your own agents and orchestration",
+        remote: "Your consoles with Termo closed, and from your phone",
         appearance: "Your terminal's theme",
         agents: "Connecting Claude Code, Codex and the rest",
         notifications: "When you want to be notified",
@@ -2094,6 +2095,7 @@ export const en: Messages = {
     steps: {
       navigation: "Navigation",
       team: "Agents",
+      remote: "Remote",
       appearance: "Appearance",
       agents: "Hooks",
       notifications: "Notifications",
@@ -2147,6 +2149,26 @@ export const en: Messages = {
         test: "Write the tests",
       },
       hint: "Both are in the agents panel ({keys}).",
+    },
+    remote: {
+      title: "Your consoles, from anywhere",
+      intro:
+        "Consoles can keep running with Termo closed, and with Tailscale you see and use them from your phone or another computer.",
+      demoLabel: "Demo: {name}",
+      persistent: {
+        title: "They keep running",
+        body: "With “Keep consoles running when Termo closes”, closing the window or Termo, or updating it, doesn't end what runs in your consoles: a server, a build, an agent halfway through. They reconnect when you open Termo again.",
+      },
+      phone: {
+        title: "From your phone",
+        body: "With Tailscale on this computer and on your phone, open Termo's address in the phone's browser: your open consoles and your agents are there, to follow what they do, type and answer what they ask. Only the accounts you allow get in.",
+      },
+      computer: "This computer",
+      phoneLabel: "Phone",
+      closed: "Termo closed",
+      running: "Still running",
+      reconnected: "Right where you left it",
+      hint: "Turn them on in Preferences → Console and Preferences → Remote access. The antenna in the title bar shows the address, with a QR code to open it on your phone.",
     },
     appearance: {
       title: "Choose how it looks",

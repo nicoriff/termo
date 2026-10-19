@@ -19,22 +19,25 @@
   import NavigationStep from "./NavigationStep.svelte";
   import NotificationsStep from "./NotificationsStep.svelte";
   import AgentInstallDialog from "$lib/agent-install/AgentInstallDialog.svelte";
+  import RemoteStep from "./RemoteStep.svelte";
   import TeamStep from "./TeamStep.svelte";
   import WelcomeStep from "./WelcomeStep.svelte";
 
   /**
    * The setup shown the first time Termo runs, and again from "About": how
-   * to move around, the theme, the agents' hooks and the notifications.
+   * to move around, the agents, the consoles from elsewhere, the theme, the
+   * agents' hooks and the notifications.
    * Every step applies what it changes as it goes, except the hooks, which
    * touch each agent's own settings and wait for "continue".
    */
   /** The numbered ones, between the welcome and the closing screen. */
-  const SETUP_STEPS = ["navigation", "team", "appearance", "agents", "notifications"] as const;
+  const SETUP_STEPS = ["navigation", "team", "remote", "appearance", "agents", "notifications"] as const;
   type SetupStep = (typeof SETUP_STEPS)[number];
   const STEPS = ["welcome", ...SETUP_STEPS, "done"] as const;
   const STEP_LABELS: Record<SetupStep, MessageKey> = {
     navigation: "onboarding.steps.navigation",
     team: "onboarding.steps.team",
+    remote: "onboarding.steps.remote",
     appearance: "onboarding.steps.appearance",
     agents: "onboarding.steps.agents",
     notifications: "onboarding.steps.notifications",
@@ -42,6 +45,7 @@
   const STEP_ABOUT: Record<SetupStep, MessageKey> = {
     navigation: "onboarding.welcome.items.navigation",
     team: "onboarding.welcome.items.team",
+    remote: "onboarding.welcome.items.remote",
     appearance: "onboarding.welcome.items.appearance",
     agents: "onboarding.welcome.items.agents",
     notifications: "onboarding.welcome.items.notifications",
@@ -238,6 +242,8 @@
           <NavigationStep />
         {:else if step === "team"}
           <TeamStep />
+        {:else if step === "remote"}
+          <RemoteStep />
         {:else if step === "appearance"}
           <AppearanceStep />
         {:else if step === "agents"}
