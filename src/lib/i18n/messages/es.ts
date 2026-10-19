@@ -2082,11 +2082,12 @@ export const es = {
     welcome: {
       titleFirst: "Te ayudamos a configurar Termo por primera vez",
       titleAgain: "Volvamos a configurar Termo",
-      intro: "Son cinco pasos cortos. Lo que elijas se aplica al momento y después lo podés cambiar en Preferencias.",
+      intro: "Son seis pasos cortos. Lo que elijas se aplica al momento y después lo podés cambiar en Preferencias.",
       pathLabel: "Lo que vamos a ver",
       items: {
         navigation: "Cómo moverte entre tiles y pestañas",
         team: "Agentes propios y orquestación",
+        remote: "Tus consolas con Termo cerrado, y desde el celular",
         appearance: "El tema de tu terminal",
         agents: "Conectar Claude Code, Codex y los demás",
         notifications: "Cuándo querés que te avise",
@@ -2095,6 +2096,7 @@ export const es = {
     steps: {
       navigation: "Navegación",
       team: "Agentes",
+      remote: "Remoto",
       appearance: "Apariencia",
       agents: "Hooks",
       notifications: "Avisos",
@@ -2148,6 +2150,27 @@ export const es = {
         test: "Escribir los tests",
       },
       hint: "Los dos están en el panel de agentes ({keys}).",
+    },
+    remote: {
+      title: "Tus consolas, desde cualquier lado",
+      intro:
+        "Las consolas pueden seguir corriendo con Termo cerrado, y con Tailscale las ves y las usás desde el celular u otra computadora.",
+      demoLabel: "Demostración: {name}",
+      persistent: {
+        title: "Siguen corriendo",
+        body: "Con «Mantener las consolas abiertas al cerrar Termo», cerrar la ventana o Termo, o actualizarlo, no corta lo que corre en tus consolas: un servidor, un build, un agente a mitad de camino. Se reconectan cuando volvés a abrir Termo.",
+      },
+      devices: {
+        title: "Desde tus dispositivos",
+        body: "Con Tailscale en esta computadora y en tu celular o tu notebook, abrí la dirección de Termo en su navegador: tus consolas abiertas y tus agentes están ahí, en todos a la vez, para seguir lo que hacen, escribir y responder lo que preguntan. La conexión va cifrada de punta a punta y solo entran las cuentas que vos autorizás.",
+      },
+      computer: "Esta computadora",
+      phoneLabel: "Celular",
+      laptopLabel: "Notebook",
+      yours: "Tu cuenta",
+      noAccess: "Sin acceso",
+      encrypted: "Cifrado de punta a punta",
+      hint: "Se activan en Preferencias → Consola y Preferencias → Acceso remoto. La antena de la barra de título muestra la dirección, con un código QR para abrirla en el celular.",
     },
     appearance: {
       title: "Elegí cómo se ve",

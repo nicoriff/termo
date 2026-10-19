@@ -185,6 +185,21 @@ mod tests {
         }
     }
 
+    /// A phone attaching narrows the screen and leaves a wide character in
+    /// the last column, its second half cut off; the program then draws over
+    /// it. vt100 itself, not the guard, has to take that (vendor/vt100): the
+    /// guard would hide the panic here, and a release build used to abort.
+    #[test]
+    fn narrowed_over_a_wide_character_in_the_last_column() {
+        for (text, cols) in [("12345678漢", 9u16), ("1234567🚀", 8), ("漢字漢字漢", 9)] {
+            let mut parser = vt100::Parser::new(5, cols + 1, SCROLLBACK);
+            parser.process(text.as_bytes());
+            parser.screen_mut().set_size(5, cols);
+            parser.process(format!("\x1b[1;{cols}Hx\x1b[1;{cols}H字\x1b[1;{cols}H\x1b[X\x1b[1;{cols}H\x1b[@").as_bytes());
+            assert_eq!(parser.screen().size(), (5, cols));
+        }
+    }
+
     /// Whatever vt100 panics on, the copy starts over rather than taking
     /// the console's lock down with it.
     #[test]

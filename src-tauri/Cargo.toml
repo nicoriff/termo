@@ -105,5 +105,13 @@ debug = "line-tables-only"
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
+# Not "abort": the sessions daemon (mux/screen.rs) catches a panic of its
+# terminal emulator and starts that screen over. Aborting would end the
+# daemon, and every console in it, instead.
+panic = "unwind"
 strip = true
+
+# vt100 with a wide character left in the last column by a resize cleared
+# (vendor/vt100/src/row.rs): drawing over it panicked.
+[patch.crates-io]
+vt100 = { path = "vendor/vt100" }
