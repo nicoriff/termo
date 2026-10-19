@@ -69,8 +69,10 @@
   .path {
     align-self: stretch;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 10px;
+    /* One column a step, however many there are: a single row. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 8px;
     margin: 28px 0 0;
     padding: 0;
     list-style: none;
@@ -81,7 +83,7 @@
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    padding: 14px 8px;
+    padding: 14px 6px;
     border: 1px solid var(--tabbar-border, #2a2a2a);
     border-radius: 8px;
     font-size: 12px;
@@ -117,7 +119,7 @@
 
   @media (max-width: 680px) {
     .path {
-      grid-template-columns: minmax(0, 1fr);
+      grid-auto-flow: row;
       gap: 6px;
     }
 
