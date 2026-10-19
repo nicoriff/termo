@@ -2160,15 +2160,16 @@ export const es = {
         title: "Siguen corriendo",
         body: "Con «Mantener las consolas abiertas al cerrar Termo», cerrar la ventana o Termo, o actualizarlo, no corta lo que corre en tus consolas: un servidor, un build, un agente a mitad de camino. Se reconectan cuando volvés a abrir Termo.",
       },
-      phone: {
-        title: "Desde el celular",
-        body: "Con Tailscale en esta computadora y en el celular, abrí la dirección de Termo en el navegador del celular: ahí están tus consolas abiertas y tus agentes, para seguir lo que hacen, escribir y responder lo que preguntan. Solo entran las cuentas que vos autorizás.",
+      devices: {
+        title: "Desde tus dispositivos",
+        body: "Con Tailscale en esta computadora y en tu celular o tu notebook, abrí la dirección de Termo en su navegador: tus consolas abiertas y tus agentes están ahí, en todos a la vez, para seguir lo que hacen, escribir y responder lo que preguntan. La conexión va cifrada de punta a punta y solo entran las cuentas que vos autorizás.",
       },
       computer: "Esta computadora",
       phoneLabel: "Celular",
-      closed: "Termo cerrado",
-      running: "Sigue corriendo",
-      reconnected: "Como la dejaste",
+      laptopLabel: "Notebook",
+      yours: "Tu cuenta",
+      noAccess: "Sin acceso",
+      encrypted: "Cifrado de punta a punta",
       hint: "Se activan en Preferencias → Consola y Preferencias → Acceso remoto. La antena de la barra de título muestra la dirección, con un código QR para abrirla en el celular.",
     },
     appearance: {

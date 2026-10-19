@@ -1,141 +1,146 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
 
-  type Scene = "persistent" | "phone";
-  const SCENES: Scene[] = ["persistent", "phone"];
-  const BEAT_MS = 1100;
-  const SCENE_LENGTH: Record<Scene, number> = { persistent: 7, phone: 7 };
-  /** The beat that stands for the whole scene when motion is reduced. */
-  const STILL_BEAT: Record<Scene, number> = { persistent: 3, phone: 5 };
+  /** What the panel tells, beside the picture. */
+  const TOPICS: { title: MessageKey; body: MessageKey }[] = [
+    { title: "onboarding.remote.persistent.title", body: "onboarding.remote.persistent.body" },
+    { title: "onboarding.remote.devices.title", body: "onboarding.remote.devices.body" },
+  ];
 
-  const TITLES: Record<Scene, MessageKey> = {
-    persistent: "onboarding.remote.persistent.title",
-    phone: "onboarding.remote.phone.title",
-  };
-  const BODIES: Record<Scene, MessageKey> = {
-    persistent: "onboarding.remote.persistent.body",
-    phone: "onboarding.remote.phone.body",
-  };
+  /** What the console shows, on every screen: the same in any language. */
+  const AGENT_LINES = ["❯ npm test", "✓ 42 passed", "Commit? (y/n) y"];
+  /** Where the browsers on the other devices open Termo: a tailnet name. */
+  const ADDRESS = "pc.tailnet.ts.net";
 
-  /** What the console prints, a line a beat: the same in any language. */
-  const SERVER_LINES = ["$ npm run dev", "ready on :5173", "GET / 200", "GET /api 200", "GET /login 200", "GET /api 200"];
-  const AGENT_LINES = ["❯ npm test", "✓ 42 passed", "Commit the changes? (y/n)"];
-  /** What's typed on the phone, and the beat it shows up there and here. */
-  const TYPED = "y";
-  const TYPED_BEAT = 4;
-
-  let scene = $state<Scene>("persistent");
-  let beat = $state(0);
-  let still = $state(false);
-  // Once the user picks a scene it loops, instead of moving on to the other.
-  let pinned = false;
-
-  onMount(() => {
-    still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (still) return;
-    const timer = setInterval(() => {
-      if (beat + 1 < SCENE_LENGTH[scene]) {
-        beat++;
-        return;
-      }
-      if (!pinned) scene = SCENES[(SCENES.indexOf(scene) + 1) % SCENES.length];
-      beat = 0;
-    }, BEAT_MS);
-    return () => clearInterval(timer);
-  });
-
-  function pick(next: Scene) {
-    pinned = true;
-    scene = next;
-    beat = 0;
-  }
-
-  const now = $derived(still ? STILL_BEAT[scene] : beat);
-
-  // Kept running: open, Termo closes and the console goes on, Termo is back.
-  const windowState = $derived<"open" | "closed" | "back">(now < 2 ? "open" : now < 5 ? "closed" : "back");
-  const serverLines = $derived(SERVER_LINES.slice(0, Math.min(SERVER_LINES.length, now + 2)));
-  const windowLabel = $derived(
-    windowState === "closed"
-      ? t("onboarding.remote.running")
-      : windowState === "back"
-        ? t("onboarding.remote.reconnected")
-        : null,
-  );
-
-  // From the phone: the link comes up, the phone shows the console, an
-  // answer typed there reaches it.
-  const linked = $derived(now >= 1);
-  const onPhone = $derived(now >= 2);
+  /** Tailscale's mark: a three-by-three grid of dots, the middle row and the
+   * one under its center lit. */
+  const MARK_DOTS = [0, 1, 2].flatMap((row) => [0, 1, 2].map((col) => ({ row, col, lit: row === 1 || (row === 2 && col === 1) })));
 </script>
 
+{#snippet lines()}
+  {#each AGENT_LINES as line, index (index)}
+    <span class="line">{line}</span>
+  {/each}
+{/snippet}
+
+{#snippet padlock()}
+  <svg class="padlock" viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="3.5" y="7" width="9" height="7" rx="1.5" />
+    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+  </svg>
+{/snippet}
+
+{#snippet address()}
+  <span class="address">{@render padlock()}<span>{ADDRESS}</span></span>
+{/snippet}
+
+{#snippet caption(label: string)}
+  <span class="caption">
+    {label}
+    <span class="badge yours">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.3l2.6 2.6L12 5.2" /></svg>
+      {t("onboarding.remote.yours")}
+    </span>
+  </span>
+{/snippet}
+
+<!-- This computer's consoles, through the tailnet, on your laptop and your
+     phone at once; someone else's device kept out. All of it there from the
+     start: only what goes over the connectors moves. -->
 <div class="onb-stage">
-  <div class="demo" role="img" aria-label={t("onboarding.remote.demoLabel", { name: t(TITLES[scene]) })}>
-    {#if scene === "persistent"}
-      <div class="persistent">
-        <div class="window" class:closed={windowState === "closed"}>
-          <div class="window-bar">
-            <i></i><i></i><i></i>
-            <span class="window-name">{windowState === "closed" ? t("onboarding.remote.closed") : "Termo"}</span>
-          </div>
-          <div class="console" class:live={windowState === "closed"}>
-            {#each serverLines as line, index (index)}
-              <span class="line">{line}</span>
-            {/each}
+  <div class="demo" role="img" aria-label={t("onboarding.remote.demoLabel", { name: t("onboarding.remote.devices.title") })}>
+    <div class="net">
+      <!-- The connectors, under the devices; stretched to the scene, the
+           strokes keep their width. -->
+      <svg class="wires" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path class="wire" d="M50 27 L50 38" />
+        <path class="wire" d="M50 52 C50 57 27 54 27 58" />
+        <path class="wire" d="M50 52 C50 57 75 54 75 58" />
+        <path class="wire refused" d="M19 45 L44 45" />
+      </svg>
+
+      <!-- This computer: a monitor on its stand, Termo on screen. -->
+      <div class="monitor">
+        <div class="bezel">
+          <i class="camera"></i>
+          <div class="glass">
+            <span class="app-bar"><i></i><i></i><i></i><ConsoleIcon kind="claude" size={10} /> Claude Code</span>
+            <div class="console">{@render lines()}</div>
           </div>
         </div>
-        <span class="state" class:shown={windowLabel !== null}>
-          <i class="dot {windowState === 'closed' ? 'running' : 'done'}"></i>{windowLabel ?? ""}
+        <span class="neck"></span>
+        <span class="foot"></span>
+        <span class="monitor-caption">{t("onboarding.remote.computer")}</span>
+      </div>
+
+      <div class="hub">
+        <span class="mark">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {#each MARK_DOTS as dot (`${dot.row}-${dot.col}`)}
+              <circle cx={5 + dot.col * 7} cy={5 + dot.row * 7} r="2.6" class:lit={dot.lit} />
+            {/each}
+          </svg>
+          <span class="lock">{@render padlock()}</span>
+        </span>
+        <span class="hub-label">
+          <strong>{t("titlebar.remote.tailscale")}</strong>
+          <small>{t("onboarding.remote.encrypted")}</small>
         </span>
       </div>
-    {:else}
-      <div class="phone-scene">
-        <div class="device computer">
-          <span class="device-name">{t("onboarding.remote.computer")}</span>
-          <div class="console">
-            <span class="console-head"><ConsoleIcon kind="claude" size={14} /> Claude Code</span>
-            {#each AGENT_LINES as line, index (index)}
-              <span class="line">{line}</span>
-            {/each}
-            {#if now >= TYPED_BEAT + 1}
-              <span class="line typed">{TYPED}</span>
-            {/if}
-          </div>
-        </div>
-        <div class="link" class:live={linked}>
-          <span class="pill">{t("titlebar.remote.tailscale")}</span>
-        </div>
-        <div class="device phone" class:shown={onPhone}>
-          <span class="device-name">{t("onboarding.remote.phoneLabel")}</span>
-          <div class="console">
-            <span class="console-head"><ConsoleIcon kind="claude" size={12} /></span>
-            {#each AGENT_LINES as line, index (index)}
-              <span class="line">{line}</span>
-            {/each}
-            {#if now >= TYPED_BEAT}
-              <span class="line typed">{TYPED}</span>
-            {/if}
-          </div>
-        </div>
+
+      <div class="stranger">
+        <span class="stranger-device"><i></i></span>
+        <span class="refused-mark" aria-hidden="true">
+          <svg viewBox="0 0 16 16"><path d="M5 5l6 6M11 5l-6 6" /></svg>
+        </span>
+        <span class="badge refused">{t("onboarding.remote.noAccess")}</span>
       </div>
-    {/if}
+
+      <!-- A laptop: the lid, with its camera and a browser on Termo, the
+           hinge, the deck seen from the front and its shadow. -->
+      <div class="device laptop">
+        <div class="lid">
+          <i class="camera"></i>
+          <div class="glass">
+            <span class="browser-tabs"><i></i><i></i><i></i><span class="browser-tab">Termo</span></span>
+            {@render address()}
+            <div class="console">{@render lines()}</div>
+          </div>
+        </div>
+        <span class="hinge"></span>
+        <span class="deck"><i></i></span>
+        <span class="floor-shadow"></span>
+        {@render caption(t("onboarding.remote.laptopLabel"))}
+      </div>
+
+      <!-- A phone: its body and side buttons, the island, the status bar,
+           a browser on Termo and the home indicator. -->
+      <div class="device phone">
+        <div class="body">
+          <i class="button power"></i>
+          <i class="button volume"></i>
+          <div class="glass">
+            <span class="status-bar"><span>9:41</span><i class="island"></i><span class="signal"><i></i><i></i><i></i></span></span>
+            {@render address()}
+            <div class="console">{@render lines()}</div>
+            <i class="home"></i>
+          </div>
+        </div>
+        {@render caption(t("onboarding.remote.phoneLabel"))}
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="onb-panel">
   <h2>{t("onboarding.remote.title")}</h2>
   <p class="onb-intro">{t("onboarding.remote.intro")}</p>
-  <ul class="scenes">
-    {#each SCENES as id (id)}
+  <ul class="topics">
+    {#each TOPICS as topic (topic.title)}
       <li>
-        <button class="scene" class:active={scene === id} aria-pressed={scene === id} onclick={() => pick(id)}>
-          <span class="scene-title">{t(TITLES[id])}</span>
-          {#if scene === id}
-            <span class="scene-body">{t(BODIES[id])}</span>
-          {/if}
-        </button>
+        <span class="topic-title">{t(topic.title)}</span>
+        <span class="topic-body">{t(topic.body)}</span>
       </li>
     {/each}
   </ul>
@@ -144,45 +149,24 @@
 
 <style>
   .demo {
+    --accent: var(--pane-active-border, #3a6df0);
+    --ok: #22a55b;
+    --refused: #f14c4c;
+    /* The hardware itself is dark, whatever the theme. */
+    --frame: #1b1c20;
+    --frame-edge: #3b3e46;
+    --frame-shine: #50545e;
+    --screen: #0f1013;
+    --screen-fg: #d8dbe2;
     width: min(100%, 400px);
     font-size: 11px;
-  }
-
-  .dot {
-    display: inline-block;
-    flex-shrink: 0;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.35;
-  }
-
-  .dot.running {
-    opacity: 1;
-    background: var(--pane-active-border, #3a6df0);
-    animation: pulse 900ms ease-in-out infinite;
-  }
-
-  .dot.done {
-    opacity: 1;
-    background: #22a55b;
-  }
-
-  @keyframes pulse {
-    50% {
-      transform: scale(1.5);
-      opacity: 0.5;
-    }
   }
 
   .console {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 8px 10px;
+    gap: 1px;
     font-family: var(--terminal-font-family, monospace);
-    font-size: 10.5px;
     line-height: 1.35;
     overflow: hidden;
   }
@@ -193,252 +177,621 @@
     text-overflow: ellipsis;
   }
 
-  .line.typed {
-    color: var(--pane-active-border, #3a6df0);
+  /* Placed on the same 0–100 grid as the connectors. */
+  .net {
+    position: relative;
+    height: 345px;
   }
 
-  /* Kept running: a Termo window whose frame goes while its console stays. */
-  .persistent {
+  .wires {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* What goes over them, moving along: encrypted, from end to end. */
+  .wire {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    vector-effect: non-scaling-stroke;
+    animation: flow 600ms linear infinite;
+  }
+
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -10;
+    }
+  }
+
+  .wire.refused {
+    stroke: var(--refused);
+    stroke-dasharray: 3 4;
+    opacity: 0.75;
+    animation: none;
+  }
+
+  /* Every screen: dark glass, a faint reflection across it. */
+  .glass {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 40%),
+      var(--screen);
+    color: var(--screen-fg);
+  }
+
+  .glass .console {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .camera {
+    display: block;
+    width: 3px;
+    height: 3px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: #2c3038;
+    box-shadow: inset 0 0 0 1px #3c4250;
+  }
+
+  .padlock {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
+  /* A browser's address bar, the padlock first: the tailnet's own address. */
+  .address {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin: 4px 5px 0;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    font-size: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .address .padlock {
+    color: #3fbf75;
+  }
+
+  .address span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+  }
+
+  /* The devices' shadow, and the accent ring of being connected. */
+  .monitor .bezel,
+  .lid,
+  .phone .body {
+    box-shadow:
+      0 0 0 1px var(--accent),
+      0 10px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  /* This computer. */
+  .monitor {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 52%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    transform: translateX(-50%);
   }
 
-  .window {
+  .monitor .bezel {
     box-sizing: border-box;
-    width: 82%;
-    border: 1px solid var(--tabbar-border, #2a2a2a);
-    border-radius: 8px;
+    width: 100%;
+    height: 76px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 4px 4px;
+    border: 1px solid var(--frame-edge);
+    border-radius: 7px;
+    background: var(--frame);
+  }
+
+  .monitor .glass {
+    flex: 1;
+    border-radius: 3px;
+  }
+
+  .app-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 8.5px;
+  }
+
+  .app-bar i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .app-bar i:last-of-type {
+    margin-right: 4px;
+  }
+
+  .monitor .console {
+    padding: 3px 7px;
+    font-size: 9px;
+  }
+
+  .neck {
+    width: 12%;
+    height: 8px;
+    background: linear-gradient(90deg, var(--frame-edge), var(--frame-shine), var(--frame-edge));
+  }
+
+  .foot {
+    width: 34%;
+    height: 4px;
+    border-radius: 3px 3px 1px 1px;
+    background: var(--frame-shine);
+  }
+
+  .monitor-caption {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 30px;
+    width: 70px;
+    font-size: 10px;
+    line-height: 1.3;
+    opacity: 0.75;
+  }
+
+  /* The tailnet. */
+  .hub {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translate(-22px, -50%);
+  }
+
+  .mark {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 44px;
+    height: 44px;
+    border: 1.5px solid var(--accent);
+    border-radius: 12px;
     background: var(--tabbar-active-bg-solid, #1e1e1e);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
-    transition:
-      border-color 260ms ease,
-      background 260ms ease,
-      box-shadow 260ms ease;
+    box-shadow: 0 0 0 4px var(--tab-focus-bg, rgba(58, 109, 240, 0.25));
   }
 
-  .window.closed {
-    border-style: dashed;
-    background: transparent;
-    box-shadow: none;
+  .mark > svg {
+    width: 26px;
+    height: 26px;
   }
 
-  .window-bar {
+  .mark circle {
+    fill: currentColor;
+    opacity: 0.25;
+  }
+
+  .mark circle.lit {
+    opacity: 1;
+  }
+
+  /* The padlock on its corner: what goes through is encrypted. */
+  .lock {
+    position: absolute;
+    right: -7px;
+    bottom: -7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--ok);
+    color: #fff;
+  }
+
+  .lock .padlock {
+    width: 11px;
+    height: 11px;
+    stroke-width: 1.6;
+  }
+
+  .hub-label {
+    display: flex;
+    flex-direction: column;
+    white-space: nowrap;
+  }
+
+  .hub-label small {
+    margin-top: 1px;
+    font-size: 10px;
+    opacity: 0.65;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .badge svg {
+    width: 9px;
+    height: 9px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .badge.yours {
+    background: rgba(34, 165, 91, 0.18);
+    color: #3fbf75;
+  }
+
+  .badge.refused {
+    background: rgba(241, 76, 76, 0.16);
+    color: var(--refused);
+  }
+
+  /* Someone else's device: it reaches for the tailnet and is turned away. */
+  .stranger {
+    position: absolute;
+    top: 45%;
+    left: 2%;
+    width: 42%;
+    height: 0;
+  }
+
+  .stranger-device {
+    position: absolute;
+    left: 6%;
+    top: -19px;
+    box-sizing: border-box;
+    width: 22px;
+    height: 38px;
+    border: 1.5px dashed var(--refused);
+    border-radius: 6px;
+    opacity: 0.75;
+  }
+
+  .stranger-device i {
+    position: absolute;
+    left: 50%;
+    bottom: 3px;
+    width: 8px;
+    height: 1.5px;
+    border-radius: 1px;
+    background: var(--refused);
+    transform: translateX(-50%);
+  }
+
+  .refused-mark {
+    position: absolute;
+    left: 62%;
+    top: -9px;
+    display: flex;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--refused);
+    color: #fff;
+    transform: translateX(-50%);
+  }
+
+  .refused-mark svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .stranger .badge {
+    position: absolute;
+    left: 62%;
+    top: 14px;
+    transform: translateX(-50%);
+  }
+
+  /* Your devices, under the tailnet. */
+  .device {
+    position: absolute;
+    top: 58%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .device .console {
+    padding: 3px 7px 4px;
+    font-size: 8.5px;
+  }
+
+  .caption {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-    transition: opacity 260ms ease;
+    margin-top: 6px;
+    font-size: 10px;
+    white-space: nowrap;
   }
 
-  .window-bar i {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--tabbar-border, #2a2a2a);
+  .laptop {
+    left: 4%;
+    width: 46%;
   }
 
-  .window.closed .window-bar {
-    opacity: 0.6;
-  }
-
-  .window.closed .window-bar i {
-    visibility: hidden;
-  }
-
-  .window-name {
-    margin-left: 6px;
-    opacity: 0.7;
-  }
-
-  .window .console {
-    height: 92px;
-    justify-content: flex-end;
-    margin: 6px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    transition:
-      border-color 260ms ease,
-      background 260ms ease;
-  }
-
-  .window .console.live {
-    border-color: var(--pane-active-border, #3a6df0);
-    background: var(--tabbar-active-bg-solid, #1e1e1e);
-  }
-
-  .state {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 14px;
-    opacity: 0;
-    transition: opacity 200ms ease;
-  }
-
-  .state.shown {
-    opacity: 0.85;
-  }
-
-  /* From the phone: this computer, the tailnet between, the phone. */
-  .phone-scene {
-    display: flex;
-    align-items: center;
-  }
-
-  .device {
+  .lid {
     box-sizing: border-box;
-    flex-shrink: 0;
+    width: 100%;
+    height: 104px;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-active-bg-solid, #1e1e1e);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+    gap: 2px;
+    padding: 3px 5px 6px;
+    border: 1px solid var(--frame-edge);
+    border-bottom: none;
+    border-radius: 9px 9px 2px 2px;
+    background: linear-gradient(180deg, #24262b, var(--frame));
   }
 
-  .device-name {
-    padding: 6px 10px 0;
-    font-size: 10px;
-    opacity: 0.6;
+  .lid .glass {
+    flex: 1;
+    border-radius: 2px;
   }
 
-  .console-head {
+  /* The browser on it: its window buttons and a tab on Termo, then the
+     address bar. */
+  .browser-tabs {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 2px;
-    font-family: inherit;
-    opacity: 0.8;
+    align-items: flex-end;
+    gap: 3px;
+    height: 10px;
+    padding: 0 5px;
+    background: rgba(255, 255, 255, 0.04);
   }
 
-  .computer {
-    width: 52%;
-    border-radius: 8px;
+  .browser-tabs > i {
+    align-self: center;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .browser-tabs > i:nth-of-type(1) {
+    background: #ff5f57;
+  }
+
+  .browser-tabs > i:nth-of-type(2) {
+    background: #febc2e;
+  }
+
+  .browser-tabs > i:nth-of-type(3) {
+    margin-right: 4px;
+    background: #28c840;
+  }
+
+  .browser-tab {
+    padding: 1px 8px 0;
+    border-radius: 3px 3px 0 0;
+    background: var(--screen);
+    font-size: 6.5px;
+    line-height: 8px;
+    opacity: 0.9;
+  }
+
+  .laptop .address {
+    margin-top: 3px;
+  }
+
+  /* Where the lid meets the deck. */
+  .hinge {
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(180deg, #0b0c0e, #24262c);
+  }
+
+  /* The deck, wider than the lid and seen from the front: lit along its
+     edge, with the notch to open it. */
+  .deck {
+    position: relative;
+    width: 118%;
+    height: 8px;
+    clip-path: polygon(2.5% 0, 97.5% 0, 100% 55%, 99% 100%, 1% 100%, 0 55%);
+    background: linear-gradient(180deg, #7a7f8a 0, #5a5e68 18%, #42454d 60%, #2c2e34 100%);
+  }
+
+  .deck i {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 15%;
+    height: 3px;
+    border-radius: 0 0 5px 5px;
+    background: linear-gradient(180deg, #2a2c32, #3a3d44);
+    transform: translateX(-50%);
+  }
+
+  .floor-shadow {
+    width: 110%;
+    height: 6px;
+    margin-top: -1px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.45), transparent 70%);
+  }
+
+  .laptop .caption {
+    margin-top: 1px;
   }
 
   .phone {
-    width: 30%;
-    min-height: 150px;
-    border-radius: 14px;
-    opacity: 0.35;
-    transition:
-      opacity 260ms ease,
-      border-color 260ms ease;
+    left: calc(75% - 33px);
+    width: 66px;
   }
 
-  .phone.shown {
-    opacity: 1;
-    border-color: var(--pane-active-border, #3a6df0);
+  .phone .body {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 118px;
+    padding: 3px;
+    border: 1px solid var(--frame-shine);
+    border-radius: 13px;
+    background: var(--frame);
   }
 
-  /* Before it's up, the phone's console is just its frame. */
-  .phone:not(.shown) .console {
-    visibility: hidden;
+  .button {
+    position: absolute;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--frame-shine);
+  }
+
+  .button.power {
+    right: -3px;
+    top: 26px;
+    height: 16px;
+  }
+
+  .button.volume {
+    left: -3px;
+    top: 20px;
+    height: 22px;
+  }
+
+  .phone .glass {
+    height: 100%;
+    border-radius: 10px;
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 6px 0;
+    font-size: 6.5px;
+    font-weight: 600;
+  }
+
+  .island {
+    width: 18px;
+    height: 5px;
+    border-radius: 3px;
+    background: #000;
+  }
+
+  .signal {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 5px;
+  }
+
+  .signal i {
+    width: 1.5px;
+    background: currentColor;
+  }
+
+  .signal i:nth-child(1) {
+    height: 2px;
+  }
+
+  .signal i:nth-child(2) {
+    height: 3.5px;
+  }
+
+  .signal i:nth-child(3) {
+    height: 5px;
+  }
+
+  .phone .address {
+    margin: 3px 3px 0;
+    padding: 1px 3px;
+    font-size: 6.5px;
   }
 
   .phone .console {
-    padding: 6px 8px;
-    font-size: 9.5px;
+    padding: 3px 5px;
+    font-size: 7.5px;
   }
 
   .phone .line {
     white-space: normal;
   }
 
-  .link {
-    position: relative;
-    flex: 1;
-    min-width: 16px;
+  .home {
+    align-self: center;
+    flex-shrink: 0;
+    width: 36%;
     height: 2px;
-    background: var(--tabbar-border, #2a2a2a);
-    transition: background 200ms ease;
+    margin: 0 0 3px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.45);
   }
 
-  .link.live {
-    background: var(--pane-active-border, #3a6df0);
-  }
-
-  .pill {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    padding: 3px 7px;
-    border: 1px solid var(--tabbar-border, #2a2a2a);
-    border-radius: 10px;
-    background: var(--tabbar-active-bg-solid, #1e1e1e);
-    font-size: 9.5px;
-    white-space: nowrap;
-    transition: border-color 200ms ease;
-  }
-
-  .link.live .pill {
-    border-color: var(--pane-active-border, #3a6df0);
-  }
-
-  .scenes {
+  .topics {
     list-style: none;
     margin: 14px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .topics li {
+    display: flex;
+    flex-direction: column;
     gap: 4px;
   }
 
-  .scene {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: 12px;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .scene:hover {
-    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
-  }
-
-  .scene:focus-visible {
-    outline: 2px solid var(--pane-active-border, #3a6df0);
-    outline-offset: 1px;
-  }
-
-  .scene.active {
-    border-color: var(--pane-active-border, #3a6df0);
-    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
-  }
-
-  .scene-title {
+  .topic-title {
     font-weight: 600;
   }
 
-  .scene-body {
+  .topic-body {
     line-height: 1.5;
     opacity: 0.8;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dot.running {
+    .wire {
       animation: none;
-    }
-
-    .window,
-    .window-bar,
-    .window .console,
-    .state,
-    .phone,
-    .link,
-    .pill {
-      transition: none;
     }
   }
 </style>

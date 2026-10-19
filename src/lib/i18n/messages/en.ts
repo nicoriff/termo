@@ -2159,15 +2159,16 @@ export const en: Messages = {
         title: "They keep running",
         body: "With “Keep consoles running when Termo closes”, closing the window or Termo, or updating it, doesn't end what runs in your consoles: a server, a build, an agent halfway through. They reconnect when you open Termo again.",
       },
-      phone: {
-        title: "From your phone",
-        body: "With Tailscale on this computer and on your phone, open Termo's address in the phone's browser: your open consoles and your agents are there, to follow what they do, type and answer what they ask. Only the accounts you allow get in.",
+      devices: {
+        title: "From your devices",
+        body: "With Tailscale on this computer and on your phone or laptop, open Termo's address in their browser: your open consoles and your agents are there on all of them at once, to follow what they do, type and answer what they ask. The connection is encrypted end to end, and only the accounts you allow get in.",
       },
       computer: "This computer",
       phoneLabel: "Phone",
-      closed: "Termo closed",
-      running: "Still running",
-      reconnected: "Right where you left it",
+      laptopLabel: "Laptop",
+      yours: "Your account",
+      noAccess: "No access",
+      encrypted: "End-to-end encrypted",
       hint: "Turn them on in Preferences → Console and Preferences → Remote access. The antenna in the title bar shows the address, with a QR code to open it on your phone.",
     },
     appearance: {
