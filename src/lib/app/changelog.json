@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.25.2",
+    "date": "2026-10-22",
+    "es": [
+      "Pegar una línea copiada entera ya no la ejecuta sola: el salto de línea del final se descarta al pegar, como en Windows Terminal.",
+      "En Mac con Apple Silicon, Termo recién descargado ya no aparece como «dañado»: macOS muestra el aviso de app de un desarrollador no identificado y se puede abrir desde Ajustes del Sistema → Privacidad y seguridad → «Abrir igualmente»."
+    ],
+    "en": [
+      "Pasting a whole copied line no longer runs it on its own: the line break at the end is dropped when pasting, as in Windows Terminal.",
+      "On Macs with Apple Silicon, a freshly downloaded Termo no longer shows up as “damaged”: macOS shows the unidentified developer warning instead, and you can open it from System Settings → Privacy & Security → “Open Anyway”."
+    ]
+  },
+  {
     "version": "0.25.1",
     "date": "2026-10-18",
     "es": [
