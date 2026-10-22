@@ -26,11 +26,15 @@ export async function copySelection(): Promise<boolean> {
 }
 
 /** Returns false when the clipboard held no text (an image, say), which is
- * what lets a plain Ctrl+V still reach the program on Windows. */
+ * what lets a plain Ctrl+V still reach the program on Windows.
+ * The line breaks the copy ends on are dropped, as Windows Terminal does:
+ * copying a whole line takes its newline along, and where the program
+ * didn't ask for bracketed paste (any shell behind the Windows 10 ConPTY)
+ * that newline is an Enter that runs the command. */
 export async function pasteClipboard(): Promise<boolean> {
   const terminal = focusedTerminal();
   if (!terminal) return false;
-  const text = await readText().catch(() => "");
+  const text = (await readText().catch(() => "")).replace(/[\r\n]+$/, "");
   if (text) terminal.paste(text);
   terminal.focus();
   return Boolean(text);
