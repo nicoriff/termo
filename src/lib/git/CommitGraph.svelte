@@ -129,6 +129,7 @@
     gap: 8px;
     flex-shrink: 0;
     width: 100%;
+    box-sizing: border-box;
     padding: 0 10px 0 4px;
     border: none;
     background: transparent;

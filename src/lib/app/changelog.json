@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.25.3",
+    "date": "2026-10-22",
+    "es": [
+      "El panel de Git ya no muestra una barra de desplazamiento horizontal cuando no hace falta."
+    ],
+    "en": [
+      "The Git panel no longer shows a horizontal scrollbar when nothing needs scrolling."
+    ]
+  },
+  {
     "version": "0.25.2",
     "date": "2026-10-22",
     "es": [
