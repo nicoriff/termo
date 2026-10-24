@@ -126,6 +126,7 @@ export interface AppConfig {
   quick_ask_with_exchange?: boolean;
   companion_muted?: string[];
   agents_from_any_console?: boolean;
+  orchestrations_from_consoles?: boolean;
   marketplace_source?: string;
   keep_awake_button: boolean;
   remote_button?: boolean;

@@ -18,6 +18,7 @@ use tiny_http::{Header, Method, Response, Server};
 
 use super::hub::Hub;
 use super::mcp_server;
+use super::ops::Agents;
 use super::runner::Runner;
 use super::spec::is_valid_id;
 use super::store::{self, RunTrigger};
@@ -97,9 +98,9 @@ fn reply(request: tiny_http::Request, status: u16, body: serde_json::Value) {
 static SERVER: Mutex<Option<Arc<Server>>> = Mutex::new(None);
 
 /// Listens until `stop` (Modo IA turned off; see ai_mode.rs).
-pub fn start(hub: Hub, runner: Arc<Runner>) {
+pub fn start(agents: Agents) {
     std::thread::spawn(move || {
-        let root = hub.root().to_path_buf();
+        let root = agents.hub.root().to_path_buf();
         // Turned back on right after being turned off, the old socket may
         // take a moment to be let go.
         let Some(server) = (0..10).find_map(|attempt| {
@@ -129,12 +130,12 @@ pub fn start(hub: Hub, runner: Arc<Runner>) {
                 reply(request, 503, json!({ "error": "busy" }));
                 continue;
             }
-            let (hub, runner, root) = (hub.clone(), runner.clone(), root.clone());
+            let (agents, root) = (agents.clone(), root.clone());
             std::thread::spawn(move || {
                 if mcp {
-                    mcp_server::handle(request, &hub, &runner, &root);
+                    mcp_server::handle(request, &agents, &root);
                 } else {
-                    handle(request, &hub, &runner, &root);
+                    handle(request, &agents.hub, &agents.runner, &root);
                 }
                 counter.fetch_sub(1, Ordering::SeqCst);
             });

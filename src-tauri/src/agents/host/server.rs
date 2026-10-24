@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::agents::hub::{Hub, Sink};
 use crate::agents::ops::{self, Agents};
 use crate::agents::orchestration::executor;
-use crate::agents::{console_bridge, runner, store, webhook};
+use crate::agents::{console_bridge, console_orchestration, runner, store, webhook};
 use crate::config::store as config_store;
 use crate::i18n::{self, Lang};
 use crate::mux::protocol::{read_frame, read_frame_within, write_frame, Frame};
@@ -133,7 +133,8 @@ pub fn run(build: &str, dir: Option<&str>) {
     executor::recover(&root);
     console_bridge::read_from_disk(&root);
     console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
-    crate::ai_mode::init_agents(&hub, &agents.runner, config.ai_mode_enabled);
+    console_orchestration::set_enabled(config.orchestrations_from_consoles);
+    crate::ai_mode::init_agents(&agents, config.ai_mode_enabled);
 
     let host = Arc::new(Host {
         dir: dir.clone(),
@@ -316,8 +317,9 @@ impl Host {
         }
         let config = config_store::load_from(&self.config_path);
         crate::marketplace::agent_install::apply(&config.agent_install_dirs);
-        crate::ai_mode::set_agents(&self.agents.hub, &self.agents.runner, config.ai_mode_enabled);
+        crate::ai_mode::set_agents(&self.agents, config.ai_mode_enabled);
         console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
+        console_orchestration::set_enabled(config.orchestrations_from_consoles);
         self.notifier.set_config(&config);
         if !config.background_agents || !config.ai_mode_enabled {
             self.retiring.store(true, Ordering::SeqCst);

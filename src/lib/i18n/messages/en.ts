@@ -2749,6 +2749,8 @@ export const en: Messages = {
       consolesHint: "The agents you mark as \"Available from consoles\" (in their settings, Tools step) can be used from the Claude Code, Codex and Copilot consoles you open from Termo, with nothing else to set up. Also when you type claude, codex or copilot in one of Termo's shell tabs. Gemini CLI only takes them from its own settings: turn on the option below.",
       everyConsole: "Also in consoles opened outside Termo",
       everyConsoleHint: "Adds Termo as an MCP server in each installed CLI's own settings, so consoles you open anywhere (VS Code, another terminal) see it. The access token is written in those files, and with Termo closed those CLIs warn that they couldn't connect.",
+      orchestrations: "Orchestrations from consoles",
+      orchestrationsHint: "Consoles can plan an orchestration, run it once you agree to the plan, and wait on it: you see its agents' questions and the final report there, and its live progress in the Orchestration tab. Each planning and each run is paid usage. It applies to consoles you open after turning it on.",
       registering: "Updating each CLI's settings…",
       noClis: "No agent CLI is installed.",
       rotate: "Regenerate token",

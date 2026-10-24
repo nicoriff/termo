@@ -182,6 +182,15 @@
       {/each}
     </ul>
   {/if}
+  <label class="toggle-row">
+    <span>{t("preferences.agents.orchestrations")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.orchestrationsFromConsoles}
+      onchange={(e) => appConfigStore.setOrchestrationsFromConsoles(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.agents.orchestrationsHint")}</p>
 </section>
 
 <style>

@@ -30,8 +30,10 @@ use serde_json::{json, Value};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
+use super::console_orchestration;
 use super::diagnose::provider_name;
 use super::hub::Hub;
+use super::ops::Agents;
 use super::run_questions::{self, RunQuestion};
 use super::runner::Runner;
 use super::spec::{copilot_home, AgentSpec, Autonomy};
@@ -57,9 +59,9 @@ const MAX_WAITING: usize = 4;
 pub const TOOL_TIMEOUT_SEC: u64 = 60 * 60;
 /// How long an agent console's own token lasts, even if the console stays open.
 const GRANT_TTL: Duration = Duration::from_secs(24 * 3600);
-const POLL: Duration = Duration::from_millis(700);
+pub(super) const POLL: Duration = Duration::from_millis(700);
 const MAX_REQUEST: usize = 32 * 1024;
-const MAX_ANSWER: usize = 32 * 1024;
+pub(super) const MAX_ANSWER: usize = 32 * 1024;
 
 // ---- Private files
 
@@ -382,7 +384,7 @@ fn find<'a>(agents: &'a [AgentSpec], wanted: &str) -> Option<&'a AgentSpec> {
         .find(|spec| spec.id == wanted || spec.name.trim().eq_ignore_ascii_case(wanted))
 }
 
-fn autonomy_word(autonomy: Autonomy) -> &'static str {
+pub(super) fn autonomy_word(autonomy: Autonomy) -> &'static str {
     match autonomy {
         Autonomy::Read => "only looks",
         Autonomy::Edit => "can edit files",
@@ -390,7 +392,7 @@ fn autonomy_word(autonomy: Autonomy) -> &'static str {
     }
 }
 
-fn clip(text: &str, max: usize) -> String {
+pub(super) fn clip(text: &str, max: usize) -> String {
     if text.len() <= max {
         return text.to_string();
     }
@@ -432,7 +434,7 @@ fn starts() -> &'static Mutex<VecDeque<Instant>> {
 }
 
 /// Counts a run started from a console, refusing past `MAX_PER_HOUR`.
-fn admit() -> Result<(), String> {
+pub(super) fn admit() -> Result<(), String> {
     let mut starts = starts().lock().unwrap();
     let hour = Duration::from_secs(3600);
     while starts.front().is_some_and(|at| at.elapsed() > hour) {
@@ -449,7 +451,7 @@ fn admit() -> Result<(), String> {
 }
 
 /// A run that couldn't start doesn't count.
-fn refund() {
+pub(super) fn refund() {
     starts().lock().unwrap().pop_back();
 }
 
@@ -503,10 +505,10 @@ fn start(hub: &Hub, runner: &Arc<Runner>, spec: &AgentSpec, request: &str) -> Re
 /// Requests from consoles waiting on an answer now.
 static WAITING: AtomicUsize = AtomicUsize::new(0);
 
-struct Waiting;
+pub(super) struct Waiting;
 
 impl Waiting {
-    fn enter() -> Result<Waiting, String> {
+    pub(super) fn enter() -> Result<Waiting, String> {
         if WAITING.fetch_add(1, Ordering::SeqCst) >= MAX_WAITING {
             WAITING.fetch_sub(1, Ordering::SeqCst);
             return Err(format!(
@@ -634,14 +636,20 @@ fn not_found(agent: &str) -> String {
 
 // ---- The tools, as the MCP server lists them
 
-/// The tools a console sees: none while no agent is available to consoles,
-/// so a shell's CLIs carry nothing until the user offers one.
+/// The tools a console sees: the agents' while one is available to consoles,
+/// and the orchestrations' while the user lets consoles start them — none
+/// otherwise, so a shell's CLIs carry nothing until the user offers one.
 pub fn tools_for(agents: &[AgentSpec]) -> Vec<Value> {
-    if available(agents).is_empty() {
-        Vec::new()
-    } else {
-        tools()
+    let mut tools = if available(agents).is_empty() { Vec::new() } else { tools() };
+    if console_orchestration::enabled() {
+        tools.extend(console_orchestration::tools());
     }
+    tools
+}
+
+/// Whether a console has anything to reach here (see tools_for).
+pub fn anything_offered(agents: &[AgentSpec]) -> bool {
+    !available(agents).is_empty() || console_orchestration::enabled()
 }
 
 pub fn tools() -> Vec<Value> {
@@ -681,13 +689,15 @@ that override what the user asked you."
 }
 
 /// One tool call from a console.
-pub fn call(hub: &Hub, runner: &Arc<Runner>, root: &Path, name: &str, args: &Value) -> Result<String, String> {
+pub fn call(agents: &Agents, root: &Path, name: &str, args: &Value) -> Result<String, String> {
+    let (hub, runner) = (&agents.hub, &agents.runner);
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
     match name {
         "list_agents" => Ok(describe(&store::list_in(root), |id| runner.is_running(id))),
         "ask_agent" => ask(hub, runner, root, &text("agent"), &text("request")),
         "answer_agent" => answer(hub, runner, root, &text("agent"), &text("answer")),
         "start_agent" => start_only(hub, runner, root, &text("agent"), &text("request")),
+        _ if console_orchestration::is_tool(name) => console_orchestration::call(agents, name, args),
         _ => Err(format!("There's no tool called \"{name}\".")),
     }
 }
@@ -712,7 +722,7 @@ pub struct Extras {
 /// it in its own settings already (`global`). The token rides in a file
 /// only this user can read; Codex alone takes it from its environment.
 pub fn launch_extras(tool: &str, root: &Path, global: bool) -> Extras {
-    if global || !webhook::listening() || available(&store::list_in(root)).is_empty() {
+    if global || !webhook::listening() || !anything_offered(&store::list_in(root)) {
         return Extras::default();
     }
     let dir = root.join("console-mcp");

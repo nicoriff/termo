@@ -334,7 +334,7 @@ pub fn call_where_they_run(app: &tauri::AppHandle, name: &str, args: Value) -> R
     }
 }
 
-fn local(app: &tauri::AppHandle) -> Result<Agents, String> {
+pub(crate) fn local(app: &tauri::AppHandle) -> Result<Agents, String> {
     let state = app.state::<AppState>();
     Ok(Agents { hub: Hub::for_app(app)?, runner: state.agents.clone(), orchestrator: state.orchestrator.clone() })
 }
@@ -434,9 +434,8 @@ fn back_to_app(app_handle: &tauri::AppHandle) -> Result<(), String> {
     }
     super::set_runs_here(true);
     if config.ai_mode_enabled {
-        let state = app_handle.state::<AppState>();
-        if let Ok(hub) = Hub::for_app(app_handle) {
-            webhook::start(hub, state.agents.clone());
+        if let Ok(agents) = local(app_handle) {
+            webhook::start(agents);
         }
     }
     super::login::sync(&config);

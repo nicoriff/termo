@@ -181,6 +181,8 @@ class AppConfigStore {
   companionMuted = $state<string[]>([]);
   /** The user's agents also in consoles opened outside Termo. */
   agentsFromAnyConsole = $state(false);
+  /** Consoles may plan and run orchestrations (see agents/console_orchestration.rs). */
+  orchestrationsFromConsoles = $state(false);
   /** The agents keep running with Termo closed (see agents/host/). Changed
    * by the backend (setBackgroundAgents), which moves them. */
   backgroundAgents = $state(false);
@@ -341,6 +343,7 @@ class AppConfigStore {
     this.quickAskWithExchange = config.quick_ask_with_exchange ?? false;
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
+    this.orchestrationsFromConsoles = config.orchestrations_from_consoles ?? false;
     this.backgroundAgents = config.background_agents ?? false;
     this.backgroundAgentsAtLogin = config.background_agents_at_login ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
@@ -538,6 +541,11 @@ class AppConfigStore {
 
   setAgentsFromAnyConsole(enabled: boolean): void {
     this.agentsFromAnyConsole = enabled;
+    void this.persist();
+  }
+
+  setOrchestrationsFromConsoles(enabled: boolean): void {
+    this.orchestrationsFromConsoles = enabled;
     void this.persist();
   }
 
@@ -744,6 +752,7 @@ class AppConfigStore {
       quick_ask_with_exchange: this.quickAskWithExchange,
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
+      orchestrations_from_consoles: this.orchestrationsFromConsoles,
       background_agents: this.backgroundAgents,
       background_agents_at_login: this.backgroundAgentsAtLogin,
       marketplace_source: this.marketplaceSource,

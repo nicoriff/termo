@@ -185,6 +185,9 @@ pub struct AppConfig {
     /// The user's agents also in consoles opened outside Termo: Termo's MCP
     /// server in each CLI's own settings (see agents/console_bridge.rs).
     pub agents_from_any_console: bool,
+    /// Consoles may plan and run orchestrations too (see
+    /// agents/console_orchestration.rs). Off unless the user turns it on.
+    pub orchestrations_from_consoles: bool,
     /// Where the marketplace searches MCP servers first: "official" or
     /// "smithery" (see marketplace/sources.rs).
     pub marketplace_source: String,
@@ -319,6 +322,7 @@ impl Default for AppConfig {
             quick_ask_with_exchange: false,
             companion_muted: Vec::new(),
             agents_from_any_console: false,
+            orchestrations_from_consoles: false,
             marketplace_source: "official".into(),
             agent_install_dirs: std::collections::BTreeMap::new(),
             agent_clis_known: std::collections::BTreeMap::new(),

@@ -205,7 +205,7 @@ pub fn run() {
             // Before anything looks for an agent's CLI.
             marketplace::agent_install::apply(&loaded.agent_install_dirs);
             let ai_mode_on = loaded.ai_mode_enabled;
-            ai_mode::init(app.handle(), &app.state::<AppState>().agents, ai_mode_on);
+            ai_mode::init(app.handle(), ai_mode_on);
             if loaded.background_agents && ai_mode_on {
                 agents::host::client::start(app.handle());
             }
@@ -222,6 +222,7 @@ pub fn run() {
             // Every console's CLI settings point at this Termo (its port and
             // token), like the hooks do.
             agents::console_bridge::set_global(ai_mode_on && loaded.agents_from_any_console);
+            agents::console_orchestration::set_enabled(loaded.orchestrations_from_consoles);
             if ai_mode_on && loaded.agents_from_any_console {
                 if let Ok(root) = agents::store::root(app.handle()) {
                     std::thread::spawn(move || {

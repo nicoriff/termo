@@ -2752,6 +2752,8 @@ export const es = {
       consolesHint: "Los agentes que marques como \"Disponible desde las consolas\" (en su configuración, paso Herramientas) se pueden usar desde las consolas de Claude Code, Codex y Copilot que abras desde Termo, sin configurar nada más. También si tipeás claude, codex o copilot en una pestaña de shell de Termo. Gemini CLI solo los toma de su propia configuración: activá la opción de abajo.",
       everyConsole: "También en consolas abiertas fuera de Termo",
       everyConsoleHint: "Agrega Termo como servidor MCP en la configuración de cada CLI instalada, así lo ven las consolas que abras en cualquier lado (VS Code, otra terminal). El token de acceso queda escrito en esos archivos, y con Termo cerrado esas CLIs avisan que no pudieron conectarse.",
+      orchestrations: "Orquestaciones desde las consolas",
+      orchestrationsHint: "Las consolas pueden planificar una orquestación, correrla cuando aceptes el plan y esperarla: ahí ves las preguntas de sus agentes y el informe final, y en la pestaña Orquestación, el avance en vivo. Cada planificación y cada ejecución es un uso pago. Vale para las consolas que abras después de activarla.",
       registering: "Actualizando la configuración de cada CLI…",
       noClis: "No hay ninguna CLI de agente instalada.",
       rotate: "Regenerar token",

@@ -13,11 +13,9 @@
 //! Switching takes effect at once, no restart.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use crate::agents::host;
-use crate::agents::hub::Hub;
-use crate::agents::runner::Runner;
+use crate::agents::ops::Agents;
 use crate::agents::{scheduler, webhook};
 use crate::pty;
 
@@ -36,12 +34,12 @@ pub fn set_enabled_for_tests(on: bool) {
 /// At launch, with the saved setting. The scheduler's thread starts either
 /// way and idles while Modo IA is off, so turning it on later needs nothing
 /// more from it.
-pub fn init(app: &tauri::AppHandle, runner: &Arc<Runner>, on: bool) {
-    let Ok(hub) = Hub::for_app(app) else {
+pub fn init(app: &tauri::AppHandle, on: bool) {
+    let Ok(agents) = host::client::local(app) else {
         ENABLED.store(on, Ordering::SeqCst);
         return;
     };
-    init_agents(&hub, runner, on);
+    init_agents(&agents, on);
     if on {
         refresh_hooks(app);
     }
@@ -50,25 +48,25 @@ pub fn init(app: &tauri::AppHandle, runner: &Arc<Runner>, on: bool) {
 /// The agents' part, wherever they run: the scheduler's thread (which only
 /// acts in the process that runs the agents, see host::runs_here) and,
 /// switched on, their local server.
-pub fn init_agents(hub: &Hub, runner: &Arc<Runner>, on: bool) {
+pub fn init_agents(agents: &Agents, on: bool) {
     ENABLED.store(on, Ordering::SeqCst);
-    scheduler::start(hub.clone(), runner.clone());
+    scheduler::start(agents.hub.clone(), agents.runner.clone());
     if on && host::runs_here() {
-        webhook::start(hub.clone(), runner.clone());
+        webhook::start(agents.clone());
     }
 }
 
 /// A saved config: acts only when the switch actually moved.
-pub fn set(app: &tauri::AppHandle, runner: &Arc<Runner>, on: bool) {
-    let Ok(hub) = Hub::for_app(app) else { return };
-    if set_agents(&hub, runner, on) && on {
+pub fn set(app: &tauri::AppHandle, on: bool) {
+    let Ok(agents) = host::client::local(app) else { return };
+    if set_agents(&agents, on) && on {
         refresh_hooks(app);
     }
 }
 
 /// The agents' part of switching; false when it didn't move. Where the
 /// agents run elsewhere, that process follows the config on its own.
-pub fn set_agents(hub: &Hub, runner: &Arc<Runner>, on: bool) -> bool {
+pub fn set_agents(agents: &Agents, on: bool) -> bool {
     if ENABLED.swap(on, Ordering::SeqCst) == on {
         return false;
     }
@@ -76,11 +74,11 @@ pub fn set_agents(hub: &Hub, runner: &Arc<Runner>, on: bool) -> bool {
         return true;
     }
     if on {
-        webhook::start(hub.clone(), runner.clone());
+        webhook::start(agents.clone());
     } else {
         webhook::stop();
-        for run in runner.running() {
-            runner.stop(&run.agent_id);
+        for run in agents.runner.running() {
+            agents.runner.stop(&run.agent_id);
         }
     }
     true

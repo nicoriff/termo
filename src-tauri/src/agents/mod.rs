@@ -4,6 +4,7 @@
 
 pub mod acp;
 pub mod console_bridge;
+pub mod console_orchestration;
 pub mod diagnose;
 pub mod draft;
 pub mod events;

@@ -14,6 +14,7 @@ use tiny_http::{Header, Method, Response};
 
 use super::console_bridge;
 use super::hub::Hub;
+use super::ops::Agents;
 use super::orchestration::questions;
 use super::projects;
 use super::runner::Runner;
@@ -49,7 +50,8 @@ fn bearer(request: &tiny_http::Request) -> String {
         .unwrap_or_default()
 }
 
-pub fn handle(mut request: tiny_http::Request, hub: &Hub, runner: &Arc<Runner>, root: &Path) {
+pub fn handle(mut request: tiny_http::Request, agents: &Agents, root: &Path) {
+    let (hub, runner) = (&agents.hub, &agents.runner);
     // No server-initiated stream (GET) and no sessions to end (DELETE).
     if request.method() != &Method::Post {
         return respond(request, 405, None);
@@ -69,7 +71,7 @@ pub fn handle(mut request: tiny_http::Request, hub: &Hub, runner: &Arc<Runner>, 
     };
     let answer = |message: &Value| match &session {
         Some(session) => Context { hub, runner, root, token: &token, session }.answer(message),
-        None => console_answer(hub, runner, root, message),
+        None => console_answer(agents, root, message),
     };
     match message {
         Value::Array(batch) => {
@@ -89,7 +91,7 @@ pub fn handle(mut request: tiny_http::Request, hub: &Hub, runner: &Arc<Runner>, 
 }
 
 /// A message from one of the user's consoles (see console_bridge.rs).
-fn console_answer(hub: &Hub, runner: &Arc<Runner>, root: &Path, message: &Value) -> Option<Value> {
+fn console_answer(agents: &Agents, root: &Path, message: &Value) -> Option<Value> {
     let id = message.get("id")?.clone();
     let params = message.get("params").cloned().unwrap_or(Value::Null);
     let reply = match message.get("method").and_then(Value::as_str).unwrap_or_default() {
@@ -105,7 +107,7 @@ fn console_answer(hub: &Hub, runner: &Arc<Runner>, root: &Path, message: &Value)
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
             let args = params.get("arguments").cloned().unwrap_or(Value::Null);
-            let (text, is_error) = match console_bridge::call(hub, runner, root, name, &args) {
+            let (text, is_error) = match console_bridge::call(agents, root, name, &args) {
                 Ok(text) => (text, false),
                 Err(text) => (text, true),
             };
