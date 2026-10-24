@@ -2,12 +2,14 @@
   import "./status-bar.css";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { menuKeys } from "$lib/core/menu-keys";
-  import { openPreferencesWindow } from "$lib/core/window-client";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { onMount } from "svelte";
   import { t } from "$lib/i18n/i18n.svelte";
+  import { statusBarCustomize } from "./customize.svelte";
+  import StatusBarEditor from "./StatusBarEditor.svelte";
   import StatusItem from "./StatusItem.svelte";
 
-  /** The bar as arranged in Preferences → Status bar: each end's items, in
-   * order. An item with nothing to say for the tab in focus isn't drawn. */
+  /** The bar as arranged (StatusBarEditor): each end's items, in order. An item with nothing to say for the tab in focus isn't drawn. */
   const layout = $derived(appConfigStore.effectiveStatusBar);
 
   /** Where the right-click menu opened, or null. */
@@ -25,25 +27,35 @@
 
   function customize() {
     closeMenu();
-    void openPreferencesWindow("status-bar");
+    statusBarCustomize.start();
   }
+
+  // Preferences' "Edit on the bar", sent to this window alone.
+  onMount(() => {
+    const unlisten = getCurrentWebviewWindow().listen("status-bar-customize", () => statusBarCustomize.start(true));
+    return () => void unlisten.then((stop) => stop());
+  });
 </script>
 
 <svelte:window onpointerdown={() => menuAt && closeMenu()} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="status-bar" oncontextmenu={openMenu}>
-  <div class="status-side left">
-    {#each layout.left as item (item.id)}
-      <StatusItem {item} />
-    {/each}
+{#if statusBarCustomize.active}
+  <StatusBarEditor />
+{:else}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="status-bar" oncontextmenu={openMenu}>
+    <div class="status-side left">
+      {#each layout.left as item (item.id)}
+        <StatusItem {item} />
+      {/each}
+    </div>
+    <div class="status-side right">
+      {#each layout.right as item (item.id)}
+        <StatusItem {item} />
+      {/each}
+    </div>
   </div>
-  <div class="status-side right">
-    {#each layout.right as item (item.id)}
-      <StatusItem {item} />
-    {/each}
-  </div>
-</div>
+{/if}
 
 {#if menuAt}
   <div

@@ -315,6 +315,7 @@ pub fn run() {
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
             commands::window_commands::preferences_ready,
+            commands::window_commands::customize_status_bar,
             commands::window_commands::open_new_window,
             commands::window_commands::is_primary_window,
             commands::window_commands::report_pending,

@@ -19,6 +19,12 @@ export function openPreferencesWindow(section?: string): Promise<void> {
   return invoke("open_preferences_window", { section: section ?? null });
 }
 
+/** From Preferences: arranges the status bar on the console window it was
+ * opened over. Preferences hides meanwhile, and comes back when that's done. */
+export function customizeStatusBar(): Promise<void> {
+  return invoke("customize_status_bar");
+}
+
 /** Ends the app. Not the same as closing this window: the hidden, preloaded
  * Preferences window would keep the process alive (see quit_app). */
 export function quitApp(): Promise<void> {

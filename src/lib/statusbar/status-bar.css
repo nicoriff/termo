@@ -1,6 +1,5 @@
-/* The status bar's look, shared by the bar itself and its simulation in
-   Preferences (StatusBarSection), so what's arranged there looks as it will.
-   Everything hangs off .status-bar. */
+/* The status bar's look, shared by the bar and by the bar being arranged
+   (StatusBarEditor). Everything hangs off .status-bar. */
 
 .status-bar {
   flex-shrink: 0;

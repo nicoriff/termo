@@ -5,8 +5,8 @@
   import { formatPath, type PathFormat } from "./format";
   import { optionOn, optionValue, type StatusItemRef } from "./layout";
 
-  /** An item as it looks in the bar, with made-up readings: the simulation
-   * in Preferences, which has no console of its own to read from. */
+  /** An item as it looks in the bar, with made-up readings: what an item
+   * with nothing to show right now looks like while the bar is arranged. */
   let { item }: { item: StatusItemRef } = $props();
 
   const SAMPLE_PATH = isWindows

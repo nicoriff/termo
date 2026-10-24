@@ -134,6 +134,28 @@ pub async fn open_preferences_window(
     Ok(())
 }
 
+/// Preferences' "Edit on the bar": the status bar is arranged on the console
+/// window Preferences was opened over, so Preferences steps aside (it is owned
+/// by that window, and would stay in front of its bar) and that window is told
+/// to start. It opens Preferences again when the user is done.
+#[tauri::command]
+pub async fn customize_status_bar(app: tauri::AppHandle, from: tauri::WebviewWindow) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let opener = OPENED_FROM.lock().unwrap().clone();
+    let Some(main) = opener
+        .and_then(|label| app.get_webview_window(&label))
+        .or_else(|| crate::terminal_windows::labels(&app).first().and_then(|label| app.get_webview_window(label)))
+    else {
+        return Ok(());
+    };
+    if from.label() == PREFERENCES {
+        from.hide().map_err(|err| err.to_string())?;
+    }
+    show_and_focus(&main)?;
+    main.emit_to(main.label(), "status-bar-customize", true).map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 pub async fn preferences_ready(window: tauri::WebviewWindow) -> Result<(), String> {
     use std::sync::atomic::Ordering::SeqCst;
