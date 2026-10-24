@@ -1509,6 +1509,7 @@ export const es = {
       list: {
         hideDone: "Ocultar las finalizadas ({n})",
         allHidden: "Todas están finalizadas ({n} ocultas).",
+        planningFromConsole: "Planificando, pedida desde una consola…",
       },
       result: {
         collapse: "Plegar el resultado",

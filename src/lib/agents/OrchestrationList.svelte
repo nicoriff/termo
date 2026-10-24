@@ -67,6 +67,17 @@
       </span>
     </div>
   {/if}
+  {#each Object.entries(orchestrationStore.consolePlannings) as [id, planning] (id)}
+    {@const step = planning.steps.length > 0 ? stepLine(planning.steps[planning.steps.length - 1], t) : null}
+    <div class="row planning" title={planning.prompt} aria-live="polite">
+      <span class="icon">🧭</span>
+      <span class="text">
+        <span class="name">{planning.prompt}</span>
+        <span class="state">{t("agents.orchestration.list.planningFromConsole")}</span>
+        {#if step}<span class="step-now">{step.icon} {step.text}</span>{/if}
+      </span>
+    </div>
+  {/each}
   {#each shown as orchestration (orchestration.id)}
     {@const progress = progressOf(orchestration.plan)}
     <button
@@ -93,7 +104,7 @@
   {:else}
     {#if hideDone && doneCount > 0}
       <p class="all-hidden">{t("agents.orchestration.list.allHidden", { n: String(doneCount) })}</p>
-    {:else if !orchestrationStore.planning}
+    {:else if !orchestrationStore.planning && Object.keys(orchestrationStore.consolePlannings).length === 0}
       <div class="empty">
         <div class="empty-icon">🧭</div>
         <p class="empty-title">{t("agents.orchestration.empty.title")}</p>

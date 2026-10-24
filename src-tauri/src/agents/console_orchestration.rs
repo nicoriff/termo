@@ -12,12 +12,16 @@
 //! (`Waiting`). Approving and answering go through ops.rs, the same calls the
 //! window makes, so the rules on what can run are the window's.
 
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
 use super::console_bridge::{admit, autonomy_word, clip, refund, Waiting, MAX_ANSWER, POLL};
+use super::draft::Step;
 use super::ops::{self, Agents};
 use super::orchestration::plan::{
     projected_usd, spent_usd, Change, Hold, Orchestration, Plan, QuestionState, RevisionState, Status, TaskStatus,
@@ -46,6 +50,19 @@ const MAX_WAIT: Duration = Duration::from_secs(50 * 60);
 /// Orchestrations `orchestration_status` lists when not given one.
 const MAX_LISTED: usize = 10;
 
+/// A planning a console asked for, going on in the background — or how it
+/// failed, until the console hears it. One that worked is in the store,
+/// under the same id, before it leaves this list.
+struct Planning {
+    started: Instant,
+    error: Option<String>,
+}
+
+fn plannings() -> &'static Mutex<HashMap<String, Planning>> {
+    static PLANNINGS: OnceLock<Mutex<HashMap<String, Planning>>> = OnceLock::new();
+    PLANNINGS.get_or_init(Mutex::default)
+}
+
 const TOOLS: [&str; 6] = [
     "plan_orchestration",
     "run_orchestration",
@@ -66,9 +83,10 @@ pub fn tools() -> Vec<Value> {
             "name": "plan_orchestration",
             "description": "Has Termo's orchestrator design a team of agents for a piece of work in a project folder: \
 which agents, each one's engine, model and permissions, and their tasks, in one or more strategies with what each is \
-expected to cost. Planning takes a minute or two and is itself a paid run; nothing else runs. The plan is saved as a \
-draft that also shows in Termo's Orchestration tab, where the user can review and edit it. Show the user the plan and \
-its cost, and run it with run_orchestration only once they agree.",
+expected to cost. It starts the planning and comes back at once with the orchestration's id: planning goes on in the \
+background for a few minutes and is itself a paid run; nothing else runs. Get the plan with orchestration_status, with \
+that id and wait. The plan is saved as a draft that also shows in Termo's Orchestration tab, where the user can review \
+and edit it. Show the user the plan and its cost, and run it with run_orchestration only once they agree.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -99,12 +117,13 @@ in Termo's Orchestration tab.",
         json!({
             "name": "orchestration_status",
             "description": "How an orchestration is going: each task's state, what it spent, what it's waiting for. \
-Without an id, lists the latest ones. With wait, waits like run_orchestration does, for one that's running.",
+Without an id, lists the latest ones. With wait, waits for one being planned until its plan is ready, and like \
+run_orchestration does for one that's running.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "id": id,
-                    "wait": { "type": "boolean", "description": "Wait until it ends or needs the user (at most about 50 minutes)." },
+                    "wait": { "type": "boolean", "description": "Wait until its plan is ready, or until it ends or needs the user (at most about 50 minutes)." },
                 },
             },
         }),
@@ -154,11 +173,17 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
         "run_orchestration" => run(agents, &text("id"), &text("strategy"), args.get("budget_usd").and_then(Value::as_f64)),
         "orchestration_status" => {
             let id = text("id");
+            let waits = args.get("wait").and_then(Value::as_bool).unwrap_or(false);
             if id.is_empty() {
-                return Ok(list(&store::list_in(agents.hub.root())));
+                let mut planning: Vec<String> = plannings().lock().unwrap().keys().cloned().collect();
+                planning.sort();
+                return Ok(list(&store::list_in(agents.hub.root()), &planning));
+            }
+            if plannings().lock().unwrap().contains_key(&id) {
+                return planning_status(agents, &id, waits);
             }
             let orchestration = find(agents, &id)?;
-            if args.get("wait").and_then(Value::as_bool).unwrap_or(false) {
+            if waits {
                 wait(agents, &orchestration.id)
             } else {
                 Ok(where_it_is(&orchestration, agents.orchestrator.is_active(&orchestration.id)))
@@ -213,9 +238,14 @@ fn engine_name(engine: Engine) -> &'static str {
     }
 }
 
-/// `plan_orchestration`: plans it and saves the draft, as the window does
+/// `plan_orchestration`: starts planning it, in the background, and saves
+/// the draft when it's done, as the window does
 /// (commands/orchestration_commands.rs), without the questions the window
-/// asks first: the console's assistant can ask the user itself.
+/// asks first: the console's assistant can ask the user itself. It comes
+/// back at once with the id — planning reads the whole project, longer than
+/// a CLI may wait on a tool — and `orchestration_status` waits for the plan.
+/// Meanwhile the windows hear `orchestration-planning`, so the Orchestration
+/// tab shows it being planned.
 fn plan(agents: &Agents, request: &str, folder: &str, engine: &str) -> Result<String, String> {
     if request.is_empty() {
         return Err("Write the request.".into());
@@ -223,19 +253,77 @@ fn plan(agents: &Agents, request: &str, folder: &str, engine: &str) -> Result<St
     if folder.is_empty() {
         return Err("Say the project's folder, as an absolute path.".into());
     }
+    if !Path::new(folder).is_dir() {
+        return Err(format!("There's no folder \"{folder}\" on this computer."));
+    }
     let engine = planner_engine(engine)?;
-    let _waiting = Waiting::enter()?;
     admit()?;
-    let planned = match planner::generate(&clip(request, MAX_ANSWER), folder, engine, "", &|_| {}) {
-        Ok(planned) => planned,
-        Err(error) => {
-            refund();
-            return Err(error);
+    let id = uuid::Uuid::new_v4().to_string();
+    plannings().lock().unwrap().insert(id.clone(), Planning { started: Instant::now(), error: None });
+    let announce = {
+        let (hub, id, prompt, work_dir, started_at) = (agents.hub.clone(), id.clone(), request.to_string(), folder.to_string(), now_millis());
+        move |step: Option<Step>, ended: bool| {
+            hub.emit(
+                "orchestration-planning",
+                &json!({ "id": id, "prompt": prompt, "workDir": work_dir, "startedAt": started_at, "step": step, "ended": ended }),
+            );
         }
     };
-    let saved = store::save_in(agents.hub.root(), planned).map_err(|err| err.to_string())?;
-    agents.hub.emit("orchestration", &saved);
-    Ok(plan_text(&saved))
+    announce(None, false);
+    let (hub, request, work_dir, planning) = (agents.hub.clone(), clip(request, MAX_ANSWER), folder.to_string(), id.clone());
+    std::thread::spawn(move || {
+        let saved = planner::generate(&request, &work_dir, engine, "", &|step| announce(Some(step), false)).and_then(|mut planned| {
+            planned.id = planning.clone();
+            store::save_in(hub.root(), planned).map_err(|err| err.to_string())
+        });
+        match saved {
+            Ok(saved) => {
+                hub.emit("orchestration", &saved);
+                plannings().lock().unwrap().remove(&planning);
+            }
+            Err(error) => {
+                refund();
+                if let Some(entry) = plannings().lock().unwrap().get_mut(&planning) {
+                    entry.error = Some(error);
+                }
+            }
+        }
+        announce(None, true);
+    });
+    Ok(format!(
+        "Planning started: orchestration id {id}, in {folder}, planned by {}. It takes a few minutes and is itself a paid \
+run; nothing else runs. Termo's Orchestration tab shows it being planned. Call orchestration_status with this id and \
+wait to get the plan when it's ready.",
+        engine_name(engine)
+    ))
+}
+
+/// `orchestration_status` on one a console is having planned: still going,
+/// or — waiting until it is — its plan, or how it failed.
+fn planning_status(agents: &Agents, id: &str, wait: bool) -> Result<String, String> {
+    let _waiting = if wait { Some(Waiting::enter()?) } else { None };
+    let deadline = Instant::now() + MAX_WAIT;
+    loop {
+        let state = plannings().lock().unwrap().get(id).map(|planning| (planning.started.elapsed(), planning.error.clone()));
+        match state {
+            // Out of the list: planned, and saved.
+            None => {
+                let orchestration = find(agents, id)?;
+                return Ok(where_it_is(&orchestration, agents.orchestrator.is_active(&orchestration.id)));
+            }
+            Some((_, Some(error))) => {
+                plannings().lock().unwrap().remove(id);
+                return Err(error);
+            }
+            Some((elapsed, None)) if !wait || Instant::now() >= deadline => {
+                return Ok(format!(
+                    "Still planning ({} min so far). Call orchestration_status with this id and wait to get the plan.",
+                    elapsed.as_secs() / 60
+                ));
+            }
+            Some(_) => std::thread::sleep(POLL),
+        }
+    }
 }
 
 /// `run_orchestration`: approves the draft with the strategy and budget the
@@ -573,10 +661,16 @@ fn report_text(orchestration: &Orchestration) -> String {
     )
 }
 
-/// `orchestration_status` without an id: the latest ones.
-fn list(all: &[Orchestration]) -> String {
+/// `orchestration_status` without an id: the ones being planned, and the
+/// latest ones.
+fn list(all: &[Orchestration], planning: &[String]) -> String {
+    let planning = if planning.is_empty() {
+        String::new()
+    } else {
+        format!("Being planned (or failed, until asked about): id {}\n\n", planning.join(", id "))
+    };
     if all.is_empty() {
-        return "There are no orchestrations yet. plan_orchestration plans one.".into();
+        return format!("{planning}There are no orchestrations yet. plan_orchestration plans one.");
     }
     let lines: Vec<String> = all
         .iter()
@@ -585,7 +679,7 @@ fn list(all: &[Orchestration]) -> String {
             format!("- \"{}\" (id {}; {:?}; in {})", orchestration.name, orchestration.id, orchestration.status, orchestration.work_dir)
         })
         .collect();
-    fence(&format!("The latest orchestrations, newest first:\n{}", lines.join("\n")))
+    format!("{planning}{}", fence(&format!("The latest orchestrations, newest first:\n{}", lines.join("\n"))))
 }
 
 #[cfg(test)]
@@ -716,7 +810,8 @@ mod tests {
 
     #[test]
     fn the_list_is_the_latest_first() {
-        assert!(list(&[]).contains("no orchestrations yet"));
-        assert!(list(&[sample()]).contains("- \"Login ››› OAuth\" (id o1; Draft; in /repo)"));
+        assert!(list(&[], &[]).contains("no orchestrations yet"));
+        assert!(list(&[sample()], &[]).contains("- \"Login ››› OAuth\" (id o1; Draft; in /repo)"));
+        assert!(list(&[], &["p1".into(), "p2".into()]).starts_with("Being planned (or failed, until asked about): id p1, id p2\n\n"));
     }
 }

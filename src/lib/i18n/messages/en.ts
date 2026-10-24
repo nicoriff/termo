@@ -1510,6 +1510,7 @@ export const en: Messages = {
       list: {
         hideDone: "Hide finished ones ({n})",
         allHidden: "All of them are finished ({n} hidden).",
+        planningFromConsole: "Planning, asked for from a console…",
       },
       result: {
         collapse: "Collapse the result",

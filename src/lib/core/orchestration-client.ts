@@ -281,6 +281,23 @@ export function onOrchestrationProgress(handler: (progress: OrchestrationProgres
   return listen<OrchestrationProgress>("orchestration-progress", (event) => handler(event.payload));
 }
 
+/** One being planned for a console (see console_orchestration.rs): when it
+ * starts, each step the orchestrator takes, and when it ends — planned, or
+ * failed. */
+export interface ConsolePlanningEvent {
+  /** The id the orchestration is saved under once planned. */
+  id: string;
+  prompt: string;
+  workDir: string;
+  startedAt: number;
+  step: PlanStep | null;
+  ended: boolean;
+}
+
+export function onConsolePlanning(handler: (event: ConsolePlanningEvent) => void): Promise<UnlistenFn> {
+  return listen<ConsolePlanningEvent>("orchestration-planning", (event) => handler(event.payload));
+}
+
 /** Every change to an orchestration, as saved. */
 export function onOrchestration(handler: (orchestration: Orchestration) => void): Promise<UnlistenFn> {
   return listen<Orchestration>("orchestration", (event) => handler(event.payload));

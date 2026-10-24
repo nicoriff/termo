@@ -7,6 +7,7 @@ import {
   writeOrchestrationReport,
   deleteOrchestration,
   listOrchestrations,
+  onConsolePlanning,
   onOrchestration,
   onOrchestrationProgress,
   orchestrationCatalog,
@@ -43,6 +44,8 @@ class OrchestrationStore {
   planningSteps = $state<PlanStep[]>([]);
   /** The steps of a revision being asked for, by orchestration. */
   revisingSteps = $state<Record<string, PlanStep[]>>({});
+  /** Being planned for a console, by the id they'll be saved under. */
+  consolePlannings = $state<Record<string, { prompt: string; startedAt: number; steps: PlanStep[] }>>({});
   private started = false;
   private catalogLoaded = false;
 
@@ -57,6 +60,23 @@ class OrchestrationStore {
       } else if (this.planningPhase === progress.phase) {
         this.planningSteps = [...this.planningSteps, progress.step].slice(-80);
       }
+    });
+    await onConsolePlanning((event) => {
+      const { [event.id]: before, ...rest } = this.consolePlannings;
+      // Planned (the orchestration came in) or failed: either way, done.
+      if (event.ended || this.get(event.id)) {
+        this.consolePlannings = rest;
+        return;
+      }
+      const steps = before?.steps ?? [];
+      this.consolePlannings = {
+        ...rest,
+        [event.id]: {
+          prompt: event.prompt,
+          startedAt: event.startedAt,
+          steps: event.step ? [...steps, event.step].slice(-80) : steps,
+        },
+      };
     });
     this.all = await listOrchestrations().catch(() => []);
   }
@@ -78,6 +98,10 @@ class OrchestrationStore {
     const before = this.get(orchestration.id);
     const known = before !== undefined;
     void announceOrchestration(before, orchestration);
+    if (this.consolePlannings[orchestration.id]) {
+      const { [orchestration.id]: _, ...rest } = this.consolePlannings;
+      this.consolePlannings = rest;
+    }
     this.all = known
       ? this.all.map((other) => (other.id === orchestration.id ? orchestration : other))
       : [orchestration, ...this.all];
