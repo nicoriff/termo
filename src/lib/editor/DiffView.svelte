@@ -3,8 +3,6 @@
   import { basicSetup } from "codemirror";
   import { Compartment, EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { LanguageDescription } from "@codemirror/language";
-  import { languages } from "@codemirror/language-data";
   import { unifiedMergeView } from "@codemirror/merge";
   import { readTextFile } from "$lib/core/explorer-client";
   import { gitBlob } from "$lib/core/git-client";
@@ -15,6 +13,7 @@
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { diffJump } from "./diff-jump.svelte";
   import { editorTheme } from "./editor-theme";
+  import { languageFor } from "./editor-languages";
   import { fileTabs } from "./file-tabs.svelte";
 
   /** What changed in a file between two of its versions (see DiffTarget):
@@ -156,7 +155,7 @@
     view.scrollDOM.scrollTop = scroll;
     jump();
 
-    const description = LanguageDescription.matchFilename(languages, fileName(diff.path));
+    const description = languageFor(fileName(diff.path));
     if (description) {
       const built = view;
       const support = await description.load();

@@ -4,9 +4,8 @@
   import { indentWithTab } from "@codemirror/commands";
   import { Compartment, EditorState } from "@codemirror/state";
   import { EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
-  import { LanguageDescription } from "@codemirror/language";
-  import { languages } from "@codemirror/language-data";
   import { editorTheme } from "$lib/editor/editor-theme";
+  import { languageFor } from "$lib/editor/editor-languages";
   import { themeStore } from "$lib/theme/theme-store.svelte";
 
   /** A small Markdown editor inside the Harness panel: what the agents are
@@ -65,7 +64,7 @@
       }),
     });
     const built = view;
-    const markdown = LanguageDescription.matchFilename(languages, "AGENTS.md");
+    const markdown = languageFor("AGENTS.md");
     void markdown?.load().then((support) => {
       if (view === built) built.dispatch({ effects: languageSlot.reconfigure(support) });
     });

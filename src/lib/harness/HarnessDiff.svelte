@@ -3,10 +3,9 @@
   import { basicSetup } from "codemirror";
   import { Compartment, EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { LanguageDescription } from "@codemirror/language";
-  import { languages } from "@codemirror/language-data";
   import { unifiedMergeView } from "@codemirror/merge";
   import { editorTheme } from "$lib/editor/editor-theme";
+  import { languageFor } from "$lib/editor/editor-languages";
   import { t } from "$lib/i18n/i18n.svelte";
   import { fileName } from "$lib/layout/split-tree";
   import { themeStore } from "$lib/theme/theme-store.svelte";
@@ -66,7 +65,7 @@
       }),
     });
     const built = view;
-    const description = LanguageDescription.matchFilename(languages, fileName(path));
+    const description = languageFor(fileName(path));
     if (description) {
       void description.load().then((support) => {
         if (view === built) built.dispatch({ effects: languageSlot.reconfigure(support) });
