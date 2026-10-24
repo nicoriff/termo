@@ -199,7 +199,7 @@
   </div>
 {/snippet}
 
-<section>
+<section class="preview-section">
   <h3>{t("preferences.statusBar.preview")}</h3>
   <p class="setting-hint first">{t("preferences.statusBar.previewHint")}</p>
   <div class="status-bar preview" class:dragging={drag?.active} class:removing>
@@ -291,6 +291,18 @@
 <style>
   section {
     margin-bottom: 20px;
+  }
+
+  /* The bar stays in view while what's below it scrolls: stuck to the top
+     of the pane, over its padding, on the pane's own background. */
+  .preview-section {
+    position: sticky;
+    top: -16px;
+    z-index: 5;
+    margin: -16px 0 16px;
+    padding: 16px 0 12px;
+    background: var(--terminal-bg, #1e1e1e);
+    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
   }
 
   h3 {
