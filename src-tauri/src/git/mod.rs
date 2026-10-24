@@ -16,6 +16,7 @@ use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
+pub mod file;
 pub mod forge;
 pub mod graph;
 pub mod ops;

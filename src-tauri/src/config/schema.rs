@@ -245,6 +245,14 @@ pub struct AppConfig {
     pub git_review_instructions: String,
     /// How long a review may take, in minutes.
     pub git_review_timeout_min: u16,
+    /// Who wrote each line, in the file editor: "line" (the cursor's line),
+    /// "gutter" (every line, in a column) or "off".
+    pub git_editor_blame: String,
+    /// The commit's message next to its author and date.
+    pub git_editor_blame_message: bool,
+    /// The file editor's toolbar stays open instead of folding back into its
+    /// button when the mouse leaves it.
+    pub editor_toolbar_pinned: bool,
     /// The user's own Claude Code `statusLine` command, saved when Termo
     /// chained onto it so uninstalling can put it back (pty/status_line.rs).
     pub status_line_wrapped: Option<String>,
@@ -338,6 +346,9 @@ impl Default for AppConfig {
             git_review_on_pr_create: false,
             git_review_instructions: String::new(),
             git_review_timeout_min: 10,
+            git_editor_blame: "line".into(),
+            git_editor_blame_message: true,
+            editor_toolbar_pinned: false,
             status_line_wrapped: None,
             last_seen_version: None,
             default_layout: None,

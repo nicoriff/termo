@@ -10,6 +10,7 @@ use tauri::{Emitter, Manager};
 use crate::agents::draft::Step;
 use crate::agents::spec::{AgentSpec, Autonomy, GitRole};
 use crate::agents::store::{self, RunRecord, RunTrigger};
+use crate::git::file::{self, Blame, FileInfo};
 use crate::git::forge::ForgeKind;
 use crate::git::graph::{self, Branch, CommitDetail, GraphCommit, GraphScope};
 use crate::git::ops::{Context, GitOp};
@@ -42,6 +43,28 @@ pub async fn git_snapshot(path: String) -> Option<RepoSnapshot> {
 pub async fn git_blob(root: String, rev: String, path: String) -> Result<Option<String>, String> {
     let Some(root) = checked(&root) else { return Ok(None) };
     blocking(move || graph::blob(&root, &rev, &path)).await.unwrap_or(Ok(None))
+}
+
+/// Where a file stands in the repository it's in, for the editor's toolbar;
+/// `None` outside one. `path` is the file's own, absolute.
+#[tauri::command]
+pub async fn git_file_info(path: String) -> Option<FileInfo> {
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return None;
+    }
+    blocking(move || file::file_info(&path)).await.flatten()
+}
+
+/// Who wrote each line of `contents`, the editor's text of the file at
+/// `path` (absolute); `None` when git can't tell.
+#[tauri::command]
+pub async fn git_blame(path: String, contents: String) -> Option<Blame> {
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return None;
+    }
+    blocking(move || file::blame(&path, &contents)).await.flatten()
 }
 
 #[tauri::command]

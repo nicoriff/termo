@@ -92,7 +92,7 @@ pub struct RepoSnapshot {
     pub remotes: Vec<Remote>,
 }
 
-const STATUS_ARGS: &[&str] =
+pub(crate) const STATUS_ARGS: &[&str] =
     &["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", "--ignore-submodules=all"];
 
 #[derive(Default, Debug, PartialEq)]

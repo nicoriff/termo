@@ -286,6 +286,8 @@ pub fn run() {
             commands::harness_commands::harness_assist_cancel,
             commands::harness_commands::harness_write_instructions,
             commands::git_commands::git_blob,
+            commands::git_commands::git_file_info,
+            commands::git_commands::git_blame,
             commands::git_commands::git_branches,
             commands::git_commands::git_graph,
             commands::git_commands::git_commit_detail,

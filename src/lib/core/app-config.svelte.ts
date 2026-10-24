@@ -114,6 +114,9 @@ export type GitReviewDefaultScope = "changes" | "branch";
 export type GitReviewSeverity = "serious" | "warning" | "suggestion";
 /** Reviewing the branch before a push from Termo. */
 export type GitReviewBeforePush = "off" | "ask";
+/** Who wrote each line, in the file editor: the cursor's line, every line in
+ * a column, or nothing. */
+export type GitEditorBlame = "line" | "gutter" | "off";
 
 export interface GitReviewSettings {
   enabled: boolean;
@@ -214,6 +217,11 @@ class AppConfigStore {
   gitReviewOnPrCreate = $state(false);
   gitReviewInstructions = $state("");
   gitReviewTimeoutMin = $state(10);
+  gitEditorBlame = $state<GitEditorBlame>("line");
+  /** The commit's message next to its author and date. */
+  gitEditorBlameMessage = $state(true);
+  /** The file editor's toolbar stays open when the mouse leaves it. */
+  editorToolbarPinned = $state(false);
   /** Where an agent's CLI was installed when not npm's own folder, by agent. */
   agentInstallDirs = $state<Record<string, string>>({});
   /** Which Node.js each agent's CLI was last found under (see
@@ -364,6 +372,9 @@ class AppConfigStore {
     this.gitReviewOnPrCreate = config.git_review_on_pr_create ?? false;
     this.gitReviewInstructions = config.git_review_instructions ?? "";
     this.gitReviewTimeoutMin = config.git_review_timeout_min ?? 10;
+    this.gitEditorBlame = config.git_editor_blame === "gutter" || config.git_editor_blame === "off" ? config.git_editor_blame : "line";
+    this.gitEditorBlameMessage = config.git_editor_blame_message ?? true;
+    this.editorToolbarPinned = config.editor_toolbar_pinned ?? false;
     this.agentInstallDirs = config.agent_install_dirs ?? {};
     this.agentClisKnown = config.agent_clis_known ?? {};
     this.defaultLayout = config.default_layout;
@@ -613,6 +624,21 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setGitEditorBlame(mode: GitEditorBlame): void {
+    this.gitEditorBlame = mode;
+    void this.persist();
+  }
+
+  setGitEditorBlameMessage(show: boolean): void {
+    this.gitEditorBlameMessage = show;
+    void this.persist();
+  }
+
+  setEditorToolbarPinned(pinned: boolean): void {
+    this.editorToolbarPinned = pinned;
+    void this.persist();
+  }
+
   setTabsFillWidth(fill: boolean): void {
     this.tabsFillWidth = fill;
     void this.persist();
@@ -743,6 +769,9 @@ class AppConfigStore {
       git_review_on_pr_create: this.gitReviewOnPrCreate,
       git_review_instructions: this.gitReviewInstructions,
       git_review_timeout_min: this.gitReviewTimeoutMin,
+      git_editor_blame: this.gitEditorBlame,
+      git_editor_blame_message: this.gitEditorBlameMessage,
+      editor_toolbar_pinned: this.editorToolbarPinned,
       agent_install_dirs: this.agentInstallDirs,
       agent_clis_known: this.agentClisKnown,
       default_layout: this.defaultLayout,

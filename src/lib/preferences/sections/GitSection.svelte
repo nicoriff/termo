@@ -3,6 +3,7 @@
   import {
     appConfigStore,
     GIT_STATUS_PARTS,
+    type GitEditorBlame,
     type GitReviewBeforePush,
     type GitReviewDefaultScope,
     type GitReviewSeverity,
@@ -21,6 +22,10 @@
     { value: "0", label: t("preferences.git.autoFetchNever") },
     ...[5, 15, 30, 60].map((minutes) => ({ value: String(minutes), label: t("preferences.git.autoFetchEvery", { n: String(minutes) }) })),
   ]);
+
+  const blameOptions = $derived(
+    (["line", "gutter", "off"] as const).map((mode) => ({ value: mode, label: t(`preferences.git.blameModes.${mode}`) })),
+  );
 
   /** What's installed of what all this leans on; null while it's asked. */
   let tools = $state<GitTools | null>(null);
@@ -129,6 +134,29 @@
       />
     </label>
   {/each}
+</section>
+
+<section class:off>
+  <h3>{t("preferences.git.editor")}</h3>
+  <div class="row spaced">
+    <span>{t("preferences.git.blame")}</span>
+    <SettingDropdown
+      options={blameOptions}
+      value={appConfigStore.gitEditorBlame}
+      disabled={off}
+      onpick={(value) => appConfigStore.setGitEditorBlame(value as GitEditorBlame)}
+    />
+  </div>
+  <p class="setting-hint">{t("preferences.git.blameHint")}</p>
+  <label class="row toggle-row sub">
+    <span>{t("preferences.git.blameMessage")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.gitEditorBlameMessage}
+      disabled={off || appConfigStore.gitEditorBlame === "off"}
+      onchange={(e) => appConfigStore.setGitEditorBlameMessage(e.currentTarget.checked)}
+    />
+  </label>
 </section>
 
 <section class:off>

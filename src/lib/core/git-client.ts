@@ -214,6 +214,68 @@ export function gitBlob(root: string, rev: string, path: string): Promise<string
   return invoke("git_blob", { root, rev, path });
 }
 
+/** Where a file stands in its repository, for the editor's toolbar (see
+ * src-tauri/src/git/file.rs). */
+export interface FileGitInfo {
+  root: string;
+  /** Relative to the repository, with forward slashes. */
+  path: string;
+  branch: string | null;
+  tracked: boolean;
+  staged: GitMark | null;
+  unstaged: GitMark | null;
+  /** Lines added and removed on disk against HEAD; null when unknown. */
+  added: number | null;
+  removed: number | null;
+  /** The repository's config names programs to compare files with: the
+   * file on disk wasn't compared, so the four fields above say nothing. */
+  changesUnavailable: boolean;
+  last: {
+    sha: string;
+    parent: string | null;
+    author: string;
+    /** Seconds since the epoch. */
+    time: number;
+    subject: string;
+  } | null;
+}
+
+export interface BlameCommit {
+  sha: string;
+  author: string;
+  /** Seconds since the epoch. */
+  time: number;
+  summary: string;
+  /** Where the file was in this commit. */
+  path: string;
+  /** Not in any commit yet: changed in the editor or on disk. */
+  uncommitted: boolean;
+  /** The commit before, and where the file was in it. */
+  previous: string | null;
+  previousPath: string | null;
+}
+
+export interface Blame {
+  root: string;
+  /** The file's path in the repository now, with forward slashes. */
+  path: string;
+  commits: BlameCommit[];
+  /** For each line, from the first: its commit in `commits` and the line it
+   * was in that commit's version of the file (from 1). */
+  lines: [number, number][];
+}
+
+/** `path` is the file's own, absolute; null outside a repository. */
+export function gitFileInfo(path: string): Promise<FileGitInfo | null> {
+  return invoke("git_file_info", { path });
+}
+
+/** Who wrote each line of `contents`, the editor's text of the file at
+ * `path`; null when git can't tell (a file it doesn't follow, say). */
+export function gitBlame(path: string, contents: string): Promise<Blame | null> {
+  return invoke("git_blame", { path, contents });
+}
+
 export function gitBranches(root: string): Promise<Branch[]> {
   return invoke("git_branches", { root });
 }

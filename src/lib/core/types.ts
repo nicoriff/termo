@@ -159,6 +159,9 @@ export interface AppConfig {
   git_review_on_pr_create?: boolean;
   git_review_instructions?: string;
   git_review_timeout_min?: number;
+  git_editor_blame?: string;
+  git_editor_blame_message?: boolean;
+  editor_toolbar_pinned?: boolean;
   /** The user's own Claude Code statusLine command, saved when Termo chained
    * onto it. Never edited here — carried through so saving doesn't drop it. */
   status_line_wrapped: string | null;

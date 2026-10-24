@@ -1,11 +1,21 @@
 [
   {
-    "version": "0.25.3",
-    "date": "2026-10-22",
+    "version": "0.26.0",
+    "date": "2026-10-23",
     "es": [
+      "**Barra de herramientas en el editor**: un botón redondo arriba en el medio de cada archivo que se abre hacia los costados al pasar el mouse, y que se puede fijar abierta con su pin. Guardar, deshacer, rehacer, buscar y reemplazar (`Ctrl+H`), y el archivo en git: su rama, su estado, las líneas agregadas y quitadas, y el último commit que lo tocó, con accesos a sus cambios.",
+      "**Quién escribió cada línea**: el editor muestra el autor, la fecha y el mensaje del commit de la línea del cursor, o de todas las líneas en una columna. Al hacer clic se abre lo que cambió ese commit. Se configura en Preferencias → Git → Editor de archivos, y se prende y apaga desde la barra.",
+      "**Buscar y reemplazar** en el editor, en un cuadro flotante sobre el archivo: cuenta las coincidencias, distingue mayúsculas, busca palabras completas o expresiones regulares, y reemplaza de a una o todas.",
+      "**Más colores en el editor**: markdown distingue títulos, código, citas, links y listas, y colorea los bloques de código en su lenguaje (```ts, ```rust…). También se reconocen .svelte, .astro, .mdx, .jsonc, .zsh, .env, .gitignore y Cargo.lock, y los archivos .diff muestran lo agregado y lo quitado.",
+      "El texto seleccionado en el editor y en los diffs se ve con el color de selección del tema (antes quedaba un gris casi igual al de la línea actual), y con suficiente contraste también en los temas donde ese color es muy suave, como Solarized.",
       "El panel de Git ya no muestra una barra de desplazamiento horizontal cuando no hace falta."
     ],
     "en": [
+      "**A toolbar in the editor**: a round button at the top middle of each file that opens out to both sides when you hover over it, and can be pinned open. Save, undo, redo, find and replace (`Ctrl+H`), and the file in git: its branch, its state, the lines added and removed, and the last commit that touched it, with shortcuts to its changes.",
+      "**Who wrote each line**: the editor shows the author, date and message of the commit behind the cursor's line, or of every line in a column. Clicking it opens what that commit changed. It's set in Preferences → Git → File editor, and turned on and off from the toolbar.",
+      "**Find and replace** in the editor, in a box floating over the file: it counts the matches, can match case, whole words or a regular expression, and replaces one at a time or all at once.",
+      "**More colors in the editor**: markdown tells apart headings, code, quotes, links and lists, and colors code blocks in their own language (```ts, ```rust…). .svelte, .astro, .mdx, .jsonc, .zsh, .env, .gitignore and Cargo.lock are recognized too, and .diff files show what was added and removed.",
+      "Selected text in the editor and in diffs shows in the theme's selection color (it used to be a gray almost the same as the current line's), with enough contrast even in themes where that color is very faint, like Solarized.",
       "The Git panel no longer shows a horizontal scrollbar when nothing needs scrolling."
     ]
   },
