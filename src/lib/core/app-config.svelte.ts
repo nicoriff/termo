@@ -11,6 +11,7 @@ import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shor
 import type { AppConfig, ShortcutsConfig } from "./types";
 import { DEFAULT_SOUNDS, isSoundChoice, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
+import { defaultLayout, normalizeLayout, type StatusBarLayout } from "$lib/statusbar/layout";
 
 const EMPTY_SHORTCUTS: ShortcutsConfig = {
   new_tab_mac: null,
@@ -107,7 +108,6 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
 
 /** What the repository's item on the status bar can show. */
 export type GitStatusPart = "branch" | "sync" | "changes" | "pr";
-export const GIT_STATUS_PARTS: GitStatusPart[] = ["branch", "sync", "changes", "pr"];
 
 /** What a code review looks at unless told otherwise. */
 export type GitReviewDefaultScope = "changes" | "branch";
@@ -200,9 +200,18 @@ class AppConfigStore {
   gitEnabled = $state(true);
   /** The Git button in the window's vertical bar. */
   gitInActivityBar = $state(true);
-  /** The repository's item on the status bar, and each thing it shows. */
+  /** The repository's item on the status bar, and each thing it shows, from
+   * before the bar could be arranged: what the default bar reads (see
+   * effectiveStatusBar). Nothing sets them any more. */
   gitStatusBar = $state(true);
   gitStatusParts = $state<Record<GitStatusPart, boolean>>({ branch: true, sync: true, changes: true, pr: true });
+  /** The status bar as arranged in Preferences; null for the default one. */
+  statusBarLayout = $state<StatusBarLayout | null>(null);
+  /** What the bar shows: the user's arrangement, or the default with what
+   * the Git section used to say about the repository's item. */
+  readonly effectiveStatusBar = $derived<StatusBarLayout>(
+    this.statusBarLayout ?? defaultLayout({ visible: this.gitStatusBar, parts: this.gitStatusParts }),
+  );
   /** Asking gh / glab for the branch's pull request. */
   gitPrEnabled = $state(true);
   /** Minutes between fetches made on their own; 0 for never. */
@@ -361,6 +370,7 @@ class AppConfigStore {
       changes: config.git_status_changes ?? true,
       pr: config.git_status_pr ?? true,
     };
+    this.statusBarLayout = normalizeLayout(config.status_bar_layout);
     this.gitPrEnabled = config.git_pr_enabled ?? true;
     this.gitAutoFetchMinutes = config.git_auto_fetch_minutes ?? 0;
     this.gitReviewEnabled = config.git_review_enabled ?? true;
@@ -598,13 +608,9 @@ class AppConfigStore {
     void this.persist();
   }
 
-  setGitStatusBar(visible: boolean): void {
-    this.gitStatusBar = visible;
-    void this.persist();
-  }
-
-  setGitStatusPart(part: GitStatusPart, visible: boolean): void {
-    this.gitStatusParts = { ...this.gitStatusParts, [part]: visible };
+  /** Null goes back to the default bar. */
+  setStatusBarLayout(layout: StatusBarLayout | null): void {
+    this.statusBarLayout = layout;
     void this.persist();
   }
 
@@ -767,6 +773,7 @@ class AppConfigStore {
       git_status_sync: this.gitStatusParts.sync,
       git_status_changes: this.gitStatusParts.changes,
       git_status_pr: this.gitStatusParts.pr,
+      status_bar_layout: this.statusBarLayout,
       git_pr_enabled: this.gitPrEnabled,
       git_auto_fetch_minutes: this.gitAutoFetchMinutes,
       git_review_enabled: this.gitReviewEnabled,

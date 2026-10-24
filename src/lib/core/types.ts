@@ -149,6 +149,9 @@ export interface AppConfig {
   git_status_sync?: boolean;
   git_status_changes?: boolean;
   git_status_pr?: boolean;
+  /** The status bar as arranged in Preferences; absent or null for the
+   * default (see statusbar/layout.ts). */
+  status_bar_layout?: StatusBarLayoutConfig | null;
   git_pr_enabled?: boolean;
   git_auto_fetch_minutes?: number;
   git_review_enabled?: boolean;
@@ -172,4 +175,10 @@ export interface AppConfig {
   default_layout: string | null;
   window: WindowConfig;
   shortcuts: ShortcutsConfig;
+}
+
+/** As stored: the frontend checks the ids and options on reading. */
+export interface StatusBarLayoutConfig {
+  left: { id: string; options?: Record<string, string> }[];
+  right: { id: string; options?: Record<string, string> }[];
 }

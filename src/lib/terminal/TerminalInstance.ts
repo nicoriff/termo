@@ -31,6 +31,7 @@ import { neutralizePaintedControls } from "./conpty-controls";
 import { OutputHighlighter } from "./output-highlighter";
 import { parseOsc7 } from "./osc7";
 import { tabCwd } from "./tab-cwd.svelte";
+import { tabSize } from "./tab-size.svelte";
 import { registerPty, unregisterPty } from "./pty-registry";
 import { registerTerminal, unregisterTerminal } from "./terminal-registry";
 import { copySelection, pasteClipboard } from "./terminal-clipboard";
@@ -158,6 +159,10 @@ export class TerminalInstance {
     this.term.onKey(() => this.setStarting(false));
 
     this.term.onTitleChange((title) => tabTitleStore.setProgramTitle(this.tabId, title));
+
+    // For the status bar: fitting the console to its pane is what resizes it.
+    tabSize.set(this.tabId, this.term.cols, this.term.rows);
+    this.term.onResize(({ cols, rows }) => tabSize.set(this.tabId, cols, rows));
 
     // The shell announces its directory on every prompt (see
     // src-tauri/src/pty/cwd_report.rs) — the only way to know where a console
@@ -672,6 +677,7 @@ export class TerminalInstance {
     this.oscSub?.dispose();
     this.oscSub = null;
     tabCwd.remove(this.tabId);
+    tabSize.remove(this.tabId);
     // Also covers teardown paths that don't go through workspaceStore's
     // closeTab (e.g. closing the whole window/tile) — remove() is an
     // idempotent no-op if that already fired.

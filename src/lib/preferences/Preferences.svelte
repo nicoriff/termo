@@ -25,12 +25,14 @@
   import PlatformSection from "./sections/PlatformSection.svelte";
   import GeneralSection from "./sections/GeneralSection.svelte";
   import GitSection from "./sections/GitSection.svelte";
+  import StatusBarSection from "./sections/StatusBarSection.svelte";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
 
   type SectionId =
     | "general"
     | "appearance"
     | "font"
+    | "status-bar"
     | "console"
     | "remote"
     | "shortcuts"
@@ -65,7 +67,10 @@
     {
       id: "appearance",
       label: "preferences.sidebar.appearance",
-      children: [{ id: "font", label: "preferences.sidebar.font" }],
+      children: [
+        { id: "font", label: "preferences.sidebar.font" },
+        { id: "status-bar", label: "preferences.sidebar.statusBar" },
+      ],
     },
     {
       id: "console",
@@ -143,6 +148,9 @@
       } else if (event.payload === "remote") {
         selected = "remote";
         expanded = { ...expanded, console: true };
+      } else if (event.payload === "status-bar") {
+        selected = "status-bar";
+        expanded = { ...expanded, appearance: true };
       }
     }).then((stop) => (unlisten = stop));
     return () => unlisten?.();
@@ -234,6 +242,8 @@
         <AppearanceSection />
       {:else if selected === "font"}
         <FontSection />
+      {:else if selected === "status-bar"}
+        <StatusBarSection />
       {:else if selected === "console"}
         <ConsoleSection />
       {:else if selected === "remote"}
@@ -241,7 +251,12 @@
       {:else if selected === "shortcuts"}
         <ShortcutsSection />
       {:else if selected === "git"}
-        <GitSection />
+        <GitSection
+          onstatusbar={() => {
+            selected = "status-bar";
+            expanded = { ...expanded, appearance: true };
+          }}
+        />
       {:else if selected === "oh-my-posh"}
         <OhMyPoshSection />
       {:else if selected === "ai-mode"}

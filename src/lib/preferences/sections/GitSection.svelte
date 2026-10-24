@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import {
     appConfigStore,
-    GIT_STATUS_PARTS,
     type GitEditorBlame,
     type GitReviewBeforePush,
     type GitReviewDefaultScope,
@@ -14,6 +13,9 @@
   import { isMac } from "$lib/core/platform";
   import { t } from "$lib/i18n/i18n.svelte";
   import SettingDropdown from "../SettingDropdown.svelte";
+
+  /** Opens the status bar's page, where the repository's item is arranged. */
+  let { onstatusbar }: { onstatusbar: () => void } = $props();
 
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleGit"), isMac));
   const off = $derived(!appConfigStore.gitEnabled);
@@ -113,27 +115,10 @@
 
 <section class:off>
   <h3>{t("preferences.git.statusBar")}</h3>
-  <label class="row toggle-row">
-    <span>{t("preferences.git.statusBarShow")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.gitStatusBar}
-      disabled={off}
-      onchange={(e) => appConfigStore.setGitStatusBar(e.currentTarget.checked)}
-    />
-  </label>
-  <p class="setting-hint">{t("preferences.git.statusBarHint")}</p>
-  {#each GIT_STATUS_PARTS as part (part)}
-    <label class="row toggle-row sub">
-      <span>{t(`preferences.git.parts.${part}`)}</span>
-      <input
-        type="checkbox"
-        checked={appConfigStore.gitStatusParts[part]}
-        disabled={off || !appConfigStore.gitStatusBar}
-        onchange={(e) => appConfigStore.setGitStatusPart(part, e.currentTarget.checked)}
-      />
-    </label>
-  {/each}
+  <div class="row">
+    <span class="status-bar-moved">{t("preferences.git.statusBarMoved")}</span>
+    <button class="status-bar-link" onclick={onstatusbar}>{t("preferences.git.statusBarOpen")}</button>
+  </div>
 </section>
 
 <section class:off>
@@ -314,6 +299,26 @@
     justify-content: space-between;
     gap: 10px;
     font-size: 12px;
+  }
+
+  .status-bar-moved {
+    opacity: 0.75;
+  }
+
+  .status-bar-link {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .status-bar-link:hover {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 
   .row.spaced {

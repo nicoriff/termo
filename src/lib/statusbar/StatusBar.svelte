@@ -1,418 +1,93 @@
 <script lang="ts">
+  import "./status-bar.css";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { getPtyMemory } from "$lib/core/pty-client";
-  import { isConsoleTab } from "$lib/layout/split-tree";
-  import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
-  import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
-  import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import { getPtyId } from "$lib/terminal/pty-registry";
-  import { i18n, t } from "$lib/i18n/i18n.svelte";
-  import { getCopilotPlanUsage, type CopilotPlanUsage } from "$lib/core/copilot-usage-client";
-  import { agentStatusStore } from "$lib/ai-mode/agent-status-store.svelte";
-  import { companionNudges } from "$lib/companion/companion-nudges.svelte";
-  import { companionStore } from "$lib/companion/companion-store.svelte";
-  import { nudgeTitle } from "$lib/companion/companion";
-  import { uiState } from "$lib/core/ui-state.svelte";
-  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
-  import { planWindowLabel } from "$lib/ai-mode/plan-window-label";
-  import { REPORTS_PLAN_USAGE, TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
-  import GitStatusItem from "./GitStatusItem.svelte";
-  import { remoteWatch } from "$lib/remote/remote-watch.svelte";
-  import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
+  import { menuKeys } from "$lib/core/menu-keys";
   import { openPreferencesWindow } from "$lib/core/window-client";
+  import { t } from "$lib/i18n/i18n.svelte";
+  import StatusItem from "./StatusItem.svelte";
 
-  const MEMORY_POLL_MS = 2000;
-  /** A plan's monthly count barely moves; the backend keeps it as long. */
-  const COPILOT_POLL_MS = 5 * 60 * 1000;
+  /** The bar as arranged in Preferences → Status bar: each end's items, in
+   * order. An item with nothing to say for the tab in focus isn't drawn. */
+  const layout = $derived(appConfigStore.effectiveStatusBar);
 
-  const activeSession = $derived(workspaceStore.focusedSession);
-  const activeTabId = $derived(activeSession?.id ?? null);
-  /** The active tab's console, when it is one (not a file or an agent's runs). */
-  const activeConsole = $derived(activeSession && isConsoleTab(activeSession) ? activeSession : null);
+  /** Where the right-click menu opened, or null. */
+  let menuAt = $state<{ x: number; y: number } | null>(null);
 
-  let memoryBytes = $state<number | null>(null);
-
-  $effect(() => {
-    const tabId = activeTabId;
-    memoryBytes = null;
-    if (!tabId) return;
-
-    let cancelled = false;
-    async function sample(tabId: string) {
-      // No PTY id yet while the tab's shell is still spawning — the next
-      // poll picks it up.
-      const ptyId = getPtyId(tabId);
-      if (!ptyId) return;
-      try {
-        const bytes = await getPtyMemory(ptyId);
-        if (!cancelled) memoryBytes = bytes;
-      } catch {
-        if (!cancelled) memoryBytes = null;
-      }
-    }
-
-    void sample(tabId);
-    const timer = setInterval(() => void sample(tabId), MEMORY_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  });
-
-  // Which agent Modo IA detected in the active console, by hooks or by
-  // reading the screen. Null when there's none (or Modo IA is off, which is
-  // what stops both sources from reporting).
-  const activeTool = $derived(activeTabId ? (aiStatusStore.byId[activeTabId]?.tool ?? null) : null);
-
-  // The active console's plan windows, whichever agent reported them and
-  // whatever windows its plan has — named after how long each one runs.
-  const planWindows = $derived.by(() => {
-    const status = activeTabId ? agentStatusStore.byTab[activeTabId] : null;
-    return (status?.planWindows ?? []).map((usage) => {
-      const label = planWindowLabel(usage.windowMinutes);
-      return { label: t(label.key, label.params), percent: usage.percentage };
-    });
-  });
-
-  // Copilot's plan usage comes from GitHub rather than from the console
-  // (see src-tauri/src/copilot_quota.rs): asked while a Copilot console is
-  // the active one.
-  const showCopilotPlan = $derived(appConfigStore.aiModeEnabled && activeTool === "copilot");
-  let copilotUsage = $state<CopilotPlanUsage | null>(null);
-
-  $effect(() => {
-    if (!showCopilotPlan) return;
-    let cancelled = false;
-    const load = () =>
-      void getCopilotPlanUsage()
-        .then((usage) => {
-          if (!cancelled) copilotUsage = usage;
-        })
-        .catch(() => {});
-    load();
-    const timer = setInterval(load, COPILOT_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  });
-
-  const copilotWindows = $derived(
-    copilotUsage?.kind === "ok"
-      ? copilotUsage.quotas.map((quota) => ({
-          label: t(quota.id === "chat" ? "statusBar.copilotChat" : "statusBar.copilotPremium"),
-          percent: quota.percentUsed,
-        }))
-      : [],
-  );
-
-  /** "2026-11-01" as a date in the current language, read as a local date. */
-  const copilotResets = $derived.by(() => {
-    if (copilotUsage?.kind !== "ok" || !copilotUsage.resetsOn) return null;
-    const [year, month, day] = copilotUsage.resetsOn.split("-").map(Number);
-    if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day).toLocaleDateString(i18n.locale, { day: "numeric", month: "long" });
-  });
-
-  const planTitle = $derived(
-    showCopilotPlan
-      ? copilotUsage?.kind === "noGh"
-        ? t("statusBar.copilotNeedsGhHint")
-        : copilotResets
-          ? t("statusBar.copilotPlanHint", { date: copilotResets })
-          : t("statusBar.planHint")
-      : t("statusBar.planHint"),
-  );
-
-  const shownWindows = $derived(showCopilotPlan ? copilotWindows : planWindows);
-
-  const contextPercent = $derived(
-    activeTabId ? (agentStatusStore.byTab[activeTabId]?.contextUsedPercentage ?? null) : null,
-  );
-
-  // Claude only: Codex reports no cost for a subscription, so the item
-  // simply isn't there for it.
-  const costUsd = $derived(activeTabId ? (agentStatusStore.byTab[activeTabId]?.costUsd ?? null) : null);
-
-  /** Cents are enough for a session total, but a session that has only
-   * just started would read "$0.00" as if it were free. */
-  function formatUsd(value: number): string {
-    return value > 0 && value < 0.01 ? "<$0.01" : `$${value.toFixed(2)}`;
+  function openMenu(event: MouseEvent) {
+    event.preventDefault();
+    menuAt = { x: event.clientX, y: event.clientY };
   }
 
-  /** The gauge can't run past its track; the number still shows what was
-   * reported (a spend limit can go over 100%). */
-  function clamp(percent: number): number {
-    return Math.min(100, Math.max(0, percent));
+  /** Keyboard closes go through menuKeys, which gives the console its focus back. */
+  function closeMenu() {
+    menuAt = null;
   }
 
-  /** What the Companion has to say about the active console's session. */
-  const nudge = $derived(companionNudges.for(activeTabId));
-  const nudgeText = $derived(
-    !nudge
-      ? ""
-      : nudge.kind === "cacheExpiring"
-        ? t("companion.nudge.cacheExpiring", { minutes: String(nudge.minutes ?? 1) })
-        : t(nudgeTitle(nudge.kind)),
-  );
-
-  /** Looked at: the panel says the rest, and the notice doesn't come back. */
-  function openNudge() {
-    if (!nudge) return;
-    companionNudges.markSeen(nudge);
-    companionStore.picked = null;
-    uiState.openCompanion();
-  }
-
-  function formatBytes(bytes: number): string {
-    const mb = bytes / (1024 * 1024);
-    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+  function customize() {
+    closeMenu();
+    void openPreferencesWindow("status-bar");
   }
 </script>
 
-<div class="status-bar">
-  <span class="status-item">
-    {t("statusBar.aiMode", { state: t(appConfigStore.aiModeEnabled ? "statusBar.aiOn" : "statusBar.aiOff") })}
-  </span>
-  {#if activeConsole}
-    <!-- The console's type: the tab shows it only as an icon. -->
-    <span class="status-item status-engine" title={activeTool ? t("statusBar.engineHint") : t("statusBar.consoleHint")}>
-      <ConsoleIcon kind={tabTitleStore.kindFor(activeConsole)} size={11} />
-      {activeTool ? TOOL_DISPLAY_NAMES[activeTool] : tabTitleStore.typeFor(activeConsole)}
-    </span>
-  {/if}
-  <!-- Plan usage and cost are Modo IA's: only with it on. -->
-  {#if appConfigStore.aiModeEnabled && (showCopilotPlan || (activeTool && REPORTS_PLAN_USAGE[activeTool]) || planWindows.length > 0)}
-    <span class="status-item status-plan" title={planTitle}>
-      {t("statusBar.plan")}
-      {#each shownWindows as usage (usage.label)}
-        <span class="plan-window">
-          <span class="plan-label">{usage.label}</span>
-          <span class="plan-gauge" style="--fill:{clamp(usage.percent)}%">
-            <span class="plan-gauge-text">{Math.round(usage.percent)}%</span>
-          </span>
-        </span>
-      {:else}
-        <!-- No agent reports usage until its first response, and Claude's
-             windows need a Pro/Max plan. Saying so beats the reading
-             vanishing from the bar as if the console had none. -->
-        <span class="plan-pending">
-          {t(showCopilotPlan && copilotUsage?.kind === "noGh" ? "statusBar.copilotNeedsGh" : "statusBar.planPending")}
-        </span>
-      {/each}
-    </span>
-  {/if}
-  {#if appConfigStore.aiModeEnabled && contextPercent !== null}
-    <span class="status-item status-context" title={t("statusBar.contextHint")}>
-      {t("statusBar.context")}
-      <span class="plan-gauge" style="--fill:{clamp(contextPercent)}%">
-        <span class="plan-gauge-text">{Math.round(contextPercent)}%</span>
-      </span>
-    </span>
-  {/if}
-  {#if appConfigStore.aiModeEnabled && costUsd !== null}
-    <span class="status-item status-cost" title={t("statusBar.costHint")}>
-      {t("statusBar.cost", { value: formatUsd(costUsd) })}
-    </span>
-  {/if}
-  {#if nudge}
-    <button class="status-item status-companion" title={t("companion.nudge.hint")} onclick={openNudge}>
-      <span class="nudge-dot" aria-hidden="true"></span>{nudgeText}
-    </button>
-  {/if}
-  <!-- The right end: who's connected from the tailnet, the repository, then
-       the console's memory. -->
-  <div class="status-right">
-    {#if !sessionsDaemon.answering && appConfigStore.persistentSessions}
-      <button
-        class="status-item status-daemon"
-        title={t("statusBar.daemonDownHint")}
-        onclick={() => void openPreferencesWindow("console")}
-      >
-        <span class="daemon-dot" aria-hidden="true"></span>{t("statusBar.daemonDown")}
-      </button>
-    {/if}
-    {#if remoteWatch.viewers.length > 0}
-      <button
-        class="status-item status-remote"
-        title={t("remote.viewersHint", {
-          who: remoteWatch.viewers.map((viewer) => `${viewer.login} (${viewer.node})`).join(", "),
-        })}
-        onclick={() => void openPreferencesWindow("remote")}
-      >
-        <span class="remote-dot" aria-hidden="true"></span>{t("remote.viewers", { count: String(remoteWatch.viewers.length) })}
-      </button>
-    {/if}
-    <GitStatusItem />
-    {#if memoryBytes !== null}
-      <span class="status-item status-memory" title={t("statusBar.memoryHint")}>
-        {t("statusBar.memory", { value: formatBytes(memoryBytes) })}
-      </span>
-    {/if}
+<svelte:window onpointerdown={() => menuAt && closeMenu()} />
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="status-bar" oncontextmenu={openMenu}>
+  <div class="status-side left">
+    {#each layout.left as item (item.id)}
+      <StatusItem {item} />
+    {/each}
+  </div>
+  <div class="status-side right">
+    {#each layout.right as item (item.id)}
+      <StatusItem {item} />
+    {/each}
   </div>
 </div>
 
+{#if menuAt}
+  <div
+    class="status-menu"
+    role="menu"
+    tabindex="-1"
+    style="left:{menuAt.x}px; bottom:{window.innerHeight - menuAt.y + 4}px"
+    onpointerdown={(event) => event.stopPropagation()}
+    use:menuKeys={{ close: () => closeMenu() }}
+  >
+    <button role="menuitem" onclick={customize}>{t("statusBar.customize")}</button>
+  </div>
+{/if}
+
 <style>
-  .status-bar {
-    flex-shrink: 0;
+  .status-menu {
+    position: fixed;
+    z-index: 70;
     display: flex;
-    align-items: center;
-    height: 22px;
-    padding: 0 10px;
-    font-size: 11px;
-    background: var(--titlebar-bg, #1e1e1e);
+    flex-direction: column;
+    padding: 4px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 7px;
+    background: var(--tabbar-active-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
-    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+    font-size: 12px;
+    box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.38);
   }
 
-  /* Dimmed text only — dimming the whole bar would also lighten its
-     background below the opacity setting. */
-  .status-item {
+  .status-menu button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     white-space: nowrap;
-    opacity: 0.85;
-  }
-
-  .status-companion {
-    margin-left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: none;
-    padding: 0;
     cursor: pointer;
   }
 
-  .status-companion:hover {
-    opacity: 1;
-    text-decoration: underline;
-  }
-
-  .nudge-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #f5a623;
-  }
-
-  .status-remote,
-  .status-daemon {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-right: 12px;
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .status-remote:hover,
-  .status-daemon:hover {
-    opacity: 1;
-    text-decoration: underline;
-  }
-
-  .remote-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #3fb950;
-  }
-
-  .status-daemon {
-    color: #e3b341;
-  }
-
-  .daemon-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #e3b341;
-  }
-
-  .status-engine {
-    margin-left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .status-plan {
-    margin-left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .plan-window {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .plan-label {
-    opacity: 0.75;
-  }
-
-  .plan-pending {
-    opacity: 0.6;
-  }
-
-  .plan-gauge {
-    position: relative;
-    display: block;
-    width: 52px;
-    height: 13px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.12);
-    overflow: hidden;
-  }
-
-  /* The fill sits behind the number, which stays centered on the whole
-     track so it doesn't move as the bar grows. */
-  .plan-gauge::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: var(--fill);
-    background: var(--pane-active-border, #3a6df0);
-    opacity: 0.55;
-  }
-
-  .plan-gauge-text {
-    position: relative;
-    display: block;
-    text-align: center;
-    font-size: 10px;
-    line-height: 13px;
-  }
-
-  .status-cost {
-    margin-left: 12px;
-  }
-
-  .status-context {
-    margin-left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .status-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-
-  .status-memory {
-    margin-left: 12px;
+  .status-menu button:hover,
+  .status-menu button:focus-visible {
+    outline: none;
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
   }
 </style>

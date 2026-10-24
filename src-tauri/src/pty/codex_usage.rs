@@ -84,10 +84,9 @@ fn snapshot_from(payload: &Value, codex_home: &Path) -> Option<StatusSnapshot> {
     // What the model is carrying right now, which is the turn's own usage —
     // the running total counts every turn of the conversation, cached tokens
     // included, and would read far past the window it's measured against.
-    let context_used_percentage = match (
-        number("/info/last_token_usage/total_tokens"),
-        number("/info/model_context_window"),
-    ) {
+    let context_tokens = number("/info/last_token_usage/total_tokens");
+    let context_window_tokens = number("/info/model_context_window");
+    let context_used_percentage = match (context_tokens, context_window_tokens) {
         (Some(used), Some(window)) if window > 0.0 => Some(used / window * 100.0),
         _ => None,
     };
@@ -105,6 +104,9 @@ fn snapshot_from(payload: &Value, codex_home: &Path) -> Option<StatusSnapshot> {
         cost_usd: None,
         plan_windows: [window("primary"), window("secondary")].into_iter().flatten().collect(),
         spend_limit_percentage: None,
+        context_tokens,
+        context_window_tokens,
+        ..Default::default()
     })
 }
 

@@ -11,12 +11,20 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { fileName } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
+  import { optionOn, type StatusItemRef } from "../layout";
+
+  let { item }: { item: StatusItemRef } = $props();
 
   /** The repository of the tab in focus, on the status bar: its branch, what
    * there is to push and pull, what changed and its pull request — each one
-   * as Preferences says — and, on a click, what to do with it. */
+   * as the item's settings say — and, on a click, what to do with it. */
   const snap = $derived(gitStore.snapshot);
-  const parts = $derived(appConfigStore.gitStatusParts);
+  const parts = $derived({
+    branch: optionOn(item, "branch"),
+    sync: optionOn(item, "sync"),
+    changes: optionOn(item, "changes"),
+    pr: optionOn(item, "pr"),
+  });
   const sync = $derived(snap ? syncLabel(snap.ahead, snap.behind) : "");
   const changes = $derived(changesLabel(gitStore.counts));
   const pr = $derived(gitStore.pr?.kind === "ok" ? gitStore.pr.pr : null);
@@ -108,7 +116,7 @@
 
 <svelte:window onpointerdown={() => open && close(false)} />
 
-{#if appConfigStore.gitEnabled && appConfigStore.gitStatusBar && snap}
+{#if appConfigStore.gitEnabled && snap}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <span class="git-anchor" onpointerdown={(event) => event.stopPropagation()} onkeydown={onKeydown}>
     <button class="git-item" class:open title={hint} aria-haspopup="menu" aria-expanded={open} onclick={toggle}>
@@ -225,7 +233,6 @@
 <style>
   .git-anchor {
     position: relative;
-    margin-left: 12px;
     display: flex;
     align-items: center;
     min-width: 0;

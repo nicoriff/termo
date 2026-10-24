@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.27.0",
+    "date": "2026-10-24",
+    "es": [
+      "**Barra de estado a tu medida**: en Preferencias → Apariencia → Barra de estado elegís qué muestra y dónde, arrastrando los ítems sobre una simulación de la barra. Hay ítems nuevos: el modelo, el estado del agente, el límite de gasto, las líneas cambiadas, la duración de la sesión y la versión del agente; el último commit, el stash, la rama remota y el último fetch; la carpeta de la consola (clic para copiarla); el proceso y el tamaño de la consola; la CPU de la consola, la memoria de Termo, la CPU y la RAM del sistema; tus agentes trabajando, y un reloj. Algunos tienen opciones, como el contexto en tokens o cuánto falta para que se renueve cada ventana del plan. También se llega con clic derecho sobre la barra."
+    ],
+    "en": [
+      "**A status bar of your own**: in Preferences → Appearance → Status bar you choose what it shows and where, dragging items onto a simulation of the bar. There are new items: the model, the agent's status, the spend limit, lines changed, the session's duration and the agent's version; the last commit, the stash, the remote branch and the last fetch; the console's folder (click to copy it); the console's process and size; the console's CPU, Termo's memory, the system's CPU and RAM; your agents at work, and a clock. Some have settings, like the context in tokens or how long until each plan window renews. Right-clicking the bar gets you there too."
+    ]
+  },
+  {
     "version": "0.26.0",
     "date": "2026-10-24",
     "es": [

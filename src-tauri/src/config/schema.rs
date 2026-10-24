@@ -85,6 +85,26 @@ pub struct ShortcutsConfig {
     pub ai_next_pending_other: Option<String>,
 }
 
+/// One item of the status bar, as the user placed it: which one, and what
+/// its settings say. The ids and options belong to the frontend
+/// (src/lib/statusbar/layout.ts), which checks them on reading; here they're
+/// only kept.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct StatusBarItem {
+    pub id: String,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub options: std::collections::BTreeMap<String, String>,
+}
+
+/// The status bar arranged in Preferences: what goes on each end, in order.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct StatusBarLayout {
+    pub left: Vec<StatusBarItem>,
+    pub right: Vec<StatusBarItem>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppConfig {
@@ -225,6 +245,11 @@ pub struct AppConfig {
     pub git_status_sync: bool,
     pub git_status_changes: bool,
     pub git_status_pr: bool,
+    /// The status bar as the user arranged it; None for the default one,
+    /// which then follows whatever later versions add to it. The git_status_*
+    /// fields above are what that default reads for the repository's item,
+    /// from before the bar could be arranged.
+    pub status_bar_layout: Option<StatusBarLayout>,
     /// Asking gh / glab for the branch's pull request.
     pub git_pr_enabled: bool,
     /// Fetching on its own every so many minutes while a repository is in
@@ -339,6 +364,7 @@ impl Default for AppConfig {
             git_status_sync: true,
             git_status_changes: true,
             git_status_pr: true,
+            status_bar_layout: None,
             git_pr_enabled: true,
             git_auto_fetch_minutes: 0,
             git_review_enabled: true,

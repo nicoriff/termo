@@ -19,6 +19,16 @@ export interface AgentStatus {
   costUsd: number | null;
   planWindows: PlanWindow[];
   spendLimitPercentage: number | null;
+  /** What the context holds and the model's whole window, in tokens. */
+  contextTokens?: number | null;
+  contextWindowTokens?: number | null;
+  /** Claude only: what the session changed and how long it has run. */
+  linesAdded?: number | null;
+  linesRemoved?: number | null;
+  durationMs?: number | null;
+  apiDurationMs?: number | null;
+  agentVersion?: string | null;
+  outputStyle?: string | null;
 }
 
 /** Keyed by tab (SessionTab) id, like aiStatusStore and tabTitleStore. */

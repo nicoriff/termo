@@ -60,6 +60,19 @@ pub struct StatusSnapshot {
     pub cost_usd: Option<f64>,
     pub plan_windows: Vec<UsageWindow>,
     pub spend_limit_percentage: Option<f64>,
+    /// What the context holds, in tokens, and the model's whole window: the
+    /// status bar can show them instead of the share.
+    pub context_tokens: Option<f64>,
+    pub context_window_tokens: Option<f64>,
+    /// Claude only: lines the session added and took out, how long it has
+    /// run and how much of that was waiting on the API.
+    pub lines_added: Option<i64>,
+    pub lines_removed: Option<i64>,
+    pub duration_ms: Option<f64>,
+    pub api_duration_ms: Option<f64>,
+    /// The agent CLI's own version, and Claude's output style.
+    pub agent_version: Option<String>,
+    pub output_style: Option<String>,
 }
 
 impl StatusSnapshot {
@@ -94,6 +107,21 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
         })
     };
 
+    // What the last turn left in the context: what was sent fresh plus what
+    // was read from or written to the cache. Older versions only report the
+    // share, so that and the window's size stand in for it.
+    let context_window_tokens = number("/context_window/context_window_size");
+    let current = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
+        .iter()
+        .filter_map(|field| number(&format!("/context_window/current_usage/{field}")))
+        .reduce(|sum, tokens| sum + tokens);
+    let context_tokens = current.or_else(|| {
+        match (number("/context_window/used_percentage"), context_window_tokens) {
+            (Some(share), Some(size)) => Some((share / 100.0 * size).round()),
+            _ => None,
+        }
+    });
+
     Some(StatusSnapshot {
         tool: Some("claude".to_string()),
         agent_session_id: text("/session_id"),
@@ -110,6 +138,14 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
             .flatten()
             .collect(),
         spend_limit_percentage: number("/rate_limits/spend_limit/used_percentage"),
+        context_tokens,
+        context_window_tokens,
+        lines_added: integer("/cost/total_lines_added"),
+        lines_removed: integer("/cost/total_lines_removed"),
+        duration_ms: number("/cost/total_duration_ms"),
+        api_duration_ms: number("/cost/total_api_duration_ms"),
+        agent_version: text("/version"),
+        output_style: text("/output_style/name"),
     })
 }
 
@@ -348,6 +384,37 @@ mod tests {
         );
         // Absent for everyone without a spend limit.
         assert_eq!(snapshot.spend_limit_percentage, None);
+    }
+
+    #[test]
+    fn reads_what_the_session_has_done() {
+        let snapshot = snapshot_from(
+            r#"{
+                "version": "2.1.0",
+                "output_style": { "name": "default" },
+                "cost": {
+                    "total_lines_added": 156, "total_lines_removed": 23,
+                    "total_duration_ms": 45000, "total_api_duration_ms": 2300
+                },
+                "context_window": {
+                    "context_window_size": 200000,
+                    "current_usage": { "input_tokens": 8500, "cache_creation_input_tokens": 5000, "cache_read_input_tokens": 2000 }
+                }
+            }"#,
+        )
+        .unwrap();
+        assert_eq!((snapshot.lines_added, snapshot.lines_removed), (Some(156), Some(23)));
+        assert_eq!((snapshot.duration_ms, snapshot.api_duration_ms), (Some(45000.0), Some(2300.0)));
+        assert_eq!(snapshot.agent_version.as_deref(), Some("2.1.0"));
+        assert_eq!(snapshot.output_style.as_deref(), Some("default"));
+        assert_eq!((snapshot.context_tokens, snapshot.context_window_tokens), (Some(15500.0), Some(200000.0)));
+    }
+
+    #[test]
+    fn works_out_the_tokens_from_the_share_without_the_usage() {
+        let snapshot =
+            snapshot_from(r#"{"context_window":{"used_percentage":10,"context_window_size":200000}}"#).unwrap();
+        assert_eq!(snapshot.context_tokens, Some(20000.0));
     }
 
     #[test]

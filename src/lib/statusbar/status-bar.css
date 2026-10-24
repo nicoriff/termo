@@ -1,0 +1,135 @@
+/* The status bar's look, shared by the bar itself and its simulation in
+   Preferences (StatusBarSection), so what's arranged there looks as it will.
+   Everything hangs off .status-bar. */
+
+.status-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11px;
+  background: var(--titlebar-bg, #1e1e1e);
+  color: var(--titlebar-fg, #d4d4d4);
+  border-top: 1px solid var(--tabbar-border, #2a2a2a);
+}
+
+.status-bar .status-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.status-bar .status-side.left {
+  overflow: hidden;
+}
+
+.status-bar .status-side.right {
+  margin-left: auto;
+  padding-left: 12px;
+  flex-shrink: 0;
+}
+
+/* Dimmed text only — dimming the whole bar would also lighten its
+   background below the opacity setting. */
+.status-bar .status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.status-bar button.status-item {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.status-bar button.status-item:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.status-bar .status-dim {
+  opacity: 0.7;
+}
+
+.status-bar .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #3fb950;
+}
+
+.status-bar .status-plan,
+.status-bar .status-context {
+  gap: 6px;
+}
+
+.status-bar .plan-window {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-bar .plan-label {
+  opacity: 0.75;
+}
+
+.status-bar .plan-pending {
+  opacity: 0.6;
+}
+
+.status-bar .plan-gauge {
+  position: relative;
+  display: block;
+  width: 52px;
+  height: 13px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+/* The fill sits behind the number, which stays centered on the whole
+   track so it doesn't move as the bar grows. */
+.status-bar .plan-gauge::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--fill);
+  background: var(--pane-active-border, #3a6df0);
+  opacity: 0.55;
+}
+
+.status-bar .plan-gauge-text {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.status-bar .lines-added {
+  color: #3fb950;
+}
+
+.status-bar .lines-removed {
+  color: #e05a5a;
+}
+
+.status-bar .status-path {
+  max-width: 320px;
+}
+
+.status-bar .status-path .path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

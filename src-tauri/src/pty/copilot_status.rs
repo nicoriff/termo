@@ -53,6 +53,9 @@ fn snapshot_from(input: &str) -> Option<StatusSnapshot> {
         cost_usd: None,
         plan_windows: Vec::new(),
         spend_limit_percentage: None,
+        context_tokens: number("/context_window/current_context_tokens"),
+        context_window_tokens: number("/context_window/displayed_context_limit"),
+        ..Default::default()
     })
 }
 
@@ -235,6 +238,7 @@ mod tests {
         assert_eq!(snapshot.cwd.as_deref(), Some("E:\\Proyectos\\Booky"));
         assert_eq!(snapshot.model.as_deref(), Some("Auto → mai-code-1.1-flash"));
         assert_eq!(snapshot.context_used_percentage, Some(8.0));
+        assert_eq!((snapshot.context_tokens, snapshot.context_window_tokens), (Some(15719.0), Some(200000.0)));
         assert!(snapshot.plan_windows.is_empty());
         assert!(snapshot_from("not json").is_none());
     }

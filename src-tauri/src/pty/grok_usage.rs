@@ -48,7 +48,9 @@ fn snapshot_from(payload: &Value, grok_home: &Path) -> Option<StatusSnapshot> {
     }
     let signals: Value = serde_json::from_str(&std::fs::read_to_string(folder.join("signals.json")).ok()?).ok()?;
     let number = |key: &str| signals.get(key).and_then(Value::as_f64);
-    let context_used_percentage = match (number("contextTokensUsed"), number("contextWindowTokens")) {
+    let context_tokens = number("contextTokensUsed");
+    let context_window_tokens = number("contextWindowTokens");
+    let context_used_percentage = match (context_tokens, context_window_tokens) {
         (Some(used), Some(window)) if window > 0.0 => Some(used / window * 100.0),
         // The whole number it keeps beside them.
         _ => number("contextWindowUsage"),
@@ -64,6 +66,9 @@ fn snapshot_from(payload: &Value, grok_home: &Path) -> Option<StatusSnapshot> {
         cost_usd: None,
         plan_windows: Vec::new(),
         spend_limit_percentage: None,
+        context_tokens,
+        context_window_tokens,
+        ..Default::default()
     })
 }
 
