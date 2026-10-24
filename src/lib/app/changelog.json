@@ -1,8 +1,9 @@
 [
   {
     "version": "0.26.0",
-    "date": "2026-10-23",
+    "date": "2026-10-24",
     "es": [
+      "**Orquestaciones desde las consolas**: la consola de Claude Code, Codex, Gemini CLI o Copilot CLI en la que estás trabajando puede planificar una orquestación, correrla cuando aceptes el plan y esperarla. Las preguntas de sus agentes y el informe final llegan a la consola, y el avance se ve en vivo en la pestaña Orquestación. Se activa en Preferencias → Modo IA → Agentes → Orquestaciones desde las consolas.",
       "**Barra de herramientas en el editor**: un botón redondo arriba en el medio de cada archivo que se abre hacia los costados al pasar el mouse, y que se puede fijar abierta con su pin. Guardar, deshacer, rehacer, buscar y reemplazar (`Ctrl+H`), y el archivo en git: su rama, su estado, las líneas agregadas y quitadas, y el último commit que lo tocó, con accesos a sus cambios.",
       "**Quién escribió cada línea**: el editor muestra el autor, la fecha y el mensaje del commit de la línea del cursor, o de todas las líneas en una columna. Al hacer clic se abre lo que cambió ese commit. Se configura en Preferencias → Git → Editor de archivos, y se prende y apaga desde la barra.",
       "**Buscar y reemplazar** en el editor, en un cuadro flotante sobre el archivo: cuenta las coincidencias, distingue mayúsculas, busca palabras completas o expresiones regulares, y reemplaza de a una o todas.",
@@ -11,6 +12,7 @@
       "El panel de Git ya no muestra una barra de desplazamiento horizontal cuando no hace falta."
     ],
     "en": [
+      "**Orchestrations from consoles**: the Claude Code, Codex, Gemini CLI or Copilot CLI console you are working in can plan an orchestration, run it once you accept the plan, and wait for it. Its agents' questions and the final report come back to the console, and the progress shows live in the Orchestration tab. Turn it on in Preferences → AI Mode → Agents → Orchestrations from consoles.",
       "**A toolbar in the editor**: a round button at the top middle of each file that opens out to both sides when you hover over it, and can be pinned open. Save, undo, redo, find and replace (`Ctrl+H`), and the file in git: its branch, its state, the lines added and removed, and the last commit that touched it, with shortcuts to its changes.",
       "**Who wrote each line**: the editor shows the author, date and message of the commit behind the cursor's line, or of every line in a column. Clicking it opens what that commit changed. It's set in Preferences → Git → File editor, and turned on and off from the toolbar.",
       "**Find and replace** in the editor, in a box floating over the file: it counts the matches, can match case, whole words or a regular expression, and replaces one at a time or all at once.",
