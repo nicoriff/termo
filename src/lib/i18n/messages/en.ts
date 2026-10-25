@@ -2504,7 +2504,7 @@ export const en: Messages = {
       aiAgents: "Agents",
       aiCompanion: "AI Companion",
       integrations: "Integrations",
-      ohMyPosh: "Oh My Posh",
+      prompt: "Prompt",
       mac: "macOS",
       windows: "Windows",
       linux: "Linux",
@@ -2847,26 +2847,38 @@ export const en: Messages = {
       hooksHint:
         "Adds hooks to {files} that tell Termo each session's exact state (asking for permission, working, done), instead of inferring it from the screen. Outside Termo they do nothing. A copy of the file is saved before the first change.",
     },
-    ohMyPosh: {
-      installation: "Installation",
-      searching: "Looking for Oh My Posh...",
+    prompt: {
+      engine: "Console prompt",
+      none: "None (each shell's own)",
+      engineHint:
+        "One at a time: Oh My Posh and Starship both replace the shell's prompt, so they can't share a session. Only affects new sessions.",
       installed: "Installed",
       installedByTermo: "Installed by Termo",
       notInstalled: "Not installed",
       install: "Install",
       downloading: "Downloading...",
-      installHint:
-        "Downloads the official binary from cdn.ohmyposh.dev into Termo's folder. Doesn't change your PATH or your config files.",
-      prompt: "Prompt",
-      enable: "Use Oh My Posh in new sessions",
-      theme: "Theme",
-      promptHint: "Works in PowerShell, zsh and bash 4.2 or later.",
-      promptHintMac: "The bash that ships with macOS (3.2) isn't supported: pick zsh in Console.",
-      onlyNewSessions: "Only affects new sessions.",
       nerdFont: "Icon font",
       inUse: "In use",
       installAndUse: "Install and use",
-      nerdFontHint: "Themes use Nerd Fonts icons; without this font they show up as little boxes.",
+      nerdFontHint: "Oh My Posh and Starship themes use Nerd Fonts icons; without this font they show up as little boxes.",
+    },
+    ohMyPosh: {
+      searching: "Looking for Oh My Posh...",
+      installHint:
+        "Downloads the official binary from cdn.ohmyposh.dev into Termo's folder. Doesn't change your PATH or your config files.",
+      theme: "Theme",
+      promptHint: "Works in PowerShell, zsh and bash 4.2 or later.",
+      promptHintMac: "The bash that ships with macOS (3.2) isn't supported: pick zsh in Console.",
+    },
+    starship: {
+      searching: "Looking for Starship...",
+      installHint:
+        "Downloads the official binary from GitHub (starship/starship) into Termo's folder. Doesn't change your PATH or your config files.",
+      preset: "Preset",
+      useOwnConfig: "Use my own starship.toml",
+      useOwnConfigHint:
+        "Instead of the preset, Starship reads your own config: ~/.config/starship.toml, or the file STARSHIP_CONFIG points to.",
+      promptHint: "Works in PowerShell, zsh and bash (on macOS, the system's bash 3.2 too).",
     },
     shortcuts: {
       title: "Shortcuts",

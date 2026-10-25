@@ -7,7 +7,7 @@ use crate::mux::protocol::SessionInfo;
 use crate::pty::agent_launch::{self, AgentLaunch};
 use crate::pty::{
     agent_hooks, bash_color_env, console_shims, cwd_report, default_shell, list_shells as detect_shells, oh_my_posh, powershell_keys,
-    utf8_console, zsh_init,
+    starship, utf8_console, zsh_init,
     channel_sink, PtyEvent, ShellInfo, SpawnSpec,
 };
 use crate::state::AppState;
@@ -175,10 +175,10 @@ fn prepare_console(
     }
     // A broken shell integration must never keep the shell itself from
     // opening — on failure the session just starts without it.
-    let mut prompt_redraw = None;
-    if config.oh_my_posh_enabled {
-        if let Some((binary, managed)) = oh_my_posh::find(app) {
-            prompt_redraw = oh_my_posh::apply(
+    // Only one prompt tool per session: each replaces the shell's prompt.
+    let prompt_redraw = match config.prompt_engine() {
+        "oh_my_posh" => oh_my_posh::find(app).and_then(|(binary, managed)| {
+            oh_my_posh::apply(
                 app,
                 &binary,
                 managed,
@@ -189,9 +189,14 @@ fn prepare_console(
                 &mut zsh_lines,
             )
             .unwrap_or(None)
-            .map(<[u8]>::to_vec);
-        }
+        }),
+        "starship" => starship::find(app).and_then(|(binary, managed)| {
+            let preset = (!config.starship_use_own_config).then_some(config.starship_preset.as_str());
+            starship::apply(app, &binary, managed, preset, &path, &mut args, &mut env, &mut zsh_lines).unwrap_or(None)
+        }),
+        _ => None,
     }
+    .map(<[u8]>::to_vec);
     // The user's agents, for the agent CLIs typed in this shell (see
     // pty/console_shims.rs).
     let console_token = crate::agents::store::root(app).ok().and_then(|root| {

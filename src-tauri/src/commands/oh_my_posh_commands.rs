@@ -1,10 +1,10 @@
+#[cfg(unix)]
 use std::fs;
-use std::io::Read;
-use std::path::Path;
 
 use serde::Serialize;
 use tauri::Manager;
 
+use super::download::{blocking, download_to};
 use crate::pty::oh_my_posh;
 
 const NERD_FONT_URL: &str =
@@ -73,29 +73,4 @@ pub async fn install_nerd_font(app: tauri::AppHandle) -> Result<String, String> 
         Ok(target.to_string_lossy().into_owned())
     })
     .await
-}
-
-/// Downloads are several MB; running them off the async runtime's blocking
-/// pool keeps the webview's IPC responsive meanwhile.
-async fn blocking<T: Send + 'static>(
-    task: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
-) -> Result<T, String> {
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|err| err.to_string())?
-        .map_err(|err| err.to_string())
-}
-
-/// Writes to a sibling temp file first so an interrupted download never
-/// leaves a truncated binary where `find` would pick it up.
-fn download_to(url: &str, target: &Path) -> anyhow::Result<()> {
-    let mut bytes = Vec::new();
-    ureq::get(url).call()?.into_reader().read_to_end(&mut bytes)?;
-    if let Some(dir) = target.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    let partial = target.with_extension("download");
-    fs::write(&partial, &bytes)?;
-    fs::rename(&partial, target)?;
-    Ok(())
 }

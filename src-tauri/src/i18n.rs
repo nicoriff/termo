@@ -35,6 +35,8 @@ pub enum Msg<'a> {
     HooksNotAnObject,
     HooksEventNotAList(&'a str),
     OhMyPoshNoBinary,
+    StarshipNoBinary,
+    StarshipNotInstalled,
     InvalidThemeName(&'a str),
     FontFileNotFound(&'a str),
     ClaudeCliNotFound,
@@ -264,6 +266,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
 
         (OhMyPoshNoBinary, Es) => "Oh My Posh no tiene un binario para esta plataforma".into(),
         (OhMyPoshNoBinary, En) => "Oh My Posh has no binary for this platform".into(),
+
+        (StarshipNoBinary, Es) => "Starship no tiene un binario para esta plataforma".into(),
+        (StarshipNoBinary, En) => "Starship has no binary for this platform".into(),
+
+        (StarshipNotInstalled, Es) => "Starship no está instalado".into(),
+        (StarshipNotInstalled, En) => "Starship isn't installed".into(),
 
         (InvalidThemeName(theme), Es) => format!("Nombre de tema inválido: {theme}"),
         (InvalidThemeName(theme), En) => format!("Invalid theme name: {theme}"),
@@ -676,6 +684,8 @@ mod tests {
             Msg::HooksNotAnObject,
             Msg::HooksEventNotAList("Stop"),
             Msg::OhMyPoshNoBinary,
+            Msg::StarshipNoBinary,
+            Msg::StarshipNotInstalled,
             Msg::InvalidThemeName("x"),
             Msg::FontFileNotFound("Fira Code"),
             Msg::ClaudeCliNotFound,

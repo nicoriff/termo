@@ -16,6 +16,7 @@ mod manager;
 pub mod memory;
 pub mod oh_my_posh;
 pub mod powershell_keys;
+pub mod starship;
 pub mod utf8_console;
 mod recorder;
 mod session;

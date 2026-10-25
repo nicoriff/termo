@@ -20,9 +20,26 @@ pub const DEFAULT_THEME: &str = "jandedobbeleer";
 /// and while oh-my-posh sees to that for the prompts it draws itself, a
 /// redraw from here goes out in the OEM page — which has no Nerd Font
 /// icons, so every one of them came out as a `?`.
-const POWERSHELL_REDRAW_HANDLER: &str = "Set-PSReadLineKeyHandler -Chord 'Ctrl+Alt+F12' -ScriptBlock { \
+///
+/// InvokePrompt goes back to the row PSReadLine remembers the prompt starting
+/// on (`_initialY`, minus the extra lines of a multi-line prompt). After the
+/// console gets shorter that row can be past its last one, and PSReadLine
+/// 2.0 (Windows PowerShell's) doesn't check: SetCursorPosition throws and the
+/// error lands in the console. So a row out of range is moved to the
+/// cursor's, which after a resize is the input line. Private fields, read by
+/// reflection and only when they exist; and a redraw that still fails is
+/// dropped, since all it would have fixed is the look of the prompt.
+pub(super) const POWERSHELL_REDRAW_HANDLER: &str = "Set-PSReadLineKeyHandler -Chord 'Ctrl+Alt+F12' -ScriptBlock { \
      $encoding = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8; \
-     try { [Console]::Write([char]27 + '[J'); [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() } \
+     try { [Console]::Write([char]27 + '[J'); \
+       try { $readLine = [Microsoft.PowerShell.PSConsoleReadLine]; \
+         $self = $readLine.GetField('_singleton', 'NonPublic,Static').GetValue($null); \
+         $field = $readLine.GetField('_initialY', 'NonPublic,Instance'); \
+         $extra = (Get-PSReadLineOption).ExtraPromptLineCount; $last = [Console]::BufferHeight - 1; \
+         $row = $field.GetValue($self); \
+         if ($row - $extra -lt 0 -or $row -gt $last) { $field.SetValue($self, [Math]::Min([Math]::Max([Console]::CursorTop, $extra), $last)) } \
+       } catch {} \
+       try { [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt() } catch {} } \
      finally { [Console]::OutputEncoding = $encoding } }";
 
 /// What to send a PowerShell console to trigger the handler above. A chord
@@ -32,7 +49,7 @@ pub const POWERSHELL_REDRAW_KEY: &[u8] = b"\x1b[24;7~";
 
 /// zsh's half of the same fix, and it needs nothing from Termo: SIGWINCH
 /// already reaches the shell on every resize, so the trap alone is enough.
-const ZSH_REDRAW_LINE: &str = "TRAPWINCH() { zle && { zle reset-prompt; zle -R } }";
+pub(super) const ZSH_REDRAW_LINE: &str = "TRAPWINCH() { zle && { zle reset-prompt; zle -R } }";
 
 fn exe_name() -> &'static str {
     if cfg!(windows) {
@@ -147,17 +164,24 @@ pub fn apply(
 
     if managed {
         // So `oh-my-posh` itself is usable inside Termo sessions too.
-        if let Some(bin_dir) = binary.parent() {
-            let mut paths = vec![bin_dir.to_path_buf()];
-            if let Some(existing) = std::env::var_os("PATH") {
-                paths.extend(std::env::split_paths(&existing));
-            }
-            if let Ok(joined) = std::env::join_paths(paths) {
-                env.push(("PATH", joined.to_string_lossy().into_owned()));
-            }
-        }
+        put_binary_on_path(binary, env);
     }
     Ok(redraw_key)
+}
+
+/// Puts the folder of Termo's own copy of a prompt binary first on the
+/// session's PATH. Shared with starship.
+pub(super) fn put_binary_on_path(binary: &Path, env: &mut Vec<(&'static str, String)>) {
+    let Some(bin_dir) = binary.parent() else {
+        return;
+    };
+    let mut paths = vec![bin_dir.to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    if let Ok(joined) = std::env::join_paths(paths) {
+        env.push(("PATH", joined.to_string_lossy().into_owned()));
+    }
 }
 
 /// A downloaded local theme file when there is one (fast, works offline);
@@ -170,11 +194,11 @@ fn config_arg(app: &tauri::AppHandle, theme: &str) -> String {
     }
 }
 
-fn ps_quote(value: &str) -> String {
+pub(super) fn ps_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-fn sh_quote(value: &str) -> String {
+pub(super) fn sh_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
@@ -203,16 +227,24 @@ pub(super) fn append_powershell_command(args: &mut Vec<String>, script: &str) {
 }
 
 fn bash_init(binary: &Path, config: &str) -> String {
+    bash_rcfile(&format!(
+        "eval \"$({} init bash --config {})\"",
+        sh_quote(&binary.to_string_lossy()),
+        sh_quote(config)
+    ))
+}
+
+/// An rcfile for `--rcfile` that keeps the user's usual bash startup and runs
+/// `init_line` after it. Shared with starship.
+pub(super) fn bash_rcfile(init_line: &str) -> String {
     format!(
         "[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc\n\
          [ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"\n\
-         eval \"$({} init bash --config {})\"\n",
-        sh_quote(&binary.to_string_lossy()),
-        sh_quote(config)
+         {init_line}\n"
     )
 }
 
-fn write_file(path: &Path, contents: &str) -> anyhow::Result<()> {
+pub(super) fn write_file(path: &Path, contents: &str) -> anyhow::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }

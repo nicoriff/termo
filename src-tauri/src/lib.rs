@@ -439,6 +439,9 @@ pub fn run() {
             commands::oh_my_posh_commands::install_oh_my_posh,
             commands::oh_my_posh_commands::install_oh_my_posh_theme,
             commands::oh_my_posh_commands::install_nerd_font,
+            commands::starship_commands::starship_status,
+            commands::starship_commands::install_starship,
+            commands::starship_commands::install_starship_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
