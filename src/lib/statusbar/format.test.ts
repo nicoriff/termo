@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { agoLabel, formatDuration, formatPath, formatTokens, formatUsd, resetsInMs } from "./format";
+import { agoLabel, formatDuration, formatPath, formatTokens, formatUsd, promptEngineName, resetsInMs } from "./format";
+
+describe("promptEngineName", () => {
+  it("names the tools, and leaves the shell's own to be worded", () => {
+    expect(promptEngineName("oh_my_posh")).toBe("Oh My Posh");
+    expect(promptEngineName("starship")).toBe("Starship");
+    expect(promptEngineName("none")).toBeNull();
+  });
+});
 
 describe("formatTokens", () => {
   it("keeps small counts whole and shortens the rest", () => {

@@ -120,6 +120,14 @@ export const es = {
         "Porcentaje del límite del plan ya consumido por esta consola, en cada ventana que informa el agente",
     memoryHint: "Memoria de la consola activa y de los procesos que corren en ella",
     customize: "Personalizar la barra de estado…",
+    prompt: {
+      shell: "Prompt del shell",
+      hint: "El prompt de las consolas nuevas: clic para elegir otro",
+      menuTitle: "Prompt de las consolas",
+      notInstalled: "sin instalar",
+      newConsoles: "Se aplica a las consolas que abras desde ahora.",
+      settings: "Ajustes del prompt…",
+    },
     edit: {
       title: "Personalizar la barra de estado",
       hint: "Arrastrá ítems a la barra, movelos por ella, o sacalos soltándolos fuera. Clic en uno para ajustarlo; ← → lo mueven y Supr lo quita.",
@@ -204,6 +212,8 @@ export const es = {
       processHint: "El programa que corre en la consola activa.",
       size: "Tamaño",
       sizeHint: "Columnas y filas de la consola activa.",
+      prompt: "Prompt",
+      promptHint: "El prompt de las consolas nuevas (Oh My Posh, Starship o el de cada shell). Clic para elegir otro.",
       consoleMemory: "Memoria de la consola",
       consoleMemoryHint: "Memoria de la consola activa y de los procesos que corren en ella.",
       consoleCpu: "CPU de la consola",

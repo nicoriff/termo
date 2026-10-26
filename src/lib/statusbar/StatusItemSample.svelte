@@ -100,6 +100,8 @@
   <span class="status-item">▸ node</span>
 {:else if item.id === "console.size"}
   <span class="status-item">120×32</span>
+{:else if item.id === "console.prompt"}
+  <span class="status-item">Starship</span>
 {:else if item.id === "console.memory"}
   <span class="status-item">{t("statusBar.memory", { value: "84 MB" })}</span>
 {:else if item.id === "console.cpu"}

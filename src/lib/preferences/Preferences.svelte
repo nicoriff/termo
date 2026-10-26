@@ -151,6 +151,9 @@
       } else if (event.payload === "status-bar") {
         selected = "status-bar";
         expanded = { ...expanded, appearance: true };
+      } else if (event.payload === "prompt") {
+        selected = "prompt";
+        expanded = { ...expanded, integrations: true };
       }
     }).then((stop) => (unlisten = stop));
     return () => unlisten?.();

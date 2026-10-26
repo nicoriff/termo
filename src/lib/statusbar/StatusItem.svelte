@@ -15,6 +15,7 @@
   import NudgeItem from "./items/NudgeItem.svelte";
   import PathItem from "./items/PathItem.svelte";
   import PlanItem from "./items/PlanItem.svelte";
+  import PromptItem from "./items/PromptItem.svelte";
   import RemoteItem from "./items/RemoteItem.svelte";
   import UsageItem from "./items/UsageItem.svelte";
 
@@ -47,6 +48,8 @@
   <PathItem {item} />
 {:else if item.id === "console.process" || item.id === "console.size"}
   <ConsoleInfoItem id={item.id} />
+{:else if item.id === "console.prompt"}
+  <PromptItem />
 {:else if item.id === "console.memory"}
   <MemoryItem />
 {:else if item.id === "console.cpu" || item.id === "system.appMemory" || item.id === "system.cpu" || item.id === "system.memory"}

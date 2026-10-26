@@ -33,6 +33,7 @@ export type StatusItemId =
   | "system.appMemory"
   | "system.cpu"
   | "system.memory"
+  | "console.prompt"
   | "system.clock"
   | "system.daemon"
   | "system.remote";
@@ -145,6 +146,7 @@ export const STATUS_ITEMS: StatusItemSpec[] = [
   },
   { id: "console.process", category: "console", label: "statusBar.items.process", description: "statusBar.items.processHint" },
   { id: "console.size", category: "console", label: "statusBar.items.size", description: "statusBar.items.sizeHint" },
+  { id: "console.prompt", category: "console", label: "statusBar.items.prompt", description: "statusBar.items.promptHint" },
   { id: "console.memory", category: "diagnostics", label: "statusBar.items.consoleMemory", description: "statusBar.items.consoleMemoryHint" },
   { id: "console.cpu", category: "diagnostics", label: "statusBar.items.consoleCpu", description: "statusBar.items.consoleCpuHint" },
   { id: "system.appMemory", category: "diagnostics", label: "statusBar.items.appMemory", description: "statusBar.items.appMemoryHint" },

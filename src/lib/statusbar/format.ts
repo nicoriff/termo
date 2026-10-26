@@ -3,7 +3,16 @@
  * format.test.ts); anything worded comes back as a key for the component to
  * translate.
  */
+import type { PromptEngine } from "$lib/core/types";
 import type { MessageKey } from "$lib/i18n/translate";
+
+/** The prompt tool's name (a brand, the same in every language); null for
+ * each shell's own prompt, which the component words. */
+export function promptEngineName(engine: PromptEngine): string | null {
+  if (engine === "oh_my_posh") return "Oh My Posh";
+  if (engine === "starship") return "Starship";
+  return null;
+}
 
 export function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);

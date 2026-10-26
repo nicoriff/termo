@@ -121,6 +121,14 @@ export const en: Messages = {
     planHint: "Share of the plan limit this console has already used, in each window the agent reports",
     memoryHint: "Memory used by the active console and the processes running in it",
     customize: "Customize the status bar…",
+    prompt: {
+      shell: "Shell prompt",
+      hint: "New consoles' prompt: click to pick another",
+      menuTitle: "Consoles' prompt",
+      notInstalled: "not installed",
+      newConsoles: "Applies to the consoles you open from now on.",
+      settings: "Prompt settings…",
+    },
     edit: {
       title: "Customize the status bar",
       hint: "Drag items onto the bar, along it, or off it to remove them. Click one to adjust it; ← → move it and Delete removes it.",
@@ -205,6 +213,8 @@ export const en: Messages = {
       processHint: "The program running in the active console.",
       size: "Size",
       sizeHint: "The active console's columns and rows.",
+      prompt: "Prompt",
+      promptHint: "New consoles' prompt (Oh My Posh, Starship or each shell's own). Click to pick another.",
       consoleMemory: "Console memory",
       consoleMemoryHint: "Memory used by the active console and the processes running in it.",
       consoleCpu: "Console CPU",
