@@ -17,6 +17,7 @@ pub mod notification_commands;
 pub mod oh_my_posh_commands;
 pub mod orchestration_commands;
 pub mod project_commands;
+pub mod prompt_preview_commands;
 pub mod pty_commands;
 pub mod remote_commands;
 pub mod starship_commands;

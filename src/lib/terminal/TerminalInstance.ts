@@ -46,7 +46,7 @@ const CLASSIFY_THROTTLE_MS = 250;
 // enough for a typical status line/prompt, without scanning full scrollback.
 const CLASSIFY_ROW_COUNT = 20;
 
-function withMonospaceFallback(family: string): string {
+export function withMonospaceFallback(family: string): string {
   return family.includes(",") ? family : `"${family}", monospace`;
 }
 

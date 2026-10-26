@@ -444,6 +444,7 @@ pub fn run() {
             commands::starship_commands::starship_status,
             commands::starship_commands::install_starship,
             commands::starship_commands::install_starship_preset,
+            commands::prompt_preview_commands::prompt_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

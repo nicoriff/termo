@@ -8,6 +8,7 @@
   import { openPreferencesWindow } from "$lib/core/window-client";
   import { t } from "$lib/i18n/i18n.svelte";
   import { promptEngineName } from "../format";
+  import PromptPreview from "./PromptPreview.svelte";
 
   /** The prompt new consoles get (Preferences → Prompt), by name; a click
    * opens a menu to pick another, and each tool's flyout its theme. One
@@ -18,6 +19,9 @@
   const MENU_WIDTH = 220;
   const FLYOUT_WIDTH = 210;
   const MARGIN = 8;
+  const PREVIEW_WIDTH = 480;
+  /** Before a theme passed over shows: each preview starts the tool once. */
+  const PREVIEW_DELAY_MS = 140;
 
   let open = $state(false);
   /** Placed against the window: the bar's left end clips what overflows it. */
@@ -29,6 +33,46 @@
   /** The theme being installed, while it is. */
   let busy = $state<string | null>(null);
   let failed = $state(false);
+
+  /** The theme shown in the preview beside the flyout (null theme: the
+   * user's own starship.toml), and where the preview goes. */
+  let preview = $state<{ tool: Tool; theme: string | null } | null>(null);
+  let previewPos = $state<{ left: number; bottom: number }>({ left: 0, bottom: 0 });
+  let previewTimer: ReturnType<typeof setTimeout> | null = null;
+  let menuEl = $state<HTMLElement | null>(null);
+  let flyoutEl = $state<HTMLElement | null>(null);
+
+  function schedulePreview(tool: Tool, theme: string | null) {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      previewTimer = null;
+      if (flyout !== tool || !flyoutEl || !menuEl) return;
+      previewPos = placePreview(flyoutEl.getBoundingClientRect(), menuEl.getBoundingClientRect());
+      preview = { tool, theme };
+    }, PREVIEW_DELAY_MS);
+  }
+
+  function hidePreview() {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = null;
+    preview = null;
+  }
+
+  /** Beside the flyout, away from the menu; past the menu on the other side
+   * where the window ends; above the flyout if neither fits. */
+  function placePreview(flyoutBox: DOMRect, menuBox: DOMRect): { left: number; bottom: number } {
+    const bottom = window.innerHeight - flyoutBox.bottom;
+    const outward = flyoutBox.left >= menuBox.left;
+    const beyond = outward ? flyoutBox.right + 4 : flyoutBox.left - 4 - PREVIEW_WIDTH;
+    const across = outward ? Math.min(menuBox.left, flyoutBox.left) - 4 - PREVIEW_WIDTH : Math.max(menuBox.right, flyoutBox.right) + 4;
+    const fits = (left: number) => left >= MARGIN && left + PREVIEW_WIDTH <= window.innerWidth - MARGIN;
+    if (fits(beyond)) return { left: beyond, bottom };
+    if (fits(across)) return { left: across, bottom };
+    return {
+      left: Math.max(MARGIN, Math.min(flyoutBox.left, window.innerWidth - PREVIEW_WIDTH - MARGIN)),
+      bottom: window.innerHeight - flyoutBox.top + 4,
+    };
+  }
 
   function label(engine: PromptEngine): string {
     return promptEngineName(engine) ?? t("statusBar.prompt.shell");
@@ -45,6 +89,7 @@
   function close(refocus = true) {
     open = false;
     flyout = null;
+    hidePreview();
     failed = false;
     if (refocus) uiState.refocusTerminals();
   }
@@ -82,7 +127,13 @@
       bottom: Math.max(MARGIN, window.innerHeight - box.bottom - 4),
     };
     failed = false;
+    hidePreview();
     flyout = tool;
+  }
+
+  function closeFlyout() {
+    flyout = null;
+    hidePreview();
   }
 
   function pickShell() {
@@ -130,7 +181,7 @@
   function onKeydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
     event.stopPropagation();
-    if (flyout) flyout = null;
+    if (flyout) closeFlyout();
     else close();
   }
 </script>
@@ -153,13 +204,14 @@
       role="menu"
       tabindex="-1"
       style="left:{menuPos.left}px; bottom:{menuPos.bottom}px; width:{MENU_WIDTH}px"
+      bind:this={menuEl}
       use:menuKeys={{ close, escape: false }}
     >
       <div class="menu-head">{t("statusBar.prompt.menuTitle")}</div>
       <button
         role="menuitemradio"
         aria-checked={appConfigStore.promptEngine === "none"}
-        onmouseenter={() => (flyout = null)}
+        onmouseenter={closeFlyout}
         onclick={pickShell}
       >
         {@render check(appConfigStore.promptEngine === "none")}
@@ -184,7 +236,7 @@
       {/each}
       <p class="menu-note">{t("statusBar.prompt.newConsoles")}</p>
       <hr />
-      <button role="menuitem" onmouseenter={() => (flyout = null)} onclick={settings}>{t("statusBar.prompt.settings")}</button>
+      <button role="menuitem" onmouseenter={closeFlyout} onclick={settings}>{t("statusBar.prompt.settings")}</button>
     </div>
 
     {#if flyout}
@@ -195,7 +247,8 @@
         tabindex="-1"
         aria-label={label(tool)}
         style="left:{flyoutPos.left}px; bottom:{flyoutPos.bottom}px; width:{FLYOUT_WIDTH}px"
-        use:menuKeys={{ close, back: () => (flyout = null), escape: false }}
+        bind:this={flyoutEl}
+        use:menuKeys={{ close, back: closeFlyout, escape: false }}
       >
         {#if installed[tool] === false}
           <p class="menu-note first">{t("statusBar.prompt.notInstalledHint", { name: label(tool) })}</p>
@@ -208,6 +261,7 @@
                 role="menuitemradio"
                 aria-checked={appConfigStore.starshipUseOwnConfig}
                 disabled={busy !== null}
+                onfocus={() => schedulePreview(tool, null)}
                 onclick={pickOwnStarshipConfig}
               >
                 {@render check(appConfigStore.starshipUseOwnConfig)}
@@ -219,6 +273,7 @@
                 role="menuitemradio"
                 aria-checked={currentTheme(tool) === theme}
                 disabled={busy !== null}
+                onfocus={() => schedulePreview(tool, theme)}
                 onclick={() => pickTheme(tool, theme)}
               >
                 {@render check(currentTheme(tool) === theme)}
@@ -230,6 +285,13 @@
           {#if failed}<p class="menu-note error">{t("statusBar.prompt.themeFailed")}</p>{/if}
         {/if}
       </div>
+
+      {#if preview && preview.tool === flyout}
+        <div class="prompt-preview" role="presentation" style="left:{previewPos.left}px; bottom:{previewPos.bottom}px; width:{PREVIEW_WIDTH}px">
+          <div class="menu-head">{preview.theme ?? t("statusBar.prompt.ownStarshipConfig")}</div>
+          <PromptPreview tool={preview.tool} theme={preview.theme} />
+        </div>
+      {/if}
     {/if}
   {/if}
 </span>
@@ -280,6 +342,22 @@
   .prompt-menu.flyout {
     z-index: 61;
     max-height: calc(100vh - 2 * 8px);
+  }
+
+  .prompt-preview {
+    position: fixed;
+    z-index: 62;
+    padding: 4px 6px 6px;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 7px;
+    background: var(--tabbar-active-bg, #1e1e1e);
+    color: var(--titlebar-fg, #d4d4d4);
+    font-size: 12px;
+    box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.38);
+  }
+
+  .prompt-preview .menu-head {
+    padding: 2px 4px 5px;
   }
 
   .theme-list {

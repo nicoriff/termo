@@ -134,6 +134,8 @@ export const es = {
       themeFailed: "No se pudo instalar ese tema. Probá desde Preferencias.",
       notInstalledHint: "{name} todavía no está instalado.",
       installInPreferences: "Instalar en Preferencias…",
+      previewLoading: "Cargando la vista previa…",
+      previewFailed: "No hay vista previa de este tema",
     },
     edit: {
       title: "Personalizar la barra de estado",

@@ -135,6 +135,8 @@ export const en: Messages = {
       themeFailed: "Couldn't install that theme. Try from Preferences.",
       notInstalledHint: "{name} isn't installed yet.",
       installInPreferences: "Install in Preferences…",
+      previewLoading: "Loading the preview…",
+      previewFailed: "No preview for this theme",
     },
     edit: {
       title: "Customize the status bar",
