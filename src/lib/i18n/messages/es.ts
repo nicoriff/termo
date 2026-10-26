@@ -127,6 +127,13 @@ export const es = {
       notInstalled: "sin instalar",
       newConsoles: "Se aplica a las consolas que abras desde ahora.",
       settings: "Ajustes del prompt…",
+      themes: "Temas",
+      presets: "Presets",
+      ownStarshipConfig: "Mi starship.toml",
+      installingTheme: "instalando…",
+      themeFailed: "No se pudo instalar ese tema. Probá desde Preferencias.",
+      notInstalledHint: "{name} todavía no está instalado.",
+      installInPreferences: "Instalar en Preferencias…",
     },
     edit: {
       title: "Personalizar la barra de estado",

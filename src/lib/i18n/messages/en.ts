@@ -128,6 +128,13 @@ export const en: Messages = {
       notInstalled: "not installed",
       newConsoles: "Applies to the consoles you open from now on.",
       settings: "Prompt settings…",
+      themes: "Themes",
+      presets: "Presets",
+      ownStarshipConfig: "My starship.toml",
+      installingTheme: "installing…",
+      themeFailed: "Couldn't install that theme. Try from Preferences.",
+      notInstalledHint: "{name} isn't installed yet.",
+      installInPreferences: "Install in Preferences…",
     },
     edit: {
       title: "Customize the status bar",
