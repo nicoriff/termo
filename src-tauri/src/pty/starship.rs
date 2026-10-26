@@ -141,7 +141,15 @@ pub fn apply(
 
     match shell.as_str() {
         "pwsh" | "powershell" => {
-            append_powershell_command(args, &powershell_init(binary));
+            // Asking starship again each time still works, only slower.
+            let init = match powershell_init_file(app, binary, &shell, config.as_deref()) {
+                Ok(file) => powershell_init_from_file(&file),
+                Err(err) => {
+                    eprintln!("starship: couldn't keep the PowerShell init script: {err}");
+                    powershell_init(binary)
+                }
+            };
+            append_powershell_command(args, &init);
             redraw_key = Some(POWERSHELL_REDRAW_KEY);
         }
         "zsh" => {
@@ -181,6 +189,96 @@ fn powershell_init(binary: &Path) -> String {
     )
 }
 
+/// Loads the script `powershell_init_file` kept, the same way: inline (a
+/// Restricted execution policy blocks running a .ps1), as UTF-8, in a child
+/// scope.
+fn powershell_init_from_file(file: &Path) -> String {
+    format!(
+        "& {{ Invoke-Expression ([IO.File]::ReadAllText({}, [Text.Encoding]::UTF8)) }}; {POWERSHELL_REDRAW_HANDLER}",
+        ps_quote(&file.to_string_lossy())
+    )
+}
+
+/// PowerShell's init script, kept in a file. Asking starship for it costs a
+/// process start on every new console (~100 ms on Windows), and the script
+/// then starts starship once more for the continuation prompt. The script
+/// only changes with the binary; the continuation prompt, with the config —
+/// so it is written into the script only for Termo's preset files, whose
+/// change time goes into the file's name like the binary's. With the user's
+/// own starship.toml, the script still asks.
+fn powershell_init_file(app: &tauri::AppHandle, binary: &Path, shell: &str, config: Option<&Path>) -> anyhow::Result<PathBuf> {
+    let dir = root_dir(app)?.join("init");
+    let file = dir.join(format!("powershell-{:016x}.ps1", init_cache_key(binary, shell, config)?));
+    if file.is_file() {
+        return Ok(file);
+    }
+
+    let mut command = std::process::Command::new(binary);
+    command.args(["init", "powershell", "--print-full-init"]);
+    crate::git::no_window(&mut command);
+    let output = command.output()?;
+    if !output.status.success() {
+        anyhow::bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    let mut script = String::from_utf8(output.stdout)?;
+
+    if let Some(config) = config {
+        let mut command = std::process::Command::new(binary);
+        command
+            .args(["prompt", "--continuation"])
+            .env("STARSHIP_CONFIG", config)
+            .env("STARSHIP_SHELL", shell);
+        crate::git::no_window(&mut command);
+        let output = command.output()?;
+        if output.status.success() {
+            if let Some(inlined) = inline_continuation(&script, &String::from_utf8_lossy(&output.stdout)) {
+                script = inlined;
+            }
+        }
+    }
+
+    // Those of a binary or a preset no longer in use.
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("powershell-") && name.ends_with(".ps1") {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+    // Renamed into place, so a console starting meanwhile never reads half.
+    let partial = file.with_extension("partial");
+    write_file(&partial, &script)?;
+    fs::rename(&partial, &file)?;
+    Ok(file)
+}
+
+fn init_cache_key(binary: &Path, shell: &str, config: Option<&Path>) -> anyhow::Result<u64> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let meta = fs::metadata(binary)?;
+    (binary, shell, meta.len(), meta.modified().ok()).hash(&mut hasher);
+    if let Some(config) = config {
+        (config, fs::metadata(config)?.modified().ok()).hash(&mut hasher);
+    }
+    Ok(hasher.finish())
+}
+
+/// The script with its `Invoke-Native ... @("prompt", "--continuation")`
+/// replaced by what that call printed; None if the script doesn't have that
+/// call as expected (another starship version), which then stays as it is.
+fn inline_continuation(script: &str, continuation: &str) -> Option<String> {
+    let flag = script.find("\"--continuation\"")?;
+    let start = script[..flag].rfind("Invoke-Native")?;
+    let end = flag + script[flag..].find(')')? + 1;
+    let call = &script[start..end];
+    if !call.contains("-Arguments @(") || !call.contains("\"prompt\"") || call.matches('(').count() != 1 {
+        return None;
+    }
+    Some(format!("{}{}{}", &script[..start], ps_quote(continuation), &script[end..]))
+}
+
 fn bash_init(binary: &Path) -> String {
     bash_rcfile(&format!("eval \"$({} init bash)\"", sh_quote(&binary.to_string_lossy())))
 }
@@ -195,6 +293,32 @@ mod tests {
         assert!(init.contains("$init = & 'C:\\Users\\O''Neil\\starship.exe' init powershell --print-full-init | Out-String"));
         assert!(init.contains("Invoke-Expression $init }; "));
         assert!(init.ends_with(POWERSHELL_REDRAW_HANDLER));
+    }
+
+    #[test]
+    fn powershell_init_from_file_reads_it_inline_as_utf8() {
+        let init = powershell_init_from_file(Path::new("C:\\Users\\O'Neil\\init.ps1"));
+        assert!(init.starts_with("& { Invoke-Expression ([IO.File]::ReadAllText('C:\\Users\\O''Neil\\init.ps1', [Text.Encoding]::UTF8)) }; "));
+        assert!(init.ends_with(POWERSHELL_REDRAW_HANDLER));
+    }
+
+    const CONTINUATION_CALL: &str = "    Set-PSReadLineOption -ContinuationPrompt (\n        Invoke-Native -Executable 'C:\\s\\starship.exe' -Arguments @(\n            \"prompt\",\n            \"--continuation\"\n        )\n    )\n";
+
+    #[test]
+    fn inlines_what_the_continuation_call_printed() {
+        let script = format!("$a = 1\n{CONTINUATION_CALL}try {{ }}\n");
+        let inlined = inline_continuation(&script, "\x1b[90m∙\x1b[0m 'x' ").unwrap();
+        assert_eq!(
+            inlined,
+            "$a = 1\n    Set-PSReadLineOption -ContinuationPrompt (\n        '\x1b[90m∙\x1b[0m ''x'' '\n    )\ntry { }\n"
+        );
+    }
+
+    #[test]
+    fn leaves_a_script_it_does_not_recognize() {
+        assert!(inline_continuation("Set-PSReadLineOption -ContinuationPrompt '> '", "∙ ").is_none());
+        // The flag, but not inside the call it expects.
+        assert!(inline_continuation("Invoke-Native -Executable 'x' -Arguments (Get-Args) \"--continuation\")", "∙ ").is_none());
     }
 
     #[test]
