@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System};
 
 /// Measures a console's memory: its shell process plus everything running
 /// under it (e.g. `claude`, `node`). One shared `System` so repeated polls
@@ -30,7 +30,7 @@ impl MemorySampler {
         let processes = system.processes();
         let root = Pid::from_u32(root);
         processes.get(&root)?;
-        let tree = tree_pids(processes.iter().map(|(pid, process)| (*pid, process.parent())), root);
+        let tree = tree_pids(without_threads(&system).map(|(pid, process)| (*pid, process.parent())), root);
         Some(tree.iter().filter_map(|pid| processes.get(pid)).map(|p| p.memory()).sum())
     }
 
@@ -49,9 +49,7 @@ impl MemorySampler {
         );
         system.refresh_cpu_usage();
         system.refresh_memory();
-        let table: Vec<ProcessRow> = system
-            .processes()
-            .iter()
+        let table: Vec<ProcessRow> = without_threads(&system)
             .map(|(pid, process)| ProcessRow {
                 pid: *pid,
                 parent: process.parent(),
@@ -87,10 +85,10 @@ impl MemorySampler {
         system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
         let processes = system.processes();
         let root = Pid::from_u32(root);
-        let mut doomed = tree_pids(processes.iter().map(|(pid, process)| (*pid, process.parent())), root);
+        let mut doomed = tree_pids(without_threads(&system).map(|(pid, process)| (*pid, process.parent())), root);
         doomed.remove(&root);
         let mut ended = 0;
-        for pid in deepest_first(&doomed, processes.iter().map(|(pid, process)| (*pid, process.parent()))) {
+        for pid in deepest_first(&doomed, without_threads(&system).map(|(pid, process)| (*pid, process.parent()))) {
             if processes.get(&pid).is_some_and(|process| process.kill()) {
                 ended += 1;
             }
@@ -106,10 +104,18 @@ impl MemorySampler {
         let mut system = self.0.lock().unwrap();
         system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
         busy_from_table(
-            system.processes().iter().map(|(pid, process)| (*pid, process.parent())),
+            without_threads(&system).map(|(pid, process)| (*pid, process.parent())),
             roots,
         )
     }
+}
+
+/// The process table without its threads. On Linux sysinfo lists each
+/// thread too, as a child of its process and with that whole process's
+/// memory, so a tree summed with them counts a 400 MB `node` with 18
+/// threads as 7.6 GB.
+fn without_threads(system: &System) -> impl Iterator<Item = (&Pid, &Process)> {
+    system.processes().iter().filter(|(_, process)| process.thread_kind().is_none())
 }
 
 /// What one process tree (a root and all its descendants) is using.
