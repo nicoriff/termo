@@ -255,72 +255,75 @@
         onpick={(value) => (category = value as StatusCategory)}
       />
     </div>
-    <div class="palette">
-      {#each STATUS_ITEMS.filter((spec) => spec.category === category) as spec (spec.id)}
-        {@const inBar = containsItem(layout, spec.id)}
-        <button
-          class="palette-chip"
-          class:in-bar={inBar}
-          title={t(spec.description)}
-          aria-label={t(inBar ? "preferences.statusBar.inBar" : "preferences.statusBar.add", { name: t(spec.label) })}
-          onpointerdown={(event) => onChipDown(event, spec.id, "palette")}
-          onkeydown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              if (inBar) selected = spec.id;
-              else add(spec.id);
-            }
-          }}
-        >
-          {#if inBar}<span class="check" aria-hidden="true">✓</span>{/if}
-          {t(spec.label)}
-        </button>
-      {/each}
-    </div>
     <div class="tray-actions">
       <button class="text-button" disabled={!customized} onclick={restoreDefault}>{t("preferences.statusBar.restore")}</button>
       <button class="text-button primary" bind:this={doneButton} onclick={() => statusBarCustomize.finish()}>{t("statusBar.edit.done")}</button>
     </div>
   </div>
 
-  {#if selectedRef}
-    {@const spec = itemSpec(selectedRef.id)}
-    <div class="details">
-      <strong class="details-name" title={t(spec.description)}>{t(spec.label)}</strong>
-      <div class="details-controls">
-        {#each spec.options ?? [] as option (option.key)}
-          {#if option.kind === "toggle"}
-            <label class="option">
-              <input
-                type="checkbox"
-                checked={optionValue(selectedRef, option.key) === "on"}
-                onchange={(e) => save(setItemOption(layout, selectedRef.id, option.key, e.currentTarget.checked ? "on" : "off"))}
-              />
-              <span>{t(option.label)}</span>
-            </label>
+  <div class="palette">
+    {#each STATUS_ITEMS.filter((spec) => spec.category === category) as spec (spec.id)}
+      {@const inBar = containsItem(layout, spec.id)}
+      <button
+        class="palette-chip"
+        class:in-bar={inBar}
+        title={t(spec.description)}
+        aria-label={t(inBar ? "preferences.statusBar.inBar" : "preferences.statusBar.add", { name: t(spec.label) })}
+        onpointerdown={(event) => onChipDown(event, spec.id, "palette")}
+        onkeydown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            if (inBar) selected = spec.id;
+            else add(spec.id);
+          }
+        }}
+      >
+        {#if inBar}<span class="check" aria-hidden="true">✓</span>{/if}
+        {t(spec.label)}
+      </button>
+    {/each}
+  </div>
+
+  <div class="tray-foot">
+    {#if selectedRef}
+      {@const spec = itemSpec(selectedRef.id)}
+      <div class="details">
+        <strong class="details-name" title={t(spec.description)}>{t(spec.label)}</strong>
+        <div class="details-controls">
+          {#each spec.options ?? [] as option (option.key)}
+            {#if option.kind === "toggle"}
+              <label class="option">
+                <input
+                  type="checkbox"
+                  checked={optionValue(selectedRef, option.key) === "on"}
+                  onchange={(e) => save(setItemOption(layout, selectedRef.id, option.key, e.currentTarget.checked ? "on" : "off"))}
+                />
+                <span>{t(option.label)}</span>
+              </label>
+            {:else}
+              <div class="option">
+                <span>{t(option.label)}</span>
+                <SettingDropdown
+                  options={option.choices.map((choice) => ({ value: choice.value, label: t(choice.label) }))}
+                  value={optionValue(selectedRef, option.key)}
+                  label={t(option.label)}
+                  onpick={(value) => save(setItemOption(layout, selectedRef.id, option.key, value))}
+                />
+              </div>
+            {/if}
+          {/each}
+          {#if selectedSide === "right"}
+            <button class="text-button" onclick={() => moveToSide(selectedRef.id, "left")}>← {t("preferences.statusBar.toLeft")}</button>
           {:else}
-            <div class="option">
-              <span>{t(option.label)}</span>
-              <SettingDropdown
-                options={option.choices.map((choice) => ({ value: choice.value, label: t(choice.label) }))}
-                value={optionValue(selectedRef, option.key)}
-                label={t(option.label)}
-                onpick={(value) => save(setItemOption(layout, selectedRef.id, option.key, value))}
-              />
-            </div>
+            <button class="text-button" onclick={() => moveToSide(selectedRef.id, "right")}>{t("preferences.statusBar.toRight")} →</button>
           {/if}
-        {/each}
-        {#if selectedSide === "right"}
-          <button class="text-button" onclick={() => moveToSide(selectedRef.id, "left")}>← {t("preferences.statusBar.toLeft")}</button>
-        {:else}
-          <button class="text-button" onclick={() => moveToSide(selectedRef.id, "right")}>{t("preferences.statusBar.toRight")} →</button>
-        {/if}
-        <button class="text-button danger" onclick={() => remove(selectedRef.id)}>{t("preferences.statusBar.remove")}</button>
+          <button class="text-button danger" onclick={() => remove(selectedRef.id)}>{t("preferences.statusBar.remove")}</button>
+        </div>
       </div>
-    </div>
-  {:else}
-    <p class="hint">{t("statusBar.edit.hint")}</p>
-  {/if}
+    {:else}
+      <p class="hint">{t("statusBar.edit.hint")}</p>
+    {/if}
+  </div>
 </div>
 
 <div class="status-bar editing" class:dragging={drag?.active} class:removing bind:offsetHeight={barHeight}>
@@ -467,15 +470,34 @@
   .tray-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
   }
 
   .category-pick {
-    flex: 0 0 150px;
+    flex: 0 0 170px;
+  }
+
+  /* The items and the chosen one's settings each get a fixed height, so
+     the tray keeps its size whichever kind is picked and whatever is
+     chosen; what doesn't fit scrolls. */
+  .palette {
+    height: 76px;
+    margin-top: 8px;
+    overflow-y: auto;
+    align-content: flex-start;
+  }
+
+  .tray-foot {
+    height: 52px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
+    overflow-y: auto;
   }
 
   .hint {
-    margin: 6px 2px 0;
+    margin: 2px;
     font-size: 10px;
     opacity: 0.55;
   }
@@ -528,9 +550,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 6px 12px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--tabbar-border, #2a2a2a);
   }
 
   .details-name {
@@ -558,8 +577,6 @@
   }
 
   .palette {
-    flex: 1 1 auto;
-    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
