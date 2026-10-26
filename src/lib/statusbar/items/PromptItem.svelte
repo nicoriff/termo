@@ -80,11 +80,15 @@
 
   const name = $derived(label(appConfigStore.promptEngine));
 
-  /** The theme a tool has picked; Starship's own config counts as none. */
+  /** The theme in use: only the selected tool's has one (each remembers its
+   * own, but only one draws the prompt). Starship's own config counts as none. */
   function currentTheme(tool: Tool): string | null {
+    if (appConfigStore.promptEngine !== tool) return null;
     if (tool === "oh_my_posh") return appConfigStore.ohMyPoshTheme;
     return appConfigStore.starshipUseOwnConfig ? null : appConfigStore.starshipPreset;
   }
+
+  const ownStarshipConfigInUse = $derived(appConfigStore.promptEngine === "starship" && appConfigStore.starshipUseOwnConfig);
 
   function close(refocus = true) {
     open = false;
@@ -259,12 +263,12 @@
             {#if tool === "starship"}
               <button
                 role="menuitemradio"
-                aria-checked={appConfigStore.starshipUseOwnConfig}
+                aria-checked={ownStarshipConfigInUse}
                 disabled={busy !== null}
                 onfocus={() => schedulePreview(tool, null)}
                 onclick={pickOwnStarshipConfig}
               >
-                {@render check(appConfigStore.starshipUseOwnConfig)}
+                {@render check(ownStarshipConfigInUse)}
                 {t("statusBar.prompt.ownStarshipConfig")}
               </button>
             {/if}
