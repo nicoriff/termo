@@ -1,4 +1,4 @@
-import { openPreferencesWindow } from "$lib/core/window-client";
+import { hidePreferencesWindow, openPreferencesWindow } from "$lib/core/window-client";
 import { uiState } from "$lib/core/ui-state.svelte";
 
 /** Whether this window's status bar is being arranged: the rest of the window
@@ -12,6 +12,9 @@ class StatusBarCustomize {
   start(fromPreferences = false) {
     this.fromPreferences = fromPreferences;
     this.active = true;
+    // From the bar's menu, Preferences may be open (it comes forward with
+    // this window and would cover the bar); it isn't brought back after.
+    if (!fromPreferences) void hidePreferencesWindow().catch(() => {});
   }
 
   finish() {

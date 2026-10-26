@@ -156,6 +156,17 @@ pub async fn customize_status_bar(app: tauri::AppHandle, from: tauri::WebviewWin
     main.emit_to(main.label(), "status-bar-customize", true).map_err(|err| err.to_string())
 }
 
+/// Hides Preferences if it's open. Arranging the status bar from the bar's
+/// own menu: Preferences, owned by the console window, comes forward with
+/// it and would cover the bar.
+#[tauri::command]
+pub async fn hide_preferences_window(app: tauri::AppHandle) -> Result<(), String> {
+    match app.get_webview_window(PREFERENCES) {
+        Some(window) if window.is_visible().unwrap_or(false) => window.hide().map_err(|err| err.to_string()),
+        _ => Ok(()),
+    }
+}
+
 #[tauri::command]
 pub async fn preferences_ready(window: tauri::WebviewWindow) -> Result<(), String> {
     use std::sync::atomic::Ordering::SeqCst;

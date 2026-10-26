@@ -25,6 +25,11 @@ export function customizeStatusBar(): Promise<void> {
   return invoke("customize_status_bar");
 }
 
+/** Hides Preferences if it's open (it stays in front of the console window). */
+export function hidePreferencesWindow(): Promise<void> {
+  return invoke("hide_preferences_window");
+}
+
 /** Ends the app. Not the same as closing this window: the hidden, preloaded
  * Preferences window would keep the process alive (see quit_app). */
 export function quitApp(): Promise<void> {
