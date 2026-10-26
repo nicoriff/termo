@@ -11,7 +11,7 @@
   import ConsoleSection from "./sections/ConsoleSection.svelte";
   import RemoteSection from "./sections/RemoteSection.svelte";
   import ShortcutsSection from "./sections/ShortcutsSection.svelte";
-  import OhMyPoshSection from "./sections/OhMyPoshSection.svelte";
+  import PromptSection from "./sections/PromptSection.svelte";
   import AiModeSection from "./sections/AiModeSection.svelte";
   import AiNotificationsSection from "./sections/AiNotificationsSection.svelte";
   import AiAgentsSection from "./sections/AiAgentsSection.svelte";
@@ -37,7 +37,7 @@
     | "remote"
     | "shortcuts"
     | "git"
-    | "oh-my-posh"
+    | "prompt"
     | "ai-mode"
     | "ai-notifications"
     | "ai-agents"
@@ -97,7 +97,7 @@
       id: "integrations",
       label: "preferences.sidebar.integrations",
       children: [
-        { id: "oh-my-posh", label: "preferences.sidebar.ohMyPosh" },
+        { id: "prompt", label: "preferences.sidebar.prompt" },
         { id: "marketplace", label: "preferences.sidebar.marketplace" },
       ],
     },
@@ -257,8 +257,8 @@
             expanded = { ...expanded, appearance: true };
           }}
         />
-      {:else if selected === "oh-my-posh"}
-        <OhMyPoshSection />
+      {:else if selected === "prompt"}
+        <PromptSection />
       {:else if selected === "ai-mode"}
         <AiModeSection />
       {:else if selected === "ai-notifications"}

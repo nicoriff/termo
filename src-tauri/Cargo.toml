@@ -30,6 +30,11 @@ thiserror = "2"
 dirs = "6"
 base64 = "0.22"
 ureq = { version = "2", features = ["tls"] }
+# Unpacking Starship's release archives (.zip on Windows, .tar.gz elsewhere).
+# All three were already in Cargo.lock through other dependencies.
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
+flate2 = "1"
+tar = "0.4"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"

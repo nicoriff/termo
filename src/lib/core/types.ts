@@ -76,6 +76,9 @@ export interface ShortcutsConfig {
   ai_next_pending_other: string | null;
 }
 
+/** The tool that draws new sessions' prompt; only one at a time. */
+export type PromptEngine = "none" | "oh_my_posh" | "starship";
+
 export interface AppConfig {
   language: "system" | "es" | "en";
   /** User-selected theme, restored when OS synchronization is disabled. */
@@ -93,8 +96,12 @@ export interface AppConfig {
   psreadline_menu_complete: boolean;
   console_utf8: boolean;
   bash_prompt_colors: boolean;
+  /** Absent in configs from before Starship. */
+  prompt_engine?: PromptEngine | null;
   oh_my_posh_enabled: boolean;
   oh_my_posh_theme: string;
+  starship_preset?: string;
+  starship_use_own_config?: boolean;
   zsh_menu_complete: boolean;
   persistent_sessions: boolean;
   ai_mode_enabled: boolean;

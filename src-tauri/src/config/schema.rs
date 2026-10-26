@@ -142,11 +142,20 @@ pub struct AppConfig {
     /// `ls`, and no macOS "default shell is now zsh" notice — see
     /// pty/bash_colors.rs.
     pub bash_prompt_colors: bool,
-    /// Opt-in: new PowerShell/zsh/bash 4.2+ sessions get an Oh My Posh
-    /// prompt — see pty/oh_my_posh.rs.
+    /// Which tool draws the prompt of new sessions: "none", "oh_my_posh" or
+    /// "starship" — only one, since each replaces the shell's prompt. None in
+    /// configs from before Starship: see `prompt_engine()`.
+    pub prompt_engine: Option<String>,
+    /// The switch from before `prompt_engine`, still read from older configs
+    /// and kept in step with it for an older Termo reading this one.
     pub oh_my_posh_enabled: bool,
     /// Official Oh My Posh theme name, e.g. "jandedobbeleer".
     pub oh_my_posh_theme: String,
+    /// A preset built into starship, e.g. "nerd-font-symbols" — see
+    /// pty/starship.rs.
+    pub starship_preset: String,
+    /// Starship uses the user's own starship.toml instead of the preset.
+    pub starship_use_own_config: bool,
     /// Opt-in (macOS/Linux): new zsh sessions get a navigable completion
     /// menu on Tab, Tab — see pty/zsh_init.rs.
     pub zsh_menu_complete: bool,
@@ -313,8 +322,11 @@ impl Default for AppConfig {
             psreadline_menu_complete: false,
             console_utf8: true,
             bash_prompt_colors: false,
+            prompt_engine: None,
             oh_my_posh_enabled: false,
             oh_my_posh_theme: "jandedobbeleer".into(),
+            starship_preset: "nerd-font-symbols".into(),
+            starship_use_own_config: false,
             zsh_menu_complete: false,
             persistent_sessions: false,
             ai_mode_enabled: true,
@@ -388,6 +400,18 @@ impl Default for AppConfig {
     }
 }
 
+impl AppConfig {
+    /// The prompt tool for new sessions; a config from before Starship has
+    /// only the Oh My Posh switch, which picked between it and none.
+    pub fn prompt_engine(&self) -> &str {
+        match self.prompt_engine.as_deref() {
+            Some(engine) => engine,
+            None if self.oh_my_posh_enabled => "oh_my_posh",
+            None => "none",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AppConfig;
@@ -420,5 +444,16 @@ mod tests {
         assert!(restored.sync_with_os);
         assert_eq!(restored.light_theme.as_deref(), Some("Solarized Light"));
         assert_eq!(restored.dark_theme.as_deref(), Some("Dracula"));
+    }
+
+    #[test]
+    fn old_configs_keep_oh_my_posh_as_their_prompt() {
+        let on: AppConfig = serde_json::from_str(r#"{"oh_my_posh_enabled":true}"#).unwrap();
+        assert_eq!(on.prompt_engine(), "oh_my_posh");
+        let off: AppConfig = serde_json::from_str(r#"{"oh_my_posh_enabled":false}"#).unwrap();
+        assert_eq!(off.prompt_engine(), "none");
+        let picked: AppConfig =
+            serde_json::from_str(r#"{"oh_my_posh_enabled":true,"prompt_engine":"starship"}"#).unwrap();
+        assert_eq!(picked.prompt_engine(), "starship");
     }
 }

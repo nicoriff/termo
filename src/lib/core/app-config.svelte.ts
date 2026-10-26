@@ -8,7 +8,7 @@ import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
 import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
-import type { AppConfig, ShortcutsConfig } from "./types";
+import type { AppConfig, PromptEngine, ShortcutsConfig } from "./types";
 import { DEFAULT_SOUNDS, isSoundChoice, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 import { defaultLayout, normalizeLayout, type StatusBarLayout } from "$lib/statusbar/layout";
@@ -143,8 +143,12 @@ class AppConfigStore {
   /** Windows: new PowerShell and CMD sessions start in UTF-8. */
   consoleUtf8 = $state(true);
   bashPromptColors = $state(false);
-  ohMyPoshEnabled = $state(false);
+  /** The one tool that draws new sessions' prompt (each replaces the other). */
+  promptEngine = $state<PromptEngine>("none");
   ohMyPoshTheme = $state("jandedobbeleer");
+  starshipPreset = $state("nerd-font-symbols");
+  /** Starship follows the user's own starship.toml instead of the preset. */
+  starshipUseOwnConfig = $state(false);
   zshMenuComplete = $state(false);
   /** New consoles run in the sessions daemon and outlive the app (see mux/). */
   persistentSessions = $state(false);
@@ -300,8 +304,11 @@ class AppConfigStore {
     this.psreadlineMenuComplete = config.psreadline_menu_complete;
     this.consoleUtf8 = config.console_utf8 ?? true;
     this.bashPromptColors = config.bash_prompt_colors;
-    this.ohMyPoshEnabled = config.oh_my_posh_enabled;
+    // Configs from before Starship only have the Oh My Posh switch.
+    this.promptEngine = config.prompt_engine ?? (config.oh_my_posh_enabled ? "oh_my_posh" : "none");
     this.ohMyPoshTheme = config.oh_my_posh_theme;
+    this.starshipPreset = config.starship_preset ?? "nerd-font-symbols";
+    this.starshipUseOwnConfig = config.starship_use_own_config ?? false;
     this.zshMenuComplete = config.zsh_menu_complete;
     this.persistentSessions = config.persistent_sessions ?? false;
     this.backgroundBlur = config.background_blur;
@@ -442,13 +449,23 @@ class AppConfigStore {
     void this.persist();
   }
 
-  setOhMyPoshEnabled(enabled: boolean): void {
-    this.ohMyPoshEnabled = enabled;
+  setPromptEngine(engine: PromptEngine): void {
+    this.promptEngine = engine;
     void this.persist();
   }
 
   setOhMyPoshTheme(theme: string): void {
     this.ohMyPoshTheme = theme;
+    void this.persist();
+  }
+
+  setStarshipPreset(preset: string): void {
+    this.starshipPreset = preset;
+    void this.persist();
+  }
+
+  setStarshipUseOwnConfig(enabled: boolean): void {
+    this.starshipUseOwnConfig = enabled;
     void this.persist();
   }
 
@@ -724,8 +741,12 @@ class AppConfigStore {
       psreadline_menu_complete: this.psreadlineMenuComplete,
       console_utf8: this.consoleUtf8,
       bash_prompt_colors: this.bashPromptColors,
-      oh_my_posh_enabled: this.ohMyPoshEnabled,
+      prompt_engine: this.promptEngine,
+      // Still written, for an older Termo reading this config.
+      oh_my_posh_enabled: this.promptEngine === "oh_my_posh",
       oh_my_posh_theme: this.ohMyPoshTheme,
+      starship_preset: this.starshipPreset,
+      starship_use_own_config: this.starshipUseOwnConfig,
       zsh_menu_complete: this.zshMenuComplete,
       persistent_sessions: this.persistentSessions,
       background_blur: this.backgroundBlur,
