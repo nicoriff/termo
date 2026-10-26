@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, type Snippet } from "svelte";
   import { t } from "$lib/i18n/i18n.svelte";
+  import SettingDropdown from "../SettingDropdown.svelte";
 
   interface ToolStatus {
     path: string | null;
@@ -73,17 +74,10 @@
     });
   }
 
-  function onThemeChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    const picked = select.value;
-    void run("theme", async () => {
-      try {
-        await pickTheme(picked);
-      } catch (err) {
-        select.value = theme;
-        throw err;
-      }
-    });
+  /** The combo shows `theme`, so one that fails to install leaves it as it was. */
+  function onThemePick(picked: string) {
+    if (picked === theme) return;
+    void run("theme", () => pickTheme(picked));
   }
 </script>
 
@@ -112,11 +106,13 @@
 <section>
   <div class="row">
     <span>{themeLabel}</span>
-    <select value={theme} onchange={onThemeChange} disabled={busy !== null || !status?.path || themeInactive}>
-      {#each themes as option (option)}
-        <option value={option}>{option}</option>
-      {/each}
-    </select>
+    <SettingDropdown
+      options={themes.map((option) => ({ value: option, label: option }))}
+      value={theme}
+      label={themeLabel}
+      disabled={busy !== null || !status?.path || themeInactive}
+      onpick={onThemePick}
+    />
   </div>
   {@render children?.({ installed: !!status?.path })}
   <p class="setting-hint">{hint}</p>
@@ -162,8 +158,7 @@
     word-break: break-all;
   }
 
-  .action-btn,
-  select {
+  .action-btn {
     font-size: 12px;
     padding: 5px 10px;
     border-radius: 4px;
@@ -173,19 +168,13 @@
     cursor: pointer;
   }
 
-  .action-btn:hover:not(:disabled),
-  select:hover:not(:disabled) {
+  .action-btn:hover:not(:disabled) {
     border-color: var(--pane-active-border, #3a6df0);
   }
 
-  button:disabled,
-  select:disabled {
+  .action-btn:disabled {
     opacity: 0.5;
     cursor: default;
-  }
-
-  option {
-    background: var(--tabbar-active-bg, #1e1e1e);
   }
 
   .setting-hint {

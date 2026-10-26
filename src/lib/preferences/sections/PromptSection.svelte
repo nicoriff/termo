@@ -14,6 +14,7 @@
   } from "$lib/core/oh-my-posh-client";
   import { getStarshipStatus, installStarship, installStarshipPreset, STARSHIP_PRESETS } from "$lib/core/starship-client";
   import { t } from "$lib/i18n/i18n.svelte";
+  import SettingDropdown from "../SettingDropdown.svelte";
   import PromptToolSection from "./PromptToolSection.svelte";
 
   let fontBusy = $state(false);
@@ -40,14 +41,16 @@
 <section>
   <div class="row">
     <span>{t("preferences.prompt.engine")}</span>
-    <select
+    <SettingDropdown
+      options={[
+        { value: "none", label: t("preferences.prompt.none") },
+        { value: "oh_my_posh", label: "Oh My Posh" },
+        { value: "starship", label: "Starship" },
+      ]}
       value={appConfigStore.promptEngine}
-      onchange={(e) => appConfigStore.setPromptEngine(e.currentTarget.value as PromptEngine)}
-    >
-      <option value="none">{t("preferences.prompt.none")}</option>
-      <option value="oh_my_posh">Oh My Posh</option>
-      <option value="starship">Starship</option>
-    </select>
+      label={t("preferences.prompt.engine")}
+      onpick={(value) => appConfigStore.setPromptEngine(value as PromptEngine)}
+    />
   </div>
   <p class="setting-hint">{t("preferences.prompt.engineHint")}</p>
 </section>
@@ -162,8 +165,7 @@
     cursor: pointer;
   }
 
-  .action-btn,
-  select {
+  .action-btn {
     font-size: 12px;
     padding: 5px 10px;
     border-radius: 4px;
@@ -173,18 +175,13 @@
     cursor: pointer;
   }
 
-  .action-btn:hover:not(:disabled),
-  select:hover:not(:disabled) {
+  .action-btn:hover:not(:disabled) {
     border-color: var(--pane-active-border, #3a6df0);
   }
 
   button:disabled {
     opacity: 0.5;
     cursor: default;
-  }
-
-  option {
-    background: var(--tabbar-active-bg, #1e1e1e);
   }
 
   .setting-hint {
