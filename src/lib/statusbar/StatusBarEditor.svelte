@@ -15,6 +15,7 @@
     STATUS_CATEGORIES,
     STATUS_ITEMS,
     type StatusBarLayout,
+    type StatusCategory,
     type StatusItemId,
     type StatusSide,
   } from "./layout";
@@ -27,6 +28,9 @@
    * bar, along it, or off it. */
   const layout = $derived(appConfigStore.effectiveStatusBar);
   const customized = $derived(appConfigStore.statusBarLayout !== null);
+
+  /** The kind of items the tray offers, one kind at a time. */
+  let category = $state<StatusCategory>("agent");
 
   let selected = $state<StatusItemId | null>(null);
   const selectedRef = $derived.by(() => {
@@ -207,7 +211,7 @@
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
   onpointercancel={onPointerCancel}
-  onkeydowncapture={onWindowKey}
+  onkeydown={onWindowKey}
 />
 
 {#snippet zone(side: StatusSide)}
@@ -241,11 +245,37 @@
 
 <div class="customize-shade" class:removing aria-hidden="true"></div>
 
-<div class="tray" role="dialog" aria-label={t("statusBar.edit.title")} style="bottom:{barHeight + 10}px">
-  <div class="tray-head">
-    <div>
-      <h2>{t("statusBar.edit.title")}</h2>
-      <p class="hint">{t("statusBar.edit.hint")}</p>
+<div class="tray" role="dialog" aria-label={t("statusBar.edit.title")} style="bottom:{barHeight + 8}px">
+  <div class="tray-row">
+    <div class="category-pick">
+      <SettingDropdown
+        options={STATUS_CATEGORIES.map((value) => ({ value, label: t(`preferences.statusBar.categories.${value}`) }))}
+        value={category}
+        label={t("statusBar.edit.category")}
+        onpick={(value) => (category = value as StatusCategory)}
+      />
+    </div>
+    <div class="palette">
+      {#each STATUS_ITEMS.filter((spec) => spec.category === category) as spec (spec.id)}
+        {@const inBar = containsItem(layout, spec.id)}
+        <button
+          class="palette-chip"
+          class:in-bar={inBar}
+          title={t(spec.description)}
+          aria-label={t(inBar ? "preferences.statusBar.inBar" : "preferences.statusBar.add", { name: t(spec.label) })}
+          onpointerdown={(event) => onChipDown(event, spec.id, "palette")}
+          onkeydown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              if (inBar) selected = spec.id;
+              else add(spec.id);
+            }
+          }}
+        >
+          {#if inBar}<span class="check" aria-hidden="true">✓</span>{/if}
+          {t(spec.label)}
+        </button>
+      {/each}
     </div>
     <div class="tray-actions">
       <button class="text-button" disabled={!customized} onclick={restoreDefault}>{t("preferences.statusBar.restore")}</button>
@@ -256,10 +286,7 @@
   {#if selectedRef}
     {@const spec = itemSpec(selectedRef.id)}
     <div class="details">
-      <div class="details-name">
-        <strong>{t(spec.label)}</strong>
-        <span class="hint">{t(spec.description)}</span>
-      </div>
+      <strong class="details-name" title={t(spec.description)}>{t(spec.label)}</strong>
       <div class="details-controls">
         {#each spec.options ?? [] as option (option.key)}
           {#if option.kind === "toggle"}
@@ -291,37 +318,9 @@
         <button class="text-button danger" onclick={() => remove(selectedRef.id)}>{t("preferences.statusBar.remove")}</button>
       </div>
     </div>
+  {:else}
+    <p class="hint">{t("statusBar.edit.hint")}</p>
   {/if}
-
-  <div class="categories">
-    {#each STATUS_CATEGORIES as category (category)}
-      <div class="category">
-        <span class="category-name">{t(`preferences.statusBar.categories.${category}`)}</span>
-        <div class="palette">
-          {#each STATUS_ITEMS.filter((spec) => spec.category === category) as spec (spec.id)}
-            {@const inBar = containsItem(layout, spec.id)}
-            <button
-              class="palette-chip"
-              class:in-bar={inBar}
-              title={t(spec.description)}
-              aria-label={t(inBar ? "preferences.statusBar.inBar" : "preferences.statusBar.add", { name: t(spec.label) })}
-              onpointerdown={(event) => onChipDown(event, spec.id, "palette")}
-              onkeydown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  if (inBar) selected = spec.id;
-                  else add(spec.id);
-                }
-              }}
-            >
-              {#if inBar}<span class="check" aria-hidden="true">✓</span>{/if}
-              {t(spec.label)}
-            </button>
-          {/each}
-        </div>
-      </div>
-    {/each}
-  </div>
 </div>
 
 <div class="status-bar editing" class:dragging={drag?.active} class:removing bind:offsetHeight={barHeight}>
@@ -446,41 +445,39 @@
     white-space: nowrap;
   }
 
+  /* Centered without a transform: a transform would make it the box the
+     dropdowns' fixed panels are placed in. */
   .tray {
     position: fixed;
-    left: 50%;
+    left: 0;
+    right: 0;
     z-index: 902;
-    transform: translateX(-50%);
-    width: min(960px, calc(100vw - 32px));
-    max-height: calc(100vh - 120px);
-    overflow-y: auto;
-    padding: 14px 16px 16px;
+    width: min(820px, calc(100vw - 32px));
+    margin: 0 auto;
+    padding: 8px 10px;
     border: 1px solid var(--tabbar-border, #2a2a2a);
-    border-radius: 10px;
+    border-radius: 8px;
     background: var(--tabbar-active-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     user-select: none;
   }
 
-  .tray-head {
+  .tray-row {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
+    align-items: center;
+    gap: 10px;
   }
 
-  h2 {
-    margin: 0 0 3px;
-    font-size: 13px;
-    font-weight: 600;
+  .category-pick {
+    flex: 0 0 150px;
   }
 
   .hint {
-    margin: 0;
-    font-size: 11px;
-    opacity: 0.6;
+    margin: 6px 2px 0;
+    font-size: 10px;
+    opacity: 0.55;
   }
 
   .tray-actions {
@@ -530,25 +527,22 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 8px 16px;
-    margin-top: 12px;
-    padding: 8px 10px;
-    border: 1px solid var(--pane-active-border, #3a6df0);
-    border-radius: 6px;
+    gap: 6px 12px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--tabbar-border, #2a2a2a);
   }
 
   .details-name {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .details-controls {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: 6px 12px;
   }
 
   .option {
@@ -563,25 +557,9 @@
     cursor: pointer;
   }
 
-  .categories {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 4px 20px;
-    margin-top: 6px;
-  }
-
-  .category {
-    margin-top: 8px;
-  }
-
-  .category-name {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 11px;
-    opacity: 0.7;
-  }
-
   .palette {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 5px;

@@ -125,6 +125,7 @@ export const en: Messages = {
       title: "Customize the status bar",
       hint: "Drag items onto the bar, along it, or off it to remove them. Click one to adjust it; ← → move it and Delete removes it.",
       done: "Done",
+      category: "Kind of items",
       placeholderHint: "{name}: nothing to show in this console right now; this is how it looks when there is",
     },
     resetsHint: "How long until this plan window starts over",

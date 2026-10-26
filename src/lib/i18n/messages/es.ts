@@ -124,6 +124,7 @@ export const es = {
       title: "Personalizar la barra de estado",
       hint: "Arrastrá ítems a la barra, movelos por ella, o sacalos soltándolos fuera. Clic en uno para ajustarlo; ← → lo mueven y Supr lo quita.",
       done: "Listo",
+      category: "Tipo de ítems",
       placeholderHint: "{name}: ahora no tiene nada que mostrar en esta consola; así se ve cuando sí",
     },
     resetsHint: "Cuánto falta para que esta ventana del plan se renueve",
