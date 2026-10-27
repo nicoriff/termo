@@ -515,6 +515,19 @@
    * folded group hides (see tab-groups.ts). */
   const items = $derived(stripItems(tile.sessions, tabGroupsStore.groups, tile.activeSessionId));
 
+  /** A tab folding into its group's chip, or out of it: it narrows (or
+   * widens) and fades, quickly. Any other coming or going is instant. */
+  function foldTab(node: HTMLElement, { groupId }: { groupId?: string }) {
+    if (!groupId || tabGroupsStore.folding !== groupId) return { duration: 0 };
+    const width = node.offsetWidth;
+    return {
+      duration: 140,
+      easing: cubicOut,
+      css: (t: number) =>
+        `min-width:0; max-width:${t * width}px; padding-left:${t * 8}px; padding-right:${t * 8}px; opacity:${t}; overflow:hidden;`,
+    };
+  }
+
   function onChipPointerDown(event: PointerEvent, groupId: string) {
     startDrag(event, { kind: "group", groupId });
   }
@@ -705,6 +718,7 @@
         style={item.group ? `--group-color:${GROUP_COLORS[item.group.color]}` : undefined}
         data-session-id={session.id}
         data-group-id={item.group?.id}
+        transition:foldTab|global={{ groupId: item.group?.id }}
         role="tab"
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}

@@ -75,6 +75,9 @@ class TabGroupsStore {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastSaved = new Map<string, string>();
   private saving = new Set<string>();
+  /** The group folding or unfolding right now, for its tabs' animation. */
+  folding: string | null = null;
+  private foldingTimer: ReturnType<typeof setTimeout> | undefined;
 
   isOpen(groupId: string): boolean {
     return (this.liveTabs.get(groupId)?.length ?? 0) > 0;
@@ -228,7 +231,13 @@ class TabGroupsStore {
 
   toggleCollapsed(groupId: string): void {
     const group = this.byId.get(groupId);
-    if (group) this.update(groupId, { collapsed: !group.collapsed });
+    if (!group) return;
+    // Only this fold animates its tabs (see TileChrome's foldTab): tabs that
+    // open, close or move come and go at once, as they always have.
+    this.folding = groupId;
+    clearTimeout(this.foldingTimer);
+    this.foldingTimer = setTimeout(() => (this.folding = null), 250);
+    this.update(groupId, { collapsed: !group.collapsed });
   }
 
   /** Puts a tab in a group, or with null takes it out of its own. */
