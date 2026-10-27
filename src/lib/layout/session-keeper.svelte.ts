@@ -5,6 +5,7 @@ import { saveWindowSession, windowSession } from "$lib/core/layouts-client";
 import { keptConsoles, shownHere } from "$lib/core/pty-client";
 import { ptyIdsByTab } from "$lib/terminal/pty-registry";
 import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { hydrateLayout, snapshotLayout, type LayoutNode } from "./layout-snapshot";
 import { workspaceStore } from "./workspace-store.svelte";
 
@@ -59,6 +60,7 @@ class SessionKeeper {
       cwdByTab: tabCwd.byTab,
       withSessions: true,
       consoleByTab: ptyIdsByTab(),
+      groups: tabGroupsStore.defs(),
     });
     const text = JSON.stringify(snapshot);
     if (text === this.last) return;
@@ -80,7 +82,8 @@ class SessionKeeper {
     if (free.size === 0) return false;
     const saved = await windowSession().catch(() => null);
     if (!saved || !mentionsAny(saved, free)) return false;
-    const { root, resumes } = hydrateLayout(saved, undefined, free);
+    const { root, resumes, groups } = hydrateLayout(saved, undefined, free);
+    tabGroupsStore.ensure(groups);
     workspaceStore.replaceRoot(root);
     for (const resume of resumes) {
       void resumeInTab(resume.tabId, resume.tool, resume.agentSessionId);

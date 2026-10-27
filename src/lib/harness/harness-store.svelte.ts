@@ -19,6 +19,7 @@ import {
 import type { PlanStep } from "$lib/core/orchestration-client";
 import { fileTabs } from "$lib/editor/file-tabs.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { addProposed, addRule, copySpec, harnessStatus, sameEntry, sameSpec } from "./harness-model";
@@ -149,6 +150,7 @@ class HarnessStore {
       agentsStore.setOpen(false);
       explorerStore.open = false;
       gitStore.open = false;
+      tabGroupsStore.open = false;
     }
     this.open = open;
     if (!open) this.review = null;

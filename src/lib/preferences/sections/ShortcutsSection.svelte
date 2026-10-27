@@ -14,7 +14,7 @@
     <span>{t(SHORTCUT_LABEL_KEYS.tabMenu)}</span>
     <ShortcutRecorder action="tabMenu" />
   </div>
-  {#each ["newWindow", "newClaude", "newCodex", "newGemini", "newCopilot", "newGrok", "favoriteTab", "toggleExplorer", "toggleGit", "toggleHarness", "toggleAgents", "toggleOrchestration"] as const as action (action)}
+  {#each ["newWindow", "newClaude", "newCodex", "newGemini", "newCopilot", "newGrok", "favoriteTab", "toggleExplorer", "toggleGit", "toggleHarness", "toggleTabGroups", "toggleAgents", "toggleOrchestration"] as const as action (action)}
     <div class="shortcut-row">
       <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
       <ShortcutRecorder {action} />

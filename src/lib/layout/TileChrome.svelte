@@ -11,7 +11,17 @@
 
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import type { ShellInfo } from "$lib/core/types";
-  import { dropZoneAt, fileName, type DropZone, type PaneInsets, type PaneRect, type TileNode } from "./split-tree";
+  import {
+    dropZoneAt,
+    fileName,
+    isConsoleTab,
+    type DropZone,
+    type PaneInsets,
+    type PaneRect,
+    type TileNode,
+  } from "./split-tree";
+  import { GROUP_COLORS, stripItems } from "$lib/tab-groups/tab-groups";
+  import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
   import { fileTabs } from "$lib/editor/file-tabs.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -241,12 +251,26 @@
   // consistently (or automate the same way) across platforms/webviews. Reusing
   // the same pointer-capture technique as the split-divider resize keeps tab
   // dragging fully in our control and consistent everywhere.
+  //
+  // A group's chip drags the same way, carrying all of the group's tabs in
+  // this tile with it; let go without moving, it folds or unfolds the group.
+  type Dragged = { kind: "tab"; sessionId: string } | { kind: "group"; groupId: string };
+
   function onTabPointerDown(event: PointerEvent, sessionId: string) {
+    startDrag(event, { kind: "tab", sessionId });
+  }
+
+  function startDrag(event: PointerEvent, dragged: Dragged) {
     if (event.button !== 0) return;
     const startX = event.clientX;
     const startY = event.clientY;
     const sourceTileId = tile.id;
-    const sourceTabCount = tile.sessions.length;
+    const groupId = dragged.kind === "group" ? dragged.groupId : null;
+    const sessionId = dragged.kind === "tab" ? dragged.sessionId : null;
+    // Whether splitting its own tile would leave something beside it.
+    const leavesSomething = groupId
+      ? tile.sessions.some((session) => session.groupId !== groupId)
+      : tile.sessions.length >= 2;
     const sourceTab = event.currentTarget as HTMLElement;
     let dragging = false;
     let ghost: HTMLElement | null = null;
@@ -265,6 +289,7 @@
       ghost = sourceTab.cloneNode(true) as HTMLElement;
       ghost.classList.add("tab-drag-ghost");
       ghost.removeAttribute("data-session-id");
+      ghost.removeAttribute("data-group-id");
       ghost.style.width = `${box.width}px`;
       ghost.style.height = `${box.height}px`;
       document.body.appendChild(ghost);
@@ -294,14 +319,20 @@
       return null;
     }
 
+    /** The tab — or group chip — under the pointer. */
     function currentDropTab(e: PointerEvent): HTMLElement | null {
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      return el instanceof Element ? el.closest<HTMLElement>(".tile-tab") : null;
+      return el instanceof Element ? el.closest<HTMLElement>(".tile-tab, .tile-group-chip") : null;
+    }
+
+    /** Over the dragged group itself: its chip or one of its tabs. */
+    function overOwnGroup(target: HTMLElement | null): boolean {
+      return !!groupId && !!target && target.dataset.groupId === groupId;
     }
 
     function clearHighlight() {
       document
-        .querySelectorAll(".tile-tab.drag-insert-before, .tile-tab.drag-insert-after")
+        .querySelectorAll(".drag-insert-before, .drag-insert-after")
         .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
     }
 
@@ -318,7 +349,8 @@
       if (!chrome || !tileId) return { kind: "none" };
       if (document.elementFromPoint(e.clientX, e.clientY)?.closest(".tile-tabstrip")) {
         // Over itself it stays put; anywhere else on a strip it's inserted.
-        return currentDropTab(e) === sourceTab ? { kind: "none" } : { kind: "strip", tileId, chrome };
+        const over = currentDropTab(e);
+        return over === sourceTab || overOwnGroup(over) ? { kind: "none" } : { kind: "strip", tileId, chrome };
       }
       // Measured on the console below the strip, where the edges are.
       const box = chrome.getBoundingClientRect();
@@ -327,7 +359,7 @@
       const own = tileId === sourceTileId;
       if (side !== "center") {
         // A tile's only tab can't split it: there'd be nothing left beside it.
-        return own && sourceTabCount < 2 ? { kind: "none" } : { kind: "split", tileId, chrome, side };
+        return own && !leavesSomething ? { kind: "none" } : { kind: "split", tileId, chrome, side };
       }
       // Its own console keeps it where it was: only the strip reorders.
       return own ? { kind: "none" } : { kind: "tile", tileId, chrome };
@@ -362,7 +394,7 @@
       const appearing = !preview.classList.contains("visible");
       if (appearing) preview.style.transition = "none";
       Object.assign(preview.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
-      preview.firstElementChild!.textContent = drop.kind === "split" ? t("tabs.newGroup") : "";
+      preview.firstElementChild!.textContent = drop.kind === "split" ? t("tabs.newPane") : "";
       preview.classList.toggle("split", drop.kind === "split");
       if (appearing) {
         void preview.offsetWidth;
@@ -374,9 +406,12 @@
     // Which existing tab (if any) the pointer is currently over, and whether
     // it should land before or after that tab — used both to preview the
     // drop position and, on release, to compute moveSession's beforeSessionId.
+    // A chip only takes things ahead of it: just after it is the group's
+    // first tab, which "before that tab" already covers.
     function hoveredInsertion(e: PointerEvent): { tab: HTMLElement; before: boolean } | null {
       const overTab = currentDropTab(e);
-      if (!overTab || overTab.dataset.sessionId === sessionId) return null;
+      if (!overTab || (sessionId && overTab.dataset.sessionId === sessionId) || overOwnGroup(overTab)) return null;
+      if (overTab.classList.contains("tile-group-chip")) return { tab: overTab, before: true };
       const box = overTab.getBoundingClientRect();
       return { tab: overTab, before: e.clientX < box.left + box.width / 2 };
     }
@@ -409,7 +444,8 @@
       if (dragging) {
         const drop = dropAt(e);
         if (drop.kind === "split") {
-          workspaceStore.splitWithSession(sourceTileId, drop.tileId, sessionId, drop.side);
+          if (groupId) workspaceStore.splitWithGroup(sourceTileId, drop.tileId, groupId, drop.side);
+          else if (sessionId) workspaceStore.splitWithSession(sourceTileId, drop.tileId, sessionId, drop.side);
         } else if (drop.kind !== "none") {
           const insertion = hoveredInsertion(e);
           let beforeSessionId: string | undefined;
@@ -420,15 +456,32 @@
                 ? insertion.tab.nextElementSibling.dataset.sessionId
                 : undefined;
           }
-          workspaceStore.moveSession(sourceTileId, drop.tileId, sessionId, beforeSessionId);
+          if (groupId) workspaceStore.moveGroup(sourceTileId, drop.tileId, groupId, beforeSessionId);
+          else if (sessionId)
+            workspaceStore.moveSession(sourceTileId, drop.tileId, sessionId, beforeSessionId, drop.kind === "strip");
         }
-      } else {
+      } else if (groupId) {
+        tabGroupsStore.toggleCollapsed(groupId);
+      } else if (sessionId) {
         workspaceStore.setActiveSession(sourceTileId, sessionId);
       }
     }
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  }
+
+  /** What the strip shows: each group's chip ahead of its tabs, which a
+   * folded group hides (see tab-groups.ts). */
+  const items = $derived(stripItems(tile.sessions, tabGroupsStore.groups, tile.activeSessionId));
+
+  function onChipPointerDown(event: PointerEvent, groupId: string) {
+    startDrag(event, { kind: "group", groupId });
+  }
+
+  function onChipContextMenu(event: MouseEvent, groupId: string) {
+    event.preventDefault();
+    tabGroupsStore.openEditor(groupId, event.clientX, event.clientY);
   }
 
   /** Right-clicking a tab: its own small menu, at the pointer. The tab becomes
@@ -438,24 +491,100 @@
   const tabMenuFavorite = $derived(
     tabMenu && appConfigStore.aiModeEnabled ? favoriteDraftForTab(tabMenu.sessionId) : null,
   );
+  const tabMenuSession = $derived(
+    tabMenu ? (tile.sessions.find((session) => session.id === tabMenu!.sessionId) ?? null) : null,
+  );
+  /** The groups the tab could move to: all but its own. */
+  const otherGroups = $derived(
+    tabGroupsStore.groups.filter((group) => group.id !== tabMenuSession?.groupId),
+  );
+  let groupSubmenu = $state<{ top: number; left: number } | null>(null);
+  let moveRowEl = $state<HTMLButtonElement | undefined>(undefined);
 
   function onTabContextMenu(event: MouseEvent, sessionId: string) {
     event.preventDefault();
     workspaceStore.setActiveSession(tile.id, sessionId);
     const x = Math.min(event.clientX, window.innerWidth - TAB_MENU_WIDTH - SHELL_PICKER_MARGIN);
-    const y = Math.min(event.clientY, window.innerHeight - 90 - SHELL_PICKER_MARGIN);
-    tabMenu = { x, y, sessionId };
+    groupSubmenu = null;
+    tabMenu = { x, y: event.clientY, sessionId };
+  }
+
+  function closeTabMenu() {
+    tabMenu = null;
+    groupSubmenu = null;
+  }
+
+  /** Keeps a menu inside the window: one opened low on the screen goes up. */
+  function keepInWindow(node: HTMLElement) {
+    const box = node.getBoundingClientRect();
+    const overflow = box.bottom - (window.innerHeight - SHELL_PICKER_MARGIN);
+    if (overflow > 0) node.style.top = `${Math.max(SHELL_PICKER_MARGIN, box.top - overflow)}px`;
+  }
+
+  function openGroupSubmenu() {
+    if (!moveRowEl) return;
+    const box = moveRowEl.getBoundingClientRect();
+    const toTheRight = box.right + 4;
+    const left =
+      toTheRight + RECENT_SUBMENU_WIDTH + SHELL_PICKER_MARGIN > window.innerWidth
+        ? Math.max(SHELL_PICKER_MARGIN, box.left - 4 - RECENT_SUBMENU_WIDTH)
+        : toTheRight;
+    groupSubmenu = { top: box.top, left };
+  }
+
+  /** A new group with this tab in it, its editor open to name it — as
+   * Chrome does. */
+  function addToNewGroup() {
+    const menu = tabMenu;
+    closeTabMenu();
+    if (!menu) return;
+    const groupId = tabGroupsStore.create([menu.sessionId]);
+    tabGroupsStore.openEditor(groupId, menu.x, menu.y);
+  }
+
+  function moveToGroup(groupId: string) {
+    const sessionId = tabMenu?.sessionId;
+    closeTabMenu();
+    if (sessionId) tabGroupsStore.assign(sessionId, groupId);
+  }
+
+  function removeFromGroup() {
+    const sessionId = tabMenu?.sessionId;
+    closeTabMenu();
+    if (sessionId) tabGroupsStore.assign(sessionId, null);
+  }
+
+  /** The tab goes to a new pane on that side of its tile. When it's all the
+   * tile has, the new pane gets a console like it instead, in its folder and
+   * its group. */
+  async function splitFromTabMenu(side: "right" | "left" | "bottom") {
+    const session = tabMenuSession;
+    closeTabMenu();
+    if (!session) return;
+    if (tile.sessions.length >= 2) {
+      workspaceStore.splitWithSession(tile.id, tile.id, session.id, side);
+      return;
+    }
+    const shell =
+      isConsoleTab(session) && session.shellPath
+        ? { path: session.shellPath, args: session.shellArgs, title: session.title }
+        : await resolveDefaultShell();
+    workspaceStore.splitTile(tile.id, side === "bottom" ? "col" : "row", shell, {
+      newFirst: side === "left",
+      cwd: sessionFolder(session),
+      groupId: session.groupId,
+    });
   }
 
   function favoriteFromTabMenu() {
     const draft = tabMenuFavorite;
-    tabMenu = null;
+    closeTabMenu();
     if (draft) uiState.openFavoriteDialog(draft);
   }
 
   function closeFromTabMenu(event: Event) {
     const sessionId = tabMenu?.sessionId;
-    tabMenu = null;
+    closeTabMenu();
     if (sessionId) closeTab(event, sessionId);
   }
 
@@ -495,13 +624,47 @@
     100}% - {insets.left + insets.right}px); height:calc({rect.height * 100}% - {insets.top + insets.bottom}px)"
 >
   <div class="tile-tabstrip" data-tile-id={tile.id}>
-    {#each tile.sessions as session (session.id)}
+    {#each items as item (item.kind === "chip" ? `chip:${item.group.id}` : item.session.id)}
+      {#if item.kind === "chip"}
+        {@const name = item.group.name || t("tabGroups.unnamed")}
+        {@const firstTab = tile.sessions.find((session) => session.groupId === item.group.id)}
+        <div
+          class="tile-group-chip"
+          class:collapsed={item.group.collapsed}
+          class:unnamed={!item.group.name}
+          style="--group-color:{GROUP_COLORS[item.group.color]}"
+          data-group-id={item.group.id}
+          data-session-id={firstTab?.id}
+          role="button"
+          tabindex="0"
+          aria-expanded={!item.group.collapsed}
+          aria-label={t(item.group.collapsed ? "tabGroups.expand" : "tabGroups.collapse", { name })}
+          title={t("tabGroups.chipHint", { name })}
+          onpointerdown={(e) => onChipPointerDown(e, item.group.id)}
+          oncontextmenu={(e) => onChipContextMenu(e, item.group.id)}
+          onkeydown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              tabGroupsStore.toggleCollapsed(item.group.id);
+            }
+          }}
+        >
+          <span class="tile-group-chip-name">{item.group.name}</span>
+          {#if item.group.collapsed}
+            <span class="tile-group-chip-count">{item.count}</span>
+          {/if}
+        </div>
+      {:else}
+      {@const session = item.session}
       {@const aiStatus = aiStatusStore.byId[session.id]}
       {@const favorite = appConfigStore.aiModeEnabled ? favoritesStore.forTab(session.id) : null}
       <div
         class="tile-tab"
         class:active={tile.activeSessionId === session.id}
+        class:in-group={!!item.group}
+        style={item.group ? `--group-color:${GROUP_COLORS[item.group.color]}` : undefined}
         data-session-id={session.id}
+        data-group-id={item.group?.id}
         role="tab"
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}
@@ -586,6 +749,7 @@
           </svg>
         </span>
       </div>
+      {/if}
     {/each}
     <!-- Split button: "+" opens a tab right away, "˅" the full menu. -->
     <div class="tile-tab-add-group" class:open={shellPickerOpen} bind:this={addGroupEl}>
@@ -874,21 +1038,27 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="shell-picker-backdrop"
-        onpointerdown={() => (tabMenu = null)}
+        onpointerdown={closeTabMenu}
         oncontextmenu={(e) => {
           e.preventDefault();
-          tabMenu = null;
+          closeTabMenu();
         }}
       ></div>
       <div
         class="tab-menu"
         style="top:{tabMenu.y}px; left:{tabMenu.x}px"
         role="menu"
-        use:menuKeys={{ close: () => (tabMenu = null) }}
+        use:keepInWindow
+        use:menuKeys={{ close: closeTabMenu }}
       >
         {#if tabMenuFavorite}
           {@const saved = favoritesStore.byId.has(tabMenuFavorite.agentSessionId)}
-          <button class="shell-picker-item" role="menuitem" onclick={favoriteFromTabMenu}>
+          <button
+            class="shell-picker-item"
+            role="menuitem"
+            onmouseenter={() => (groupSubmenu = null)}
+            onclick={favoriteFromTabMenu}
+          >
             <span class="tab-menu-star" class:on={saved} aria-hidden="true">{saved ? "★" : "☆"}</span>
             <span class="shell-picker-label">{t(saved ? "favorites.edit" : "favorites.add")}</span>
             <span class="tab-menu-hint">
@@ -897,11 +1067,90 @@
           </button>
           <div class="shell-picker-divider"></div>
         {/if}
-        <button class="shell-picker-item" role="menuitem" onclick={closeFromTabMenu}>
+        <button class="shell-picker-item" role="menuitem" onmouseenter={() => (groupSubmenu = null)} onclick={addToNewGroup}>
+          <span class="tab-menu-star" aria-hidden="true">
+            <svg viewBox="0 0 12 12" width="11" height="11">
+              <rect x="1" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" />
+              <path d="M9 1v4M7 3h4" stroke="currentColor" />
+            </svg>
+          </span>
+          <span class="shell-picker-label">{t("tabGroups.addToNew")}</span>
+        </button>
+        {#if otherGroups.length > 0}
+          <button
+            class="shell-picker-item shell-picker-submenu-row"
+            class:open={!!groupSubmenu}
+            role="menuitem"
+            bind:this={moveRowEl}
+            aria-haspopup="menu"
+            aria-expanded={!!groupSubmenu}
+            onmouseenter={openGroupSubmenu}
+            onclick={() => (groupSubmenu ? (groupSubmenu = null) : openGroupSubmenu())}
+          >
+            <span class="tab-menu-row">
+              <span class="tab-menu-star" aria-hidden="true"></span>
+              <span class="shell-picker-label">{t("tabGroups.moveTo")}</span>
+            </span>
+            <svg viewBox="0 0 6 10" width="6" height="10" aria-hidden="true">
+              <path d="M1 1l4 4-4 4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+        {/if}
+        {#if tabMenuSession?.groupId}
+          <button class="shell-picker-item" role="menuitem" onmouseenter={() => (groupSubmenu = null)} onclick={removeFromGroup}>
+            <span class="tab-menu-star" aria-hidden="true"></span>
+            <span class="shell-picker-label">{t("tabGroups.removeFrom")}</span>
+          </button>
+        {/if}
+        <div class="shell-picker-divider"></div>
+        {#each [["right", "tabs.splitRight"], ["left", "tabs.splitLeft"], ["bottom", "tabs.splitDown"]] as const as [side, label] (side)}
+          <button
+            class="shell-picker-item"
+            role="menuitem"
+            onmouseenter={() => (groupSubmenu = null)}
+            onclick={() => void splitFromTabMenu(side)}
+          >
+            <span class="tab-menu-star" aria-hidden="true">
+              <svg viewBox="0 0 12 12" width="11" height="11">
+                <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
+                {#if side === "bottom"}
+                  <rect x="0.5" y="6" width="11" height="5.5" fill="currentColor" opacity="0.45" />
+                {:else}
+                  <rect x={side === "right" ? 6 : 0.5} y="0.5" width="5.5" height="11" fill="currentColor" opacity="0.45" />
+                {/if}
+              </svg>
+            </span>
+            <span class="shell-picker-label">{t(label)}</span>
+          </button>
+        {/each}
+        <div class="shell-picker-divider"></div>
+        <button class="shell-picker-item" role="menuitem" onmouseenter={() => (groupSubmenu = null)} onclick={closeFromTabMenu}>
           <span class="tab-menu-star" aria-hidden="true"></span>
           <span class="shell-picker-label">{t("tabs.close")}</span>
         </button>
       </div>
+      {#if groupSubmenu}
+        <div
+          class="recent-submenu"
+          style="top:{groupSubmenu.top}px; left:{groupSubmenu.left}px"
+          role="menu"
+          use:keepInWindow
+          use:menuKeys={{ close: closeTabMenu, back: () => (groupSubmenu = null) }}
+          in:fly={{ x: -4, duration: 120, easing: cubicOut }}
+        >
+          {#each otherGroups as group (group.id)}
+            <button class="shell-picker-item" role="menuitem" onclick={() => moveToGroup(group.id)}>
+              <span class="tab-menu-dot" style="background:{GROUP_COLORS[group.color]}" aria-hidden="true"></span>
+              <span class="shell-picker-label">{group.name || t("tabGroups.unnamed")}</span>
+            </button>
+          {/each}
+          <div class="shell-picker-divider"></div>
+          <button class="shell-picker-item" role="menuitem" onclick={addToNewGroup}>
+            <span class="tab-menu-dot empty" aria-hidden="true"></span>
+            <span class="shell-picker-label">{t("tabGroups.newGroupEllipsis")}</span>
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1145,6 +1394,127 @@
     flex-shrink: 0;
     text-align: center;
     opacity: 0.6;
+  }
+
+  .tab-menu-star svg {
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* "Move to group" holds its icon slot and label together, apart from the
+     arrow at the far end. */
+  .tab-menu-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  /* A group's color, in the "Move to group" flyout. */
+  .tab-menu-dot {
+    width: 10px;
+    height: 10px;
+    margin: 0 2px;
+    flex-shrink: 0;
+    border-radius: 50%;
+  }
+
+  .tab-menu-dot.empty {
+    border: 1px dashed currentColor;
+    box-sizing: border-box;
+    opacity: 0.6;
+  }
+
+  /* A tab group's chip, ahead of its tabs (see tab-groups.ts): its color,
+     its name, and while folded how many tabs it hides. Clicked it folds and
+     unfolds; dragged it takes the whole group along. */
+  .tile-group-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    max-width: 140px;
+    margin: 5px 2px 5px 6px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--group-color);
+    color: #101114;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: filter 100ms ease;
+  }
+
+  .tile-group-chip:hover {
+    filter: brightness(1.1);
+  }
+
+  .tile-group-chip:focus-visible {
+    outline: 2px solid var(--tabbar-active-fg, #f0f0f0);
+    outline-offset: 1px;
+  }
+
+  /* No name: just a dot of its color, as Chrome shows it. */
+  .tile-group-chip.unnamed:not(.collapsed) {
+    width: 12px;
+    padding: 0;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    border-radius: 50%;
+  }
+
+  .tile-group-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tile-group-chip-name:empty {
+    display: none;
+  }
+
+  .tile-group-chip-count {
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 10px;
+  }
+
+  /* The chip that follows the pointer while a group is dragged. */
+  :global(.tile-group-chip.tab-drag-ghost) {
+    position: fixed;
+    left: 0;
+    top: 0;
+    margin: 0;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+
+  :global(.tile-group-chip.drag-source) {
+    opacity: 0.35;
+  }
+
+  :global(.tile-group-chip.drag-insert-before) {
+    box-shadow: -3px 0 0 var(--pane-active-border, #3a6df0);
+  }
+
+  /* A grouped tab carries its group's color along its bottom edge. */
+  .tile-tab.in-group {
+    position: relative;
+  }
+
+  .tile-tab.in-group::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--group-color);
+    pointer-events: none;
   }
 
   .tab-menu-star.on {

@@ -18,6 +18,7 @@
   import type { SavedLayout } from "$lib/core/layouts-client";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
+  import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
   import { menuKeys } from "$lib/core/menu-keys";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
@@ -170,6 +171,11 @@
   function showHarness() {
     onclose();
     harnessStore.setOpen(true);
+  }
+
+  function showTabGroups() {
+    onclose();
+    tabGroupsStore.setOpen(true);
   }
 
   /** Asks first: restoring closes every console that's open. */
@@ -385,6 +391,16 @@
     </svg>
     <span class="app-menu-text">{t("harness.title")}</span>
     <span class="app-menu-hint">{hint("toggleHarness")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showTabGroups}>
+    <!-- As on the panels bar: a folder tab over a card. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1" y="3.5" width="10" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M1 5.5h10M3 3.5V2h3.5v1.5" fill="none" stroke="currentColor" stroke-width="1" />
+    </svg>
+    <span class="app-menu-text">{t("tabGroups.title")}</span>
+    <span class="app-menu-hint">{hint("toggleTabGroups")}</span>
   </button>
 
   <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showDiagnostics}>

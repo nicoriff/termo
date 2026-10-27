@@ -20,10 +20,12 @@ import {
   makeSession,
   makeTile,
   type DiffTarget,
+  type SessionTab,
   type SplitDirection,
   type SplitNode,
 } from "./split-tree";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
+import type { GroupDef } from "$lib/tab-groups/tab-groups";
 
 export interface LayoutSession {
   title: string;
@@ -51,6 +53,9 @@ export interface LayoutSession {
   consoleId?: string;
   /** With `consoleId`: it's another computer's console (see SessionTab.attachHost). */
   remoteHost?: { ip: string; name: string };
+  /** The tab group it was in, whole: restoring brings the group back with it
+   * even if it was deleted since. */
+  group?: GroupDef;
 }
 
 export type LayoutNode =
@@ -72,6 +77,8 @@ export interface SnapshotOptions {
   withSessions?: boolean;
   /** Each console's id (pty-registry), to record with it. */
   consoleByTab?: Record<string, string>;
+  /** The tab groups by id (tabGroupsStore), to record each tab's with it. */
+  groups?: Record<string, GroupDef>;
 }
 
 /** A console to reopen a conversation in, once the restored tree is live. */
@@ -84,55 +91,13 @@ export interface LayoutResume {
 export interface HydratedLayout {
   root: SplitNode;
   resumes: LayoutResume[];
+  /** Every group the layout's tabs were in, once each. */
+  groups: GroupDef[];
 }
 
 export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): LayoutNode {
   if (root.kind === "leaf") {
-    const sessions = root.sessions.map((session) => {
-      const stored: LayoutSession = { title: session.title };
-      if (session.filePath !== undefined) {
-        stored.filePath = session.filePath;
-        return stored;
-      }
-      if (session.agentRun !== undefined) {
-        stored.agentRun = { ...session.agentRun };
-        return stored;
-      }
-      if (session.projectView !== undefined) {
-        stored.projectView = { ...session.projectView };
-        return stored;
-      }
-      if (session.orchestrationView !== undefined) {
-        stored.orchestrationView = { ...session.orchestrationView };
-        return stored;
-      }
-      if (session.diff !== undefined) {
-        stored.diff = { ...session.diff };
-        return stored;
-      }
-      if (session.gitGraph !== undefined) {
-        stored.gitGraph = { ...session.gitGraph };
-        return stored;
-      }
-      if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
-      if (session.shellArgs !== undefined) stored.shellArgs = [...session.shellArgs];
-      if (session.cwd !== undefined) stored.cwd = session.cwd;
-      // SessionTab.cwd is only where the console was *opened*. Both the agent
-      // and the shell itself say where it ended up, and the shell (OSC 7) is
-      // the more reliable of the two, so it has the last word.
-      const agent = options.agentByTab?.[session.id];
-      if (agent?.cwd) stored.cwd = agent.cwd;
-      const reported = options.cwdByTab?.[session.id];
-      if (reported) stored.cwd = reported;
-      if (agent && options.withSessions) {
-        stored.agentTool = agent.tool;
-        stored.agentSessionId = agent.agentSessionId;
-      }
-      const consoleId = options.consoleByTab?.[session.id];
-      if (consoleId) stored.consoleId = consoleId;
-      if (consoleId && session.attachHost) stored.remoteHost = { ...session.attachHost };
-      return stored;
-    });
+    const sessions = root.sessions.map((session) => snapshotSession(session, options));
     // Stored as a position, since the id it refers to isn't stored either.
     const activeIndex = Math.max(
       0,
@@ -146,6 +111,55 @@ export function snapshotLayout(root: SplitNode, options: SnapshotOptions = {}): 
     ratio: root.ratio,
     children: [snapshotLayout(root.children[0], options), snapshotLayout(root.children[1], options)],
   };
+}
+
+/** One tab, as a layout stores it — also what a tab group keeps of its tabs. */
+export function snapshotSession(session: SessionTab, options: SnapshotOptions = {}): LayoutSession {
+  const stored: LayoutSession = { title: session.title };
+  const group = session.groupId ? options.groups?.[session.groupId] : undefined;
+  if (group) stored.group = { id: group.id, name: group.name, color: group.color };
+  if (session.filePath !== undefined) {
+    stored.filePath = session.filePath;
+    return stored;
+  }
+  if (session.agentRun !== undefined) {
+    stored.agentRun = { ...session.agentRun };
+    return stored;
+  }
+  if (session.projectView !== undefined) {
+    stored.projectView = { ...session.projectView };
+    return stored;
+  }
+  if (session.orchestrationView !== undefined) {
+    stored.orchestrationView = { ...session.orchestrationView };
+    return stored;
+  }
+  if (session.diff !== undefined) {
+    stored.diff = { ...session.diff };
+    return stored;
+  }
+  if (session.gitGraph !== undefined) {
+    stored.gitGraph = { ...session.gitGraph };
+    return stored;
+  }
+  if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
+  if (session.shellArgs !== undefined) stored.shellArgs = [...session.shellArgs];
+  if (session.cwd !== undefined) stored.cwd = session.cwd;
+  // SessionTab.cwd is only where the console was *opened*. Both the agent
+  // and the shell itself say where it ended up, and the shell (OSC 7) is
+  // the more reliable of the two, so it has the last word.
+  const agent = options.agentByTab?.[session.id];
+  if (agent?.cwd) stored.cwd = agent.cwd;
+  const reported = options.cwdByTab?.[session.id];
+  if (reported) stored.cwd = reported;
+  if (agent && options.withSessions) {
+    stored.agentTool = agent.tool;
+    stored.agentSessionId = agent.agentSessionId;
+  }
+  const consoleId = options.consoleByTab?.[session.id];
+  if (consoleId) stored.consoleId = consoleId;
+  if (consoleId && session.attachHost) stored.remoteHost = { ...session.attachHost };
+  return stored;
 }
 
 /**
@@ -166,39 +180,14 @@ export function hydrateLayout(
   running: ReadonlySet<string> = new Set(),
 ): HydratedLayout {
   const resumes: LayoutResume[] = [];
-  return { root: build(node, resumes, newId, running), resumes };
+  const root = build(node, resumes, newId, running);
+  return { root, resumes, groups: layoutGroups(node) };
 }
 
 function build(node: LayoutNode, resumes: LayoutResume[], newId: (() => string) | undefined, running: ReadonlySet<string>): SplitNode {
   if (node.kind === "leaf") {
     const stored = node.sessions.length > 0 ? node.sessions : [{ title: "Shell" } as LayoutSession];
-    const sessions = stored.map((session) => {
-      if (session.filePath) return withId(makeFileSession(session.filePath), newId);
-      if (session.agentRun)
-        return withId(makeAgentRunSession(session.title, session.agentRun.agentId, session.agentRun.runId), newId);
-      if (session.projectView) return withId(makeProjectSession(session.title, session.projectView.projectId), newId);
-      if (session.orchestrationView)
-        return withId(
-          makeOrchestrationSession(
-            session.title,
-            session.orchestrationView.orchestrationId,
-            session.orchestrationView.console === true,
-          ),
-          newId,
-        );
-      if (session.diff) return withId(makeDiffSession(session.diff), newId);
-      if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
-      const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
-      if (session.consoleId && running.has(session.consoleId)) return { ...live, attach: session.consoleId };
-      // Another computer's: whether it still runs is only known by asking it,
-      // which the tab does as it opens (and falls back to a shell here).
-      if (session.consoleId && session.remoteHost)
-        return { ...live, attach: session.consoleId, attachHost: { ...session.remoteHost } };
-      if (session.agentTool && session.agentSessionId) {
-        resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });
-      }
-      return live;
-    });
+    const sessions = stored.map((session) => hydrateSession(session, resumes, newId, running));
     const active = sessions[node.activeIndex] ?? sessions[0];
     const tile = withId(makeTile(sessions[0]), newId);
     return { ...tile, sessions, activeSessionId: active.id };
@@ -210,6 +199,64 @@ function build(node: LayoutNode, resumes: LayoutResume[], newId: (() => string) 
     ratio: node.ratio,
     children: [build(node.children[0], resumes, newId, running), build(node.children[1], resumes, newId, running)],
   };
+}
+
+/** One stored tab, live again: a fresh id, in its group if it had one. A
+ * console whose conversation should be reopened is added to `resumes`. */
+export function hydrateSession(
+  session: LayoutSession,
+  resumes: LayoutResume[],
+  newId?: () => string,
+  running: ReadonlySet<string> = new Set(),
+): SessionTab {
+  const live = hydrateTab(session, resumes, newId, running);
+  return session.group ? { ...live, groupId: session.group.id } : live;
+}
+
+function hydrateTab(
+  session: LayoutSession,
+  resumes: LayoutResume[],
+  newId: (() => string) | undefined,
+  running: ReadonlySet<string>,
+): SessionTab {
+  if (session.filePath) return withId(makeFileSession(session.filePath), newId);
+  if (session.agentRun)
+    return withId(makeAgentRunSession(session.title, session.agentRun.agentId, session.agentRun.runId), newId);
+  if (session.projectView) return withId(makeProjectSession(session.title, session.projectView.projectId), newId);
+  if (session.orchestrationView)
+    return withId(
+      makeOrchestrationSession(
+        session.title,
+        session.orchestrationView.orchestrationId,
+        session.orchestrationView.console === true,
+      ),
+      newId,
+    );
+  if (session.diff) return withId(makeDiffSession(session.diff), newId);
+  if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
+  const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
+  if (session.consoleId && running.has(session.consoleId)) return { ...live, attach: session.consoleId };
+  // Another computer's: whether it still runs is only known by asking it,
+  // which the tab does as it opens (and falls back to a shell here).
+  if (session.consoleId && session.remoteHost)
+    return { ...live, attach: session.consoleId, attachHost: { ...session.remoteHost } };
+  if (session.agentTool && session.agentSessionId) {
+    resumes.push({ tabId: live.id, tool: session.agentTool, agentSessionId: session.agentSessionId });
+  }
+  return live;
+}
+
+/** The groups a stored tree's tabs were in, once each. */
+function layoutGroups(node: LayoutNode, found = new Map<string, GroupDef>()): GroupDef[] {
+  if (node.kind === "leaf") {
+    for (const session of node.sessions) {
+      if (session.group && !found.has(session.group.id)) found.set(session.group.id, { ...session.group });
+    }
+  } else {
+    layoutGroups(node.children[0], found);
+    layoutGroups(node.children[1], found);
+  }
+  return [...found.values()];
 }
 
 /** Whether this layout carries agent conversations — what the "IA" pill in the

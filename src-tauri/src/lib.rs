@@ -12,6 +12,7 @@ mod harness;
 mod i18n;
 mod keep_awake;
 mod layouts;
+mod tab_groups;
 mod marketplace;
 mod migration;
 mod mux;
@@ -348,6 +349,9 @@ pub fn run() {
             commands::layout_commands::delete_layout,
             commands::layout_commands::save_window_session,
             commands::layout_commands::window_session,
+            commands::tab_group_commands::list_tab_groups,
+            commands::tab_group_commands::save_tab_group,
+            commands::tab_group_commands::delete_tab_group,
             commands::agent_commands::agents_list,
             commands::agent_commands::agents_save,
             commands::agent_commands::agents_delete,

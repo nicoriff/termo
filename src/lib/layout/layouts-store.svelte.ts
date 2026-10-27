@@ -2,6 +2,7 @@ import { deleteLayout, listLayouts, saveLayout, type SavedLayout } from "$lib/co
 import { resumeInTab } from "$lib/ai-mode/restore-session";
 import { tabAgentSessions } from "$lib/ai-mode/tab-sessions.svelte";
 import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { hydrateLayout, snapshotLayout } from "./layout-snapshot";
 import { workspaceStore } from "./workspace-store.svelte";
 
@@ -27,6 +28,7 @@ class LayoutsStore {
       agentByTab: tabAgentSessions.byTab,
       cwdByTab: tabCwd.byTab,
       withSessions,
+      groups: tabGroupsStore.defs(),
     });
     this.layouts = await saveLayout(name, snapshot).catch(() => this.layouts);
   }
@@ -39,7 +41,9 @@ class LayoutsStore {
    * their tiles go away, and the layout's own consoles start fresh — each one
    * resuming its conversation if the layout was saved with sessions. */
   apply(layout: SavedLayout): void {
-    const { root, resumes } = hydrateLayout(layout.root);
+    const { root, resumes, groups } = hydrateLayout(layout.root);
+    // Before the tabs show: a group deleted since comes back with them.
+    tabGroupsStore.ensure(groups);
     workspaceStore.replaceRoot(root);
     for (const resume of resumes) {
       void resumeInTab(resume.tabId, resume.tool, resume.agentSessionId);

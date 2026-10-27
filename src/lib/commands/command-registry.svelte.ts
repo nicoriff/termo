@@ -20,6 +20,7 @@ import { agentsStore, type AgentsSection } from "../agents/agents-store.svelte";
 import { explorerStore } from "../explorer/explorer-store.svelte";
 import { gitStore } from "../git/git-store.svelte";
 import { harnessStore } from "../harness/harness-store.svelte";
+import { tabGroupsStore } from "../tab-groups/tab-groups-store.svelte";
 import { gitReviewStore } from "../git/git-review-store.svelte";
 import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
@@ -85,6 +86,12 @@ export function buildCommands(): Command[] {
       group: "navigation",
       label: harnessStore.open ? t("commands.hideHarness") : t("commands.showHarness"),
       run: () => harnessStore.toggle(),
+    },
+    {
+      id: "tabGroups.toggle",
+      group: "navigation",
+      label: tabGroupsStore.open ? t("commands.hideTabGroups") : t("commands.showTabGroups"),
+      run: () => tabGroupsStore.toggle(),
     },
   ];
 

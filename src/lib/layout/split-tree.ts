@@ -43,6 +43,9 @@ export interface SessionTab {
   diff?: DiffTarget;
   /** Set on a tab that shows a repository's history (see GitGraphView). */
   gitGraph?: { root: string };
+  /** The tab group it's in (see tab-groups.ts). Unlike the tab's own id, a
+   * group's is kept across restarts and layouts: nothing live is keyed by it. */
+  groupId?: string;
 }
 
 /** Two versions of a file of a repository. `from` and `to` are revisions:
@@ -160,6 +163,31 @@ export function updateLeaf(
   if (a === null) return b;
   if (b === null) return a;
   return { ...root, children: [a, b] };
+}
+
+/** Takes the tabs `picked` selects out of a tile, dropping the tile if they
+ * were all it had. Null `base` means the whole tree went with them. */
+export function detachSessions(
+  root: SplitNode,
+  tileId: string,
+  picked: (session: SessionTab) => boolean,
+): { base: SplitNode | null; moved: SessionTab[]; tileVanishes: boolean } {
+  let moved: SessionTab[] = [];
+  let tileVanishes = false;
+  const base = updateLeaf(root, tileId, (tile) => {
+    moved = tile.sessions.filter(picked);
+    if (moved.length === 0) return tile;
+    const remaining = tile.sessions.filter((session) => !picked(session));
+    if (remaining.length === 0) {
+      tileVanishes = true;
+      return null;
+    }
+    const activeSessionId = remaining.some((session) => session.id === tile.activeSessionId)
+      ? tile.activeSessionId
+      : remaining[remaining.length - 1].id;
+    return { ...tile, sessions: remaining, activeSessionId };
+  });
+  return { base, moved, tileVanishes };
 }
 
 /** Splits the target tile in two, with `newTile` after it (right/below) or,

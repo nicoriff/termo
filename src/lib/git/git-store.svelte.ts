@@ -24,6 +24,7 @@ import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelt
 import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
 import { agentsStore } from "$lib/agents/agents-store.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { harnessStore } from "$lib/harness/harness-store.svelte";
 import { countChanges } from "./git-summary";
 
@@ -243,6 +244,7 @@ class GitStore {
       agentsStore.setOpen(false);
       explorerStore.open = false;
       harnessStore.setOpen(false);
+      tabGroupsStore.open = false;
     }
     this.open = open;
   }

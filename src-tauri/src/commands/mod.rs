@@ -11,6 +11,7 @@ pub mod font_commands;
 pub mod git_commands;
 pub mod harness_commands;
 pub mod layout_commands;
+pub mod tab_group_commands;
 pub mod link_commands;
 pub mod marketplace_commands;
 pub mod notification_commands;

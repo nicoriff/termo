@@ -161,3 +161,31 @@ describe("hydrateLayout", () => {
     expect(tile.activeSessionId).toBe(tile.sessions[0].id);
   });
 });
+
+describe("tab groups in a layout", () => {
+  const grouped: SplitNode = {
+    kind: "leaf",
+    id: "tile-1",
+    sessions: [
+      { id: "a", title: "api", groupId: "g-1" },
+      { id: "b", title: "web", groupId: "g-1" },
+      { id: "c", title: "loose" },
+    ],
+    activeSessionId: "a",
+  };
+  const groups = { "g-1": { id: "g-1", name: "Backend", color: "green" as const } };
+
+  it("records each tab's group whole, and brings it back", () => {
+    const snapshot = snapshotLayout(grouped, { groups });
+    expect(firstLeaf(snapshot).sessions[0].group).toEqual({ id: "g-1", name: "Backend", color: "green" });
+    expect(firstLeaf(snapshot).sessions[2].group).toBeUndefined();
+
+    const { root, groups: found } = hydrateLayout(snapshot, ids());
+    expect(found).toEqual([{ id: "g-1", name: "Backend", color: "green" }]);
+    expect(collectTiles(root)[0].sessions.map((s) => s.groupId)).toEqual(["g-1", "g-1", undefined]);
+  });
+
+  it("leaves out a group it wasn't told about", () => {
+    expect(firstLeaf(snapshotLayout(grouped)).sessions[0].group).toBeUndefined();
+  });
+});

@@ -30,6 +30,9 @@
   import GitPanel from "$lib/git/GitPanel.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import HarnessPanel from "$lib/harness/HarnessPanel.svelte";
+  import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+  import TabGroupsPanel from "$lib/tab-groups/TabGroupsPanel.svelte";
+  import TabGroupEditor from "$lib/tab-groups/TabGroupEditor.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import AgentWizard from "$lib/agents/AgentWizard.svelte";
@@ -86,6 +89,7 @@
     let resizeDebounce: ReturnType<typeof setTimeout>;
     let unlisten: (() => void) | null = null;
     let stopSessionKeeper: (() => void) | null = null;
+    let stopTabGroups: (() => void) | null = null;
     let stopRemoteWatch: (() => void) | null = null;
     const stopSessionsDaemon = sessionsDaemon.start();
     const stopAgentSharing = startAgentSharing();
@@ -108,6 +112,8 @@
       await appConfigStore.init();
 
       await layoutsStore.load();
+      // Before anything restores tabs into groups, or it would think them gone.
+      await tabGroupsStore.load();
       // Launching straight into the chosen layout, rather than opening a
       // console and replacing it a moment later. A name that no longer exists
       // just falls through to the normal single console. Only the window Termo
@@ -127,6 +133,7 @@
       }
 
       stopSessionKeeper = sessionKeeper.start();
+      stopTabGroups = tabGroupsStore.start();
       // Someone asking to connect from the tailnet is told about once: by
       // the first window.
       stopRemoteWatch = remoteWatch.start(isFirstWindow());
@@ -158,6 +165,7 @@
       clearTimeout(resizeDebounce);
       unlisten?.();
       stopSessionKeeper?.();
+      stopTabGroups?.();
       stopRemoteWatch?.();
       stopSessionsDaemon();
       stopAgentSharing();
@@ -306,6 +314,13 @@
       if (!harnessStore.open) uiState.refocusTerminals();
       return;
     }
+    if (!workspaceStore.overviewOpen && eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleTabGroups"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      tabGroupsStore.toggle();
+      if (!tabGroupsStore.open) uiState.refocusTerminals();
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, section] of [
         ["toggleAgents", "local"],
@@ -408,6 +423,8 @@
       <GitPanel />
     {:else if harnessStore.open}
       <HarnessPanel />
+    {:else if tabGroupsStore.open}
+      <TabGroupsPanel />
     {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
@@ -423,6 +440,9 @@
     {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />
+    {/if}
+    {#if tabGroupsStore.editing}
+      <TabGroupEditor />
     {/if}
     {#if uiState.commandPaletteOpen}
       <CommandPalette />

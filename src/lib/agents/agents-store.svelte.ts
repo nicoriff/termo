@@ -34,6 +34,7 @@ import {
 } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { harnessStore } from "$lib/harness/harness-store.svelte";
 
@@ -220,6 +221,7 @@ class AgentsStore {
       explorerStore.open = false;
       gitStore.open = false;
       harnessStore.setOpen(false);
+      tabGroupsStore.open = false;
     }
     this.open = open;
     if (this.timer) clearInterval(this.timer);

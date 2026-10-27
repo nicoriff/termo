@@ -5,6 +5,7 @@ import { agentsHostState, runningAgents } from "$lib/core/agents-client";
 import { uiState } from "$lib/core/ui-state.svelte";
 import { closeWindow, quitApp } from "$lib/core/window-client";
 import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
+import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { ptyIdsByTab } from "$lib/terminal/pty-registry";
 
 /** What closing Termo would cut short: consoles with a command running under
@@ -67,8 +68,9 @@ function anything(work: Awaited<ReturnType<typeof runningWork>>): boolean {
  */
 export async function requestQuit(): Promise<void> {
   // The consoles that outlive Termo come back as they are now (see
-  // session-keeper), not as they were a moment ago.
+  // session-keeper), not as they were a moment ago. So do the tab groups'.
   await sessionKeeper.save();
+  await tabGroupsStore.flush();
   const work = await runningWork();
   if (!anything(work)) {
     void quitApp();
@@ -82,6 +84,7 @@ export async function requestQuit(): Promise<void> {
  * (terminal_windows::on_destroyed). */
 export async function requestCloseWindow(): Promise<void> {
   await sessionKeeper.save();
+  await tabGroupsStore.flush();
   const work = await runningWork(true);
   if (!anything(work)) {
     void closeWindow();

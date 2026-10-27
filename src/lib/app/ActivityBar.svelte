@@ -8,6 +8,7 @@
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
   import { gitStore } from "$lib/git/git-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
+  import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -21,6 +22,7 @@
   const explorerHint = $derived(`${t("explorer.toggle")} (${keys("toggleExplorer")})`);
   const gitHint = $derived(`${t("git.title")} (${keys("toggleGit")})`);
   const harnessHint = $derived(`${t("harness.title")} (${keys("toggleHarness")})`);
+  const tabGroupsHint = $derived(`${t("tabGroups.title")} (${keys("toggleTabGroups")})`);
   /** Files with anything to commit, in the repository of the tab in focus. */
   const changed = $derived(gitStore.counts.total);
 </script>
@@ -85,6 +87,23 @@
     </svg>
     {#if harnessStore.status === "pending" || harnessStore.status === "draft"}
       <span class="activity-badge pending" title={t("harness.badge")}>!</span>
+    {/if}
+  </button>
+  <button
+    class="activity-item"
+    class:active={tabGroupsStore.open}
+    title={tabGroupsHint}
+    aria-label={tabGroupsHint}
+    aria-pressed={tabGroupsStore.open}
+    onclick={() => tabGroupsStore.toggle()}
+  >
+    <!-- A folder tab over a card: tabs kept together. -->
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
+      <path d="M3 10.5h18M7 7V4.5h6V7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+    </svg>
+    {#if tabGroupsStore.groups.length > 0}
+      <span class="activity-badge">{tabGroupsStore.groups.length}</span>
     {/if}
   </button>
   {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}

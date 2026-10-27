@@ -15,6 +15,7 @@ import {
   makeGitGraphSession,
   computeLayout,
   countSessions,
+  detachSessions,
   makeSession,
   makeTile,
   splitLeaf,
@@ -29,6 +30,7 @@ import {
   type TileNode,
 } from "./split-tree";
 import { findTileInDirection, type NavDirection } from "./spatial-nav";
+import { gatherGroups, insertGroup, insertTab } from "$lib/tab-groups/tab-groups";
 
 class WorkspaceStore {
   // Starts empty and is populated once by initRoot() after the persisted
@@ -68,12 +70,18 @@ class WorkspaceStore {
     title = "Shell",
     cwd?: string,
     agent?: AgentLaunch,
+    groupId?: string,
   ): string | null {
     if (!this.root) return null;
-    const session = { ...makeSession(title, shellPath, shellArgs, cwd), ...(agent ? { agent } : {}) };
+    const session: SessionTab = {
+      ...makeSession(title, shellPath, shellArgs, cwd),
+      ...(agent ? { agent } : {}),
+      ...(groupId ? { groupId } : {}),
+    };
+    // Into a group, it lands at the group's end rather than the strip's.
     const updated = updateLeaf(this.root, tileId, (tile) => ({
       ...tile,
-      sessions: [...tile.sessions, session],
+      sessions: gatherGroups([...tile.sessions, session]),
       activeSessionId: session.id,
     }));
     if (!updated) return null;
@@ -387,11 +395,89 @@ class WorkspaceStore {
     this.setActiveSession(tile.id, tile.sessions[nextIndex].id);
   }
 
-  splitTile(tileId: string, direction: SplitDirection, shell: ShellLaunch): void {
+  /** Splits a tile with a new console in the new half: right/below it, or
+   * with `newFirst` left/above. */
+  splitTile(
+    tileId: string,
+    direction: SplitDirection,
+    shell: ShellLaunch,
+    options: { newFirst?: boolean; cwd?: string; groupId?: string } = {},
+  ): void {
     if (!this.root) return;
-    const newTile = makeTile(makeSession(shell.title, shell.path, shell.args));
-    this.root = splitLeaf(this.root, tileId, direction, newTile, crypto.randomUUID());
+    const session: SessionTab = {
+      ...makeSession(shell.title, shell.path, shell.args, options.cwd),
+      ...(options.groupId ? { groupId: options.groupId } : {}),
+    };
+    const newTile = makeTile(session);
+    this.root = splitLeaf(this.root, tileId, direction, newTile, crypto.randomUUID(), options.newFirst);
     this.focusedTileId = newTile.id;
+  }
+
+  /** Puts a tab in a group, or with null takes it out of the one it's in.
+   * Joining, it moves to the end of the group's tabs in its tile; leaving,
+   * to just past them — as Chrome does — so the group stays in one piece. */
+  setSessionGroup(sessionId: string, groupId: string | null): void {
+    if (!this.root) return;
+    const loc = collectSessions(this.root).find((candidate) => candidate.session.id === sessionId);
+    if (!loc || (loc.session.groupId ?? null) === groupId) return;
+    const target = groupId ?? loc.session.groupId!;
+    const updated = updateLeaf(this.root, loc.tileId, (tile) => {
+      const moved: SessionTab = { ...loc.session };
+      if (groupId) moved.groupId = groupId;
+      else delete moved.groupId;
+      const without = tile.sessions.filter((session) => session.id !== sessionId);
+      const lastOfGroup = without.map((session) => session.groupId).lastIndexOf(target);
+      const sessions =
+        lastOfGroup === -1
+          ? tile.sessions.map((session) => (session.id === sessionId ? moved : session))
+          : [...without.slice(0, lastOfGroup + 1), moved, ...without.slice(lastOfGroup + 1)];
+      return { ...tile, sessions: gatherGroups(sessions) };
+    });
+    if (updated) this.root = updated;
+  }
+
+  /** Opens tabs that were already built (a reopened tab group) at the end of
+   * a tile, with `activeId` in front. */
+  addSessions(tileId: string, sessions: SessionTab[], activeId = sessions[0]?.id): void {
+    if (!this.root || sessions.length === 0 || !activeId) return;
+    const updated = updateLeaf(this.root, tileId, (tile) => ({
+      ...tile,
+      sessions: gatherGroups([...tile.sessions, ...sessions]),
+      activeSessionId: activeId,
+    }));
+    if (!updated) return;
+    this.root = updated;
+    this.focusedTileId = tileId;
+  }
+
+  /** Takes every tab of a group out of it, wherever they are. */
+  clearGroup(groupId: string): void {
+    if (!this.root) return;
+    let root = this.root;
+    for (const tile of collectTiles(root)) {
+      if (!tile.sessions.some((session) => session.groupId === groupId)) continue;
+      root =
+        updateLeaf(root, tile.id, (leaf) => ({
+          ...leaf,
+          sessions: leaf.sessions.map((session) => {
+            if (session.groupId !== groupId) return session;
+            const { groupId: _group, ...rest } = session;
+            return rest;
+          }),
+        })) ?? root;
+    }
+    this.root = root;
+  }
+
+  /** Closes every tab of a group. When they're all the window has, a console
+   * in the default shell opens first, so the window isn't left empty. */
+  closeGroupTabs(groupId: string): void {
+    if (!this.root) return;
+    const all = collectSessions(this.root);
+    if (all.every((loc) => loc.session.groupId === groupId)) this.addTab(all[0].tileId);
+    for (const loc of all) {
+      if (loc.session.groupId === groupId) this.closeSession(loc.session.id);
+    }
   }
 
   focusTile(tileId: string): void {
@@ -463,7 +549,13 @@ class WorkspaceStore {
    * inserts just ahead of that session in the destination tile; omitted (or
    * not found) it's appended at the end.
    */
-  moveSession(fromTileId: string, toTileId: string, sessionId: string, beforeSessionId?: string): void {
+  moveSession(
+    fromTileId: string,
+    toTileId: string,
+    sessionId: string,
+    beforeSessionId?: string,
+    onStrip = false,
+  ): void {
     if (!this.root) return;
 
     if (fromTileId === toTileId) {
@@ -471,12 +563,7 @@ class WorkspaceStore {
         const moved = tile.sessions.find((s) => s.id === sessionId);
         if (!moved) return tile;
         const without = tile.sessions.filter((s) => s.id !== sessionId);
-        const insertAt = beforeSessionId ? without.findIndex((s) => s.id === beforeSessionId) : -1;
-        const sessions =
-          insertAt === -1
-            ? [...without, moved]
-            : [...without.slice(0, insertAt), moved, ...without.slice(insertAt)];
-        return { ...tile, sessions, activeSessionId: sessionId };
+        return { ...tile, sessions: insertTab(without, moved, beforeSessionId, onStrip), activeSessionId: sessionId };
       });
       if (updated) this.root = updated;
       return;
@@ -485,14 +572,11 @@ class WorkspaceStore {
     const detached = this.detachSession(fromTileId, sessionId);
     if (!detached) return;
     const { base, moved } = detached;
-    const afterAdd = updateLeaf(base, toTileId, (tile) => {
-      const insertAt = beforeSessionId ? tile.sessions.findIndex((s) => s.id === beforeSessionId) : -1;
-      const sessions =
-        insertAt === -1
-          ? [...tile.sessions, moved!]
-          : [...tile.sessions.slice(0, insertAt), moved!, ...tile.sessions.slice(insertAt)];
-      return { ...tile, sessions, activeSessionId: moved!.id };
-    });
+    const afterAdd = updateLeaf(base, toTileId, (tile) => ({
+      ...tile,
+      sessions: insertTab(tile.sessions, moved, beforeSessionId, onStrip),
+      activeSessionId: moved.id,
+    }));
     if (afterAdd) {
       this.root = afterAdd;
       this.focusedTileId = toTileId;
@@ -515,6 +599,60 @@ class WorkspaceStore {
     const newTile = makeTile(detached.moved);
     const direction: SplitDirection = side === "left" || side === "right" ? "row" : "col";
     this.root = splitLeaf(detached.base, targetTileId, direction, newTile, crypto.randomUUID(), side === "left" || side === "top");
+    this.focusedTileId = newTile.id;
+  }
+
+  /**
+   * Moves a group's tabs in one tile, all together and still running, to
+   * another tile — or along the same strip. `beforeSessionId` puts them just
+   * ahead of that tab (past the group it's in, if it's in one); omitted,
+   * they go at the end.
+   */
+  moveGroup(fromTileId: string, toTileId: string, groupId: string, beforeSessionId?: string): void {
+    if (!this.root) return;
+    const source = collectTiles(this.root).find((tile) => tile.id === fromTileId);
+    if (!source) return;
+    const inGroup = (session: SessionTab) => session.groupId === groupId;
+    if (fromTileId === toTileId) {
+      const updated = updateLeaf(this.root, toTileId, (tile) => {
+        const moved = tile.sessions.filter(inGroup);
+        const without = tile.sessions.filter((session) => !inGroup(session));
+        return { ...tile, sessions: insertGroup(without, moved, beforeSessionId) };
+      });
+      if (updated) this.root = updated;
+      return;
+    }
+    const { base, moved, tileVanishes } = detachSessions(this.root, fromTileId, inGroup);
+    if (!base || moved.length === 0) return;
+    if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
+    const active = moved.find((session) => session.id === source.activeSessionId) ?? moved[0];
+    const updated = updateLeaf(base, toTileId, (tile) => ({
+      ...tile,
+      sessions: insertGroup(tile.sessions, moved, beforeSessionId),
+      activeSessionId: active.id,
+    }));
+    if (updated) {
+      this.root = updated;
+      this.focusedTileId = toTileId;
+    }
+  }
+
+  /** Drops a group's tabs on the side of a tile: it splits, and they are the
+   * whole of the new half. Not when they're all their own tile has and it's
+   * that tile being split — there'd be nothing left beside them. */
+  splitWithGroup(fromTileId: string, targetTileId: string, groupId: string, side: Exclude<DropZone, "center">): void {
+    if (!this.root) return;
+    const source = collectTiles(this.root).find((tile) => tile.id === fromTileId);
+    if (!source) return;
+    const inGroup = (session: SessionTab) => session.groupId === groupId;
+    if (fromTileId === targetTileId && source.sessions.every(inGroup)) return;
+    const { base, moved, tileVanishes } = detachSessions(this.root, fromTileId, inGroup);
+    if (!base || moved.length === 0) return;
+    if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
+    const active = moved.find((session) => session.id === source.activeSessionId) ?? moved[0];
+    const newTile = { ...makeTile(moved[0]), sessions: moved, activeSessionId: active.id };
+    const direction: SplitDirection = side === "left" || side === "right" ? "row" : "col";
+    this.root = splitLeaf(base, targetTileId, direction, newTile, crypto.randomUUID(), side === "left" || side === "top");
     this.focusedTileId = newTile.id;
   }
 

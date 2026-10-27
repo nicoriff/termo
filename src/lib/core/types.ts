@@ -40,6 +40,8 @@ export interface ShortcutsConfig {
   toggle_git_other: string | null;
   toggle_harness_mac: string | null;
   toggle_harness_other: string | null;
+  toggle_tab_groups_mac: string | null;
+  toggle_tab_groups_other: string | null;
   toggle_agents_mac: string | null;
   toggle_agents_other: string | null;
   toggle_orchestration_mac: string | null;
