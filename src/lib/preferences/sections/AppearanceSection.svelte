@@ -4,8 +4,6 @@
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { isLinux } from "$lib/core/platform";
   import { t } from "$lib/i18n/i18n.svelte";
-  import type { TabSaverMode } from "$lib/core/types";
-  import SettingDropdown from "../SettingDropdown.svelte";
 
   function onOpacityInput(event: Event) {
     themeStore.setBackgroundOpacity(Number((event.currentTarget as HTMLInputElement).value));
@@ -155,38 +153,6 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.appearance.tabsFillWidthHint")}</p>
-  <div class="setting-row">
-    <span>{t("preferences.appearance.tabSaver")}</span>
-    <SettingDropdown
-      options={[
-        { value: "off", label: t("preferences.appearance.tabSaverOff") },
-        { value: "sleep", label: t("preferences.appearance.tabSaverSleep") },
-        { value: "discard", label: t("preferences.appearance.tabSaverDiscard") },
-      ]}
-      value={appConfigStore.tabSaver}
-      onpick={(value) => appConfigStore.setTabSaver(value as TabSaverMode)}
-    />
-  </div>
-  {#if appConfigStore.tabSaver !== "off"}
-    <label class="setting-row">
-      <span>{t("preferences.appearance.tabSaverMinutes")}</span>
-      <input
-        class="minutes-input"
-        type="number"
-        min="1"
-        max="240"
-        value={appConfigStore.tabSaverMinutes}
-        onchange={(e) => appConfigStore.setTabSaver(appConfigStore.tabSaver, Number(e.currentTarget.value) || 10)}
-      />
-    </label>
-  {/if}
-  <p class="setting-hint">
-    {t(
-      appConfigStore.tabSaver === "sleep" && !appConfigStore.persistentSessions
-        ? "preferences.appearance.tabSaverNeedsKeep"
-        : "preferences.appearance.tabSaverHint",
-    )}
-  </p>
 </section>
 
 <style>
@@ -364,19 +330,6 @@
   .setting-value {
     min-width: 36px;
     text-align: center;
-  }
-
-  /* The tab saver's minutes: a short number box at the row's end. */
-  .minutes-input {
-    width: 64px;
-    margin-top: 8px;
-    padding: 4px 6px;
-    border: 1px solid var(--tabbar-border, #3a3a3a);
-    border-radius: 4px;
-    background: var(--tabbar-bg, #181818);
-    color: inherit;
-    font: inherit;
-    text-align: right;
   }
 
   .opacity-slider {

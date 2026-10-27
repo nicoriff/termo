@@ -3,7 +3,7 @@
   import { listShells } from "$lib/core/pty-client";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
-  import type { ShellInfo } from "$lib/core/types";
+  import type { ShellInfo, TabSaverMode } from "$lib/core/types";
   import { t } from "$lib/i18n/i18n.svelte";
   import { sessionsDaemon } from "$lib/core/sessions-daemon.svelte";
   import SettingDropdown from "../SettingDropdown.svelte";
@@ -81,6 +81,39 @@
       {/if}
     </div>
   {/if}
+  <!-- Next to keeping consoles running: putting tabs to sleep relies on it. -->
+  <div class="row saver-row">
+    <span>{t("preferences.console.tabSaver")}</span>
+    <SettingDropdown
+      options={[
+        { value: "off", label: t("preferences.console.tabSaverOff") },
+        { value: "sleep", label: t("preferences.console.tabSaverSleep") },
+        { value: "discard", label: t("preferences.console.tabSaverDiscard") },
+      ]}
+      value={appConfigStore.tabSaver}
+      onpick={(value) => appConfigStore.setTabSaver(value as TabSaverMode)}
+    />
+  </div>
+  {#if appConfigStore.tabSaver !== "off"}
+    <label class="row saver-row">
+      <span>{t("preferences.console.tabSaverMinutes")}</span>
+      <input
+        class="minutes-input"
+        type="number"
+        min="1"
+        max="240"
+        value={appConfigStore.tabSaverMinutes}
+        onchange={(e) => appConfigStore.setTabSaver(appConfigStore.tabSaver, Number(e.currentTarget.value) || 10)}
+      />
+    </label>
+  {/if}
+  <p class="setting-hint">
+    {t(
+      appConfigStore.tabSaver === "sleep" && !appConfigStore.persistentSessions
+        ? "preferences.console.tabSaverNeedsKeep"
+        : "preferences.console.tabSaverHint",
+    )}
+  </p>
 </section>
 
 <style>
@@ -123,6 +156,26 @@
     margin: 6px 0 0;
     font-size: 10px;
     opacity: 0.6;
+  }
+
+  .saver-row {
+    margin-top: 14px;
+  }
+
+  .saver-row + .saver-row {
+    margin-top: 8px;
+  }
+
+  /* The tab saver's minutes: a short number box at the row's end. */
+  .minutes-input {
+    width: 64px;
+    padding: 4px 6px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 4px;
+    background: var(--tabbar-bg, #181818);
+    color: inherit;
+    font: inherit;
+    text-align: right;
   }
 
   .daemon-down {
