@@ -11,7 +11,19 @@
     routeWindowOpen();
     startI18nSync();
   });
+
+  /** The web view's own menu (Inspect, Print, Back…) has no place in an
+   * app: right-clicking anywhere without a menu of Termo's does nothing.
+   * Text fields keep it, for its Cut, Copy and Paste. */
+  function blockNativeMenu(event: MouseEvent) {
+    if (event.defaultPrevented) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]')) return;
+    event.preventDefault();
+  }
 </script>
+
+<svelte:window oncontextmenu={blockNativeMenu} />
 
 {#if isPreferences}
   <Preferences />
