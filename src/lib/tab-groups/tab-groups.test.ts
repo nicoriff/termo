@@ -102,3 +102,11 @@ describe("insertGroup", () => {
     expect(insertGroup(strip, moved, undefined).map((s) => s.id)).toEqual(["a", "b", "c", "x", "y"]);
   });
 });
+
+describe("insertTab joining the group it was dropped on", () => {
+  it("joins even at the group's edge, where the strip alone wouldn't say", () => {
+    const strip = [tab("a", "g"), tab("b", "g"), tab("c")];
+    const placed = insertTab(strip, tab("x"), "c", true, "g");
+    expect(placed.map((s) => `${s.id}${s.groupId ? ":" + s.groupId : ""}`)).toEqual(["a:g", "b:g", "x:g", "c"]);
+  });
+});

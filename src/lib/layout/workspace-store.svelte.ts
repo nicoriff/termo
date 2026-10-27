@@ -555,6 +555,7 @@ class WorkspaceStore {
     sessionId: string,
     beforeSessionId?: string,
     onStrip = false,
+    joinGroupId?: string,
   ): void {
     if (!this.root) return;
 
@@ -563,7 +564,8 @@ class WorkspaceStore {
         const moved = tile.sessions.find((s) => s.id === sessionId);
         if (!moved) return tile;
         const without = tile.sessions.filter((s) => s.id !== sessionId);
-        return { ...tile, sessions: insertTab(without, moved, beforeSessionId, onStrip), activeSessionId: sessionId };
+        const sessions = insertTab(without, moved, beforeSessionId, onStrip, joinGroupId);
+        return { ...tile, sessions, activeSessionId: sessionId };
       });
       if (updated) this.root = updated;
       return;
@@ -574,7 +576,7 @@ class WorkspaceStore {
     const { base, moved } = detached;
     const afterAdd = updateLeaf(base, toTileId, (tile) => ({
       ...tile,
-      sessions: insertTab(tile.sessions, moved, beforeSessionId, onStrip),
+      sessions: insertTab(tile.sessions, moved, beforeSessionId, onStrip, joinGroupId),
       activeSessionId: moved.id,
     }));
     if (afterAdd) {

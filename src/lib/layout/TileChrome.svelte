@@ -334,6 +334,37 @@
       document
         .querySelectorAll(".drag-insert-before, .drag-insert-after")
         .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
+      document.querySelectorAll(".join-target").forEach((el) => el.classList.remove("join-target"));
+    }
+
+    /** The group a dragged tab would join if let go here: the one whose tab
+     * is under the pointer, as Chrome does. Not for a group being dragged. */
+    function joinTarget(e: PointerEvent): { groupId: string; tab: HTMLElement } | null {
+      if (!sessionId) return null;
+      const over = currentDropTab(e);
+      const group = over?.classList.contains("tile-tab") ? over.dataset.groupId : undefined;
+      return over && group ? { groupId: group, tab: over } : null;
+    }
+
+    /** Shows the join coming: the dragged tab takes the group's color, and
+     * the group's chip and tabs in that strip light up. Off a group, on a
+     * strip, it shows ungrouped — where it'd land outside any. */
+    function showJoin(e: PointerEvent, drop: Drop) {
+      const join = joinTarget(e);
+      if (join) {
+        const color = join.tab.style.getPropertyValue("--group-color");
+        ghost?.style.setProperty("--group-color", color);
+        ghost?.classList.add("in-group");
+        join.tab
+          .closest(".tile-tabstrip")
+          ?.querySelectorAll<HTMLElement>(`[data-group-id="${join.groupId}"]`)
+          .forEach((el) => el.classList.add("join-target"));
+      } else if (drop.kind === "strip") {
+        ghost?.classList.remove("in-group");
+      } else if (sourceTab.classList.contains("in-group")) {
+        ghost?.style.setProperty("--group-color", sourceTab.style.getPropertyValue("--group-color"));
+        ghost?.classList.add("in-group");
+      }
     }
 
     /** What letting go right here would do — the preview and the drop both
@@ -425,7 +456,9 @@
       if (!dragging) return;
       moveGhost(e);
       clearHighlight();
-      showPreview(dropAt(e));
+      const drop = dropAt(e);
+      showPreview(drop);
+      showJoin(e, drop);
       const insertion = hoveredInsertion(e);
       insertion?.tab.classList.add(insertion.before ? "drag-insert-before" : "drag-insert-after");
     }
@@ -458,7 +491,14 @@
           }
           if (groupId) workspaceStore.moveGroup(sourceTileId, drop.tileId, groupId, beforeSessionId);
           else if (sessionId)
-            workspaceStore.moveSession(sourceTileId, drop.tileId, sessionId, beforeSessionId, drop.kind === "strip");
+            workspaceStore.moveSession(
+              sourceTileId,
+              drop.tileId,
+              sessionId,
+              beforeSessionId,
+              drop.kind === "strip",
+              joinTarget(e)?.groupId,
+            );
         }
       } else if (groupId) {
         tabGroupsStore.toggleCollapsed(groupId);
@@ -1290,7 +1330,8 @@
   /* The copy of the tab that follows the pointer (see createGhost). Moved
      with transform, so its left/top stay at the origin. */
   :global(.tile-tab.tab-drag-ghost) {
-    position: fixed;
+    /* Over .in-group's relative, which is more specific. */
+    position: fixed !important;
     left: 0;
     top: 0;
     z-index: 1000;
@@ -1434,9 +1475,8 @@
     gap: 5px;
     flex-shrink: 0;
     max-width: 140px;
-    margin: 5px 2px 5px 6px;
-    padding: 0 8px;
-    border-radius: 6px;
+    padding: 0 10px;
+    border-right: 1px solid var(--tabbar-border, #2a2a2a);
     background: var(--group-color);
     color: #101114;
     font-size: 11px;
@@ -1453,16 +1493,13 @@
 
   .tile-group-chip:focus-visible {
     outline: 2px solid var(--tabbar-active-fg, #f0f0f0);
-    outline-offset: 1px;
+    outline-offset: -2px;
   }
 
-  /* No name: just a dot of its color, as Chrome shows it. */
+  /* No name: just a narrow band of its color. */
   .tile-group-chip.unnamed:not(.collapsed) {
-    width: 12px;
+    width: 10px;
     padding: 0;
-    margin-top: 8px;
-    margin-bottom: 8px;
-    border-radius: 50%;
   }
 
   .tile-group-chip-name {
@@ -1499,6 +1536,22 @@
 
   :global(.tile-group-chip.drag-insert-before) {
     box-shadow: -3px 0 0 var(--pane-active-border, #3a6df0);
+  }
+
+  /* A dragged tab is over this group: letting go adds it (see showJoin).
+     The chip lights up and the group's tabs take a tint of its color. */
+  :global(.tile-group-chip.join-target) {
+    filter: brightness(1.15);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+  }
+
+  :global(.tile-tab.join-target) {
+    background: color-mix(in srgb, var(--group-color) 18%, transparent);
+  }
+
+  /* The dragged tab, taking the color of the group it's about to join. */
+  :global(.tile-tab.tab-drag-ghost.in-group) {
+    background: color-mix(in srgb, var(--group-color) 22%, var(--tabbar-active-bg, #1e1e1e));
   }
 
   /* A grouped tab carries its group's color along its bottom edge. */

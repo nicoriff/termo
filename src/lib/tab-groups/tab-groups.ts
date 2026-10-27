@@ -99,11 +99,16 @@ export function insertTab<T extends Placed>(
   moved: T,
   beforeSessionId: string | undefined,
   onStrip: boolean,
+  /** The group whose tab it was dropped on, which it joins wherever it
+   * lands beside it — what the drag showed it would do. */
+  joinGroupId?: string,
 ): T[] {
   const found = beforeSessionId ? sessions.findIndex((s) => s.id === beforeSessionId) : -1;
   const insertAt = found === -1 ? sessions.length : found;
   let tab = moved;
-  if (onStrip) {
+  if (joinGroupId) {
+    tab = { ...moved, groupId: joinGroupId };
+  } else if (onStrip) {
     const joined = joinedGroupAt(sessions, insertAt);
     const own = moved.groupId;
     const besideOwn = !!own && (sessions[insertAt - 1]?.groupId === own || sessions[insertAt]?.groupId === own);
