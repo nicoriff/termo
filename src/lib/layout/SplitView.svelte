@@ -111,6 +111,10 @@
           <OrchestrationConsole orchestrationId={loc.session.orchestrationView.orchestrationId} />
         {:else if loc.session.orchestrationView}
           <OrchestrationView orchestrationId={loc.session.orchestrationView.orchestrationId} />
+        {:else if loc.session.dormant}
+          <!-- Put away to save memory (see tab-saver): no console mounted.
+               It wakes as soon as it's the tab in view. -->
+          <div class="dormant-slot"></div>
         {:else}
           <Terminal
             sessionId={loc.session.id}
@@ -174,6 +178,12 @@
       top 140ms ease,
       width 140ms ease,
       height 140ms ease;
+  }
+
+  .dormant-slot {
+    width: 100%;
+    height: 100%;
+    background: var(--terminal-bg, transparent);
   }
 
   .session-slot.hidden {

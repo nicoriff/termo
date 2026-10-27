@@ -38,6 +38,8 @@ export interface GroupDef {
 export interface TabGroup extends GroupDef {
   /** Only its own tabs are folded behind the chip. */
   collapsed: boolean;
+  /** When it was collapsed (ms), for the tab saver (see tab-saver.svelte.ts). */
+  collapsedAt?: number;
   /** Its tabs as they last were, which is what reopening it opens. */
   tabs: LayoutSession[];
 }
@@ -104,6 +106,16 @@ export interface TabNews {
 export function groupAlert(tabs: readonly TabNews[]): GroupAlert | null {
   const pending = (tab: TabNews) => tab.status === "awaiting" || !!tab.unseen;
   return ALERTS.find((alert) => tabs.some((tab) => tab.status === alert && pending(tab))) ?? null;
+}
+
+/** Whether a group's tabs are due to be put to rest: it has been collapsed
+ * for at least `minutes`. An expanded group never is. */
+export function restIsDue(
+  group: Pick<TabGroup, "collapsed" | "collapsedAt">,
+  now: number,
+  minutes: number,
+): boolean {
+  return group.collapsed && group.collapsedAt !== undefined && now - group.collapsedAt >= minutes * 60_000;
 }
 
 type Placed = Pick<SessionTab, "id" | "groupId">;

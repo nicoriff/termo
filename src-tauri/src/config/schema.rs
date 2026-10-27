@@ -244,6 +244,13 @@ pub struct AppConfig {
     pub background_agents_at_login: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
+    /// What becomes of the tabs of a tab group collapsed for a while (see
+    /// src/lib/tab-groups/tab-saver.svelte.ts): "off", "sleep" (their view
+    /// goes, their consoles keep running in the sessions daemon) or "discard"
+    /// (an idle console ends, and starts again in its folder when opened).
+    pub tab_saver: String,
+    /// How long a group stays collapsed before that, in minutes.
+    pub tab_saver_minutes: u32,
     /// Everything git: the panel, the status bar's item, the diff and graph
     /// tabs (see src-tauri/src/git).
     pub git_enabled: bool,
@@ -371,6 +378,8 @@ impl Default for AppConfig {
             background_agents: false,
             background_agents_at_login: false,
             tabs_fill_width: false,
+            tab_saver: "off".into(),
+            tab_saver_minutes: 10,
             git_enabled: true,
             git_in_activity_bar: true,
             git_status_bar: true,

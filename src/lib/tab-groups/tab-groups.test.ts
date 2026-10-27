@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gatherGroups, groupAlert, insertGroup, insertTab, joinedGroupAt, nextColor, stripItems } from "./tab-groups";
+import { gatherGroups, groupAlert, insertGroup, insertTab, joinedGroupAt, nextColor, restIsDue, stripItems } from "./tab-groups";
 
 const tab = (id: string, groupId?: string) => (groupId ? { id, groupId } : { id });
 
@@ -132,5 +132,19 @@ describe("groupAlert", () => {
   it("is nothing while they only run, or have no agent", () => {
     expect(groupAlert([news("running", true), news(null), {}])).toBeNull();
     expect(groupAlert([])).toBeNull();
+  });
+});
+
+describe("restIsDue", () => {
+  const minute = 60_000;
+
+  it("is due once collapsed for the minutes set", () => {
+    expect(restIsDue({ collapsed: true, collapsedAt: 0 }, 10 * minute, 10)).toBe(true);
+    expect(restIsDue({ collapsed: true, collapsedAt: 0 }, 9 * minute, 10)).toBe(false);
+  });
+
+  it("never for an expanded group", () => {
+    expect(restIsDue({ collapsed: false, collapsedAt: 0 }, 60 * minute, 10)).toBe(false);
+    expect(restIsDue({ collapsed: false }, 60 * minute, 10)).toBe(false);
   });
 });

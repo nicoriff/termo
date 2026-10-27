@@ -156,7 +156,15 @@ export function snapshotSession(session: SessionTab, options: SnapshotOptions = 
     stored.agentTool = agent.tool;
     stored.agentSessionId = agent.agentSessionId;
   }
-  const consoleId = options.consoleByTab?.[session.id];
+  // Put away to save memory (see tab-saver): a discarded console still has a
+  // conversation to reopen, and a sleeping one still runs where it's kept.
+  const resume = session.dormant?.kind === "discarded" ? session.dormant.resume : undefined;
+  if (resume && options.withSessions) {
+    stored.agentTool = resume.tool;
+    stored.agentSessionId = resume.agentSessionId;
+  }
+  const asleepIn = session.dormant?.kind === "asleep" ? session.attach : undefined;
+  const consoleId = options.consoleByTab ? (options.consoleByTab[session.id] ?? asleepIn) : undefined;
   if (consoleId) stored.consoleId = consoleId;
   if (consoleId && session.attachHost) stored.remoteHost = { ...session.attachHost };
   return stored;

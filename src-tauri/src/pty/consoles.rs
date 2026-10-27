@@ -275,6 +275,20 @@ impl Consoles {
         }
     }
 
+    /// Stops showing a console without ending it: the daemon (this
+    /// computer's or another's) keeps it running, and its tab attaches to it
+    /// again later — what putting a tab to sleep does. False for a console
+    /// only this process runs: letting go of it would end it.
+    pub fn release(&self, id: Uuid) -> bool {
+        match self.mux_for(id) {
+            Some(mux) => {
+                mux.detach(id);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Ends a console the daemon runs, shown here or not (the background
     /// sessions menu).
     pub fn kill_kept(&self, id: Uuid) -> anyhow::Result<()> {

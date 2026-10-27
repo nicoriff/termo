@@ -23,6 +23,7 @@ import {
   updateRatio,
   type AgentLaunch,
   type DiffTarget,
+  type DormantTab,
   type DropZone,
   type SessionTab,
   type SplitDirection,
@@ -31,6 +32,7 @@ import {
 } from "./split-tree";
 import { findTileInDirection, type NavDirection } from "./spatial-nav";
 import { gatherGroups, insertGroup, insertTab } from "$lib/tab-groups/tab-groups";
+import { killKeptConsole } from "$lib/core/pty-client";
 
 class WorkspaceStore {
   // Starts empty and is populated once by initRoot() after the persisted
@@ -54,6 +56,7 @@ class WorkspaceStore {
    * console currently open goes away with its tile (each <Terminal> unmounts
    * and kills its PTY), and the incoming tiles spawn their own. */
   replaceRoot(root: SplitNode): void {
+    if (this.root) endAsleep(collectSessions(this.root).map((loc) => loc.session));
     this.root = root;
     this.focusedTileId = collectTiles(root)[0]?.id ?? null;
     this.zoomedTileId = null;
@@ -334,9 +337,11 @@ class WorkspaceStore {
       return { ...tile, sessions: remaining, activeSessionId };
     });
     if (updated) {
+      const closing = collectSessions(this.root).find((loc) => loc.session.id === sessionId)?.session;
       this.root = updated;
       if (tileVanishes && this.zoomedTileId === tileId) this.zoomedTileId = null;
       aiStatusStore.remove(sessionId);
+      if (closing) endAsleep([closing]);
     }
   }
 
@@ -448,6 +453,26 @@ class WorkspaceStore {
     if (!updated) return;
     this.root = updated;
     this.focusedTileId = tileId;
+  }
+
+  /** Puts a tab to rest, or with undefined wakes it (see tab-saver), with
+   * whatever else of it changes along: the console a sleeping one is kept
+   * in, the folder a discarded one starts again in. */
+  setDormant(sessionId: string, dormant: DormantTab | undefined, change: Partial<SessionTab> = {}): void {
+    if (!this.root) return;
+    const loc = collectSessions(this.root).find((candidate) => candidate.session.id === sessionId);
+    if (!loc) return;
+    const updated = updateLeaf(this.root, loc.tileId, (tile) => ({
+      ...tile,
+      sessions: tile.sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+        const next: SessionTab = { ...session, ...change };
+        if (dormant) next.dormant = dormant;
+        else delete next.dormant;
+        return next;
+      }),
+    }));
+    if (updated) this.root = updated;
   }
 
   /** Takes every tab of a group out of it, wherever they are. */
@@ -679,6 +704,15 @@ class WorkspaceStore {
     if (!moved) return null;
     if (tileVanishes && this.zoomedTileId === fromTileId) this.zoomedTileId = null;
     return { base: afterRemoval ?? this.root, moved };
+  }
+}
+
+/** Ends the consoles of tabs put to sleep that are going away: no <Terminal>
+ * shows them to end them as it unmounts, and the sessions daemon would keep
+ * them running in the background otherwise. */
+function endAsleep(sessions: SessionTab[]): void {
+  for (const session of sessions) {
+    if (session.dormant?.kind === "asleep" && session.attach) void killKeptConsole(session.attach).catch(() => {});
   }
 }
 

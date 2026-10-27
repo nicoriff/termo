@@ -344,6 +344,8 @@ pub fn run() {
             commands::companion_commands::companion_quick_ask,
             commands::companion_commands::companion_last_exchange,
             commands::pty_commands::pty_kill_tree,
+            commands::pty_commands::pty_release,
+            commands::pty_commands::pty_busy,
             commands::layout_commands::list_layouts,
             commands::layout_commands::save_layout,
             commands::layout_commands::delete_layout,

@@ -2,6 +2,7 @@
   import "@xterm/xterm/css/xterm.css";
   import { onDestroy, onMount } from "svelte";
   import { TerminalInstance } from "./TerminalInstance";
+  import { takePreface, takeReleasing } from "./releasing";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -51,6 +52,10 @@
     instance.onExit = () => {
       if (!workspaceStore.closeSession(sessionId)) void instance?.restartShell(shellPath, shellArgs, cwd);
     };
+    // A discarded console starting again: what it last showed stays above,
+    // dimmed, in the scrollback (see tab-saver).
+    const preface = takePreface(sessionId);
+    if (preface) instance.preface = { text: preface, rule: t("tabGroups.saver.resumed") };
     void instance.mount(container, shellPath, shellArgs, cwd, agent, attach, attachHost?.ip);
 
     resizeObserver = new ResizeObserver(() => instance?.resize());
@@ -79,6 +84,15 @@
 
   onDestroy(() => {
     resizeObserver?.disconnect();
+    // A tab put to sleep keeps its console running in the sessions daemon;
+    // should the daemon not have it after all, it ends as on any close.
+    const current = instance;
+    if (current && takeReleasing(sessionId)) {
+      void current.release().then((released) => {
+        if (!released) current.dispose();
+      });
+      return;
+    }
     instance?.dispose();
   });
 </script>

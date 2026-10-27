@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hydrateLayout, layoutHasSessions, snapshotLayout, type LayoutNode } from "./layout-snapshot";
+import { hydrateLayout, layoutHasSessions, snapshotLayout, snapshotSession, type LayoutNode } from "./layout-snapshot";
 import { collectTiles, type SplitNode } from "./split-tree";
 
 function ids() {
@@ -187,5 +187,26 @@ describe("tab groups in a layout", () => {
 
   it("leaves out a group it wasn't told about", () => {
     expect(firstLeaf(snapshotLayout(grouped)).sessions[0].group).toBeUndefined();
+  });
+});
+
+describe("tabs put to rest to save memory", () => {
+  it("records where a sleeping console still runs, and a discarded one's conversation", () => {
+    const asleep = snapshotSession(
+      { id: "a", title: "api", attach: "console-a", dormant: { kind: "asleep" } },
+      { consoleByTab: {} },
+    );
+    expect(asleep.consoleId).toBe("console-a");
+
+    const discarded = snapshotSession(
+      {
+        id: "b",
+        title: "web",
+        cwd: "E:/web",
+        dormant: { kind: "discarded", resume: { tool: "claude", agentSessionId: "conv-9" } },
+      },
+      { withSessions: true },
+    );
+    expect(discarded).toMatchObject({ cwd: "E:/web", agentTool: "claude", agentSessionId: "conv-9" });
   });
 });

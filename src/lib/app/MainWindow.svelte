@@ -31,6 +31,7 @@
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import HarnessPanel from "$lib/harness/HarnessPanel.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+  import { tabSaver } from "$lib/tab-groups/tab-saver.svelte";
   import TabGroupsPanel from "$lib/tab-groups/TabGroupsPanel.svelte";
   import TabGroupEditor from "$lib/tab-groups/TabGroupEditor.svelte";
   import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
@@ -90,6 +91,7 @@
     let unlisten: (() => void) | null = null;
     let stopSessionKeeper: (() => void) | null = null;
     let stopTabGroups: (() => void) | null = null;
+    let stopTabSaver: (() => void) | null = null;
     let stopRemoteWatch: (() => void) | null = null;
     const stopSessionsDaemon = sessionsDaemon.start();
     const stopAgentSharing = startAgentSharing();
@@ -134,6 +136,7 @@
 
       stopSessionKeeper = sessionKeeper.start();
       stopTabGroups = tabGroupsStore.start();
+      stopTabSaver = tabSaver.start();
       // Someone asking to connect from the tailnet is told about once: by
       // the first window.
       stopRemoteWatch = remoteWatch.start(isFirstWindow());
@@ -166,6 +169,7 @@
       unlisten?.();
       stopSessionKeeper?.();
       stopTabGroups?.();
+      stopTabSaver?.();
       stopRemoteWatch?.();
       stopSessionsDaemon();
       stopAgentSharing();

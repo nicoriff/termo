@@ -47,6 +47,8 @@ function checked(group: TabGroup): TabGroup {
     name: typeof group.name === "string" ? group.name : "",
     color: isGroupColor(group.color) ? group.color : "grey",
     collapsed: group.collapsed === true,
+    // One collapsed before this was recorded counts from now on.
+    collapsedAt: group.collapsed === true ? (typeof group.collapsedAt === "number" ? group.collapsedAt : Date.now()) : undefined,
     tabs: Array.isArray(group.tabs) ? group.tabs : [],
   };
 }
@@ -286,7 +288,10 @@ class TabGroupsStore {
     this.folding = groupId;
     clearTimeout(this.foldingTimer);
     this.foldingTimer = setTimeout(() => (this.folding = null), 250);
-    this.update(groupId, { collapsed: !group.collapsed });
+    this.update(groupId, {
+      collapsed: !group.collapsed,
+      collapsedAt: group.collapsed ? undefined : Date.now(),
+    });
   }
 
   /** Puts a tab in a group, or with null takes it out of its own. */

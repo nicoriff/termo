@@ -8,7 +8,7 @@ import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
 import { injectFontFace } from "../theme/google-fonts";
 import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
-import type { AppConfig, PromptEngine, ShortcutsConfig } from "./types";
+import type { AppConfig, PromptEngine, ShortcutsConfig, TabSaverMode } from "./types";
 import { DEFAULT_SOUNDS, isSoundChoice, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 import { defaultLayout, normalizeLayout, type StatusBarLayout } from "$lib/statusbar/layout";
@@ -203,6 +203,9 @@ class AppConfigStore {
   /** The browser links open with (see core/links.ts); null for the system's. */
   linkBrowser = $state<string | null>(null);
   tabsFillWidth = $state(false);
+  /** What becomes of a collapsed tab group's tabs (see tab-saver.svelte.ts). */
+  tabSaver = $state<TabSaverMode>("off");
+  tabSaverMinutes = $state(10);
   /** Everything git: the panel, the status bar's item, the diff and graph tabs. */
   gitEnabled = $state(true);
   /** The Git button in the window's vertical bar. */
@@ -371,6 +374,8 @@ class AppConfigStore {
     this.linkBrowser = config.link_browser ?? null;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
+    this.tabSaver = config.tab_saver === "sleep" || config.tab_saver === "discard" ? config.tab_saver : "off";
+    this.tabSaverMinutes = config.tab_saver_minutes ?? 10;
     this.gitEnabled = config.git_enabled ?? true;
     this.gitInActivityBar = config.git_in_activity_bar ?? true;
     this.gitStatusBar = config.git_status_bar ?? true;
@@ -678,6 +683,12 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setTabSaver(mode: TabSaverMode, minutes = this.tabSaverMinutes): void {
+    this.tabSaver = mode;
+    this.tabSaverMinutes = Math.max(1, Math.round(minutes));
+    void this.persist();
+  }
+
   setLastSeenVersion(version: string): void {
     this.lastSeenVersion = version;
     void this.persist();
@@ -790,6 +801,8 @@ class AppConfigStore {
       remote_button: this.remoteButton,
       link_browser: this.linkBrowser,
       tabs_fill_width: this.tabsFillWidth,
+      tab_saver: this.tabSaver,
+      tab_saver_minutes: this.tabSaverMinutes,
       git_enabled: this.gitEnabled,
       git_in_activity_bar: this.gitInActivityBar,
       git_status_bar: this.gitStatusBar,

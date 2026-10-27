@@ -14,6 +14,7 @@ import {
   claimPtySize,
   killPty,
   promptRedrawPty,
+  releasePty,
   resizePty,
   restoreAgentEvents,
   spawnPty,
@@ -81,6 +82,11 @@ export class TerminalInstance {
   private readonly fit: FitAddon;
   private sessionId: string | null = null;
   private disposed = false;
+  /** What a discarded console last showed, written above the new one as it
+   * mounts, with the line that separates them (see tab-saver). */
+  preface: { text: string; rule: string } | null = null;
+  /** Until the new console's first output: drop the reset it opens with. */
+  private keepScrollback = false;
   // Streaming so a multi-byte UTF-8 character split across two PTY reads
   // decodes correctly instead of producing replacement characters.
   private readonly decoder = new TextDecoder();
@@ -375,6 +381,14 @@ export class TerminalInstance {
     // into: the size a phone may have taken meanwhile comes back.
     this.term.textarea?.addEventListener("focus", () => this.claimSize({ now: true }));
     this.fit.fit();
+    if (this.preface) {
+      // Pushed into the scrollback whole: the new console paints its screen
+      // from the top, over anything left on it.
+      const { text, rule } = this.preface;
+      this.preface = null;
+      this.keepScrollback = true;
+      this.term.write(`\x1b[2m${text.replace(/\n/g, "\r\n")}\r\n── ${rule} ──\x1b[0m${"\r\n".repeat(this.term.rows)}\x1b[H`);
+    }
     void this.remeasureWhenFontLoads(
       `${themeStore.effectiveFontSize}px ${withMonospaceFallback(themeStore.effectiveFontFamily)}`,
     );
@@ -479,7 +493,14 @@ export class TerminalInstance {
       },
       onData: (bytes: Uint8Array) => {
         if (this.disposed) return;
-        const decoded = this.decoder.decode(bytes, { stream: true });
+        let decoded = this.decoder.decode(bytes, { stream: true });
+        // A new console opens with a full reset (ESC c), which would wipe
+        // the scrollback — and with it a discarded console's last screen,
+        // kept above. On a fresh xterm it has nothing else to reset.
+        if (this.keepScrollback) {
+          this.keepScrollback = false;
+          if (decoded.startsWith("\x1bc")) decoded = decoded.slice(2);
+        }
         const text = isWindows ? neutralizePaintedControls(decoded) : decoded;
         this.term.write(
           themeStore.outputHighlightingEnabled ? this.highlighter.feed(text) : text,
@@ -544,6 +565,13 @@ export class TerminalInstance {
       selectAll: () => this.term.selectAll(),
       clear: () => this.term.clear(),
       focus: () => this.focus(),
+      recentText: (lines) => {
+        const buffer = this.term.buffer.active;
+        const text: string[] = [];
+        for (let y = 0; y < buffer.length; y++) text.push(buffer.getLine(y)?.translateToString(true) ?? "");
+        while (text.length > 0 && text[text.length - 1].trim() === "") text.pop();
+        return text.slice(-lines).join("\n");
+      },
     });
     this.lastPtySize = consoleSize;
     if (opts.attach) {
@@ -689,5 +717,27 @@ export class TerminalInstance {
     tabTitleStore.remove(this.tabId);
     if (this.sessionId) void killPty(this.sessionId);
     this.term.dispose();
+  }
+
+  /** Lets go of the view and leaves the console running in the sessions
+   * daemon, for the tab to attach to again (a tab put to sleep, see
+   * tab-saver). What the tab knows of it — its folder, title, agent and
+   * conversation — stays, as the tab does. False when the daemon doesn't
+   * run it: then nothing changed, and the caller disposes as usual. */
+  async release(): Promise<boolean> {
+    if (this.disposed || !this.sessionId) return false;
+    if (!(await releasePty(this.sessionId).catch(() => false))) return false;
+    this.disposed = true;
+    if (this.startingTimer) clearTimeout(this.startingTimer);
+    if (this.ptyResizeTimer) clearTimeout(this.ptyResizeTimer);
+    this.renderSub?.dispose();
+    this.renderSub = null;
+    this.oscSub?.dispose();
+    this.oscSub = null;
+    tabSize.remove(this.tabId);
+    unregisterPty(this.tabId);
+    unregisterTerminal(this.tabId);
+    this.term.dispose();
+    return true;
   }
 }

@@ -46,7 +46,23 @@ export interface SessionTab {
   /** The tab group it's in (see tab-groups.ts). Unlike the tab's own id, a
    * group's is kept across restarts and layouts: nothing live is keyed by it. */
   groupId?: string;
+  /** Put away to save memory while its group is collapsed (see
+   * tab-saver.svelte.ts): "asleep", its console still running in the
+   * sessions daemon (`attach` then points at it), or "discarded", its
+   * console ended and what to bring back kept here. Either wakes as the tab
+   * comes into view. */
+  dormant?: DormantTab;
 }
+
+export type DormantTab =
+  | { kind: "asleep" }
+  | {
+      kind: "discarded";
+      /** The last lines it showed, shown again above the new prompt. */
+      screen?: string;
+      /** The agent conversation it had open, reopened as it wakes. */
+      resume?: { tool: ToolId; agentSessionId: string };
+    };
 
 /** Two versions of a file of a repository. `from` and `to` are revisions:
  * a commit, "HEAD", or "" for the index. A null `from` is nothing at all (the

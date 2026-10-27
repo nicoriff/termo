@@ -120,6 +120,18 @@ export function killPty(id: string): Promise<void> {
   return invoke("pty_kill", { id });
 }
 
+/** Stops showing a console without ending it, when the sessions daemon runs
+ * it; false when it doesn't, and nothing changed. */
+export function releasePty(id: string): Promise<boolean> {
+  return invoke("pty_release", { id });
+}
+
+/** Whether a command runs under the console's shell, rather than its prompt
+ * sitting idle. Another computer's console counts as busy. */
+export function ptyBusy(id: string): Promise<boolean> {
+  return invoke("pty_busy", { id });
+}
+
 /** Resident memory of the console's shell plus every process running under
  * it, in bytes — or null once its process has already exited. */
 export function getPtyMemory(id: string): Promise<number | null> {

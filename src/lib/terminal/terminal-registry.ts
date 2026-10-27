@@ -10,6 +10,9 @@ export interface TerminalHandle {
   selectAll(): void;
   clear(): void;
   focus(): void;
+  /** The last `lines` lines it shows, as plain text, trailing blanks off —
+   * kept when its console is discarded (see tab-saver). */
+  recentText(lines: number): string;
 }
 
 /** Keyed by tab (SessionTab) id, like the other per-console stores. */

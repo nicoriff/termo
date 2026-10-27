@@ -359,6 +359,32 @@ pub async fn pty_kill(app: tauri::AppHandle, id: String) -> Result<(), String> {
         .map_err(|err| err.to_string())
 }
 
+/// Lets go of a console without ending it, when the sessions daemon runs it
+/// (see ConsoleManager::release); false when it doesn't, and nothing changed.
+#[tauri::command]
+pub fn pty_release(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let id = parse_id(&id)?;
+    Ok(app.state::<AppState>().pty.release(id))
+}
+
+/// Whether something runs under the console's shell — a command, rather than
+/// a prompt sitting idle. Another computer's console, whose processes can't
+/// be seen from here, counts as busy. Off the main thread: it refreshes the
+/// process table.
+#[tauri::command]
+pub async fn pty_busy(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let id = parse_id(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        match state.pty.pid(id).ok().flatten() {
+            Some(pid) => !state.memory.busy_roots(&[pid]).is_empty(),
+            None => true,
+        }
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
 /// Refreshing the whole process table takes tens of ms, so it runs off the
 /// main thread. An already-exited console reports `None` instead of an error.
 #[tauri::command]

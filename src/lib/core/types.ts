@@ -81,6 +81,9 @@ export interface ShortcutsConfig {
 /** The tool that draws new sessions' prompt; only one at a time. */
 export type PromptEngine = "none" | "oh_my_posh" | "starship";
 
+/** What becomes of the tabs of a tab group collapsed for a while. */
+export type TabSaverMode = "off" | "sleep" | "discard";
+
 export interface AppConfig {
   language: "system" | "es" | "en";
   /** User-selected theme, restored when OS synchronization is disabled. */
@@ -150,6 +153,10 @@ export interface AppConfig {
   agent_install_dirs?: Record<string, string>;
   agent_clis_known?: Record<string, string>;
   tabs_fill_width: boolean;
+  /** What becomes of a collapsed tab group's tabs (see tab-saver.svelte.ts).
+   * Absent in configs from before it. */
+  tab_saver?: TabSaverMode;
+  tab_saver_minutes?: number;
   /** Everything git (see src-tauri/src/git). Absent in configs from before it. */
   git_enabled?: boolean;
   git_in_activity_bar?: boolean;

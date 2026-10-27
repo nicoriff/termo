@@ -724,6 +724,7 @@
         class="tile-tab"
         class:active={tile.activeSessionId === session.id}
         class:in-group={!!item.group}
+        class:dormant={!!session.dormant}
         style={item.group ? `--group-color:${GROUP_COLORS[item.group.color]}` : undefined}
         data-session-id={session.id}
         data-group-id={item.group?.id}
@@ -784,7 +785,9 @@
         {/if}
         <span
           class="tile-tab-title"
-          title={favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
+          title={session.dormant
+            ? t(session.dormant.kind === "asleep" ? "tabGroups.saver.asleepHint" : "tabGroups.saver.discardedHint")
+            : favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
             session.diff?.path ??
             (session.agentRun || session.projectView || session.orchestrationView || session.gitGraph
               ? tabTitleStore.titleFor(session.id, session.title)
@@ -1603,6 +1606,12 @@
   /* The dragged tab, taking the color of the group it's about to join. */
   :global(.tile-tab.tab-drag-ghost.in-group) {
     background: color-mix(in srgb, var(--group-color) 22%, var(--tabbar-active-bg, #1e1e1e));
+  }
+
+  /* Put away to save memory (see tab-saver): dimmed until it's opened. */
+  .tile-tab.dormant {
+    opacity: 0.5;
+    font-style: italic;
   }
 
   /* A grouped tab carries its group's color along its bottom edge. */
