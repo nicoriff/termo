@@ -9,7 +9,16 @@ import { hydrateSession, snapshotSession, type LayoutResume } from "$lib/layout/
 import { collectSessions, collectTiles, type SessionLocation } from "$lib/layout/split-tree";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
-import { isGroupColor, nextColor, type GroupColor, type GroupDef, type TabGroup } from "./tab-groups";
+import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+import {
+  groupAlert,
+  isGroupColor,
+  nextColor,
+  type GroupAlert,
+  type GroupColor,
+  type GroupDef,
+  type TabGroup,
+} from "./tab-groups";
 
 /** How long after a change to the tree each group's tabs are recorded. */
 const SAVE_DELAY_MS = 300;
@@ -78,6 +87,13 @@ class TabGroupsStore {
   /** The group folding or unfolding right now, for its tabs' animation. */
   folding: string | null = null;
   private foldingTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** What the group's chip warns of: the most urgent state among its open
+   * tabs' agents, wherever they are (see aiStatusStore). */
+  alertFor(groupId: string): GroupAlert | null {
+    const live = this.liveTabs.get(groupId) ?? [];
+    return groupAlert(live.map((loc) => aiStatusStore.byId[loc.session.id]?.status));
+  }
 
   isOpen(groupId: string): boolean {
     return (this.liveTabs.get(groupId)?.length ?? 0) > 0;

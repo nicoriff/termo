@@ -11,7 +11,8 @@
   import { isConsoleTab, type SessionTab } from "$lib/layout/split-tree";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
-  import { GROUP_COLORS, type TabGroup } from "./tab-groups";
+  import { themeStore } from "$lib/theme/theme-store.svelte";
+  import { GROUP_COLORS, type GroupAlert, type TabGroup } from "./tab-groups";
   import { TAB_GROUPS_WIDTH, tabGroupsStore } from "./tab-groups-store.svelte";
 
   /** Every tab group, as an accordion: each one's open tabs (a click brings
@@ -58,6 +59,12 @@
     tabGroupsStore.openEditor(group.id, box.left, box.bottom);
   }
 
+  /** The same colors as the tabs' own status dots (see TileChrome). */
+  function alertColor(alert: GroupAlert): string {
+    const colors = themeStore.current.colors;
+    return alert === "error" ? colors.red : alert === "awaiting" ? colors.yellow : colors.green;
+  }
+
   function countLabel(n: number): string {
     return n === 1 ? t("tabGroups.tabsOne") : t("tabGroups.tabs", { n });
   }
@@ -98,6 +105,7 @@
         {@const isOpen = live.length > 0}
         {@const expanded = !folded.includes(group.id)}
         {@const name = group.name || t("tabGroups.unnamed")}
+        {@const alert = tabGroupsStore.alertFor(group.id)}
         <section class="group" style="--group-color:{GROUP_COLORS[group.color]}">
           <div class="group-head" class:closed={!isOpen}>
             <button
@@ -111,6 +119,14 @@
               </svg>
               <span class="group-dot" aria-hidden="true"></span>
               <span class="group-name" class:unnamed={!group.name}>{name}</span>
+              {#if alert}
+                <span
+                  class="group-alert"
+                  class:urgent={alert !== "finished"}
+                  style="background:{alertColor(alert)}"
+                  title={t("tabGroups.alertHint", { name, what: t(`aiMode.notify.${alert}`) })}
+                ></span>
+              {/if}
               <span class="group-count">
                 {isOpen ? countLabel(live.length) : t("tabGroups.closed")}
               </span>
@@ -332,6 +348,29 @@
     font-style: italic;
     font-weight: 400;
     opacity: 0.7;
+  }
+
+  /* One of the group's tabs has news; waiting on you or an error pulses. */
+  .group-alert {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    margin-left: auto;
+    border-radius: 50%;
+  }
+
+  .group-alert.urgent {
+    animation: group-alert-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes group-alert-pulse {
+    50% {
+      transform: scale(1.35);
+    }
+  }
+
+  .group-alert + .group-count {
+    margin-left: 0;
   }
 
   .group-count {

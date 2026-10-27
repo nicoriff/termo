@@ -97,6 +97,7 @@ export const es = {
     collapse: "Contraer {name}",
     expand: "Expandir {name}",
     chipHint: "{name}: clic para contraer o expandir, arrastrar para moverlo entero",
+    alertHint: "{name}: {what}",
     tabs: "{n} pestañas",
     tabsOne: "1 pestaña",
     closed: "cerrado",

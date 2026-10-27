@@ -99,6 +99,7 @@ export const en: Messages = {
     collapse: "Collapse {name}",
     expand: "Expand {name}",
     chipHint: "{name}: click to collapse or expand, drag to move it whole",
+    alertHint: "{name}: {what}",
     tabs: "{n} tabs",
     tabsOne: "1 tab",
     closed: "closed",

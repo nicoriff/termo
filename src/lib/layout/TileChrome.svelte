@@ -681,6 +681,7 @@
       {#if item.kind === "chip"}
         {@const name = item.group.name || t("tabGroups.unnamed")}
         {@const firstTab = tile.sessions.find((session) => session.groupId === item.group.id)}
+        {@const alert = tabGroupsStore.alertFor(item.group.id)}
         <div
           class="tile-group-chip"
           class:collapsed={item.group.collapsed}
@@ -705,6 +706,14 @@
           <span class="tile-group-chip-name">{item.group.name}</span>
           {#if item.group.collapsed}
             <span class="tile-group-chip-count">{item.count}</span>
+          {/if}
+          {#if alert}
+            <span
+              class="tile-group-chip-alert"
+              class:urgent={alert !== "finished"}
+              style="background:{aiDotColor(alert)}"
+              title={t("tabGroups.alertHint", { name, what: t(`aiMode.notify.${alert}`) })}
+            ></span>
           {/if}
         </div>
       {:else}
@@ -1524,6 +1533,34 @@
 
   .tile-group-chip-name:empty {
     display: none;
+  }
+
+  /* A tab of the group has news (see tabGroupsStore.alertFor): a dot in the
+     chip's corner, ringed in the bar's color so it reads on any group
+     color. Waiting on you or an error pulses; done just sits there. */
+  .tile-group-chip {
+    position: relative;
+  }
+
+  .tile-group-chip-alert {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--tabbar-bg, #181818);
+    pointer-events: auto;
+  }
+
+  .tile-group-chip-alert.urgent {
+    animation: group-alert-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes group-alert-pulse {
+    50% {
+      transform: scale(1.35);
+    }
   }
 
   .tile-group-chip-count {

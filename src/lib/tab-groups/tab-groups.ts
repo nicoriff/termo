@@ -86,6 +86,16 @@ export function joinedGroupAt(sessions: readonly Pick<SessionTab, "groupId">[], 
   return before && before === after ? before : undefined;
 }
 
+/** The states of a tab's agent worth an alert on its group's chip — the ones
+ * Modo IA notifies about — most urgent first. */
+const ALERTS = ["error", "awaiting", "finished"] as const;
+export type GroupAlert = (typeof ALERTS)[number];
+
+/** The most urgent alert among a group's tabs, or null when none has one. */
+export function groupAlert(statuses: readonly (string | null | undefined)[]): GroupAlert | null {
+  return ALERTS.find((alert) => statuses.includes(alert)) ?? null;
+}
+
 type Placed = Pick<SessionTab, "id" | "groupId">;
 
 /**

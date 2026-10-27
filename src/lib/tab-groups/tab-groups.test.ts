@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gatherGroups, insertGroup, insertTab, joinedGroupAt, nextColor, stripItems } from "./tab-groups";
+import { gatherGroups, groupAlert, insertGroup, insertTab, joinedGroupAt, nextColor, stripItems } from "./tab-groups";
 
 const tab = (id: string, groupId?: string) => (groupId ? { id, groupId } : { id });
 
@@ -108,5 +108,18 @@ describe("insertTab joining the group it was dropped on", () => {
     const strip = [tab("a", "g"), tab("b", "g"), tab("c")];
     const placed = insertTab(strip, tab("x"), "c", true, "g");
     expect(placed.map((s) => `${s.id}${s.groupId ? ":" + s.groupId : ""}`)).toEqual(["a:g", "b:g", "x:g", "c"]);
+  });
+});
+
+describe("groupAlert", () => {
+  it("is the most urgent of its tabs' states", () => {
+    expect(groupAlert(["finished", "running", "awaiting"])).toBe("awaiting");
+    expect(groupAlert(["awaiting", "error"])).toBe("error");
+    expect(groupAlert([undefined, "finished"])).toBe("finished");
+  });
+
+  it("is nothing while they only run, or have no agent", () => {
+    expect(groupAlert(["running", null, undefined])).toBeNull();
+    expect(groupAlert([])).toBeNull();
   });
 });
