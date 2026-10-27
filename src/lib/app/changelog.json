@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.28.0",
+    "date": "2026-10-26",
+    "es": [
+      "**Grupos de pestañas**, como los de Chrome: con clic derecho en una pestaña → Agregar a un grupo nuevo, o Mover al grupo, juntás pestañas bajo un nombre y un color. El chip del grupo va delante de sus pestañas: un clic lo contrae o lo expande, y arrastrándolo movés el grupo entero, a otro lugar de la barra, a otro panel o a un borde para dividirlo. Arrastrar una pestaña sobre las de un grupo la suma a él.",
+      "Los grupos se guardan: si cerrás sus pestañas, o Termo, el grupo queda y se vuelve a abrir como estaba, con cada consola en su carpeta y las conversaciones de los agentes retomadas. También viajan en los layouts.",
+      "**Panel de grupos** en la barra de actividad (`Ctrl+Shift+Q`): todos los grupos con sus pestañas; un clic lleva a la pestaña o reabre el grupo.",
+      "**Alertas en el chip**: un punto avisa si un agente de alguna pestaña del grupo espera tu respuesta, o si terminó (o falló) y todavía no lo viste.",
+      "**Ahorrar memoria en grupos contraídos** (Preferencias → Consola → Sesiones): pasado un tiempo, las pestañas de un grupo contraído se duermen (la consola sigue corriendo y vuelve tal cual) o, si están ociosas, se descartan y vuelven a empezar en su carpeta al abrirlas.",
+      "El menú de una pestaña suma Dividir a la derecha, a la izquierda y abajo.",
+      "El clic derecho fuera de los menús de Termo ya no abre el menú del navegador (Inspeccionar, Imprimir…).",
+      "Reabrir varias consolas a la vez ya no puede dejar la ventana sin responder."
+    ],
+    "en": [
+      "**Tab groups**, like Chrome's: right-click a tab → Add to new group, or Move to group, to gather tabs under a name and a color. The group's chip sits ahead of its tabs: a click collapses or expands it, and dragging it moves the whole group, along the bar, to another pane, or to an edge to split it. Dragging a tab over a group's tabs adds it to the group.",
+      "Groups are kept: close their tabs, or Termo, and the group stays, to open again as it was, each console in its folder and the agents' conversations resumed. Layouts carry them too.",
+      "**A Tab groups panel** on the activity bar (`Ctrl+Shift+Q`): every group with its tabs; a click goes to the tab or reopens the group.",
+      "**Alerts on the chip**: a dot tells you when an agent in one of the group's tabs is waiting on you, or has finished (or failed) and you haven't seen it yet.",
+      "**Save memory in collapsed groups** (Preferences → Console → Sessions): after a while, the tabs of a collapsed group are put to sleep (the console keeps running and comes back as it was) or, when idle, discarded, starting again in their folder when you open them.",
+      "A tab's menu adds Split right, Split left and Split down.",
+      "Right-clicking outside Termo's menus no longer opens the browser's menu (Inspect, Print…).",
+      "Reopening several consoles at once can no longer leave the window unresponsive."
+    ]
+  },
+  {
     "version": "0.27.0",
     "date": "2026-10-25",
     "es": [
