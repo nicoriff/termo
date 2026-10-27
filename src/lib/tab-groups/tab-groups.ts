@@ -91,9 +91,19 @@ export function joinedGroupAt(sessions: readonly Pick<SessionTab, "groupId">[], 
 const ALERTS = ["error", "awaiting", "finished"] as const;
 export type GroupAlert = (typeof ALERTS)[number];
 
-/** The most urgent alert among a group's tabs, or null when none has one. */
-export function groupAlert(statuses: readonly (string | null | undefined)[]): GroupAlert | null {
-  return ALERTS.find((alert) => statuses.includes(alert)) ?? null;
+/** A tab's agent state, and whether it changed since the tab was last on
+ * screen. */
+export interface TabNews {
+  status?: string | null;
+  unseen?: boolean;
+}
+
+/** The most urgent alert among a group's tabs, or null when none has one.
+ * Waiting on you alerts until it's answered; an error or a finish only
+ * until the tab has been looked at. */
+export function groupAlert(tabs: readonly TabNews[]): GroupAlert | null {
+  const pending = (tab: TabNews) => tab.status === "awaiting" || !!tab.unseen;
+  return ALERTS.find((alert) => tabs.some((tab) => tab.status === alert && pending(tab))) ?? null;
 }
 
 type Placed = Pick<SessionTab, "id" | "groupId">;

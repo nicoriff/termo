@@ -9,6 +9,7 @@ import { hydrateSession, snapshotSession, type LayoutResume } from "$lib/layout/
 import { collectSessions, collectTiles, type SessionLocation } from "$lib/layout/split-tree";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { tabCwd } from "$lib/terminal/tab-cwd.svelte";
+import { untrack } from "svelte";
 import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
 import {
   groupAlert,
@@ -92,7 +93,33 @@ class TabGroupsStore {
    * tabs' agents, wherever they are (see aiStatusStore). */
   alertFor(groupId: string): GroupAlert | null {
     const live = this.liveTabs.get(groupId) ?? [];
-    return groupAlert(live.map((loc) => aiStatusStore.byId[loc.session.id]?.status));
+    return groupAlert(
+      live.map((loc) => {
+        const entry = aiStatusStore.byId[loc.session.id];
+        return { status: entry?.status, unseen: !!entry && entry.since > (this.seenAt[loc.session.id] ?? 0) };
+      }),
+    );
+  }
+
+  /** When each tab was last on screen (ms), to tell news apart from what's
+   * been looked at already. A tab on screen as its state changes sees it. */
+  private seenAt = $state<Record<string, number>>({});
+
+  private markSeen(): void {
+    const root = workspaceStore.root;
+    if (!root) return;
+    // Its state, so a change while the tab is in view counts as seen.
+    void aiStatusStore.byId;
+    const now = Date.now();
+    const visible = collectTiles(root)
+      .map((tile) => tile.activeSessionId)
+      .filter((id) => workspaceStore.isSessionVisible(id));
+    if (visible.length === 0) return;
+    untrack(() => {
+      const next = { ...this.seenAt };
+      for (const id of visible) next[id] = now;
+      this.seenAt = next;
+    });
   }
 
   isOpen(groupId: string): boolean {
@@ -137,6 +164,12 @@ class TabGroupsStore {
         void workspaceStore.root;
         void tabCwd.byTab;
         this.schedule();
+      });
+      // Reruns as tabs come into view (root, zoom) and as their state
+      // changes; the tabs on screen then have seen what they show.
+      $effect(() => {
+        void workspaceStore.zoomedTileId;
+        this.markSeen();
       });
     });
     return () => {

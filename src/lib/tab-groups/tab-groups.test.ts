@@ -112,14 +112,25 @@ describe("insertTab joining the group it was dropped on", () => {
 });
 
 describe("groupAlert", () => {
-  it("is the most urgent of its tabs' states", () => {
-    expect(groupAlert(["finished", "running", "awaiting"])).toBe("awaiting");
-    expect(groupAlert(["awaiting", "error"])).toBe("error");
-    expect(groupAlert([undefined, "finished"])).toBe("finished");
+  const news = (status: string | null, unseen = false) => ({ status, unseen });
+
+  it("is the most urgent of its tabs' pending news", () => {
+    expect(groupAlert([news("finished", true), news("running"), news("awaiting")])).toBe("awaiting");
+    expect(groupAlert([news("awaiting"), news("error", true)])).toBe("error");
+    expect(groupAlert([news(null), news("finished", true)])).toBe("finished");
+  });
+
+  it("keeps alerting while an agent waits, seen or not", () => {
+    expect(groupAlert([news("awaiting")])).toBe("awaiting");
+  });
+
+  it("drops an error or a finish once the tab has been looked at", () => {
+    expect(groupAlert([news("finished"), news("error")])).toBeNull();
+    expect(groupAlert([news("error"), news("awaiting")])).toBe("awaiting");
   });
 
   it("is nothing while they only run, or have no agent", () => {
-    expect(groupAlert(["running", null, undefined])).toBeNull();
+    expect(groupAlert([news("running", true), news(null), {}])).toBeNull();
     expect(groupAlert([])).toBeNull();
   });
 });
