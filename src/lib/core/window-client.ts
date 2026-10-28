@@ -42,6 +42,13 @@ export function preferencesReady(): Promise<void> {
   return invoke("preferences_ready");
 }
 
+/** Tells the backend this console window's tabs are in place, so the window,
+ * built hidden, can show whole (see startup.rs). `marks` are the page's
+ * startup timings, in ms since it started loading, for startup.log. */
+export function windowReady(marks: [string, number][]): Promise<void> {
+  return invoke("window_ready", { marks });
+}
+
 /** GTK's titlebar button layout, e.g. "appmenu:minimize,maximize,close";
  * null off Linux. See decoration_layout in window_commands.rs. */
 export function getDecorationLayout(): Promise<string | null> {
@@ -118,8 +125,4 @@ export function onWindowResized(handler: () => void): Promise<() => void> {
 export async function getWindowSize(): Promise<{ width: number; height: number }> {
   const size = await getCurrentWindow().innerSize();
   return { width: size.width, height: size.height };
-}
-
-export function setWindowSize(width: number, height: number): Promise<void> {
-  return getCurrentWindow().setSize(new PhysicalSize(width, height));
 }

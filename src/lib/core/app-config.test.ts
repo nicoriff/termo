@@ -8,7 +8,7 @@ import type { AppConfig } from "./types";
 import type { Appearance } from "../theme/theme-types";
 
 vi.mock("./config-client", () => ({ getConfig: vi.fn(), saveConfig: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("./window-client", () => ({ getWindowSize: vi.fn(), setWindowSize: vi.fn() }));
+vi.mock("./window-client", () => ({ getWindowSize: vi.fn() }));
 vi.mock("./platform", () => ({ isMac: true }));
 vi.mock("../i18n/i18n.svelte", () => ({ i18n: { setPreference: vi.fn() } }));
 vi.mock("../theme/theme-loader", () => ({ applyThemeToDocument: vi.fn() }));
@@ -36,7 +36,7 @@ describe("appearance config persistence and window sync", () => {
       callback("light");
       return { ready: Promise.resolve(), stop: vi.fn() };
     });
-    await appConfigStore.init({ restoreWindowSize: false });
+    await appConfigStore.init();
   });
 
   afterEach(() => appConfigStore.stopSystemAppearanceSync());

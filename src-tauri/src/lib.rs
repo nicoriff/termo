@@ -17,6 +17,7 @@ mod marketplace;
 mod migration;
 mod mux;
 mod pty;
+mod startup;
 mod state;
 mod terminal_windows;
 
@@ -74,6 +75,7 @@ fn notification_target(args: impl Iterator<Item = String>) -> Option<serde_json:
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    startup::begin();
     // Before anything reads the config folders (see migration.rs).
     migration::migrate_from_termini();
     let builder = tauri::Builder::default();
@@ -115,7 +117,11 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            startup::mark("setup");
+            let loaded = config::store::load(app.handle());
+            // Built hidden: it shows once its page has its tabs in place.
             if let Some(window) = app.get_webview_window(terminal_windows::MAIN) {
+                startup::hold(&window, &loaded.window);
                 commands::window_shape::attach(&window);
             }
             // The status bar says when the sessions daemon stops answering
@@ -184,9 +190,9 @@ pub fn run() {
             // runs (see mux/): what belongs to them stays.
             let kept: std::collections::HashSet<String> =
                 app.state::<AppState>().pty.background().into_iter().map(|session| session.id.to_string()).collect();
+            startup::mark("daemon");
             pty::agent_hooks::start_watcher(app.handle().clone(), kept.clone());
             pty::status_line::start_watcher(app.handle().clone());
-            let loaded = config::store::load(app.handle());
             // With "Keep agents running when Termo closes", the agents run in
             // their own process (see agents/host/): it cleans up after itself,
             // and may be running some right now.
@@ -201,6 +207,7 @@ pub fn run() {
                 // but for those of consoles still running.
                 agents::console_bridge::remove_leftovers(&root, &kept);
             }
+            startup::mark("leftovers");
             // The agents, their local server and refreshing the hooks: only
             // with Modo IA on (see ai_mode.rs).
             // Before anything looks for an agent's CLI.
@@ -210,6 +217,7 @@ pub fn run() {
             if loaded.background_agents && ai_mode_on {
                 agents::host::client::start(app.handle());
             }
+            startup::mark("ai_mode");
             // The entry that starts them at sign-in points at this build.
             {
                 let loaded = loaded.clone();
@@ -231,6 +239,7 @@ pub fn run() {
                     });
                 }
             }
+            startup::mark("setup_done");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -316,6 +325,7 @@ pub fn run() {
             commands::window_commands::is_maximized,
             commands::window_commands::open_preferences_window,
             commands::window_commands::preferences_ready,
+            commands::window_commands::window_ready,
             commands::window_commands::customize_status_bar,
             commands::window_commands::hide_preferences_window,
             commands::window_commands::open_new_window,

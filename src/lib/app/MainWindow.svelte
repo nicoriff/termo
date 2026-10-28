@@ -18,6 +18,7 @@
   import UpdateDialog from "./UpdateDialog.svelte";
   import WhatsNewDialog from "./WhatsNewDialog.svelte";
   import { showWhatsNewOnce } from "./whats-new";
+  import { markStartup, showWhenLaidOut } from "./startup";
   import MissingAgentsDialog from "$lib/agent-install/MissingAgentsDialog.svelte";
   import { missingAgents } from "$lib/agent-install/missing-agents-store.svelte";
   import OnboardingWizard from "$lib/onboarding/OnboardingWizard.svelte";
@@ -111,27 +112,39 @@
     void orchestrationStore.init();
 
     (async () => {
-      await appConfigStore.init();
+      markStartup("mount");
+      try {
+        await appConfigStore.init();
+        markStartup("config");
 
-      await layoutsStore.load();
-      // Before anything restores tabs into groups, or it would think them gone.
-      await tabGroupsStore.load();
-      // Launching straight into the chosen layout, rather than opening a
-      // console and replacing it a moment later. A name that no longer exists
-      // just falls through to the normal single console. Only the window Termo
-      // opens with: one opened later starts with a single console.
-      const preset =
-        isFirstWindow() && appConfigStore.defaultLayout
-          ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
-          : undefined;
-      // Before either: consoles this window had open that are still running
-      // (see session-keeper) come back where they were.
-      const restored = await sessionKeeper.restore();
-      if (!restored && preset) {
-        layoutsStore.apply(preset);
-      } else if (!restored) {
-        const shell = await resolveDefaultShell();
-        workspaceStore.initRoot(shell.path, shell.args, shell.title);
+        await layoutsStore.load();
+        // Before anything restores tabs into groups, or it would think them gone.
+        await tabGroupsStore.load();
+        markStartup("layouts");
+        // Launching straight into the chosen layout, rather than opening a
+        // console and replacing it a moment later. A name that no longer exists
+        // just falls through to the normal single console. Only the window Termo
+        // opens with: one opened later starts with a single console.
+        const preset =
+          isFirstWindow() && appConfigStore.defaultLayout
+            ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
+            : undefined;
+        // Before either: consoles this window had open that are still running
+        // (see session-keeper) come back where they were.
+        const restored = await sessionKeeper.restore();
+        markStartup("restore");
+        if (!restored && preset) {
+          layoutsStore.apply(preset);
+        } else if (!restored) {
+          const shell = await resolveDefaultShell();
+          workspaceStore.initRoot(shell.path, shell.args, shell.title);
+        }
+        markStartup("workspace");
+      } finally {
+        // The window shows now, whole: built hidden, it had none of this
+        // yet. Also when something above failed: as far as it got, rather
+        // than waiting out the backend's grace period.
+        void showWhenLaidOut();
       }
 
       stopSessionKeeper = sessionKeeper.start();

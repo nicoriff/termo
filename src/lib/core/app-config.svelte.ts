@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getConfig, saveConfig } from "./config-client";
-import { getWindowSize, setWindowSize } from "./window-client";
+import { getWindowSize } from "./window-client";
 import { themeStore } from "../theme/theme-store.svelte";
 import { observeSystemAppearance } from "../theme/system-appearance";
 import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
@@ -133,12 +133,6 @@ export interface GitReviewSettings {
   timeoutMin: number;
 }
 
-interface InitOptions {
-  /** MainWindow restores the persisted window size on launch; Preferences
-   * opens at its own fixed size and must not fight that. Defaults to true. */
-  restoreWindowSize?: boolean;
-}
-
 class AppConfigStore {
   language = $state<LanguagePreference>("system");
   defaultShellId = $state<string | null>(null);
@@ -266,19 +260,13 @@ class AppConfigStore {
   private systemAppearance: ReturnType<typeof observeSystemAppearance> | null = null;
 
   /** Loads preferences and starts this window's appearance observer. The mounting
-   * component calls stopSystemAppearanceSync() when it unmounts. */
-  async init(options?: InitOptions): Promise<void> {
+   * component calls stopSystemAppearanceSync() when it unmounts. A console
+   * window already has the size it was left at: the backend gives it that
+   * before showing it (see startup.rs). */
+  async init(): Promise<void> {
     this.systemAppearance = observeSystemAppearance((appearance) => themeStore.setSystemAppearance(appearance));
     const [config] = await Promise.all([getConfig(), this.systemAppearance.ready]);
     this.applyFields(config);
-
-    if (options?.restoreWindowSize !== false) {
-      try {
-        await setWindowSize(config.window.width, config.window.height);
-      } catch {
-        // Non-critical — keep the default size from tauri.conf.json.
-      }
-    }
 
     this.loaded = true;
 
