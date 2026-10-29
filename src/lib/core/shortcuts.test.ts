@@ -13,7 +13,6 @@ import {
   normalizeEventToZoomBinding,
   parseKeybinding,
   resolveKeybinding,
-  scrollTopToReveal,
   serializeKeybinding,
   SHORTCUT_ACTIONS,
   SHORTCUT_GROUPS,
@@ -297,17 +296,5 @@ describe("filterShortcutActions", () => {
 
   it("requires every word to match", () => {
     expect(filterShortcutActions(actions, "nueva copiar", labelOf, bindingOf)).toEqual([]);
-  });
-});
-
-describe("scrollTopToReveal", () => {
-  it("stays put when the span is already visible", () => {
-    expect(scrollTopToReveal(100, 200, 150, 180)).toBe(100);
-  });
-  it("scrolls down just enough for a span below the viewport", () => {
-    expect(scrollTopToReveal(0, 200, 190, 230)).toBe(30);
-  });
-  it("scrolls up to a span above the viewport", () => {
-    expect(scrollTopToReveal(100, 200, 40, 70)).toBe(40);
   });
 });

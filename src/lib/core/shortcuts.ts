@@ -16,7 +16,7 @@
  * fired is read straight off the event by the caller, not decided here.
  */
 
-import { scoreMatch } from "../commands/commands";
+import { scoreMatch } from "./fuzzy-match";
 import type { MessageKey } from "../i18n/translate";
 
 export type ShortcutAction =
@@ -440,14 +440,4 @@ export function filterShortcutActions(
     const binding = bindingOf(action);
     return words.every((word) => scoreMatch(label, word) !== null || scoreMatch(binding, word) !== null);
   });
-}
-
-/** The scrollTop that brings the span [top, bottom] into a viewport of
- * `viewHeight` scrolled to `scrollTop`, moving as little as possible (what
- * `scrollIntoView({ block: "nearest" })` does). Keyboard navigation of a list
- * doesn't scroll on its own: the highlight moves, the viewport doesn't. */
-export function scrollTopToReveal(scrollTop: number, viewHeight: number, top: number, bottom: number): number {
-  if (top < scrollTop) return top;
-  if (bottom > scrollTop + viewHeight) return Math.max(0, bottom - viewHeight);
-  return scrollTop;
 }

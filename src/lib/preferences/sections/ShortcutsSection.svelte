@@ -80,6 +80,11 @@
     border-radius: 4px;
   }
 
+  .shortcut-search:focus {
+    outline: none;
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
   .shortcut-empty {
     margin: 12px 0 0;
     font-size: 12px;
