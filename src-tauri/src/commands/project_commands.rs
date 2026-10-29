@@ -17,8 +17,10 @@ fn saved(result: anyhow::Result<Vec<Project>>) -> Result<Vec<Project>, String> {
     result.map_err(|err| tr(Msg::AgentSaveFailed(&err.to_string())))
 }
 
+/// Off the main thread: a window reads it as it starts, and there it would
+/// hold up every other call.
 #[tauri::command]
-pub fn projects_list(app: tauri::AppHandle) -> Result<Vec<Project>, String> {
+pub async fn projects_list(app: tauri::AppHandle) -> Result<Vec<Project>, String> {
     Ok(projects::list_in(&root(&app)?))
 }
 

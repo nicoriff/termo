@@ -48,6 +48,7 @@
   import { startAgentAttention } from "$lib/ai-mode/attention";
   import { openStartedFrom, startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
+  import { windowsBuild } from "$lib/core/pty-client";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
   import { shareRemoteLook } from "$lib/core/remote-client";
   import { themeStore } from "$lib/theme/theme-store.svelte";
@@ -84,6 +85,8 @@
     newTabOptions.refresh();
     void agentsStore.init();
     void orchestrationStore.init();
+    // Every console waits on it as it mounts: asked now, it's in by then.
+    void windowsBuild();
 
     (async () => {
       markStartup("mount");

@@ -27,7 +27,9 @@ pub fn save_window_session(
     layouts::save_window_session(&app, window.label(), root).map_err(|err| err.to_string())
 }
 
+/// Off the main thread: a window reads it as it starts, and there it would
+/// hold up every other call.
 #[tauri::command]
-pub fn window_session(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Option<serde_json::Value> {
+pub async fn window_session(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Option<serde_json::Value> {
     layouts::window_session(&app, window.label())
 }

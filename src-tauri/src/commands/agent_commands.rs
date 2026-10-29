@@ -80,8 +80,10 @@ pub(crate) fn delete_agent(root: &Path, runner: &Runner, id: &str) -> Result<Vec
     Ok(list)
 }
 
+/// Off the main thread: a window reads it as it starts, and there it would
+/// hold up every other call.
 #[tauri::command]
-pub fn agents_list(app: tauri::AppHandle) -> Result<Vec<AgentSpec>, String> {
+pub async fn agents_list(app: tauri::AppHandle) -> Result<Vec<AgentSpec>, String> {
     Ok(store::list_in(&root(&app)?))
 }
 
