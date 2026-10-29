@@ -109,7 +109,7 @@
     <div class="palette-list" id="palette-listbox" role="listbox" bind:this={listEl}>
       {#each results as command, index (command.id)}
         {#if index === 0 || results[index - 1].group !== command.group}
-          <div class="palette-group">{t(GROUP_LABEL_KEYS[command.group])}</div>
+          <div class="palette-group" role="presentation">{t(GROUP_LABEL_KEYS[command.group])}</div>
         {/if}
         <button
           class="palette-item"

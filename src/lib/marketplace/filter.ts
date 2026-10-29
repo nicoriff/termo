@@ -8,7 +8,7 @@
  * word like "git" appears in dozens of descriptions and in exactly one name.
  */
 
-import { normalize, scoreMatch } from "$lib/commands/commands";
+import { normalize, scoreMatch } from "$lib/core/fuzzy-match";
 import type { AgentTarget, CatalogItem, ComponentClass } from "$lib/core/marketplace-client";
 
 export interface Facets {

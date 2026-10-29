@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { matchCommands, normalize, scoreMatch, type Command, type CommandGroup } from "./commands";
+import { normalize, scoreMatch } from "../core/fuzzy-match";
+import { matchCommands, type Command, type CommandGroup } from "./commands";
 
 function cmd(label: string, group: CommandGroup = "navigation"): Command {
   return { id: label, group, label, run: () => {} };

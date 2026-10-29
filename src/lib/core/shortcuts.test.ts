@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventMatchesKeybinding,
   filterShortcutActions,
+  keybindingSearchText,
   findConflict,
   formatKeybindingLabel,
   getDefaultKeybinding,
@@ -294,7 +295,27 @@ describe("filterShortcutActions", () => {
     expect(filterShortcutActions(["aiRunning", "newTab"], "aime", of, bindingOf)).toEqual(["aiRunning"]);
   });
 
+  it("matches the combination by substring only, not letters in order", () => {
+    const label = () => "Zzz";
+    const binding = () => "Ctrl+Shift+T";
+    expect(filterShortcutActions(["copy"], "shift", label, binding)).toEqual(["copy"]);
+    expect(filterShortcutActions(["copy"], "cst", label, binding)).toEqual([]);
+  });
+
   it("requires every word to match", () => {
     expect(filterShortcutActions(actions, "nueva copiar", labelOf, bindingOf)).toEqual([]);
+  });
+});
+
+describe("keybindingSearchText", () => {
+  it("adds the modifier names on macOS, where the label is only symbols", () => {
+    const text = keybindingSearchText("meta+shift+t", true);
+    expect(text).toContain("⌘⇧T");
+    expect(text).toContain("cmd");
+    expect(text).toContain("shift");
+  });
+
+  it("is just the label elsewhere", () => {
+    expect(keybindingSearchText("ctrl+shift+t", false)).toBe("Ctrl+Shift+T");
   });
 });

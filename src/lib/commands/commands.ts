@@ -4,11 +4,8 @@
  * Labels arrive already translated; `command-registry.svelte.ts` builds them.
  */
 
-import { normalize, scoreMatch } from "../core/fuzzy-match";
+import { scoreMatch } from "../core/fuzzy-match";
 import type { ShortcutAction } from "../core/shortcuts";
-
-// Where they used to live: callers and tests still import them from here.
-export { normalize, scoreMatch };
 
 export type CommandGroup = "navigation" | "tabs" | "layouts" | "appearance" | "git" | "aiMode" | "agents" | "extensions";
 

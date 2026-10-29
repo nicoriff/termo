@@ -4,7 +4,7 @@
   import { isMac } from "$lib/core/platform";
   import {
     filterShortcutActions,
-    formatKeybindingLabel,
+    keybindingSearchText,
     SHORTCUT_GROUPS,
     SHORTCUT_LABEL_KEYS,
   } from "$lib/core/shortcuts";
@@ -20,7 +20,7 @@
         group.actions,
         query,
         (action) => t(SHORTCUT_LABEL_KEYS[action]),
-        (action) => formatKeybindingLabel(appConfigStore.getEffectiveShortcut(action), isMac),
+        (action) => keybindingSearchText(appConfigStore.getEffectiveShortcut(action), isMac),
       ),
     })).filter((group) => group.actions.length > 0),
   );
