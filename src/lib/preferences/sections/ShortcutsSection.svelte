@@ -1,46 +1,50 @@
 <script lang="ts">
   import ShortcutRecorder from "../ShortcutRecorder.svelte";
-  import { SHORTCUT_LABEL_KEYS } from "$lib/core/shortcuts";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { isMac } from "$lib/core/platform";
+  import {
+    filterShortcutActions,
+    formatKeybindingLabel,
+    SHORTCUT_GROUPS,
+    SHORTCUT_LABEL_KEYS,
+  } from "$lib/core/shortcuts";
   import { t } from "$lib/i18n/i18n.svelte";
+
+  let query = $state("");
+
+  // Groups left with no matching shortcut disappear, title included.
+  const groups = $derived(
+    SHORTCUT_GROUPS.map((group) => ({
+      ...group,
+      actions: filterShortcutActions(
+        group.actions,
+        query,
+        (action) => t(SHORTCUT_LABEL_KEYS[action]),
+        (action) => formatKeybindingLabel(appConfigStore.getEffectiveShortcut(action), isMac),
+      ),
+    })).filter((group) => group.actions.length > 0),
+  );
 </script>
 
 <section>
   <h3>{t("preferences.shortcuts.title")}</h3>
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.newTab)}</span>
-    <ShortcutRecorder action="newTab" />
-  </div>
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.tabMenu)}</span>
-    <ShortcutRecorder action="tabMenu" />
-  </div>
-  {#each ["newWindow", "newClaude", "newCodex", "newGemini", "newCopilot", "newGrok", "favoriteTab", "toggleExplorer", "toggleGit", "toggleHarness", "toggleTabGroups", "toggleAgents", "toggleOrchestration"] as const as action (action)}
-    <div class="shortcut-row">
-      <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
-      <ShortcutRecorder {action} />
-    </div>
-  {/each}
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.cycleTab)}</span>
-    <ShortcutRecorder action="cycleTab" />
-  </div>
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.zoomTile)}</span>
-    <ShortcutRecorder action="zoomTile" mode="zoom" />
-  </div>
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.commandPalette)}</span>
-    <ShortcutRecorder action="commandPalette" />
-  </div>
-  <div class="shortcut-row">
-    <span>{t(SHORTCUT_LABEL_KEYS.marketplace)}</span>
-    <ShortcutRecorder action="marketplace" />
-  </div>
-  {#each ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"] as const as action (action)}
-    <div class="shortcut-row">
-      <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
-      <ShortcutRecorder {action} />
-    </div>
+  <input
+    class="shortcut-search"
+    type="search"
+    bind:value={query}
+    placeholder={t("preferences.shortcuts.search")}
+    aria-label={t("preferences.shortcuts.search")}
+  />
+  {#each groups as group (group.id)}
+    <h4>{t(group.titleKey)}</h4>
+    {#each group.actions as action (action)}
+      <div class="shortcut-row">
+        <span>{t(SHORTCUT_LABEL_KEYS[action])}</span>
+        <ShortcutRecorder {action} mode={action === "zoomTile" ? "zoom" : "combo"} />
+      </div>
+    {/each}
+  {:else}
+    <p class="shortcut-empty">{t("preferences.shortcuts.empty")}</p>
   {/each}
 </section>
 
@@ -55,6 +59,31 @@
     letter-spacing: 0.05em;
     opacity: 0.6;
     margin: 0 0 8px;
+  }
+
+  h4 {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.6;
+    margin: 14px 0 0;
+  }
+
+  .shortcut-search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 12px;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--tabbar-border, #2a2a2a);
+    border-radius: 4px;
+  }
+
+  .shortcut-empty {
+    margin: 12px 0 0;
+    font-size: 12px;
+    opacity: 0.6;
   }
 
   .shortcut-row {

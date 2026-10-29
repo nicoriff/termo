@@ -2592,6 +2592,7 @@ export const es = {
     placeholder: "Escribí un comando...",
     empty: "Sin comandos que coincidan",
     hint: "Escribí para ver comandos",
+    openTabMenu: "Abrir el menú de nueva pestaña",
     groups: {
       git: "Git",
       navigation: "Ir a",
@@ -3089,6 +3090,15 @@ export const es = {
     },
     shortcuts: {
       title: "Shortcuts",
+      search: "Buscar shortcuts...",
+      empty: "Ningún shortcut coincide",
+      groups: {
+        tabs: "Pestañas y ventanas",
+        agents: "Nueva pestaña de agente",
+        panels: "Paneles y herramientas",
+        editing: "Edición",
+        aiMode: "Modo IA",
+      },
     },
   },
 };

@@ -16,6 +16,7 @@
  * fired is read straight off the event by the caller, not decided here.
  */
 
+import { scoreMatch } from "../commands/commands";
 import type { MessageKey } from "../i18n/translate";
 
 export type ShortcutAction =
@@ -376,4 +377,77 @@ export function formatKeybindingLabel(binding: string, isMacPlatform: boolean): 
     return ordered.map((m) => MAC_MODIFIER_SYMBOLS[m]).join("") + formatKeyLabel(key);
   }
   return [...ordered.map((m) => OTHER_MODIFIER_LABELS[m]), formatKeyLabel(key)].join("+");
+}
+
+/** Every shortcut, grouped the way Preferences lists them. A test checks that
+ * each action in `SHORTCUT_ACTIONS` appears in exactly one group, so a new
+ * action can't be added without showing up in the list. */
+export const SHORTCUT_GROUPS: { id: string; titleKey: MessageKey; actions: ShortcutAction[] }[] = [
+  {
+    id: "tabs",
+    titleKey: "preferences.shortcuts.groups.tabs",
+    actions: ["newWindow", "newTab", "tabMenu", "cycleTab", "zoomTile", "favoriteTab"],
+  },
+  {
+    id: "agents",
+    titleKey: "preferences.shortcuts.groups.agents",
+    actions: ["newClaude", "newCodex", "newGemini", "newCopilot", "newGrok"],
+  },
+  {
+    id: "panels",
+    titleKey: "preferences.shortcuts.groups.panels",
+    actions: [
+      "commandPalette",
+      "toggleExplorer",
+      "toggleGit",
+      "toggleHarness",
+      "toggleTabGroups",
+      "toggleAgents",
+      "toggleOrchestration",
+      "marketplace",
+      "diagnostics",
+      "companion",
+      "quickAsk",
+    ],
+  },
+  {
+    id: "editing",
+    titleKey: "preferences.shortcuts.groups.editing",
+    actions: ["copy", "paste", "selectAll"],
+  },
+  {
+    id: "aiMode",
+    titleKey: "preferences.shortcuts.groups.aiMode",
+    actions: ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"],
+  },
+];
+
+/** The actions whose label or key combination matches every word of `query`,
+ * in the order given. Matching is the command palette's (`scoreMatch`:
+ * accent- and case-insensitive, and letters in order, so "aime" finds "AI
+ * Mode"). An empty query keeps them all. Labels arrive translated, so this
+ * stays free of the i18n store. */
+export function filterShortcutActions(
+  actions: ShortcutAction[],
+  query: string,
+  labelOf: (action: ShortcutAction) => string,
+  bindingOf: (action: ShortcutAction) => string,
+): ShortcutAction[] {
+  const words = query.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return actions;
+  return actions.filter((action) => {
+    const label = labelOf(action);
+    const binding = bindingOf(action);
+    return words.every((word) => scoreMatch(label, word) !== null || scoreMatch(binding, word) !== null);
+  });
+}
+
+/** The scrollTop that brings the span [top, bottom] into a viewport of
+ * `viewHeight` scrolled to `scrollTop`, moving as little as possible (what
+ * `scrollIntoView({ block: "nearest" })` does). Keyboard navigation of a list
+ * doesn't scroll on its own: the highlight moves, the viewport doesn't. */
+export function scrollTopToReveal(scrollTop: number, viewHeight: number, top: number, bottom: number): number {
+  if (top < scrollTop) return top;
+  if (bottom > scrollTop + viewHeight) return Math.max(0, bottom - viewHeight);
+  return scrollTop;
 }

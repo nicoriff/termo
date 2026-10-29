@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   eventMatchesKeybinding,
+  filterShortcutActions,
   findConflict,
   formatKeybindingLabel,
   getDefaultKeybinding,
@@ -12,8 +13,12 @@ import {
   normalizeEventToZoomBinding,
   parseKeybinding,
   resolveKeybinding,
+  scrollTopToReveal,
   serializeKeybinding,
+  SHORTCUT_ACTIONS,
+  SHORTCUT_GROUPS,
   type KeyLike,
+  type ShortcutAction,
 } from "./shortcuts";
 
 function key(overrides: Partial<KeyLike> & { key: string }): KeyLike {
@@ -250,5 +255,59 @@ describe("formatKeybindingLabel", () => {
   it("formats the zoom placeholder as an up/down pair", () => {
     expect(formatKeybindingLabel("meta+arrow", true)).toBe("⌘↑ / ⌘↓");
     expect(formatKeybindingLabel("alt+arrow", false)).toBe("Alt+↑ / Alt+↓");
+  });
+});
+
+describe("SHORTCUT_GROUPS", () => {
+  it("lists every shortcut action exactly once", () => {
+    const listed = SHORTCUT_GROUPS.flatMap((group) => group.actions);
+    expect([...listed].sort()).toEqual([...SHORTCUT_ACTIONS].sort());
+  });
+});
+
+describe("filterShortcutActions", () => {
+  const labels: Partial<Record<ShortcutAction, string>> = {
+    newTab: "Nueva pestaña",
+    copy: "Copiar",
+    diagnostics: "Diagnóstico",
+  };
+  const labelOf = (a: ShortcutAction) => labels[a] ?? a;
+  const bindingOf = (a: ShortcutAction) => formatKeybindingLabel(getDefaultKeybinding(a, true), true);
+  const actions: ShortcutAction[] = ["newTab", "copy", "diagnostics"];
+
+  it("keeps everything for an empty query", () => {
+    expect(filterShortcutActions(actions, "  ", labelOf, bindingOf)).toEqual(actions);
+  });
+
+  it("matches the label ignoring case and accents", () => {
+    expect(filterShortcutActions(actions, "diagnostico", labelOf, bindingOf)).toEqual(["diagnostics"]);
+    expect(filterShortcutActions(actions, "PESTANA", labelOf, bindingOf)).toEqual(["newTab"]);
+  });
+
+  it("matches the key combination", () => {
+    expect(filterShortcutActions(actions, "⌘⇧D", labelOf, bindingOf)).toEqual(["diagnostics"]);
+    expect(filterShortcutActions(actions, "⌘C", labelOf, bindingOf)).toEqual(["copy"]);
+  });
+
+  it("matches letters in order, as the command palette does", () => {
+    const aiLabels: Partial<Record<ShortcutAction, string>> = { aiRunning: "AI Mode: Running", newTab: "New tab" };
+    const of = (a: ShortcutAction) => aiLabels[a] ?? a;
+    expect(filterShortcutActions(["aiRunning", "newTab"], "aime", of, bindingOf)).toEqual(["aiRunning"]);
+  });
+
+  it("requires every word to match", () => {
+    expect(filterShortcutActions(actions, "nueva copiar", labelOf, bindingOf)).toEqual([]);
+  });
+});
+
+describe("scrollTopToReveal", () => {
+  it("stays put when the span is already visible", () => {
+    expect(scrollTopToReveal(100, 200, 150, 180)).toBe(100);
+  });
+  it("scrolls down just enough for a span below the viewport", () => {
+    expect(scrollTopToReveal(0, 200, 190, 230)).toBe(30);
+  });
+  it("scrolls up to a span above the viewport", () => {
+    expect(scrollTopToReveal(100, 200, 40, 70)).toBe(40);
   });
 });

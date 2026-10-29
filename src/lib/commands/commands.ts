@@ -4,6 +4,8 @@
  * Labels arrive already translated; `command-registry.svelte.ts` builds them.
  */
 
+import type { ShortcutAction } from "../core/shortcuts";
+
 export type CommandGroup = "navigation" | "tabs" | "layouts" | "appearance" | "git" | "aiMode" | "agents" | "extensions";
 
 /** Display order of the groups in the palette. */
@@ -22,6 +24,8 @@ export interface Command {
   id: string;
   group: CommandGroup;
   label: string;
+  /** The shortcut that does the same, shown beside the command. */
+  shortcut?: ShortcutAction;
   run: () => void;
 }
 
