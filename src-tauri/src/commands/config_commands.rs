@@ -2,8 +2,10 @@ use crate::config::{store, AppConfig};
 use serde::Serialize;
 use tauri::Emitter;
 
+/// Off the main thread: every window asks for it first thing, while the main
+/// thread is still busy with that window's start.
 #[tauri::command]
-pub fn get_config(app: tauri::AppHandle) -> AppConfig {
+pub async fn get_config(app: tauri::AppHandle) -> AppConfig {
     store::load(&app)
 }
 

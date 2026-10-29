@@ -11,13 +11,14 @@
   import { workspaceStore } from "./workspace-store.svelte";
   import TileChrome from "./TileChrome.svelte";
   import Terminal from "$lib/terminal/Terminal.svelte";
-  import FileEditor from "$lib/editor/FileEditor.svelte";
-  import DiffView from "$lib/editor/DiffView.svelte";
-  import GitGraphView from "$lib/git/GitGraphView.svelte";
-  import AgentRunView from "$lib/agents/AgentRunView.svelte";
-  import ProjectView from "$lib/agents/ProjectView.svelte";
-  import OrchestrationView from "$lib/agents/OrchestrationView.svelte";
-  import OrchestrationConsole from "$lib/agents/OrchestrationConsole.svelte";
+  import { loadDiffView, loadFileEditor } from "$lib/editor/lazy-editors";
+  import {
+    loadAgentRunView,
+    loadGitGraphView,
+    loadOrchestrationConsole,
+    loadOrchestrationView,
+    loadProjectView,
+  } from "./lazy-tabs";
   import QuickAskTab from "$lib/companion/QuickAskTab.svelte";
   import { fade } from "svelte/transition";
 
@@ -89,28 +90,47 @@
         onpointerdown={() => workspaceStore.focusTile(loc.tileId)}
       >
         {#if loc.session.filePath}
-          <FileEditor
-            sessionId={loc.session.id}
-            filePath={loc.session.filePath}
-            active={workspaceStore.focusedTileId === loc.tileId &&
-              tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
-          />
+          {#await loadFileEditor() then { default: FileEditor }}
+            <FileEditor
+              sessionId={loc.session.id}
+              filePath={loc.session.filePath}
+              active={workspaceStore.focusedTileId === loc.tileId &&
+                tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+            />
+          {/await}
         {:else if loc.session.diff}
-          <DiffView
-            diff={loc.session.diff}
-            active={workspaceStore.focusedTileId === loc.tileId &&
-              tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
-          />
+          {#await loadDiffView() then { default: DiffView }}
+            <DiffView
+              diff={loc.session.diff}
+              active={workspaceStore.focusedTileId === loc.tileId &&
+                tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+            />
+          {/await}
         {:else if loc.session.gitGraph}
-          <GitGraphView root={loc.session.gitGraph.root} />
+          {@const root = loc.session.gitGraph.root}
+          {#await loadGitGraphView() then { default: GitGraphView }}
+            <GitGraphView {root} />
+          {/await}
         {:else if loc.session.agentRun}
-          <AgentRunView agentId={loc.session.agentRun.agentId} runId={loc.session.agentRun.runId} />
+          {@const { agentId, runId } = loc.session.agentRun}
+          {#await loadAgentRunView() then { default: AgentRunView }}
+            <AgentRunView {agentId} {runId} />
+          {/await}
         {:else if loc.session.projectView}
-          <ProjectView projectId={loc.session.projectView.projectId} />
+          {@const projectId = loc.session.projectView.projectId}
+          {#await loadProjectView() then { default: ProjectView }}
+            <ProjectView {projectId} />
+          {/await}
         {:else if loc.session.orchestrationView?.console}
-          <OrchestrationConsole orchestrationId={loc.session.orchestrationView.orchestrationId} />
+          {@const orchestrationId = loc.session.orchestrationView.orchestrationId}
+          {#await loadOrchestrationConsole() then { default: OrchestrationConsole }}
+            <OrchestrationConsole {orchestrationId} />
+          {/await}
         {:else if loc.session.orchestrationView}
-          <OrchestrationView orchestrationId={loc.session.orchestrationView.orchestrationId} />
+          {@const orchestrationId = loc.session.orchestrationView.orchestrationId}
+          {#await loadOrchestrationView() then { default: OrchestrationView }}
+            <OrchestrationView {orchestrationId} />
+          {/await}
         {:else if loc.session.dormant}
           <!-- Put away to save memory (see tab-saver): no console mounted.
                It wakes as soon as it's the tab in view. -->

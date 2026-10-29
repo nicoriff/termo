@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { readTextFile, writeTextFile } from "$lib/core/explorer-client";
   import { t } from "$lib/i18n/i18n.svelte";
-  import HarnessTextEditor from "./HarnessTextEditor.svelte";
+  import { loadHarnessTextEditor } from "./lazy-editors";
   import { harnessStore } from "./harness-store.svelte";
 
   /** One of the repository's instruction files (CLAUDE.md, AGENTS.md…),
@@ -79,7 +79,9 @@
     <div class="error-box"><pre>{error}</pre></div>
   {/if}
   {#if original !== null}
-    <HarnessTextEditor value={text} label={path} onchange={(next) => (text = next)} tall />
+    {#await loadHarnessTextEditor() then { default: HarnessTextEditor }}
+      <HarnessTextEditor value={text} label={path} onchange={(next) => (text = next)} tall />
+    {/await}
     <div class="file-actions">
       {#if dirty}
         <button class="small" disabled={saving} onclick={() => original !== null && (text = original)}>{t("harness.files.revert")}</button>

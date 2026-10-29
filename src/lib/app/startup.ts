@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { lazyLoadsSettled } from "$lib/core/lazy";
 import { windowReady } from "$lib/core/window-client";
 
 /** How long showing the window waits on the UI font before giving up on it:
@@ -13,10 +14,13 @@ export function markStartup(name: string): void {
   marks.push([name, Math.round(performance.now())]);
 }
 
-/** The tabs are in place: once they're laid out, the window, built hidden,
- * shows (see startup.rs). Not on an animation frame: a window never shown
- * doesn't paint, so it would never come. */
+/** The tabs are in place: once they're laid out — a file tab's editor
+ * loaded too (see core/lazy.ts) —, the window, built hidden, shows (see
+ * startup.rs). Not on an animation frame: a window never shown doesn't
+ * paint, so it would never come. */
 export async function showWhenLaidOut(): Promise<void> {
+  await tick();
+  await lazyLoadsSettled();
   await tick();
   await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, FONT_WAIT_MS))]);
   markStartup("ready");
