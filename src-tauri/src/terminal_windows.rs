@@ -66,11 +66,13 @@ pub fn open_new(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|err| err.to_string())?
         .build()
         .map_err(|err| err.to_string())?;
+    // Built hidden, like `main`: it shows, in front, once its page has its
+    // tab in place (see startup.rs).
+    crate::startup::hold(&window, &crate::config::store::load(app).window);
     let shaped = window.clone();
     window
         .run_on_main_thread(move || crate::commands::window_shape::attach(&shaped))
         .map_err(|err| err.to_string())?;
-    let _ = window.set_focus();
     Ok(())
 }
 

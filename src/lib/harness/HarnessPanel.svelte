@@ -14,7 +14,7 @@
   import AiEnginePicker from "$lib/agents/AiEnginePicker.svelte";
   import { aiEngine } from "$lib/agents/ai-engine.svelte";
   import { latestThought, stepLine, toolSteps } from "$lib/agents/planning-progress";
-  import HarnessDiff from "./HarnessDiff.svelte";
+  import { loadHarnessDiff } from "./lazy-editors";
   import HarnessFileEditor from "./HarnessFileEditor.svelte";
   import HarnessRuleSection from "./HarnessRuleSection.svelte";
   import {
@@ -185,7 +185,9 @@
         </button>
         {#if expanded.includes(change.path)}
           <div class="review-diff">
-            <HarnessDiff path={change.path} before={change.before} after={change.after} />
+            {#await loadHarnessDiff() then { default: HarnessDiff }}
+              <HarnessDiff path={change.path} before={change.before} after={change.after} />
+            {/await}
           </div>
         {/if}
       </li>

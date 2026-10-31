@@ -41,9 +41,10 @@ pub fn cancel_agent_cli_install() {
 }
 
 /// Which agent CLIs this machine has, so the panel can say why installing
-/// isn't available instead of failing at the moment the user clicks.
+/// isn't available instead of failing at the moment the user clicks. Off the
+/// main thread: it searches the PATH for each.
 #[tauri::command]
-pub fn marketplace_status() -> MarketplaceStatus {
+pub async fn marketplace_status() -> MarketplaceStatus {
     MarketplaceStatus {
         claude_cli: agent_cli::locate(AgentTarget::Claude, None)
             .map(|path| path.to_string_lossy().into_owned()),

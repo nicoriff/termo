@@ -166,7 +166,7 @@
     // requestAnimationFrame callbacks never run there — without the timeout
     // the preloaded window would report ready only after being shown, which
     // is exactly what the report unblocks.
-    void appConfigStore.init({ restoreWindowSize: false }).finally(() => {
+    void appConfigStore.init().finally(() => {
       let reported = false;
       const report = () => {
         if (reported) return;

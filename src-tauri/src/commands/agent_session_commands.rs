@@ -1,8 +1,10 @@
 use crate::agent_favorites::{self, AgentFavorite};
 use crate::agent_sessions::{self, AgentSession};
 
+/// Off the main thread, as the next: they read files, and every window asks
+/// for them as it starts.
 #[tauri::command]
-pub fn list_agent_sessions(app: tauri::AppHandle) -> Vec<AgentSession> {
+pub async fn list_agent_sessions(app: tauri::AppHandle) -> Vec<AgentSession> {
     agent_sessions::list_resumable(&app)
 }
 
@@ -12,7 +14,7 @@ pub fn forget_agent_session(app: tauri::AppHandle, id: String) -> Vec<AgentSessi
 }
 
 #[tauri::command]
-pub fn list_agent_favorites(app: tauri::AppHandle) -> Vec<AgentFavorite> {
+pub async fn list_agent_favorites(app: tauri::AppHandle) -> Vec<AgentFavorite> {
     agent_favorites::list(&app)
 }
 

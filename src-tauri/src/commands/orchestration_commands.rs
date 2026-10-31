@@ -46,8 +46,10 @@ pub async fn orchestration_catalog() -> Result<Catalog, String> {
     tauri::async_runtime::spawn_blocking(planner::catalog).await.map_err(|err| err.to_string())
 }
 
+/// Off the main thread: a window reads it as it starts, and there it would
+/// hold up every other call.
 #[tauri::command]
-pub fn orchestration_list(app: tauri::AppHandle) -> Result<Vec<Orchestration>, String> {
+pub async fn orchestration_list(app: tauri::AppHandle) -> Result<Vec<Orchestration>, String> {
     Ok(store::list_in(&root(&app)?))
 }
 

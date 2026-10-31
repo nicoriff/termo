@@ -178,6 +178,14 @@ pub async fn preferences_ready(window: tauri::WebviewWindow) -> Result<(), Strin
     Ok(())
 }
 
+/// A console window's page has its tabs in place: the window, built hidden,
+/// shows (see startup.rs). `marks` are the page's timings for startup.log.
+#[tauri::command]
+pub async fn window_ready(window: tauri::WebviewWindow, marks: Vec<(String, f64)>) -> Result<(), String> {
+    crate::startup::ready(&window, marks);
+    Ok(())
+}
+
 /// Called by each window with its resolved UI language ("es" or "en"), so
 /// backend-generated messages and the Preferences window title follow it.
 #[tauri::command]
@@ -215,9 +223,15 @@ pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoad
         // ones the sessions daemon runs stay running, unshown, for the
         // reloaded page to attach to again (see pty/consoles.rs).
         (_, PageLoadEvent::Started) if crate::terminal_windows::is_terminal(label) => {
+            if label == crate::terminal_windows::MAIN {
+                crate::startup::mark("page_started");
+            }
             webview.app_handle().state::<crate::state::AppState>().pty.release_owned_by(label);
         }
         (_, PageLoadEvent::Finished) if crate::terminal_windows::is_terminal(label) => {
+            if label == crate::terminal_windows::MAIN {
+                crate::startup::mark("page_loaded");
+            }
             let app = webview.app_handle().clone();
             // Off the main thread: this callback runs on it, and building a
             // webview window there deadlocks on Windows.

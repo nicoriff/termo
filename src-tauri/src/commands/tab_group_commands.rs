@@ -1,7 +1,9 @@
 use crate::tab_groups;
 
+/// Off the main thread: a window reads it as it starts, and there it would
+/// hold up every other call.
 #[tauri::command]
-pub fn list_tab_groups(app: tauri::AppHandle) -> Vec<serde_json::Value> {
+pub async fn list_tab_groups(app: tauri::AppHandle) -> Vec<serde_json::Value> {
     tab_groups::list(&app)
 }
 

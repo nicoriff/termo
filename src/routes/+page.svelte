@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import MainWindow from "$lib/app/MainWindow.svelte";
-  import Preferences from "$lib/preferences/Preferences.svelte";
   import { startI18nSync } from "$lib/i18n/i18n.svelte";
   import { routeWindowOpen } from "$lib/core/links";
 
@@ -25,10 +23,16 @@
 
 <svelte:window oncontextmenu={blockNativeMenu} />
 
+<!-- Each window loads only its own: a console window has no use for all of
+Preferences, nor Preferences for the consoles. -->
 {#if isPreferences}
-  <Preferences />
+  {#await import("$lib/preferences/Preferences.svelte") then { default: Preferences }}
+    <Preferences />
+  {/await}
 {:else}
-  <MainWindow />
+  {#await import("$lib/app/MainWindow.svelte") then { default: MainWindow }}
+    <MainWindow />
+  {/await}
 {/if}
 
 <style>

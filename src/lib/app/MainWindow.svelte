@@ -1,55 +1,30 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Lazy from "$lib/core/Lazy.svelte";
+  import * as surfaces from "./lazy-surfaces";
   import ResizeBorders from "$lib/titlebar/ResizeBorders.svelte";
   import TitleBar from "$lib/titlebar/TitleBar.svelte";
   import SplitView from "$lib/layout/SplitView.svelte";
   import TileOverviewMap from "$lib/layout/TileOverviewMap.svelte";
   import CommandPalette from "$lib/commands/CommandPalette.svelte";
-  import SaveLayoutDialog from "$lib/layout/SaveLayoutDialog.svelte";
-  import FavoriteDialog from "$lib/ai-mode/FavoriteDialog.svelte";
   import { favoriteDraftForFocusedTab } from "$lib/ai-mode/favorites-store.svelte";
-  import FavoritesManagerDialog from "$lib/ai-mode/FavoritesManagerDialog.svelte";
-  import RestoreLayoutDialog from "$lib/layout/RestoreLayoutDialog.svelte";
-  import RemoteConnectDialog from "$lib/remote/RemoteConnectDialog.svelte";
-  import DeleteLayoutDialog from "$lib/layout/DeleteLayoutDialog.svelte";
-  import LayoutManagerDialog from "$lib/layout/LayoutManagerDialog.svelte";
-  import QuitDialog from "./QuitDialog.svelte";
-  import AboutDialog from "./AboutDialog.svelte";
-  import UpdateDialog from "./UpdateDialog.svelte";
-  import WhatsNewDialog from "./WhatsNewDialog.svelte";
   import { showWhatsNewOnce } from "./whats-new";
-  import MissingAgentsDialog from "$lib/agent-install/MissingAgentsDialog.svelte";
+  import { markStartup, showWhenLaidOut } from "./startup";
   import { missingAgents } from "$lib/agent-install/missing-agents-store.svelte";
-  import OnboardingWizard from "$lib/onboarding/OnboardingWizard.svelte";
-  import AgentLaunchDialog from "$lib/agent-launch/AgentLaunchDialog.svelte";
-  import CloseFileDialog from "$lib/editor/CloseFileDialog.svelte";
   import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-  import ExplorerPanel from "$lib/explorer/ExplorerPanel.svelte";
   import { gitStore } from "$lib/git/git-store.svelte";
   import { gitReviewStore } from "$lib/git/git-review-store.svelte";
-  import GitPanel from "$lib/git/GitPanel.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
-  import HarnessPanel from "$lib/harness/HarnessPanel.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
   import { tabSaver } from "$lib/tab-groups/tab-saver.svelte";
-  import TabGroupsPanel from "$lib/tab-groups/TabGroupsPanel.svelte";
-  import TabGroupEditor from "$lib/tab-groups/TabGroupEditor.svelte";
-  import AgentsSidebar from "$lib/agents/AgentsSidebar.svelte";
   import ActivityBar from "./ActivityBar.svelte";
-  import AgentWizard from "$lib/agents/AgentWizard.svelte";
-  import ProjectDialog from "$lib/agents/ProjectDialog.svelte";
-  import OrchestrationDialog from "$lib/agents/OrchestrationDialog.svelte";
   import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { startAgentRunAttention } from "$lib/agents/agent-attention";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import { requestAgentLaunch } from "$lib/agent-launch/request-launch";
   import TerminalContextMenu from "$lib/terminal/TerminalContextMenu.svelte";
-  import MarketplacePanel from "$lib/marketplace/MarketplacePanel.svelte";
-  import DiagnosticsPanel from "$lib/diagnostics/DiagnosticsPanel.svelte";
-  import CompanionPanel from "$lib/companion/CompanionPanel.svelte";
   import { companionNudges } from "$lib/companion/companion-nudges.svelte";
-  import QuickAsk from "$lib/companion/QuickAsk.svelte";
   import { quickAskStore } from "$lib/companion/quick-ask-store.svelte";
   import { layoutsStore } from "$lib/layout/layouts-store.svelte";
   import { sessionKeeper } from "$lib/layout/session-keeper.svelte";
@@ -73,6 +48,7 @@
   import { startAgentAttention } from "$lib/ai-mode/attention";
   import { openStartedFrom, startNotificationClicks } from "./notification-clicks";
   import { resolveDefaultShell } from "$lib/core/default-shell";
+  import { windowsBuild } from "$lib/core/pty-client";
   import { eventMatchesKeybinding } from "$lib/core/shortcuts";
   import { shareRemoteLook } from "$lib/core/remote-client";
   import { themeStore } from "$lib/theme/theme-store.svelte";
@@ -109,29 +85,43 @@
     newTabOptions.refresh();
     void agentsStore.init();
     void orchestrationStore.init();
+    // Every console waits on it as it mounts: asked now, it's in by then.
+    void windowsBuild();
 
     (async () => {
-      await appConfigStore.init();
+      markStartup("mount");
+      try {
+        await appConfigStore.init();
+        markStartup("config");
 
-      await layoutsStore.load();
-      // Before anything restores tabs into groups, or it would think them gone.
-      await tabGroupsStore.load();
-      // Launching straight into the chosen layout, rather than opening a
-      // console and replacing it a moment later. A name that no longer exists
-      // just falls through to the normal single console. Only the window Termo
-      // opens with: one opened later starts with a single console.
-      const preset =
-        isFirstWindow() && appConfigStore.defaultLayout
-          ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
-          : undefined;
-      // Before either: consoles this window had open that are still running
-      // (see session-keeper) come back where they were.
-      const restored = await sessionKeeper.restore();
-      if (!restored && preset) {
-        layoutsStore.apply(preset);
-      } else if (!restored) {
-        const shell = await resolveDefaultShell();
-        workspaceStore.initRoot(shell.path, shell.args, shell.title);
+        await layoutsStore.load();
+        // Before anything restores tabs into groups, or it would think them gone.
+        await tabGroupsStore.load();
+        markStartup("layouts");
+        // Launching straight into the chosen layout, rather than opening a
+        // console and replacing it a moment later. A name that no longer exists
+        // just falls through to the normal single console. Only the window Termo
+        // opens with: one opened later starts with a single console.
+        const preset =
+          isFirstWindow() && appConfigStore.defaultLayout
+            ? layoutsStore.layouts.find((layout) => layout.name === appConfigStore.defaultLayout)
+            : undefined;
+        // Before either: consoles this window had open that are still running
+        // (see session-keeper) come back where they were.
+        const restored = await sessionKeeper.restore();
+        markStartup("restore");
+        if (!restored && preset) {
+          layoutsStore.apply(preset);
+        } else if (!restored) {
+          const shell = await resolveDefaultShell();
+          workspaceStore.initRoot(shell.path, shell.args, shell.title);
+        }
+        markStartup("workspace");
+      } finally {
+        // The window shows now, whole: built hidden, it had none of this
+        // yet. Also when something above failed: as far as it got, rather
+        // than waiting out the backend's grace period.
+        void showWhenLaidOut();
       }
 
       stopSessionKeeper = sessionKeeper.start();
@@ -420,99 +410,99 @@
     <ActivityBar />
     <!-- One side panel at a time (see explorerStore). -->
     {#if agentsStore.open}
-      <AgentsSidebar />
+      <Lazy load={surfaces.loadAgentsSidebar} />
     {:else if explorerStore.open}
-      <ExplorerPanel />
+      <Lazy load={surfaces.loadExplorerPanel} />
     {:else if gitStore.open && appConfigStore.gitEnabled}
-      <GitPanel />
+      <Lazy load={surfaces.loadGitPanel} />
     {:else if harnessStore.open}
-      <HarnessPanel />
+      <Lazy load={surfaces.loadHarnessPanel} />
     {:else if tabGroupsStore.open}
-      <TabGroupsPanel />
+      <Lazy load={surfaces.loadTabGroupsPanel} />
     {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
     {/if}
     {#if uiState.diagnosticsOpen}
-      <DiagnosticsPanel />
+      <Lazy load={surfaces.loadDiagnosticsPanel} />
     {/if}
     {#if uiState.companionOpen && appConfigStore.aiModeEnabled && appConfigStore.companionEnabled}
-      <CompanionPanel />
+      <Lazy load={surfaces.loadCompanionPanel} />
     {/if}
     {#if uiState.quickAskOpen && quickAskAvailable}
-      <QuickAsk />
+      <Lazy load={surfaces.loadQuickAsk} />
     {/if}
     {#if workspaceStore.overviewOpen}
       <TileOverviewMap />
     {/if}
     {#if tabGroupsStore.editing}
-      <TabGroupEditor />
+      <Lazy load={surfaces.loadTabGroupEditor} />
     {/if}
     {#if uiState.commandPaletteOpen}
       <CommandPalette />
     {/if}
     {#if uiState.saveLayoutPromptOpen}
-      <SaveLayoutDialog />
+      <Lazy load={surfaces.loadSaveLayoutDialog} />
     {/if}
     {#if uiState.favoritesManagerOpen}
-      <FavoritesManagerDialog />
+      <Lazy load={surfaces.loadFavoritesManagerDialog} />
     {/if}
     <!-- After the manager: renaming from it opens this on top. -->
     {#if uiState.favoriteDialog}
-      <FavoriteDialog />
+      <Lazy load={surfaces.loadFavoriteDialog} />
     {/if}
     {#if uiState.layoutManagerOpen}
-      <LayoutManagerDialog />
+      <Lazy load={surfaces.loadLayoutManagerDialog} />
     {/if}
     {#if uiState.aboutOpen}
-      <AboutDialog />
+      <Lazy load={surfaces.loadAboutDialog} />
     {/if}
     {#if uiState.updatesOpen}
-      <UpdateDialog />
+      <Lazy load={surfaces.loadUpdateDialog} />
     {/if}
     {#if uiState.whatsNew}
-      <WhatsNewDialog />
+      <Lazy load={surfaces.loadWhatsNewDialog} />
     {/if}
     {#if uiState.onboardingOpen}
-      <OnboardingWizard />
+      <Lazy load={surfaces.loadOnboardingWizard} />
     {/if}
     {#if uiState.agentLaunch && uiState.agentLaunch.target.kind !== "folder"}
-      <AgentLaunchDialog />
+      <Lazy load={surfaces.loadAgentLaunchDialog} />
     {/if}
     {#if uiState.closeFileTarget}
-      <CloseFileDialog />
+      <Lazy load={surfaces.loadCloseFileDialog} />
     {/if}
     {#if uiState.agentWizard}
-      <AgentWizard />
+      <Lazy load={surfaces.loadAgentWizard} />
     {/if}
     {#if uiState.projectDialog}
-      <ProjectDialog />
+      <Lazy load={surfaces.loadProjectDialog} />
     {/if}
     {#if uiState.orchestrationDialog}
-      <OrchestrationDialog />
+      <Lazy load={surfaces.loadOrchestrationDialog} />
     {/if}
     <!-- Picking a folder for one of the forms above: on top of it. -->
     {#if uiState.agentLaunch?.target.kind === "folder"}
-      <AgentLaunchDialog />
+      <Lazy load={surfaces.loadAgentLaunchDialog} />
     {/if}
     {#if uiState.restoreLayoutTarget}
-      <RestoreLayoutDialog />
+      <Lazy load={surfaces.loadRestoreLayoutDialog} />
     {/if}
     {#if uiState.remoteConnect}
-      <RemoteConnectDialog />
+      <Lazy load={surfaces.loadRemoteConnectDialog} />
     {/if}
     {#if uiState.deleteLayoutTarget}
-      <DeleteLayoutDialog />
+      <Lazy load={surfaces.loadDeleteLayoutDialog} />
     {/if}
     <!-- After what's new, which says what this version brought. -->
     {#if uiState.missingAgents && !uiState.whatsNew && !uiState.onboardingOpen}
-      <MissingAgentsDialog />
+      <Lazy load={surfaces.loadMissingAgentsDialog} />
     {/if}
     {#if uiState.quitPrompt}
-      <QuitDialog />
+      <Lazy load={surfaces.loadQuitDialog} />
     {/if}
     {#if uiState.marketplaceOpen}
-      <MarketplacePanel />
+      <Lazy load={surfaces.loadMarketplacePanel} />
     {/if}
     {#if uiState.terminalContextMenu}
       <TerminalContextMenu />

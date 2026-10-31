@@ -471,8 +471,10 @@ pub async fn busy_consoles(
     .map_err(|err| err.to_string())
 }
 
+/// Off the main thread: it searches the PATH, and on the main thread every
+/// other call of a window starting up would wait for it.
 #[tauri::command]
-pub fn list_shells() -> Vec<ShellInfo> {
+pub async fn list_shells() -> Vec<ShellInfo> {
     detect_shells()
 }
 

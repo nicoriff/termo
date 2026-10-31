@@ -150,9 +150,42 @@ fn end_process_tree(pid: u32) {
     }
 }
 
+/// Whether a process with this id exists. Unsure — no access to it, say — is
+/// a yes: taking a running daemon for gone would start a second one.
+#[cfg(windows)]
+fn process_exists(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    // SAFETY: a handle opened, read and closed here.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return GetLastError() != ERROR_INVALID_PARAMETER;
+        }
+        let mut code = 0u32;
+        let read = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        !read || code == STILL_ACTIVE as u32
+    }
+}
+
+#[cfg(unix)]
+fn process_exists(pid: u32) -> bool {
+    // SAFETY: signal 0 only asks whether the process is there.
+    let sent = unsafe { libc::kill(pid as i32, 0) } == 0;
+    sent || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+}
+
 /// A connection to the daemon in `dir`, if one is running there.
 pub fn connect(dir: &Path) -> Option<(TcpStream, DaemonInfo)> {
     let info = read_info(dir)?;
+    // A daemon that's gone leaves its info file behind (the computer
+    // restarted, say), and connecting to its port anyway takes Windows two
+    // seconds to give up on — at startup, before the window can show.
+    if !process_exists(info.pid) {
+        return None;
+    }
     let addr = SocketAddr::from(([127, 0, 0, 1], info.port));
     let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).ok()?;
     Some((stream, info))
@@ -368,5 +401,25 @@ mod tests {
         left.sort();
         assert_eq!(left, [DAEMON_BUILD, DAEMON_EXE]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod process_tests {
+    use super::*;
+
+    #[test]
+    fn a_running_process_exists_and_one_that_ended_does_not() {
+        assert!(process_exists(std::process::id()));
+        let mut child = if cfg!(windows) {
+            Command::new("cmd").args(["/C", "exit"]).spawn().unwrap()
+        } else {
+            Command::new("true").spawn().unwrap()
+        };
+        let pid = child.id();
+        child.wait().unwrap();
+        // Reaped and its handle closed: the id names nothing now.
+        drop(child);
+        assert!(!process_exists(pid));
     }
 }
