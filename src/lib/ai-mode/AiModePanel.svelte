@@ -233,8 +233,13 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
+  /* Anchored on the right, so that past the slot's width it grows leftwards
+     rather than off the window; up to there it's as wide as the slot. */
   .ai-mode-slot:last-child .ai-mode-dropdown {
     left: auto;
+    width: 100%;
+    /* Padding and border inside it, to match the others exactly. */
+    box-sizing: border-box;
   }
 
   .ai-mode-item {
