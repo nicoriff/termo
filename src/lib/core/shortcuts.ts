@@ -16,6 +16,7 @@
  * fired is read straight off the event by the caller, not decided here.
  */
 
+import { normalize, scoreMatch } from "./fuzzy-match";
 import type { MessageKey } from "../i18n/translate";
 
 export type ShortcutAction =
@@ -376,4 +377,80 @@ export function formatKeybindingLabel(binding: string, isMacPlatform: boolean): 
     return ordered.map((m) => MAC_MODIFIER_SYMBOLS[m]).join("") + formatKeyLabel(key);
   }
   return [...ordered.map((m) => OTHER_MODIFIER_LABELS[m]), formatKeyLabel(key)].join("+");
+}
+
+/** Every shortcut, grouped the way Preferences lists them. A test checks that
+ * each action in `SHORTCUT_ACTIONS` appears in exactly one group, so a new
+ * action can't be added without showing up in the list. */
+export const SHORTCUT_GROUPS: { id: string; titleKey: MessageKey; actions: ShortcutAction[] }[] = [
+  {
+    id: "tabs",
+    titleKey: "preferences.shortcuts.groups.tabs",
+    actions: ["newWindow", "newTab", "tabMenu", "cycleTab", "zoomTile", "favoriteTab"],
+  },
+  {
+    id: "agents",
+    titleKey: "preferences.shortcuts.groups.agents",
+    actions: ["newClaude", "newCodex", "newGemini", "newCopilot", "newGrok"],
+  },
+  {
+    id: "panels",
+    titleKey: "preferences.shortcuts.groups.panels",
+    actions: [
+      "commandPalette",
+      "toggleExplorer",
+      "toggleGit",
+      "toggleHarness",
+      "toggleTabGroups",
+      "toggleAgents",
+      "toggleOrchestration",
+      "marketplace",
+      "diagnostics",
+      "companion",
+      "quickAsk",
+    ],
+  },
+  {
+    id: "editing",
+    titleKey: "preferences.shortcuts.groups.editing",
+    actions: ["copy", "paste", "selectAll"],
+  },
+  {
+    id: "aiMode",
+    titleKey: "preferences.shortcuts.groups.aiMode",
+    actions: ["aiRunning", "aiAwaiting", "aiError", "aiFinished", "aiNextPending"],
+  },
+];
+
+/** What the shortcut search matches a key combination against: its label
+ * ("⌘⇧T", "Ctrl+Shift+T") plus, on macOS where the label is only symbols, the
+ * names people type for those modifiers. */
+export function keybindingSearchText(binding: string, isMacPlatform: boolean): string {
+  const label = formatKeybindingLabel(binding, isMacPlatform);
+  if (!isMacPlatform) return label;
+  const names: Record<ModifierName, string> = { ctrl: "ctrl control", alt: "alt option", shift: "shift", meta: "cmd command" };
+  const { modifiers } = parseKeybinding(binding);
+  return [label, ...MODIFIER_NAMES.filter((m) => modifiers.has(m)).map((m) => names[m])].join(" ");
+}
+
+/** The actions whose label or key combination matches every word of `query`,
+ * in the order given. The label matches like the command palette's
+ * (`scoreMatch`: accent- and case-insensitive, and letters in order, so
+ * "aime" finds "AI Mode"); the combination only by substring, since it is
+ * short and full of letters that a loose match would hit almost everywhere.
+ * An empty query keeps them all. Labels arrive translated, so this stays free
+ * of the i18n store. */
+export function filterShortcutActions(
+  actions: ShortcutAction[],
+  query: string,
+  labelOf: (action: ShortcutAction) => string,
+  bindingOf: (action: ShortcutAction) => string,
+): ShortcutAction[] {
+  const words = query.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return actions;
+  return actions.filter((action) => {
+    const label = labelOf(action);
+    const binding = normalize(bindingOf(action));
+    return words.every((word) => scoreMatch(label, word) !== null || binding.includes(normalize(word)));
+  });
 }

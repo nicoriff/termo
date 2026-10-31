@@ -2591,6 +2591,7 @@ export const en: Messages = {
     placeholder: "Type a command...",
     empty: "No matching commands",
     hint: "Type to see commands",
+    openTabMenu: "Open the new tab menu",
     groups: {
       git: "Git",
       navigation: "Go to",
@@ -3086,6 +3087,15 @@ export const en: Messages = {
     },
     shortcuts: {
       title: "Shortcuts",
+      search: "Search shortcuts...",
+      empty: "No matching shortcuts",
+      groups: {
+        tabs: "Tabs and windows",
+        agents: "New agent tab",
+        panels: "Panels and tools",
+        editing: "Editing",
+        aiMode: "AI Mode",
+      },
     },
   },
 };

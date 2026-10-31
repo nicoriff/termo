@@ -14,7 +14,8 @@ import { tabTitleStore } from "../terminal/tab-title-store.svelte";
 import { themeStore } from "../theme/theme-store.svelte";
 import { requestAgentLaunch } from "../agent-launch/request-launch";
 import { TOOL_DISPLAY_NAMES } from "../ai-mode/tool-names";
-import { TOOL_IDS } from "../ai-mode/pattern-table";
+import { TOOL_IDS, type ToolId } from "../ai-mode/pattern-table";
+import type { ShortcutAction } from "../core/shortcuts";
 import { newTabOptions } from "../layout/new-tab-options.svelte";
 import { agentsStore, type AgentsSection } from "../agents/agents-store.svelte";
 import { explorerStore } from "../explorer/explorer-store.svelte";
@@ -25,6 +26,14 @@ import { gitReviewStore } from "../git/git-review-store.svelte";
 import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
 import type { Command } from "./commands";
+
+const NEW_AGENT_SHORTCUTS: Record<ToolId, ShortcutAction> = {
+  claude: "newClaude",
+  codex: "newCodex",
+  gemini: "newGemini",
+  copilot: "newCopilot",
+  grok: "newGrok",
+};
 
 /** themeStore's setters never persist on their own — the Preferences sections
  * that own those fields do it. Commands run from the main window, so they have
@@ -49,6 +58,7 @@ export function buildCommands(): Command[] {
       id: "navigation.newWindow",
       group: "navigation",
       label: t("shortcuts.labels.newWindow"),
+      shortcut: "newWindow",
       run: () => void openNewWindow(),
     },
     {
@@ -73,24 +83,28 @@ export function buildCommands(): Command[] {
       id: "diagnostics.open",
       group: "navigation",
       label: uiState.diagnosticsOpen ? t("commands.closeDiagnostics") : t("commands.openDiagnostics"),
+      shortcut: "diagnostics",
       run: () => uiState.toggleDiagnostics(),
     },
     {
       id: "explorer.toggle",
       group: "navigation",
       label: explorerStore.open ? t("commands.hideExplorer") : t("commands.showExplorer"),
+      shortcut: "toggleExplorer",
       run: () => explorerStore.toggle(),
     },
     {
       id: "harness.toggle",
       group: "navigation",
       label: harnessStore.open ? t("commands.hideHarness") : t("commands.showHarness"),
+      shortcut: "toggleHarness",
       run: () => harnessStore.toggle(),
     },
     {
       id: "tabGroups.toggle",
       group: "navigation",
       label: tabGroupsStore.open ? t("commands.hideTabGroups") : t("commands.showTabGroups"),
+      shortcut: "toggleTabGroups",
       run: () => tabGroupsStore.toggle(),
     },
   ];
@@ -100,6 +114,7 @@ export function buildCommands(): Command[] {
       id: "git.toggle",
       group: "git",
       label: gitStore.open ? t("commands.hideGit") : t("commands.showGit"),
+      shortcut: "toggleGit",
       run: () => gitStore.toggle(),
     });
     // The rest only makes sense in a repository, with nothing else running.
@@ -135,18 +150,21 @@ export function buildCommands(): Command[] {
         id: "extensions.browse",
         group: "extensions",
         label: t("commands.openMarketplace"),
+        shortcut: "marketplace",
         run: () => uiState.openMarketplace(),
       },
       {
         id: "agents.toggle",
         group: "agents",
         label: sectionOpen("local") ? t("commands.hideAgents") : t("commands.showAgents"),
+        shortcut: "toggleAgents",
         run: () => agentsStore.toggleSection("local"),
       },
       {
         id: "agents.toggleOrchestration",
         group: "agents",
         label: sectionOpen("orchestration") ? t("commands.hideOrchestration") : t("commands.showOrchestration"),
+        shortcut: "toggleOrchestration",
         run: () => agentsStore.toggleSection("orchestration"),
       },
       {
@@ -162,6 +180,7 @@ export function buildCommands(): Command[] {
         id: "companion.open",
         group: "agents",
         label: uiState.companionOpen ? t("commands.closeCompanion") : t("commands.openCompanion"),
+        shortcut: "companion",
         run: () => uiState.toggleCompanion(),
       });
       // Only from a console with an agent in it, like its tab on the edge.
@@ -171,6 +190,7 @@ export function buildCommands(): Command[] {
           id: "companion.quickAsk",
           group: "agents",
           label: t("commands.quickAsk"),
+          shortcut: "quickAsk",
           run: () => uiState.openQuickAsk(),
         });
       }
@@ -207,9 +227,17 @@ export function buildCommands(): Command[] {
   }
 
   commands.push({
+    id: "tabs.menu",
+    group: "tabs",
+    label: t("commands.openTabMenu"),
+    shortcut: "tabMenu",
+    run: () => uiState.openTabMenu(),
+  });
+  commands.push({
     id: "tabs.new",
     group: "tabs",
     label: t("commands.newTab"),
+    shortcut: "newTab",
     run: () => workspaceStore.newTabLikeFocused(),
   });
 
@@ -221,6 +249,7 @@ export function buildCommands(): Command[] {
       id: `tabs.newAgent.${tool}`,
       group: "tabs",
       label: t("commands.newAgent", { tool: TOOL_DISPLAY_NAMES[tool] }),
+      shortcut: NEW_AGENT_SHORTCUTS[tool],
       run: () => requestAgentLaunch(tool),
     });
   }
@@ -253,6 +282,7 @@ export function buildCommands(): Command[] {
         id: "tabs.toggleZoom",
         group: "tabs",
         label: t(workspaceStore.zoomedTileId === tile.id ? "commands.restoreTile" : "commands.zoomTile"),
+        shortcut: "zoomTile",
         run: () => workspaceStore.toggleZoom(tile.id),
       },
     );
@@ -344,6 +374,7 @@ export function buildCommands(): Command[] {
       id: "aiMode.nextPending",
       group: "aiMode",
       label: t("commands.aiNextPending"),
+      shortcut: "aiNextPending",
       run: () => focusNextPending(),
     });
 
@@ -355,6 +386,7 @@ export function buildCommands(): Command[] {
         id: "aiMode.favorite",
         group: "aiMode",
         label: t(saved ? "commands.editFavorite" : "commands.addFavorite"),
+        shortcut: "favoriteTab",
         run: () => uiState.openFavoriteDialog(current),
       });
     }

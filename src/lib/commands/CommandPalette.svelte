@@ -2,6 +2,9 @@
   import { fade, fly } from "svelte/transition";
   import { t, type MessageKey } from "$lib/i18n/i18n.svelte";
   import { uiState } from "$lib/core/ui-state.svelte";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import { isMac } from "$lib/core/platform";
+  import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { buildCommands } from "./command-registry.svelte";
   import { matchCommands, type Command, type CommandGroup } from "./commands";
 
@@ -19,6 +22,7 @@
   let query = $state("");
   let highlighted = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
+  let listEl: HTMLDivElement | undefined = $state();
 
   // Nothing is listed until the user types: the palette suggests as you go
   // instead of dumping every command the moment it opens.
@@ -33,7 +37,15 @@
   $effect(() => {
     void query;
     highlighted = 0;
+    if (listEl) listEl.scrollTop = 0;
   });
+
+  // The arrow keys move the highlight, not the viewport: bring the row into
+  // view ourselves. Only for the keyboard — with the mouse the row is already
+  // under the pointer, and scrolling would slide the list away from it.
+  function reveal() {
+    listEl?.querySelector(`[data-index="${highlighted}"]`)?.scrollIntoView({ block: "nearest" });
+  }
 
   function close() {
     uiState.closeCommandPalette();
@@ -50,12 +62,21 @@
     // The palette owns the keyboard while it's open (MainWindow's window-level
     // handler bails out), so nothing here should reach the terminal either.
     event.stopPropagation();
+    if (event.key === "Tab") {
+      // A modal keeps focus inside it. The input is the only thing to focus
+      // here (the options are driven from it), so Tab stays put instead of
+      // wandering off to the app behind the backdrop.
+      event.preventDefault();
+      return;
+    }
     if (event.key === "Escape") {
       close();
     } else if (event.key === "ArrowDown") {
       highlighted = results.length === 0 ? 0 : (highlighted + 1) % results.length;
+      reveal();
     } else if (event.key === "ArrowUp") {
       highlighted = results.length === 0 ? 0 : (highlighted - 1 + results.length) % results.length;
+      reveal();
     } else if (event.key === "Enter") {
       const command = results[highlighted];
       if (command) run(command);
@@ -79,21 +100,35 @@
       placeholder={t("commands.placeholder")}
       onkeydown={onKeydown}
       aria-label={t("commands.placeholder")}
+      role="combobox"
+      aria-expanded={results.length > 0}
+      aria-controls="palette-listbox"
+      aria-activedescendant={results.length > 0 ? `palette-option-${highlighted}` : undefined}
+      aria-autocomplete="list"
     />
-    <div class="palette-list" role="listbox">
+    <div class="palette-list" id="palette-listbox" role="listbox" bind:this={listEl}>
       {#each results as command, index (command.id)}
         {#if index === 0 || results[index - 1].group !== command.group}
-          <div class="palette-group">{t(GROUP_LABEL_KEYS[command.group])}</div>
+          <div class="palette-group" role="presentation">{t(GROUP_LABEL_KEYS[command.group])}</div>
         {/if}
         <button
           class="palette-item"
           class:highlighted={index === highlighted}
+          class:opens-group={index === 0 || results[index - 1].group !== command.group}
+          id="palette-option-{index}"
           role="option"
+          tabindex="-1"
+          data-index={index}
           aria-selected={index === highlighted}
           onpointermove={() => (highlighted = index)}
           onclick={() => run(command)}
         >
-          {command.label}
+          <span class="palette-label">{command.label}</span>
+          {#if command.shortcut}
+            <kbd class="palette-shortcut">
+              {formatKeybindingLabel(appConfigStore.getEffectiveShortcut(command.shortcut), isMac)}
+            </kbd>
+          {/if}
         </button>
       {:else}
         <p class="palette-empty">{query.trim() === "" ? t("commands.hint") : t("commands.empty")}</p>
@@ -182,9 +217,29 @@
     font-size: 12px;
     text-align: left;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .palette-label {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .palette-shortcut {
+    flex-shrink: 0;
+    font: inherit;
+    font-size: 11px;
+    opacity: 0.55;
+  }
+
+  /* Scrolling to the first row of a group keeps its title in view too. */
+  .palette-item.opens-group {
+    scroll-margin-top: 28px;
   }
 
   .palette-item.highlighted {
