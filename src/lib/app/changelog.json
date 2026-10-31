@@ -6,13 +6,15 @@
       "**Termo arranca más rápido**, y la ventana aparece de una vez, completa, en vez de armarse a la vista. Después de reiniciar la PC con sesiones persistentes, el arranque pasa de unos 6 segundos a menos de uno.",
       "**Preferencias → Shortcuts** lista todos los atajos, agrupados y con un buscador: encuentra por nombre (sin importar acentos ni mayúsculas) o por la combinación de teclas. Suma los que faltaban: Diagnóstico, AI Companion, Pregunta rápida, Copiar, Pegar y Seleccionar todo.",
       "La paleta de comandos muestra el atajo de cada comando, suma Abrir el menú de nueva pestaña, y al moverte con las flechas la lista sigue al comando resaltado.",
-      "Al arrastrar una pestaña o un grupo para reordenarlo se resalta solo la barra de pestañas, no toda la consola, y las pestañas se corren para abrir el lugar donde va a caer."
+      "Al arrastrar una pestaña o un grupo para reordenarlo se resalta solo la barra de pestañas, no toda la consola, y las pestañas se corren para abrir el lugar donde va a caer.",
+      "En la barra de estados de los agentes, la lista de Listo tiene el ancho de su sección, como las demás."
     ],
     "en": [
       "**Termo starts faster**, and the window appears at once, complete, instead of building up in front of you. After a restart with persistent sessions, startup goes from about 6 seconds to under one.",
       "**Preferences → Shortcuts** lists every shortcut, grouped and with a search box: find one by name (ignoring accents and case) or by its key combination. It adds the ones that were missing: Diagnostics, AI Companion, Quick question, Copy, Paste and Select all.",
       "The command palette shows each command's shortcut, adds Open the new tab menu, and follows the highlighted command as you move with the arrow keys.",
-      "Dragging a tab or a group to reorder it highlights only the tab bar, not the whole console, and the tabs slide apart to open the spot where it will land."
+      "Dragging a tab or a group to reorder it highlights only the tab bar, not the whole console, and the tabs slide apart to open the spot where it will land.",
+      "In the agents' status bar, the Done list is as wide as its section, like the others."
     ]
   },
   {
