@@ -278,6 +278,8 @@
     // pointer at that same spot instead of jumping to its corner.
     let grabX = 0;
     let grabY = 0;
+    // How wide a gap the strip opens for it: the dragged tab's (or chip's).
+    let gapWidth = 0;
 
     /** A copy of the tab that follows the pointer. It keeps the tab's own
      * classes (Svelte's scoping included) so it looks like the tab itself,
@@ -286,6 +288,7 @@
       const box = sourceTab.getBoundingClientRect();
       grabX = startX - box.left;
       grabY = startY - box.top;
+      gapWidth = box.width;
       ghost = sourceTab.cloneNode(true) as HTMLElement;
       ghost.classList.add("tab-drag-ghost");
       ghost.removeAttribute("data-session-id");
@@ -319,10 +322,55 @@
       return null;
     }
 
-    /** The tab — or group chip — under the pointer. */
+    function currentStrip(e: PointerEvent): HTMLElement | null {
+      return document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".tile-tabstrip") ?? null;
+    }
+
+    /** Where an element of a strip sits with no gap open: what it's shifted
+     * by right now (mid-slide included) taken back off. Measuring there, the
+     * gap opening under the pointer doesn't change where the pointer is. */
+    function restingBox(el: HTMLElement): { left: number; right: number } {
+      const box = el.getBoundingClientRect();
+      const shift = new DOMMatrix(getComputedStyle(el).transform).m41;
+      return { left: box.left - shift, right: box.right - shift };
+    }
+
+    /** The tab — or group chip — under the pointer, where it sits at rest. */
     function currentDropTab(e: PointerEvent): HTMLElement | null {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      return el instanceof Element ? el.closest<HTMLElement>(".tile-tab, .tile-group-chip") : null;
+      const strip = currentStrip(e);
+      if (!strip) return null;
+      for (const el of strip.querySelectorAll<HTMLElement>(":scope > .tile-tab, :scope > .tile-group-chip")) {
+        const box = restingBox(el);
+        if (e.clientX >= box.left && e.clientX < box.right) return el;
+      }
+      return null;
+    }
+
+    /** The strip parts where the tab would go: what comes after slides right
+     * to make room. By transform, so nothing reflows under the pointer. */
+    let gapStrip: HTMLElement | null = null;
+
+    function openGap(insertion: { tab: HTMLElement; before: boolean } | null) {
+      const strip = insertion?.tab.closest<HTMLElement>(".tile-tabstrip") ?? null;
+      if (gapStrip && gapStrip !== strip) closeGap();
+      if (!insertion || !strip) {
+        closeGap();
+        return;
+      }
+      const children = [...strip.children] as HTMLElement[];
+      const at = children.indexOf(insertion.tab) + (insertion.before ? 0 : 1);
+      // Right beside where the tab already is, letting go moves nothing:
+      // no gap for it either.
+      const stays = !!sessionId && (children[at] === sourceTab || children[at - 1] === sourceTab);
+      children.forEach((el, i) => {
+        el.style.transform = !stays && i >= at ? `translateX(${gapWidth}px)` : "";
+      });
+      gapStrip = strip;
+    }
+
+    function closeGap() {
+      gapStrip?.querySelectorAll<HTMLElement>(":scope > *").forEach((el) => (el.style.transform = ""));
+      gapStrip = null;
     }
 
     /** Over the dragged group itself: its chip or one of its tabs. */
@@ -331,9 +379,6 @@
     }
 
     function clearHighlight() {
-      document
-        .querySelectorAll(".drag-insert-before, .drag-insert-after")
-        .forEach((el) => el.classList.remove("drag-insert-before", "drag-insert-after"));
       document.querySelectorAll(".join-target").forEach((el) => el.classList.remove("join-target"));
     }
 
@@ -378,7 +423,7 @@
       const chrome = currentDropTile(e);
       const tileId = chrome?.dataset.tileId;
       if (!chrome || !tileId) return { kind: "none" };
-      if (document.elementFromPoint(e.clientX, e.clientY)?.closest(".tile-tabstrip")) {
+      if (currentStrip(e)) {
         // Over itself it stays put; anywhere else on a strip it's inserted.
         const over = currentDropTab(e);
         return over === sourceTab || overOwnGroup(over) ? { kind: "none" } : { kind: "strip", tileId, chrome };
@@ -396,9 +441,10 @@
       return own ? { kind: "none" } : { kind: "tile", tileId, chrome };
     }
 
-    /** The box that shows where the tab would land: the whole tile, or the
-     * half a new group would take. One element for the whole drag, so moving
-     * between zones animates it from one shape to the next. */
+    /** The box that shows where the tab would land: the strip it's reordered
+     * in, the whole tile, or the half a new group would take. One element for
+     * the whole drag, so moving between zones animates it from one shape to
+     * the next. */
     let preview: HTMLElement | null = null;
 
     function showPreview(drop: Drop) {
@@ -406,7 +452,9 @@
         preview?.classList.remove("visible");
         return;
       }
-      const box = drop.chrome.getBoundingClientRect();
+      // Reordering only touches the strip: the console below stays as it is.
+      const strip = drop.kind === "strip" ? drop.chrome.querySelector(".tile-tabstrip") : null;
+      const box = (strip ?? drop.chrome).getBoundingClientRect();
       let { left, top, width, height } = box;
       if (drop.kind === "split") {
         if (drop.side === "left" || drop.side === "right") width /= 2;
@@ -427,6 +475,7 @@
       Object.assign(preview.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
       preview.firstElementChild!.textContent = drop.kind === "split" ? t("tabs.newPane") : "";
       preview.classList.toggle("split", drop.kind === "split");
+      preview.classList.toggle("strip", drop.kind === "strip");
       if (appearing) {
         void preview.offsetWidth;
         preview.style.transition = "";
@@ -443,8 +492,8 @@
       const overTab = currentDropTab(e);
       if (!overTab || (sessionId && overTab.dataset.sessionId === sessionId) || overOwnGroup(overTab)) return null;
       if (overTab.classList.contains("tile-group-chip")) return { tab: overTab, before: true };
-      const box = overTab.getBoundingClientRect();
-      return { tab: overTab, before: e.clientX < box.left + box.width / 2 };
+      const box = restingBox(overTab);
+      return { tab: overTab, before: e.clientX < (box.left + box.right) / 2 };
     }
 
     function onMove(e: PointerEvent) {
@@ -459,14 +508,16 @@
       const drop = dropAt(e);
       showPreview(drop);
       showJoin(e, drop);
-      const insertion = hoveredInsertion(e);
-      insertion?.tab.classList.add(insertion.before ? "drag-insert-before" : "drag-insert-after");
+      openGap(drop.kind === "strip" ? hoveredInsertion(e) : null);
     }
 
     function onUp(e: PointerEvent) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      // The class goes first: without its transition the gap closes at once,
+      // as the tab drops into it, instead of sliding shut.
       document.body.classList.remove("termo-dragging-tab");
+      closeGap();
       clearHighlight();
       ghost?.remove();
       ghost = null;
@@ -1293,8 +1344,8 @@
     scrollbar-width: none;
   }
 
-  /* Where a dragged tab would land (see showPreview): the whole tile, or the
-     half a new group would take. Built imperatively, so global. It glides
+  /* Where a dragged tab would land (see showPreview): its strip, the whole
+     tile, or the half a new group would take. Built imperatively, so global. It glides
      between shapes as the pointer crosses zones, and fades in and out. */
   :global(.tab-drop-preview) {
     position: fixed;
@@ -1348,6 +1399,13 @@
     backdrop-filter: blur(1px);
   }
 
+  /* Over a strip only as tall as its tabs: no room for the label's padding,
+     and a full tile's rounding would look like a pill. */
+  :global(.tab-drop-preview.strip) {
+    padding: 0;
+    border-radius: 4px;
+  }
+
   /* The tab being dragged, left behind as a placeholder. */
   :global(.tile-tab.drag-source) {
     opacity: 0.35;
@@ -1369,12 +1427,12 @@
     cursor: grabbing;
   }
 
-  :global(.tile-tab.drag-insert-before) {
-    box-shadow: inset 2px 0 0 var(--pane-active-border, #3a6df0);
-  }
-
-  :global(.tile-tab.drag-insert-after) {
-    box-shadow: inset -2px 0 0 var(--pane-active-border, #3a6df0);
+  /* Where a dragged tab would go, the strip parts (see openGap): what comes
+     after slides over. Only while dragging, so a drop lands at once. */
+  :global(body.termo-dragging-tab) .tile-tabstrip > * {
+    transition:
+      transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+      filter 100ms ease;
   }
 
   .tile-tab {
@@ -1586,10 +1644,6 @@
 
   :global(.tile-group-chip.drag-source) {
     opacity: 0.35;
-  }
-
-  :global(.tile-group-chip.drag-insert-before) {
-    box-shadow: -3px 0 0 var(--pane-active-border, #3a6df0);
   }
 
   /* A dragged tab is over this group: letting go adds it (see showJoin).
