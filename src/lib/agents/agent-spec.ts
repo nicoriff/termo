@@ -34,6 +34,7 @@ export const TRIGGER_KEYS: Record<RunTrigger, MessageKey> = {
   agent: "agents.run.trigger.agent",
   message: "agents.run.trigger.message",
   orchestrator: "agents.run.trigger.orchestrator",
+  kanban: "agents.run.trigger.kanban",
   console: "agents.run.trigger.console",
 };
 

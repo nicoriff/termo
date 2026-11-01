@@ -49,7 +49,7 @@ async function announce(run: RunRecord) {
   // Tests from the wizard are watched as they happen; stopping one was the
   // user's own doing; a task of an orchestration is announced by its
   // orchestration, not one by one (see orchestration-attention.ts).
-  const quiet = run.trigger === "test" || run.trigger === "orchestrator" || run.status === "stopped";
+  const quiet = run.trigger === "test" || run.trigger === "orchestrator" || run.trigger === "kanban" || run.status === "stopped";
   if (!agent || quiet || !worthTelling(run, failing) || watching(run.agentId)) return;
   const ok = run.status === "success";
   // Same switches and sounds as the engine's console sessions (Preferences →

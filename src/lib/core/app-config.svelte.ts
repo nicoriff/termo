@@ -185,6 +185,8 @@ class AppConfigStore {
   agentsFromAnyConsole = $state(false);
   /** Consoles may plan and run orchestrations (see agents/console_orchestration.rs). */
   orchestrationsFromConsoles = $state(false);
+  /** Consoles may add tasks to kanban boards (see agents/console_kanban.rs). */
+  kanbanFromConsoles = $state(false);
   /** When an orchestration's agents ask the user, for the ones planned from now. */
   agentAskLevel = $state<AskLevel>("essential");
   /** The agents keep running with Termo closed (see agents/host/). Changed
@@ -357,6 +359,7 @@ class AppConfigStore {
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.orchestrationsFromConsoles = config.orchestrations_from_consoles ?? false;
+    this.kanbanFromConsoles = config.kanban_from_consoles ?? false;
     this.agentAskLevel = config.agent_ask_level ?? "essential";
     this.backgroundAgents = config.background_agents ?? false;
     this.backgroundAgentsAtLogin = config.background_agents_at_login ?? false;
@@ -576,6 +579,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setKanbanFromConsoles(enabled: boolean): void {
+    this.kanbanFromConsoles = enabled;
+    void this.persist();
+  }
+
   setAgentAskLevel(level: AskLevel): void {
     this.agentAskLevel = level;
     void this.persist();
@@ -791,6 +799,7 @@ class AppConfigStore {
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
       orchestrations_from_consoles: this.orchestrationsFromConsoles,
+      kanban_from_consoles: this.kanbanFromConsoles,
       agent_ask_level: this.agentAskLevel,
       background_agents: this.backgroundAgents,
       background_agents_at_login: this.backgroundAgentsAtLogin,

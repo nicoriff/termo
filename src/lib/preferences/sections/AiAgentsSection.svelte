@@ -207,6 +207,15 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.agents.orchestrationsHint")}</p>
+  <label class="toggle-row">
+    <span>{t("preferences.agents.kanban")}</span>
+    <input
+      type="checkbox"
+      checked={appConfigStore.kanbanFromConsoles}
+      onchange={(e) => appConfigStore.setKanbanFromConsoles(e.currentTarget.checked)}
+    />
+  </label>
+  <p class="setting-hint">{t("preferences.agents.kanbanHint")}</p>
 </section>
 
 <style>

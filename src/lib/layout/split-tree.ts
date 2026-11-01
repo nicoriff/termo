@@ -39,6 +39,8 @@ export interface SessionTab {
   /** Set on a tab that shows an orchestration (see OrchestrationView), or
    * with `console`, everything its agents did (see OrchestrationConsole). */
   orchestrationView?: { orchestrationId: string; console?: boolean };
+  /** Set on a tab that shows a kanban board (see KanbanView). */
+  kanbanView?: { boardId: string };
   /** Set on a tab that shows what changed in a file (see DiffView). */
   diff?: DiffTarget;
   /** Set on a tab that shows a repository's history (see GitGraphView). */
@@ -89,6 +91,7 @@ export function isConsoleTab(session: SessionTab): boolean {
     session.agentRun === undefined &&
     session.projectView === undefined &&
     session.orchestrationView === undefined &&
+    session.kanbanView === undefined &&
     session.diff === undefined &&
     session.gitGraph === undefined
   );
@@ -108,6 +111,10 @@ export function makeOrchestrationSession(title: string, orchestrationId: string,
     title,
     orchestrationView: console ? { orchestrationId, console } : { orchestrationId },
   };
+}
+
+export function makeKanbanSession(title: string, boardId: string): SessionTab {
+  return { id: crypto.randomUUID(), title, kanbanView: { boardId } };
 }
 
 export function makeDiffSession(diff: DiffTarget): SessionTab {

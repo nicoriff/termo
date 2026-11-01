@@ -7,3 +7,4 @@ export const loadAgentRunView = lazy(() => import("$lib/agents/AgentRunView.svel
 export const loadProjectView = lazy(() => import("$lib/agents/ProjectView.svelte"));
 export const loadOrchestrationView = lazy(() => import("$lib/agents/OrchestrationView.svelte"));
 export const loadOrchestrationConsole = lazy(() => import("$lib/agents/OrchestrationConsole.svelte"));
+export const loadKanbanView = lazy(() => import("$lib/kanban/KanbanView.svelte"));

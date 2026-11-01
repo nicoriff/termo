@@ -5,6 +5,7 @@ import { deleteTabGroup, listTabGroups, onTabGroups, saveTabGroup } from "$lib/c
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { harnessStore } from "$lib/harness/harness-store.svelte";
+import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
 import { hydrateSession, snapshotSession, type LayoutResume } from "$lib/layout/layout-snapshot";
 import { collectSessions, collectTiles, type SessionLocation } from "$lib/layout/split-tree";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -394,6 +395,7 @@ class TabGroupsStore {
       explorerStore.open = false;
       gitStore.open = false;
       harnessStore.setOpen(false);
+      kanbanStore.open = false;
     }
     this.open = open;
   }

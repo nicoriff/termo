@@ -40,7 +40,7 @@
   function loadAgents() {
     void Promise.all([listAgents(), listProjects()])
       .then(([list, projects]) => {
-        const teams = new Set(projects.filter((project) => project.orchestrationId).map((project) => project.id));
+        const teams = new Set(projects.filter((project) => project.orchestrationId || project.kanbanId).map((project) => project.id));
         agents = list.filter((agent) => !teams.has(agent.projectId));
       })
       .catch(() => {});

@@ -14,6 +14,9 @@ function open(target: NotificationTarget) {
     case "orchestration":
       workspaceStore.openOrchestration(target.orchestrationId, target.title);
       break;
+    case "kanban":
+      workspaceStore.openKanban(target.boardId, target.title);
+      break;
     case "preferences":
       void openPreferencesWindow(target.section);
       break;

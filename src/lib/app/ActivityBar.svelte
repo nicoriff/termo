@@ -9,6 +9,7 @@
   import { gitStore } from "$lib/git/git-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+  import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -108,6 +109,28 @@
       <span class="activity-badge">{tabGroupsStore.groups.length}</span>
     {/if}
   </button>
+  {#if appConfigStore.aiModeEnabled}
+    <button
+      class="activity-item"
+      class:active={kanbanStore.open}
+      title={t("kanban.title")}
+      aria-label={t("kanban.title")}
+      aria-pressed={kanbanStore.open}
+      onclick={() => kanbanStore.toggle()}
+    >
+      <!-- Three columns of cards. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="5" height="16" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <rect x="9.5" y="4" width="5" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <rect x="16" y="4" width="5" height="13" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+      {#if kanbanStore.needingYou > 0}
+        <span class="activity-badge asking" title={t("kanban.row.needsYou", { n: String(kanbanStore.needingYou) })}>!</span>
+      {:else if kanbanStore.running > 0}
+        <span class="activity-badge">{kanbanStore.running}</span>
+      {/if}
+    </button>
+  {/if}
   {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
     <button
       class="activity-item"

@@ -19,6 +19,7 @@
   import { tabSaver } from "$lib/tab-groups/tab-saver.svelte";
   import ActivityBar from "./ActivityBar.svelte";
   import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
+  import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { startAgentRunAttention } from "$lib/agents/agent-attention";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
@@ -85,6 +86,7 @@
     newTabOptions.refresh();
     void agentsStore.init();
     void orchestrationStore.init();
+    void kanbanStore.init();
     // Every console waits on it as it mounts: asked now, it's in by then.
     void windowsBuild();
 
@@ -419,6 +421,8 @@
       <Lazy load={surfaces.loadHarnessPanel} />
     {:else if tabGroupsStore.open}
       <Lazy load={surfaces.loadTabGroupsPanel} />
+    {:else if kanbanStore.open && appConfigStore.aiModeEnabled}
+      <Lazy load={surfaces.loadKanbanSidebar} />
     {/if}
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
@@ -480,6 +484,9 @@
     {/if}
     {#if uiState.orchestrationDialog}
       <Lazy load={surfaces.loadOrchestrationDialog} />
+    {/if}
+    {#if kanbanStore.dialog}
+      <Lazy load={surfaces.loadKanbanDialogs} />
     {/if}
     <!-- Picking a folder for one of the forms above: on top of it. -->
     {#if uiState.agentLaunch?.target.kind === "folder"}
