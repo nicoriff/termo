@@ -8,6 +8,10 @@ export type KanbanMode = "sequential" | "worktrees";
 export type KanbanRole = "work" | "review" | "summary";
 export type KanbanSuccess = "full" | "partial" | "failed";
 export type KanbanVerdict = "approve" | "changes";
+/** Why a task waits for the user. */
+export type KanbanStuck = "workFailed" | "reviewFailed" | "tooManyRounds" | "noVerdict" | "cancelled" | "notStarted";
+/** What the user decided on a stuck task. */
+export type KanbanDecision = "retry" | "rework" | "approve" | "park";
 
 export const KANBAN_COLUMNS: KanbanColumn[] = ["notReady", "todo", "inProgress", "review", "done"];
 
@@ -90,6 +94,10 @@ export interface KanbanTask {
   report: KanbanOutcome | null;
   workSummary: string;
   needsYou: string;
+  stuck: KanbanStuck | null;
+  lastAgentId: string;
+  lastRunId: string;
+  instructions: string;
   outcome: KanbanOutcome | null;
   costUsd: number | null;
   branch: string;
@@ -190,8 +198,8 @@ export function deleteKanbanTask(boardId: string, taskId: string): Promise<Kanba
   return invoke("kanban_task_delete", { boardId, taskId });
 }
 
-export function resolveKanbanTask(boardId: string, taskId: string): Promise<KanbanBoard> {
-  return invoke("kanban_task_resolve", { boardId, taskId });
+export function resolveKanbanTask(boardId: string, taskId: string, decision: KanbanDecision, text: string): Promise<KanbanBoard> {
+  return invoke("kanban_task_resolve", { boardId, taskId, decision, text });
 }
 
 export function mergeKanbanTask(boardId: string, taskId: string): Promise<KanbanBoard> {

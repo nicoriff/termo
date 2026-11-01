@@ -164,6 +164,38 @@ pub struct LogEntry {
     pub to: Option<Column>,
 }
 
+/// Why a task waits for the user, which decides what they're offered.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Stuck {
+    /// The work agent failed, or said it couldn't do it.
+    WorkFailed,
+    /// The review agent's run failed.
+    ReviewFailed,
+    /// Review sent it back more times than the board allows.
+    TooManyRounds,
+    /// The review ended without approving or sending it back.
+    NoVerdict,
+    /// The user stopped its agent.
+    Cancelled,
+    /// Its agent couldn't even start: no worktree, no agent.
+    NotStarted,
+}
+
+/// What the user decided on a stuck task.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Decision {
+    /// The same column's agent takes it again, with review rounds from zero.
+    Retry,
+    /// Back to work, with the user's notes as what to change.
+    Rework,
+    /// Done as it is.
+    Approve,
+    /// Back to Not ready, to rewrite it.
+    Park,
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum Success {
@@ -223,6 +255,13 @@ pub struct KanbanTask {
     pub work_summary: String,
     /// Why it's stuck until the user decides; empty when it isn't.
     pub needs_you: String,
+    /// The kind of thing it's stuck on, set with needs_you.
+    pub stuck: Option<Stuck>,
+    /// The last run it was under, to see what the agent did once it's over.
+    pub last_agent_id: String,
+    pub last_run_id: String,
+    /// What the user said when they unstuck it, for the next run only.
+    pub instructions: String,
     pub outcome: Option<Outcome>,
     pub cost_usd: Option<f64>,
     /// In worktree mode: its branch and the folder it's checked out in.
@@ -251,11 +290,26 @@ impl KanbanTask {
 
     /// Whatever ran it no longer does.
     pub fn release(&mut self) {
+        if self.is_running() {
+            self.last_agent_id = std::mem::take(&mut self.agent_id);
+            self.last_run_id = std::mem::take(&mut self.run_id);
+        }
         self.role = None;
         self.run_id = String::new();
         self.agent_id = String::new();
         self.verdict = None;
         self.report = None;
+    }
+
+    /// It waits for the user, for `reason`.
+    pub fn stick(&mut self, stuck: Stuck, reason: impl Into<String>) {
+        self.stuck = Some(stuck);
+        self.needs_you = reason.into();
+    }
+
+    pub fn unstick(&mut self) {
+        self.stuck = None;
+        self.needs_you = String::new();
     }
 }
 
@@ -446,7 +500,7 @@ pub fn move_task(board: &mut KanbanBoard, id: &str, to: Column, before: Option<&
     if from != to {
         task.release();
         task.column = to;
-        task.needs_you = String::new();
+        task.unstick();
         match to {
             Column::NotReady | Column::Todo => {
                 task.review_rounds = 0;

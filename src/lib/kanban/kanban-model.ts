@@ -4,6 +4,7 @@ import type {
   KanbanBoard,
   KanbanColumn,
   KanbanColumnAgent,
+  KanbanDecision,
   KanbanRole,
   KanbanSettings,
   KanbanTask,
@@ -147,4 +148,29 @@ export function boardActivity(board: KanbanBoard): { running: number; needsYou: 
     done: board.tasks.filter((task) => task.column === "done").length,
     total: board.tasks.length,
   };
+}
+
+/** What the user is offered on a stuck task, the likeliest first. Approving
+ *  needs work to approve; sending it back to work only makes sense from
+ *  review. */
+export function decisionsFor(task: KanbanTask): KanbanDecision[] {
+  const hasWork = task.workSummary.trim() !== "";
+  const inReview = task.column === "review";
+  switch (task.stuck) {
+    case "tooManyRounds":
+      return hasWork ? ["retry", "approve", "park"] : ["retry", "park"];
+    case "noVerdict":
+      return hasWork ? ["approve", "retry", "rework", "park"] : ["retry", "rework", "park"];
+    case "reviewFailed":
+      return hasWork ? ["retry", "approve", "rework", "park"] : ["retry", "rework", "park"];
+    default:
+      return inReview ? ["retry", "rework", "park"] : ["retry", "park"];
+  }
+}
+
+/** The text of the button that takes a task up again where it is. */
+export function retryKey(task: KanbanTask): MessageKey {
+  if (task.stuck === "cancelled") return "kanban.decide.resume";
+  if (task.column === "review") return "kanban.decide.reviewAgain";
+  return task.stuck === "tooManyRounds" ? "kanban.decide.anotherRound" : "kanban.decide.retry";
 }

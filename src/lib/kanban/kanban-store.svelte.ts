@@ -13,6 +13,7 @@ import {
   upsertKanbanTask,
   type KanbanBoard,
   type KanbanColumn,
+  type KanbanDecision,
   type KanbanSettings,
   type KanbanTaskInput,
 } from "$lib/core/kanban-client";
@@ -194,8 +195,8 @@ class KanbanStore {
     this.replace(await deleteKanbanTask(boardId, taskId));
   }
 
-  async resolveTask(boardId: string, taskId: string): Promise<void> {
-    this.replace(await resolveKanbanTask(boardId, taskId));
+  async resolveTask(boardId: string, taskId: string, decision: KanbanDecision, text: string): Promise<void> {
+    this.replace(await resolveKanbanTask(boardId, taskId, decision, text));
   }
 
   async mergeTask(boardId: string, taskId: string): Promise<void> {

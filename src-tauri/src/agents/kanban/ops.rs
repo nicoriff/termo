@@ -14,7 +14,7 @@ use super::super::ops::Agents;
 use super::super::projects;
 use super::super::store::now_millis;
 use super::driver::{emit, ensure_team};
-use super::model::{self, clean_dependencies, clean_tags, Actor, BoardAgents, Column, KanbanBoard, KanbanTask, LogKind, Mode};
+use super::model::{self, clean_dependencies, clean_tags, Actor, BoardAgents, Column, KanbanBoard, KanbanTask, LogKind, Mode, Outcome, Stuck, Success, Decision};
 use super::store;
 use super::worktree;
 
@@ -296,7 +296,7 @@ pub fn cancel_task(agents: &Agents, board_id: &str, task_id: &str) -> Result<Kan
     let (board, stopped) = change(agents, board_id, |board| {
         let stopped = cancel_run(board, task_id, &Actor::User);
         if let Some(task) = board.task_mut(task_id).filter(|_| stopped.is_some()) {
-            task.needs_you = tr(Msg::KanbanCancelled);
+            task.stick(Stuck::Cancelled, tr(Msg::KanbanCancelled));
         }
         Ok(stopped)
     })?;
@@ -325,14 +325,46 @@ pub fn delete_task(agents: &Agents, board_id: &str, task_id: &str) -> Result<Kan
     Ok(board)
 }
 
-/// The user decided on a task that was stuck: it's taken again where it is,
-/// with its rounds of review counted from zero.
-pub fn resolve_task(agents: &Agents, board_id: &str, task_id: &str) -> Result<KanbanBoard, String> {
+/// The user decided on a task that was stuck. Whatever they decide, its
+/// rounds of review count from zero again, and what they wrote goes to the
+/// next run.
+pub fn resolve_task(agents: &Agents, board_id: &str, task_id: &str, decision: Decision, text: &str) -> Result<KanbanBoard, String> {
+    let text = clip(text, MAX_TEXT);
     Ok(change(agents, board_id, |board| {
+        let now = now_millis();
+        let has_summary = board.agents.summary.is_some();
+        let task = board.task(task_id).ok_or_else(task_not_found)?;
+        if task.is_running() {
+            return Err(tr(Msg::KanbanTaskRunning));
+        }
+        let stuck = task.stuck;
+        match decision {
+            Decision::Retry => {}
+            Decision::Rework => {
+                model::move_task(board, task_id, Column::InProgress, None, now, Actor::User);
+            }
+            Decision::Approve => {
+                model::move_task(board, task_id, Column::Done, None, now, Actor::User);
+            }
+            Decision::Park => {
+                model::move_task(board, task_id, Column::NotReady, None, now, Actor::User);
+            }
+        }
         let task = board.task_mut(task_id).ok_or_else(task_not_found)?;
-        task.needs_you = String::new();
+        task.unstick();
         task.review_rounds = 0;
-        task.note(now_millis(), Actor::User, LogKind::Resolved, "");
+        task.instructions = if decision == Decision::Park { String::new() } else { text.clone() };
+        if decision == Decision::Approve {
+            if has_summary {
+                task.summary_pending = true;
+            } else {
+                let success = if stuck == Some(Stuck::NoVerdict) { Success::Full } else { Success::Partial };
+                task.outcome = Some(Outcome { summary: task.work_summary.clone(), success, notes: text.clone(), at: now });
+            }
+            task.note(now, Actor::User, LogKind::Approved, text.clone());
+        } else {
+            task.note(now, Actor::User, LogKind::Resolved, text.clone());
+        }
         Ok(())
     })?
     .0)

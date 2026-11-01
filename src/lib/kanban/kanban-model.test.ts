@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KanbanBoard, KanbanColumn, KanbanTask } from "$lib/core/kanban-client";
-import { addTag, beforeAt, blockers, boardActivity, boardTags, tagHue, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
+import { addTag, beforeAt, blockers, boardActivity, boardTags, decisionsFor, retryKey, tagHue, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
 
 function task(id: string, column: KanbanColumn, dependsOn: string[] = [], extra: Partial<KanbanTask> = {}): KanbanTask {
   return {
@@ -22,6 +22,10 @@ function task(id: string, column: KanbanColumn, dependsOn: string[] = [], extra:
     report: null,
     workSummary: "",
     needsYou: "",
+    stuck: null,
+    lastAgentId: "",
+    lastRunId: "",
+    instructions: "",
     outcome: null,
     costUsd: null,
     branch: "",
@@ -104,5 +108,20 @@ describe("boardActivity", () => {
   it("counts what the panel shows", () => {
     const b = board([task("a", "inProgress", [], { runId: "r" }), task("b", "review", [], { needsYou: "x" }), task("c", "done")]);
     expect(boardActivity(b)).toEqual({ running: 1, needsYou: 1, done: 1, total: 3 });
+  });
+});
+
+describe("decisions on a stuck task", () => {
+  it("offers approving only when there is work to approve", () => {
+    expect(decisionsFor(task("a", "inProgress", [], { stuck: "tooManyRounds", workSummary: "did it" }))).toEqual(["retry", "approve", "park"]);
+    expect(decisionsFor(task("a", "inProgress", [], { stuck: "workFailed" }))).toEqual(["retry", "park"]);
+    expect(decisionsFor(task("a", "review", [], { stuck: "noVerdict", workSummary: "did it" }))[0]).toBe("approve");
+    expect(decisionsFor(task("a", "review", [], { stuck: "noVerdict" }))).toEqual(["retry", "rework", "park"]);
+  });
+
+  it("names taking it up again after what stopped it", () => {
+    expect(retryKey(task("a", "review", [], { stuck: "noVerdict" }))).toBe("kanban.decide.reviewAgain");
+    expect(retryKey(task("a", "inProgress", [], { stuck: "tooManyRounds" }))).toBe("kanban.decide.anotherRound");
+    expect(retryKey(task("a", "inProgress", [], { stuck: "cancelled" }))).toBe("kanban.decide.resume");
   });
 });

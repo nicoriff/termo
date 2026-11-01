@@ -306,6 +306,23 @@
                     <span class="card-agent" title={TOOL_DISPLAY_NAMES[agent.engine]}><ConsoleIcon kind={agent.engine} size={13} /></span>
                   {/if}
                 </div>
+                {#if task.needsYou && !isRunning(task) && !asking(task)}
+                  <div class="card-decide" title={task.needsYou}>
+                    <span class="decide-mark" aria-hidden="true">!</span>
+                    <span class="decide-text">
+                      {t(`kanban.decide.short.${task.stuck ?? "other"}`, { n: String(task.reviewRounds || board.maxReviewRounds) })}
+                    </span>
+                    <button
+                      class="decide-button"
+                      onclick={(event) => {
+                        event.stopPropagation();
+                        openTask(task);
+                      }}
+                    >
+                      {t("kanban.decide.button")} →
+                    </button>
+                  </div>
+                {/if}
                 {#if task.spec.trim()}
                   <div class="card-spec">{task.spec.trim()}</div>
                 {/if}
@@ -338,8 +355,6 @@
                   {/if}
                   {#if asking(task)}
                     <span class="chip ask">❓ {t("kanban.chip.asking")}</span>
-                  {:else if task.needsYou}
-                    <span class="chip ask" title={task.needsYou}>⚠ {t("kanban.chip.needsYou")}</span>
                   {/if}
                   {#if task.reviewRounds > 0 && column !== "done"}
                     <span class="chip">{t("kanban.chip.round", { n: String(task.reviewRounds), max: String(board.maxReviewRounds) })}</span>
@@ -765,6 +780,55 @@
     flex-shrink: 0;
     display: flex;
     padding-top: 1px;
+  }
+
+  .card-decide {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 5px 6px 5px 7px;
+    border-radius: 6px;
+    background: color-mix(in srgb, #d7ba7d 20%, transparent);
+    font-size: 11.5px;
+  }
+
+  .decide-mark {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #d7ba7d;
+    color: #1e1e1e;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .decide-text {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .decide-button {
+    flex: none;
+    padding: 2px 8px;
+    border: 1px solid #d7ba7d;
+    border-radius: 5px;
+    background: color-mix(in srgb, #d7ba7d 30%, transparent);
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .decide-button:hover {
+    background: color-mix(in srgb, #d7ba7d 45%, transparent);
   }
 
   .card-spec {

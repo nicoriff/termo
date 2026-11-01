@@ -70,7 +70,7 @@ pub async fn kanban_task_move(
     dispatch(app, "kanban_task_move", args).await
 }
 
-/// The calls on one task that take nothing else: cancel, delete, resolve, merge.
+/// The calls on one task that take nothing else: cancel, delete, merge.
 async fn on_task(app: tauri::AppHandle, call: &'static str, board_id: String, task_id: String) -> Result<KanbanBoard, String> {
     dispatch(app, call, json!({ "boardId": board_id, "taskId": task_id })).await
 }
@@ -86,8 +86,8 @@ pub async fn kanban_task_delete(app: tauri::AppHandle, board_id: String, task_id
 }
 
 #[tauri::command]
-pub async fn kanban_task_resolve(app: tauri::AppHandle, board_id: String, task_id: String) -> Result<KanbanBoard, String> {
-    on_task(app, "kanban_task_resolve", board_id, task_id).await
+pub async fn kanban_task_resolve(app: tauri::AppHandle, board_id: String, task_id: String, decision: String, text: String) -> Result<KanbanBoard, String> {
+    dispatch(app, "kanban_task_resolve", json!({ "boardId": board_id, "taskId": task_id, "decision": decision, "text": text })).await
 }
 
 #[tauri::command]

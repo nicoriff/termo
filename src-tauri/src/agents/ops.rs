@@ -20,7 +20,7 @@ use crate::i18n::{tr, Msg};
 
 use super::hub::Hub;
 use super::kanban::driver::Kanban;
-use super::kanban::model::{Actor, Column};
+use super::kanban::model::{Actor, Column, Decision};
 use super::kanban::ops as kanban;
 use super::orchestration::executor::{ensure_team, Orchestrator};
 use super::orchestration::plan::{self, apply, edit_plan, max_autonomy, sanitize, Orchestration, Plan, RevisionState, Status, TaskStatus};
@@ -159,6 +159,16 @@ struct KanbanMove {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct KanbanResolve {
+    board_id: String,
+    task_id: String,
+    decision: Decision,
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct KanbanNote {
     board_id: String,
     task_id: String,
@@ -253,8 +263,8 @@ pub fn call(agents: &Agents, name: &str, value: Value) -> Result<Value, String> 
             reply(kanban::delete_task(agents, &board_id, &task_id)?)
         }
         "kanban_task_resolve" => {
-            let KanbanTaskRef { board_id, task_id } = args(value)?;
-            reply(kanban::resolve_task(agents, &board_id, &task_id)?)
+            let KanbanResolve { board_id, task_id, decision, text } = args(value)?;
+            reply(kanban::resolve_task(agents, &board_id, &task_id, decision, &text)?)
         }
         "kanban_task_note" => {
             let KanbanNote { board_id, task_id, text } = args(value)?;

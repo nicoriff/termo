@@ -24,7 +24,7 @@ use super::super::projects::{self, Project};
 use super::super::runner::Runner;
 use super::super::spec::{AgentSpec, AskLevel};
 use super::super::store::{self as agent_store, now_millis, RunStatus, RunTrigger};
-use super::model::{self, Actor, Column, KanbanBoard, KanbanTask, LogKind, Mode, Outcome, Role, Success, Verdict};
+use super::model::{self, Actor, Column, KanbanBoard, KanbanTask, LogKind, Mode, Outcome, Role, Stuck, Success, Verdict};
 use super::store;
 use super::worktree;
 
@@ -192,6 +192,9 @@ pub fn request_for(board: &KanbanBoard, task: &KanbanTask, role: Role) -> (Strin
     }
     if !task.branch.is_empty() && role != Role::Summary {
         request.push_str(&format!("\n\n{}", tr(Msg::KanbanOnBranch(&task.branch))));
+    }
+    if !task.instructions.trim().is_empty() && role != Role::Summary {
+        request.push_str(&format!("\n\n{}\n{}", tr(Msg::KanbanUserInstructions), task.instructions.trim()));
     }
     request.push_str(&format!("\n\n{}\n\n{}", tr(role_how_to(role)), tr(asking_msg(board.ask_level))));
 
@@ -417,7 +420,7 @@ impl Drive {
                     let reason = tr(Msg::KanbanWorktreeFailed(&error));
                     self.update(|board| {
                         if let Some(task) = board.task_mut(&task.id) {
-                            task.needs_you = reason.clone();
+                            task.stick(Stuck::NotStarted, reason.clone());
                             task.note(now, Actor::Termo, LogKind::WorkFailed, reason);
                         }
                     });
@@ -468,7 +471,7 @@ impl Drive {
                     task.note(now, actor, LogKind::Taken, "");
                 }
                 Err(error) => {
-                    task.needs_you = tr(Msg::KanbanRunFailed(&error));
+                    task.stick(Stuck::NotStarted, tr(Msg::KanbanRunFailed(&error)));
                     task.note(now, Actor::Termo, LogKind::WorkFailed, error);
                 }
             }
@@ -485,6 +488,7 @@ fn settle(board: &mut KanbanBoard, run: Ended, now: i64) {
     let verdict = task.verdict;
     let report = task.report.clone();
     task.release();
+    task.instructions = String::new();
     if let Some(cost) = run.cost {
         task.cost_usd = Some(task.cost_usd.unwrap_or(0.0) + cost);
     }
@@ -505,7 +509,7 @@ fn settle(board: &mut KanbanBoard, run: Ended, now: i64) {
             let failed_by_agent = report.as_ref().is_some_and(|report| report.success == Success::Failed);
             if !succeeded || failed_by_agent {
                 let text = report.as_ref().map(|report| report.notes.clone()).filter(|notes| !notes.trim().is_empty()).unwrap_or_else(why);
-                task.needs_you = tr(Msg::KanbanRunFailed(&text));
+                task.stick(Stuck::WorkFailed, tr(Msg::KanbanRunFailed(&text)));
                 task.note(now, actor.clone(), LogKind::WorkFailed, text);
                 return;
             }
@@ -536,17 +540,18 @@ fn settle(board: &mut KanbanBoard, run: Ended, now: i64) {
                 task.note(now, actor.clone(), LogKind::ChangesRequested, task.review_notes.clone());
                 move_to(task, Column::InProgress);
                 if task.review_rounds >= max_rounds {
-                    task.needs_you = tr(Msg::KanbanTooManyRounds(&task.review_rounds.to_string()));
+                    let rounds = task.review_rounds.to_string();
+                    task.stick(Stuck::TooManyRounds, tr(Msg::KanbanTooManyRounds(&rounds)));
                     task.note(now, Actor::Termo, LogKind::TooManyRounds, "");
                 }
             }
             None if !succeeded => {
                 let text = why();
-                task.needs_you = tr(Msg::KanbanRunFailed(&text));
+                task.stick(Stuck::ReviewFailed, tr(Msg::KanbanRunFailed(&text)));
                 task.note(now, actor.clone(), LogKind::WorkFailed, text);
             }
             None => {
-                task.needs_you = tr(Msg::KanbanNoVerdict);
+                task.stick(Stuck::NoVerdict, tr(Msg::KanbanNoVerdict));
                 task.note(now, actor.clone(), LogKind::NoVerdict, clip(run.summary.trim(), 2000));
             }
         },

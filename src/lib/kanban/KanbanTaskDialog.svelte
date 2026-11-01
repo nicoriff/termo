@@ -7,7 +7,7 @@
   import type { KanbanColumn, KanbanLogEntry } from "$lib/core/kanban-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import { actorKey, addTag, boardTags, isRunning, tagHue } from "./kanban-model";
+  import { actorKey, addTag, boardTags, decisionsFor, isRunning, retryKey, tagHue } from "./kanban-model";
   import { kanbanStore, type KanbanDialog } from "./kanban-store.svelte";
 
   // Read once: KanbanDialogs mounts a fresh one for each dialog opened.
@@ -51,6 +51,9 @@
   let startIn = $state<KanbanColumn>(column === "todo" ? "todo" : "notReady");
   let tab = $state<"details" | "log" | "summary">("details");
   let note = $state("");
+  /** What the user tells the agent when they unstick the task. */
+  let instructions = $state("");
+  const decisions = $derived(task ? decisionsFor(task) : []);
   let busy = $state(false);
   let error = $state("");
   let confirmingDelete = $state(false);
@@ -175,6 +178,53 @@
       </button>
     </header>
 
+    {#if task?.needsYou && !isRunning(task)}
+      {@const stuck = task.stuck ?? "other"}
+      {@const rounds = String(task.reviewRounds || board?.maxReviewRounds || 0)}
+      <section class="decide" transition:fade={{ duration: 140 }}>
+        <div class="decide-head">
+          <span class="decide-mark" aria-hidden="true">!</span>
+          <div class="decide-copy">
+            <span class="decide-title">{t("kanban.decide.title")}</span>
+            <p class="decide-question">{t(`kanban.decide.question.${stuck}`, { n: rounds })}</p>
+          </div>
+        </div>
+        <details class="decide-why" open={task.needsYou.length < 220}>
+          <summary>{t("kanban.decide.why")}</summary>
+          <p>{task.needsYou}</p>
+        </details>
+        {#if task.lastRunId}
+          <button class="link-button" onclick={() => workspaceStore.openAgentRun(task!.lastAgentId, task!.lastRunId, task!.title)}>
+            {t("kanban.decide.seeRun")} →
+          </button>
+        {/if}
+        {#if decisions.some((decision) => decision !== "park")}
+          <label class="label" for="kanban-decide-text">{t("kanban.decide.instructions")}</label>
+          <textarea
+            id="kanban-decide-text"
+            class="field"
+            rows="2"
+            bind:value={instructions}
+            placeholder={t("kanban.decide.instructionsPlaceholder")}
+          ></textarea>
+          <p class="hint">{t("kanban.decide.instructionsHint")}</p>
+        {/if}
+        <div class="choices">
+          {#each decisions as decision, index (decision)}
+            <button
+              class="choice"
+              class:primary={index === 0}
+              disabled={busy}
+              onclick={() => run(() => kanbanStore.resolveTask(boardId, task!.id, decision, instructions))}
+            >
+              <span class="choice-label">{t(decision === "retry" ? retryKey(task) : `kanban.decide.${decision}`)}</span>
+              <span class="choice-hint">{t(`kanban.decide.${decision}Hint`)}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
     {#if task}
       <nav class="tabs">
         {#each ["details", "log", "summary"] as const as candidate (candidate)}
@@ -185,16 +235,8 @@
         {/each}
       </nav>
 
-      {#if task.needsYou || isRunning(task) || (task.branch && !task.merged && task.column === "done")}
+      {#if isRunning(task) || (task.branch && !task.merged && task.column === "done")}
         <div class="status">
-          {#if task.needsYou}
-            <div class="status-row ask">
-              <span class="status-text"><strong>{t("kanban.task.needsYou")}:</strong> {task.needsYou}</span>
-              <button class="button" disabled={busy} title={t("kanban.task.resolveHint")} onclick={() => run(() => kanbanStore.resolveTask(boardId, task!.id))}>
-                {t("kanban.task.resolve")}
-              </button>
-            </div>
-          {/if}
           {#if isRunning(task)}
             <div class="status-row live">
               <span class="status-text">
@@ -508,8 +550,137 @@
     background: rgba(127, 127, 127, 0.12);
   }
 
-  .status-row.ask {
-    background: color-mix(in srgb, #d7ba7d 18%, transparent);
+  .decide {
+    margin: 12px 18px 2px;
+    padding: 12px 14px;
+    border-radius: 9px;
+    border: 1px solid color-mix(in srgb, #d7ba7d 55%, transparent);
+    background: color-mix(in srgb, #d7ba7d 12%, transparent);
+  }
+
+  .decide-head {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .decide-mark {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #d7ba7d;
+    color: #1e1e1e;
+    font-weight: 700;
+  }
+
+  .decide-copy {
+    min-width: 0;
+  }
+
+  .decide-title {
+    font-weight: 700;
+    font-size: 13.5px;
+  }
+
+  .decide-question {
+    margin: 2px 0 0;
+    line-height: 1.45;
+  }
+
+  .decide-why {
+    margin: 8px 0 0 32px;
+    font-size: 12px;
+  }
+
+  .decide-why summary {
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  .decide-why p {
+    margin: 4px 0 0;
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    opacity: 0.85;
+    scrollbar-width: thin;
+  }
+
+  .link-button {
+    margin: 6px 0 0 32px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--link-color, #3a8ef0);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .link-button:hover {
+    text-decoration: underline;
+  }
+
+  .decide .label {
+    margin-top: 10px;
+  }
+
+  .decide .hint {
+    margin: 4px 0 0;
+  }
+
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .choice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(127, 127, 127, 0.35);
+    background: rgba(127, 127, 127, 0.1);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .choice:hover:not(:disabled) {
+    background: rgba(127, 127, 127, 0.2);
+  }
+
+  .choice.primary {
+    border-color: #d7ba7d;
+    background: color-mix(in srgb, #d7ba7d 28%, transparent);
+  }
+
+  .choice.primary:hover:not(:disabled) {
+    background: color-mix(in srgb, #d7ba7d 40%, transparent);
+  }
+
+  .choice:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .choice-label {
+    font-weight: 600;
+  }
+
+  .choice-hint {
+    font-size: 11px;
+    opacity: 0.7;
+    line-height: 1.35;
   }
 
   .status-row.live {
