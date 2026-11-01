@@ -14,8 +14,10 @@
    * panel closed: the agents' runs, and the orchestrations running. */
   const running = $derived(Object.values(agentsStore.lastRun).filter((run) => run.status === "running").length);
   const orchestrating = $derived(orchestrationStore.all.filter((item) => item.status === "running").length);
-  /** Questions from agents waiting on the user: they win the badge. */
+  /** Questions from agents waiting on the user: they win the badge, on the
+   * button of the section where they're answered (a run's, or a plan's). */
   const asked = $derived(orchestrationStore.waitingQuestions);
+  const runAsked = $derived(agentsStore.questions.length);
   const keys = (action: ShortcutAction) => formatKeybindingLabel(appConfigStore.getEffectiveShortcut(action), isMac);
   const localHint = $derived(`${t("agents.sections.local")} (${keys("toggleAgents")})`);
   const orchestrationHint = $derived(`${t("agents.sections.orchestration")} (${keys("toggleOrchestration")})`);
@@ -123,7 +125,9 @@
         <circle cx="15" cy="13" r="1.4" fill="currentColor" />
         <path d="M9.5 16.6h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
       </svg>
-      {#if running > 0}
+      {#if runAsked > 0}
+        <span class="activity-badge asking" title={t("agents.orchestration.questions.badge", { n: String(runAsked) })}>?</span>
+      {:else if running > 0}
         <span class="activity-badge">{running}</span>
       {/if}
     </button>

@@ -133,7 +133,7 @@ pub fn run(build: &str, dir: Option<&str>) {
     executor::recover(&root);
     console_bridge::read_from_disk(&root);
     console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
-    console_orchestration::set_enabled(config.orchestrations_from_consoles);
+    console_orchestration::configure(&config);
     crate::ai_mode::init_agents(&agents, config.ai_mode_enabled);
 
     let host = Arc::new(Host {
@@ -319,7 +319,7 @@ impl Host {
         crate::marketplace::agent_install::apply(&config.agent_install_dirs);
         crate::ai_mode::set_agents(&self.agents, config.ai_mode_enabled);
         console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
-        console_orchestration::set_enabled(config.orchestrations_from_consoles);
+        console_orchestration::configure(&config);
         self.notifier.set_config(&config);
         if !config.background_agents || !config.ai_mode_enabled {
             self.retiring.store(true, Ordering::SeqCst);

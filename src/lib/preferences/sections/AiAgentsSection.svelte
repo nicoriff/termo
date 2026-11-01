@@ -10,8 +10,11 @@
     setAgentsInEveryConsole,
     setBackgroundAgents,
     type AgentsHostState,
+    type AskLevel,
     type ConsoleRegistration,
   } from "$lib/core/agents-client";
+  import { ASK_LEVEL_KEYS, ASK_LEVELS } from "$lib/agents/orchestration-spec";
+  import SettingDropdown from "../SettingDropdown.svelte";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { onMount } from "svelte";
 
@@ -103,6 +106,19 @@
     />
   </label>
   <p class="setting-hint">{t("preferences.agents.inActivityBarHint", { shortcut })}</p>
+</section>
+
+<section>
+  <h3>{t("preferences.agents.orchestrationsSection")}</h3>
+  <div class="row">
+    <span>{t("preferences.agents.askLevel")}</span>
+    <SettingDropdown
+      options={ASK_LEVELS.map((level) => ({ value: level, label: t(ASK_LEVEL_KEYS[level].label) }))}
+      value={appConfigStore.agentAskLevel}
+      onpick={(value) => appConfigStore.setAgentAskLevel(value as AskLevel)}
+    />
+  </div>
+  <p class="setting-hint">{t(ASK_LEVEL_KEYS[appConfigStore.agentAskLevel].hint)} {t("preferences.agents.askLevelHint")}</p>
 </section>
 
 <section>
@@ -204,6 +220,14 @@
     letter-spacing: 0.05em;
     opacity: 0.6;
     margin: 0 0 8px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
   }
 
   .toggle-row {

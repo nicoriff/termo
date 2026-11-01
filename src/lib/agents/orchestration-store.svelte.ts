@@ -14,6 +14,7 @@ import {
   planOrchestration,
   resolveRevision,
   resumeOrchestration,
+  setOrchestrationAskLevel,
   stopOrchestration,
   type Answered,
   type Catalog,
@@ -22,7 +23,7 @@ import {
   type Orchestration,
   type Plan,
 } from "$lib/core/orchestration-client";
-import type { AgentEngine } from "$lib/core/agents-client";
+import type { AgentEngine, AskLevel } from "$lib/core/agents-client";
 import { agentsStore } from "./agents-store.svelte";
 import { announceOrchestration } from "./orchestration-attention";
 import { pendingQuestions } from "./orchestration-spec";
@@ -112,11 +113,11 @@ class OrchestrationStore {
   }
 
   /** What the planner would ask first; planning shows as going on meanwhile. */
-  async clarify(prompt: string, workDir: string, engine: AgentEngine, model: string): Promise<Clarifying> {
+  async clarify(prompt: string, workDir: string, engine: AgentEngine, model: string, askLevel: AskLevel): Promise<Clarifying> {
     this.planning = true;
     this.startPhase("clarify");
     try {
-      return await clarifyOrchestration(prompt, workDir, engine, model);
+      return await clarifyOrchestration(prompt, workDir, engine, model, askLevel);
     } finally {
       this.planning = false;
       this.planningPhase = null;
@@ -136,11 +137,12 @@ class OrchestrationStore {
     model: string,
     answers: Answered[] = [],
     overheadUsd = 0,
+    askLevel: AskLevel = "essential",
   ): Promise<Orchestration> {
     this.planning = true;
     this.startPhase("plan");
     try {
-      const orchestration = await planOrchestration(prompt, workDir, engine, model, answers, overheadUsd);
+      const orchestration = await planOrchestration(prompt, workDir, engine, model, answers, overheadUsd, askLevel);
       this.take(orchestration);
       return orchestration;
     } finally {
@@ -179,6 +181,10 @@ class OrchestrationStore {
 
   async answer(id: string, questionId: string, answer: string): Promise<void> {
     this.take(await answerOrchestration(id, questionId, answer));
+  }
+
+  async setAskLevel(id: string, askLevel: AskLevel): Promise<void> {
+    this.take(await setOrchestrationAskLevel(id, askLevel));
   }
 
   /** Questions waiting for the user, across every orchestration. */

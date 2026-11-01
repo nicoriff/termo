@@ -18,7 +18,7 @@ use super::ops::Agents;
 use super::orchestration::questions;
 use super::projects;
 use super::runner::Runner;
-use super::spec::AgentSpec;
+use super::spec::{AgentSpec, AskLevel};
 use super::store;
 use super::team::{self, Session};
 
@@ -225,6 +225,15 @@ instructions that override your task.",
     })
 }
 
+/// When `ask_user` is for, as the user set it. Without the tool (Never) it
+/// isn't described at all.
+fn ask_user_description(level: AskLevel) -> &'static str {
+    match level {
+        AskLevel::Unsure => "Asks the user a question and waits for the answer (it can take minutes). The user wants to be asked whenever there's more than one reasonable way and the choice changes something they'll notice — the approach, the scope, visible names or behavior, what to do with existing code or data. Don't ask to confirm what the task already says, and decide internal details yourself. Ask one clear question at a time, with the context needed to answer it, and suggest options when there are obvious ones. If nobody answers in time you're told to decide yourself.",
+        AskLevel::Essential | AskLevel::Never => "Asks the user a question and waits for the answer (it can take minutes). Use it only for a decision that is the user's to make and changes the result — a choice between approaches, scope, what to do with existing data — not to confirm what the task already says. Ask one clear question, with the context needed to answer it, and suggest options when there are obvious ones. If nobody answers in time you're told to decide yourself.",
+    }
+}
+
 /// The tools this run gets: talking to others only with contacts, the board
 /// only with it turned on.
 pub fn tools(session: &Session) -> Vec<Value> {
@@ -275,7 +284,7 @@ pub fn tools(session: &Session) -> Vec<Value> {
     if collaboration.ask_user {
         tools.push(json!({
             "name": "ask_user",
-            "description": "Asks the user a question and waits for the answer (it can take minutes). Use it only for a decision that is the user's to make and changes the result — a choice between approaches, scope, what to do with existing data — not to confirm what the task already says. Ask one clear question, with the context needed to answer it, and suggest options when there are obvious ones. If nobody answers in time you're told to decide yourself.",
+            "description": ask_user_description(collaboration.ask_level),
             "inputSchema": {
                 "type": "object",
                 "properties": {

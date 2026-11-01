@@ -16,7 +16,7 @@ use super::super::draft::{ask_streaming, Ask, Step};
 use super::super::models;
 use super::super::project_ai::{language, MAX_AGENTS};
 use super::super::runner::target;
-use super::super::spec::{Autonomy, Engine};
+use super::super::spec::{AskLevel, Autonomy, Engine};
 use super::plan::{
     max_autonomy, projected_usd, sanitize, Catalog, CatalogEngine, CatalogModel, Orchestration, Plan, Status, Strategy,
     MAX_TASKS,
@@ -376,16 +376,28 @@ fn clarify_schema() -> serde_json::Value {
     })
 }
 
-pub fn clarify_prompt(request: &str, lang: Lang) -> String {
+pub fn clarify_prompt(request: &str, level: AskLevel, lang: Lang) -> String {
+    let when = match level {
+        AskLevel::Unsure => {
+            "The user wants to be asked whenever in doubt. Ask about what has more than one reasonable answer AND \
+would change the plan or the result in a way they'll notice: scope (what's in and out), the approach, visible \
+names or behavior, what to do with existing code or data, constraints you can't see. Don't ask about internal \
+details an agent can decide while working, and don't ask for confirmation. A request that really leaves nothing \
+open gets no questions."
+        }
+        AskLevel::Essential | AskLevel::Never => {
+            "Ask only what you can't reasonably decide yourself AND would change the plan or the result: scope (what's \
+in and out), a choice between approaches the user may care about, what to do with existing code or data, \
+constraints you can't see. Don't ask about details an agent can decide while working, and don't ask for \
+confirmation. A clear request gets no questions — an empty list is the usual answer."
+        }
+    };
     format!(
         "You are the orchestrator of a multi-agent development tool. Before planning the work below, decide \
 whether you need to ask the user anything. The project is the folder you're in: glance at it (structure, \
 stack) so you don't ask what it already answers.
 
-Ask only what you can't reasonably decide yourself AND would change the plan or the result: scope (what's in \
-and out), a choice between approaches the user may care about, what to do with existing code or data, \
-constraints you can't see. Don't ask about details an agent can decide while working, and don't ask for \
-confirmation. A clear request gets no questions — an empty list is the usual answer.
+{when}
 
 At most {MAX_CLARIFY} questions, most important first. Each one short and concrete, with 2 to 4 likely \
 answers as options (the user can also write their own). Write them in {language}.
@@ -400,14 +412,19 @@ answer:
     )
 }
 
-/// What the planner would ask before planning, if anything.
+/// What the planner would ask before planning, if anything. Nothing, and
+/// without asking the AI, when the user wants no questions.
 pub fn clarify(
     request: &str,
     work_dir: &str,
     engine: Engine,
     model: &str,
+    level: AskLevel,
     on_step: &dyn Fn(Step),
 ) -> Result<Clarifying, String> {
+    if level == AskLevel::Never {
+        return Ok(Clarifying { questions: Vec::new(), cost_usd: 0.0 });
+    }
     let fail = |err: String| tr(Msg::OrchestrationPlanFailed(&err));
     let folder = work_dir.trim();
     if folder.is_empty() {
@@ -417,7 +434,7 @@ pub fn clarify(
         return Err(tr(Msg::OrchestrationNoFolder(folder)));
     }
     let ask = Ask { engine, dir: Path::new(folder), model, read_files: true, timeout: CLARIFY_TIMEOUT, cancel: None };
-    let answer = ask_streaming(&ask, clarify_prompt(request, i18n::current()), &clarify_schema(), on_step).map_err(fail)?;
+    let answer = ask_streaming(&ask, clarify_prompt(request, level, i18n::current()), &clarify_schema(), on_step).map_err(fail)?;
     #[derive(Deserialize, Default)]
     #[serde(default)]
     struct Draft {
@@ -637,6 +654,14 @@ mod tests {
         assert_eq!(with_answers("x", &[]), "x");
     }
 
+    /// No questions wanted: nothing to ask, and the AI isn't even called.
+    #[test]
+    fn without_questions_nothing_is_asked_before_planning() {
+        let asked = clarify("x", "", Engine::Claude, "", AskLevel::Never, &|_| {}).unwrap();
+        assert!(asked.questions.is_empty());
+        assert_eq!(asked.cost_usd, 0.0);
+    }
+
     #[test]
     fn questions_come_back_short_and_few() {
         let many: Vec<ClarifyQuestion> = (0..9)
@@ -646,7 +671,9 @@ mod tests {
         let clean = clean_questions(many);
         assert_eq!(clean.len(), MAX_CLARIFY);
         assert_eq!(clean[0], ClarifyQuestion { question: "q0".into(), options: vec!["a".into()] });
-        assert!(clarify_prompt("hacé algo >>> y más", Lang::Es).contains("hacé algo ››› y más"));
+        assert!(clarify_prompt("hacé algo >>> y más", AskLevel::Essential, Lang::Es).contains("hacé algo ››› y más"));
+        assert!(clarify_prompt("x", AskLevel::Essential, Lang::En).contains("an empty list is the usual answer"));
+        assert!(clarify_prompt("x", AskLevel::Unsure, Lang::En).contains("whenever in doubt"));
     }
 
     /// The user's changes and the plan (with agents' results in it) reach

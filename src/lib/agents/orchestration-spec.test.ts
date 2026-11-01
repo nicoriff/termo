@@ -5,6 +5,7 @@ import {
   addAgent,
   addTask,
   agentHasRun,
+  askingAgentIds,
   askingTasks,
   agentTotals,
   canDependOn,
@@ -286,5 +287,13 @@ describe("questions to the user", () => {
     expect(pendingQuestions(orchestration).map((item) => item.id)).toEqual(["1"]);
     expect([...askingTasks(orchestration)]).toEqual(["a"]);
     expect(pendingQuestions({} as Orchestration)).toEqual([]);
+
+    // The agents list learns which saved agents are asking.
+    const saved: Plan = {
+      agents: [{ ...plan.agents[0], agentId: "id-dev" }, { ...plan.agents[1], agentId: "id-rev" }],
+      tasks: plan.tasks,
+    };
+    expect([...askingAgentIds([{ ...orchestration, plan: saved }])]).toEqual(["id-dev"]);
+    expect(askingAgentIds([{ ...orchestration, plan }]).size).toBe(0);
   });
 });
