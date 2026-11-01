@@ -48,6 +48,9 @@ pub struct Project {
     /// Set on the team an orchestration runs (see orchestration/): it's
     /// shown with its orchestration, not among the user's own projects.
     pub orchestration_id: String,
+    /// Set on the team a kanban board runs (see kanban/): it's shown with
+    /// its board, not among the user's own projects.
+    pub kanban_id: String,
     /// Unix seconds.
     pub created_at: i64,
     pub updated_at: i64,

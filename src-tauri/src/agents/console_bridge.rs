@@ -30,6 +30,7 @@ use serde_json::{json, Value};
 use crate::marketplace::agent_cli;
 use crate::marketplace::model::AgentTarget;
 
+use super::console_kanban;
 use super::console_orchestration;
 use super::diagnose::provider_name;
 use super::hub::Hub;
@@ -644,12 +645,15 @@ pub fn tools_for(agents: &[AgentSpec]) -> Vec<Value> {
     if console_orchestration::enabled() {
         tools.extend(console_orchestration::tools());
     }
+    if console_kanban::enabled() {
+        tools.extend(console_kanban::tools());
+    }
     tools
 }
 
 /// Whether a console has anything to reach here (see tools_for).
 pub fn anything_offered(agents: &[AgentSpec]) -> bool {
-    !available(agents).is_empty() || console_orchestration::enabled()
+    !available(agents).is_empty() || console_orchestration::enabled() || console_kanban::enabled()
 }
 
 pub fn tools() -> Vec<Value> {
@@ -698,6 +702,7 @@ pub fn call(agents: &Agents, root: &Path, name: &str, args: &Value) -> Result<St
         "answer_agent" => answer(hub, runner, root, &text("agent"), &text("answer")),
         "start_agent" => start_only(hub, runner, root, &text("agent"), &text("request")),
         _ if console_orchestration::is_tool(name) => console_orchestration::call(agents, name, args),
+        _ if console_kanban::is_tool(name) => console_kanban::call(agents, name, args),
         _ => Err(format!("There's no tool called \"{name}\".")),
     }
 }

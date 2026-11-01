@@ -6,6 +6,7 @@ pub mod config_commands;
 mod download;
 pub mod explorer_commands;
 pub mod folder_commands;
+pub mod kanban_commands;
 pub mod keep_awake_commands;
 pub mod font_commands;
 pub mod git_commands;

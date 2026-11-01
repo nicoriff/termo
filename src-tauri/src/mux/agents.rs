@@ -221,7 +221,7 @@ pub struct Summary {
 pub fn summaries(root: &Path) -> Vec<Summary> {
     let teams: Vec<String> = projects::list_in(root)
         .into_iter()
-        .filter(|project| !project.orchestration_id.is_empty())
+        .filter(|project| !project.orchestration_id.is_empty() || !project.kanban_id.is_empty())
         .map(|project| project.id)
         .collect();
     store::list_in(root)

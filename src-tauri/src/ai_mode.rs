@@ -53,6 +53,7 @@ pub fn init_agents(agents: &Agents, on: bool) {
     scheduler::start(agents.hub.clone(), agents.runner.clone());
     if on && host::runs_here() {
         webhook::start(agents.clone());
+        agents.kanban.start_all(&agents.hub, &agents.runner);
     }
 }
 
@@ -75,6 +76,7 @@ pub fn set_agents(agents: &Agents, on: bool) -> bool {
     }
     if on {
         webhook::start(agents.clone());
+        agents.kanban.start_all(&agents.hub, &agents.runner);
     } else {
         webhook::stop();
         for run in agents.runner.running() {
