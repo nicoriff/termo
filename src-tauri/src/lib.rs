@@ -231,7 +231,7 @@ pub fn run() {
             // Every console's CLI settings point at this Termo (its port and
             // token), like the hooks do.
             agents::console_bridge::set_global(ai_mode_on && loaded.agents_from_any_console);
-            agents::console_orchestration::set_enabled(loaded.orchestrations_from_consoles);
+            agents::console_orchestration::configure(&loaded);
             if ai_mode_on && loaded.agents_from_any_console {
                 if let Ok(root) = agents::store::root(app.handle()) {
                     std::thread::spawn(move || {
@@ -414,6 +414,7 @@ pub fn run() {
             commands::orchestration_commands::orchestration_report,
             commands::orchestration_commands::orchestration_clarify,
             commands::orchestration_commands::orchestration_answer,
+            commands::orchestration_commands::orchestration_set_ask_level,
             commands::agent_commands::agents_console_global,
             commands::agent_commands::agents_console_rotate,
             commands::orchestration_commands::orchestration_resume,

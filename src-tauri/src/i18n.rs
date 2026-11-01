@@ -152,8 +152,12 @@ pub enum Msg<'a> {
     OrchestrationPlanFailed(&'a str),
     /// the error
     OrchestrationReportFailed(&'a str),
-    /// Told to every orchestration task: it may ask the user.
+    /// Told to every orchestration task: it may ask the user (AskLevel::Essential).
     OrchestrationCanAsk,
+    /// The same, when the user wants to be asked whenever in doubt.
+    OrchestrationAskWhenUnsure,
+    /// Told when the user wants no questions: nobody answers.
+    OrchestrationNoAsking,
     /// Heads the answers the user gave before planning.
     OrchestrationClarifications,
     OrchestrationQuestionClosed,
@@ -519,6 +523,10 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (OrchestrationReportFailed(error), En) => format!("Couldn't write the final report: {error}"),
         (OrchestrationCanAsk, Es) => "Si te encontrás con una decisión que le corresponde al usuario y cambia el resultado (un enfoque u otro, el alcance, qué hacer con lo que ya existe), preguntale con la herramienta ask_user de Termo en vez de suponer. Para lo demás, decidí vos y seguí.".into(),
         (OrchestrationCanAsk, En) => "If you hit a decision that is the user's to make and changes the result (one approach or another, the scope, what to do with what already exists), ask them with Termo's ask_user tool instead of assuming. For everything else, decide yourself and go on.".into(),
+        (OrchestrationAskWhenUnsure, Es) => "Cuando haya más de una forma razonable de hacer algo y la elección cambie algo que el usuario va a notar (el enfoque, el alcance, nombres o comportamiento visibles, qué hacer con lo que ya existe), preguntale con la herramienta ask_user de Termo en vez de suponer. Una pregunta por vez, con el contexto y las opciones. Los detalles internos decidilos vos.".into(),
+        (OrchestrationAskWhenUnsure, En) => "When there's more than one reasonable way to do something and the choice changes something the user will notice (the approach, the scope, visible names or behavior, what to do with what already exists), ask them with Termo's ask_user tool instead of assuming. One question at a time, with the context and the options. Decide internal details yourself.".into(),
+        (OrchestrationNoAsking, Es) => "Nadie va a responder preguntas durante esta tarea: decidí vos con tu mejor criterio, seguí, y decí claramente en tu respuesta final qué supusiste.".into(),
+        (OrchestrationNoAsking, En) => "Nobody will answer questions during this task: decide yourself with your best judgment, go on, and say clearly in your final answer what you assumed.".into(),
         (OrchestrationClarifications, Es) => "Aclaraciones del usuario:".into(),
         (OrchestrationClarifications, En) => "The user's clarifications:".into(),
         (OrchestrationServiceBlocked(service, model, message), Es) => format!(
@@ -774,6 +782,8 @@ mod tests {
             Msg::OrchestrationPlanFailed("timeout"),
             Msg::OrchestrationReportFailed("timeout"),
             Msg::OrchestrationCanAsk,
+            Msg::OrchestrationAskWhenUnsure,
+            Msg::OrchestrationNoAsking,
             Msg::OrchestrationClarifications,
             Msg::OrchestrationQuestionClosed,
             Msg::OrchestrationServiceBlocked("Anthropic", "m", "403"),

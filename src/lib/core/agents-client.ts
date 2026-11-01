@@ -4,6 +4,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 /** Mirrors src-tauri/src/agents/spec.rs. */
 export type AgentEngine = "claude" | "codex" | "gemini" | "copilot" | "grok";
 export type AgentAutonomy = "read" | "edit" | "run";
+/** When an agent that may ask the user does (AskLevel in spec.rs). */
+export type AskLevel = "never" | "essential" | "unsure";
 
 export interface McpServer {
   name: string;
@@ -47,6 +49,8 @@ export interface AgentSpec {
     allowEscalation: boolean;
     /** Asking the user mid-task, in a run someone is there for. */
     askUser?: boolean;
+    /** When it asks, with askUser on. */
+    askLevel?: AskLevel;
     /** Reachable from the user's consoles (Claude Code, Codex…). */
     fromConsoles?: boolean;
     /** One that runs commands is reachable only with this too. */

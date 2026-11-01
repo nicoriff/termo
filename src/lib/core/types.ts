@@ -139,6 +139,7 @@ export interface AppConfig {
   companion_muted?: string[];
   agents_from_any_console?: boolean;
   orchestrations_from_consoles?: boolean;
+  agent_ask_level?: "never" | "essential" | "unsure";
   marketplace_source?: string;
   keep_awake_button: boolean;
   remote_button?: boolean;

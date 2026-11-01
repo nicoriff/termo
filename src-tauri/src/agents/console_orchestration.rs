@@ -29,15 +29,30 @@ use super::orchestration::plan::{
 };
 use super::orchestration::planner::{self, ENGINES};
 use super::orchestration::{questions, store};
-use super::spec::Engine;
+use super::spec::{AskLevel, Engine};
 use super::store::now_millis;
+use crate::config::AppConfig;
 
 /// Whether the user lets consoles plan and run orchestrations
 /// (`AppConfig.orchestrations_from_consoles`).
 static ENABLED: AtomicBool = AtomicBool::new(false);
+/// When the agents of one planned from a console ask the user, unless the
+/// console says (`AppConfig.agent_ask_level`).
+static DEFAULT_ASK: Mutex<AskLevel> = Mutex::new(AskLevel::Essential);
 
-pub fn set_enabled(on: bool) {
-    ENABLED.store(on, Ordering::Relaxed);
+pub fn configure(config: &AppConfig) {
+    ENABLED.store(config.orchestrations_from_consoles, Ordering::Relaxed);
+    *DEFAULT_ASK.lock().unwrap() = config.agent_ask_level;
+}
+
+/// What a console asked for, or the user's default.
+fn ask_level(asked: &str) -> AskLevel {
+    match asked {
+        "never" => AskLevel::Never,
+        "essential" => AskLevel::Essential,
+        "unsure" => AskLevel::Unsure,
+        _ => *DEFAULT_ASK.lock().unwrap(),
+    }
 }
 
 pub fn enabled() -> bool {
@@ -93,6 +108,7 @@ and edit it. Show the user the plan and its cost, and run it with run_orchestrat
                     "request": { "type": "string", "description": "The work, with everything the orchestrator needs: it doesn't see this conversation." },
                     "folder": { "type": "string", "description": "The project's folder, as an absolute path (usually this console's working directory). The agents work there." },
                     "engine": { "type": "string", "enum": ["claude", "codex", "gemini", "copilot", "grok"], "description": "Whose CLI plans and supervises. Optional: the first one installed." },
+                    "ask_user": { "type": "string", "enum": ["never", "essential", "unsure"], "description": "When its agents ask the user something while they work: never (they decide alone and say what they assumed), essential (only for decisions that are the user's and change the result) or unsure (whenever there's more than one reasonable way). Optional: the user's default. Set it only when the user said how they want it." },
                 },
                 "required": ["request", "folder"],
             },
@@ -169,7 +185,7 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
     }
     let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default().trim().to_string();
     match name {
-        "plan_orchestration" => plan(agents, &text("request"), &text("folder"), &text("engine")),
+        "plan_orchestration" => plan(agents, &text("request"), &text("folder"), &text("engine"), ask_level(&text("ask_user"))),
         "run_orchestration" => run(agents, &text("id"), &text("strategy"), args.get("budget_usd").and_then(Value::as_f64)),
         "orchestration_status" => {
             let id = text("id");
@@ -246,7 +262,7 @@ fn engine_name(engine: Engine) -> &'static str {
 /// a CLI may wait on a tool — and `orchestration_status` waits for the plan.
 /// Meanwhile the windows hear `orchestration-planning`, so the Orchestration
 /// tab shows it being planned.
-fn plan(agents: &Agents, request: &str, folder: &str, engine: &str) -> Result<String, String> {
+fn plan(agents: &Agents, request: &str, folder: &str, engine: &str, level: AskLevel) -> Result<String, String> {
     if request.is_empty() {
         return Err("Write the request.".into());
     }
@@ -274,6 +290,7 @@ fn plan(agents: &Agents, request: &str, folder: &str, engine: &str) -> Result<St
     std::thread::spawn(move || {
         let saved = planner::generate(&request, &work_dir, engine, "", &|step| announce(Some(step), false)).and_then(|mut planned| {
             planned.id = planning.clone();
+            planned.ask_level = level;
             store::save_in(hub.root(), planned).map_err(|err| err.to_string())
         });
         match saved {

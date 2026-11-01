@@ -152,7 +152,8 @@ impl Notifier {
         let target = json!({ "kind": "orchestration", "orchestrationId": after.id, "title": after.name });
         let switches = *self.switches.lock().unwrap();
         if let Some(asked) = after.questions.iter().find(|question| pending.contains(&question.id) && !before_questions.contains(&question.id)) {
-            return switches.finished.then(|| (tr(Msg::OrchestrationNotifyQuestion(&asked.agent, &name)), clip(&asked.question), target));
+            // A question waits on the user, like a run's (see question()).
+            return switches.awaiting.then(|| (tr(Msg::OrchestrationNotifyQuestion(&asked.agent, &name)), clip(&asked.question), target));
         }
         if before_status != Status::Running || after.status == Status::Running {
             return None;
@@ -257,6 +258,25 @@ mod tests {
         // Stopped by the user: their own doing.
         notifier.orchestration(&orchestration(Status::Running));
         assert!(notifier.orchestration(&orchestration(Status::Stopped)).is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A question waits on the user: it follows the "awaiting" switch, not
+    /// the "finished" one.
+    #[test]
+    fn an_orchestration_question_follows_the_awaiting_switch() {
+        let (notifier, root) = notifier();
+        let asking = |id: &str| Orchestration {
+            questions: vec![crate::agents::orchestration::plan::UserQuestion { id: id.into(), agent: "Dev".into(), question: "¿SQLite?".into(), ..Default::default() }],
+            ..orchestration(Status::Running)
+        };
+        notifier.orchestration(&orchestration(Status::Running));
+        assert!(notifier.orchestration(&asking("q1")).is_some());
+
+        notifier.set_config(&AppConfig { ai_notify_finished: true, ai_notify_awaiting: false, ..AppConfig::default() });
+        assert!(notifier.orchestration(&asking("q2")).is_none());
+        notifier.set_config(&AppConfig { ai_notify_finished: false, ai_notify_awaiting: true, ..AppConfig::default() });
+        assert!(notifier.orchestration(&asking("q3")).is_some());
         let _ = std::fs::remove_dir_all(root);
     }
 

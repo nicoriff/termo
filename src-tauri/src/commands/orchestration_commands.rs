@@ -5,7 +5,7 @@ use crate::agents::draft::Step;
 use crate::agents::host::client::dispatch;
 use crate::agents::orchestration::plan::{Catalog, Orchestration, Plan, Status};
 use crate::agents::orchestration::{planner, store};
-use crate::agents::spec::Engine;
+use crate::agents::spec::{AskLevel, Engine};
 use crate::agents::store::now_millis;
 use crate::commands::agent_commands::root;
 use crate::i18n::{tr, Msg};
@@ -62,10 +62,12 @@ pub async fn orchestration_clarify(
     work_dir: String,
     engine: Option<Engine>,
     model: String,
+    ask_level: Option<AskLevel>,
 ) -> Result<planner::Clarifying, String> {
     let on_step = progress(&app, "clarify", None);
     let engine = engine.unwrap_or_default();
-    tauri::async_runtime::spawn_blocking(move || planner::clarify(&prompt, &work_dir, engine, &model, &on_step))
+    let level = ask_level.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || planner::clarify(&prompt, &work_dir, engine, &model, level, &on_step))
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))?
 }
@@ -82,6 +84,7 @@ pub async fn orchestration_plan(
     model: String,
     answers: Option<Vec<planner::Answered>>,
     overhead_usd: Option<f64>,
+    ask_level: Option<AskLevel>,
 ) -> Result<Orchestration, String> {
     let root = root(&app)?;
     let request = planner::with_answers(&prompt, &answers.unwrap_or_default());
@@ -92,6 +95,7 @@ pub async fn orchestration_plan(
         .await
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
     planned.overhead_usd += overhead_usd.filter(|usd| usd.is_finite() && *usd > 0.0).unwrap_or(0.0);
+    planned.ask_level = ask_level.unwrap_or_default();
     let orchestration = saved(store::save_in(&root, planned))?;
     let _ = app.emit("orchestration", &orchestration);
     Ok(orchestration)
@@ -166,6 +170,13 @@ pub async fn orchestration_revise(
 #[tauri::command]
 pub async fn orchestration_answer(app: tauri::AppHandle, id: String, question_id: String, answer: String) -> Result<Orchestration, String> {
     dispatch(app, "orchestration_answer", json!({ "id": id, "question_id": question_id, "answer": answer })).await
+}
+
+/// When its agents ask the user something, in any state: the tasks that
+/// start from now on go by it.
+#[tauri::command]
+pub async fn orchestration_set_ask_level(app: tauri::AppHandle, id: String, ask_level: AskLevel) -> Result<Orchestration, String> {
+    dispatch(app, "orchestration_set_ask_level", json!({ "id": id, "ask_level": ask_level })).await
 }
 
 #[tauri::command]

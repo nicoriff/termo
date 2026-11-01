@@ -22,6 +22,19 @@ pub enum Engine {
     Grok,
 }
 
+/// When an agent that may ask the user something mid-task does: never (it
+/// decides alone and says what it assumed), only for what is the user's to
+/// decide and changes the result, or whenever more than one reasonable way
+/// would change something the user will notice.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum AskLevel {
+    Never,
+    #[default]
+    Essential,
+    Unsure,
+}
+
 /// How far the agent may go on its own, in the terms the wizard explains:
 /// only look, also change files, or also run commands. Runs never stop to ask
 /// for permission (nobody is there to answer), so whatever isn't allowed here
@@ -168,6 +181,8 @@ pub struct Collaboration {
     /// orchestration's agents on its plan (orchestration/questions.rs), any
     /// other in a run someone is there for (run_questions.rs).
     pub ask_user: bool,
+    /// When it asks, with `ask_user` on (see mcp_server.rs).
+    pub ask_level: AskLevel,
     /// Reachable from the user's consoles (Claude Code, Codex…): they can ask
     /// it something and wait for its answer (see console_bridge.rs).
     pub from_consoles: bool,

@@ -38,7 +38,8 @@ export async function announceOrchestration(before: Orchestration | undefined, a
   const asked = newQuestions(before, after);
   if (asked.length > 0) {
     if (!(await isPrimaryWindow().catch(() => true))) return;
-    if (!appConfigStore.aiNotifyFinished || !(await canNotify())) return;
+    // A question waits on the user, like a run's (agent-attention.ts).
+    if (!appConfigStore.aiNotifyAwaiting || !(await canNotify())) return;
     const question = asked[0].question.replace(/\s+/g, " ").trim();
     void notify(
       t("agents.orchestration.notify.question", { agent: asked[0].agent, name: `${after.icon} ${after.name}`.trim() }),

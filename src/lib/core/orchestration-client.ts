@@ -1,7 +1,7 @@
 import type { RunFailure } from "./agents-client";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AgentAutonomy, AgentEngine } from "./agents-client";
+import type { AgentAutonomy, AgentEngine, AskLevel } from "./agents-client";
 
 /** Mirrors src-tauri/src/agents/orchestration/plan.rs. */
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "dropped";
@@ -153,6 +153,8 @@ export interface Orchestration {
   /** What planning and supervising cost. */
   overheadUsd: number;
   note: string;
+  /** When its agents ask the user; the tasks that start after a change go by it. */
+  askLevel: AskLevel;
   /** What its agents asked the user, answered or not. */
   questions: UserQuestion[];
   /** The final report, once it ended (or when the user asked for one). */
@@ -197,8 +199,14 @@ export function listOrchestrations(): Promise<Orchestration[]> {
 
 /** Plans the work with AI: a draft to review, nothing runs yet. */
 /** What the planner would ask about the request first, if anything. */
-export function clarifyOrchestration(prompt: string, workDir: string, engine: AgentEngine, model: string): Promise<Clarifying> {
-  return invoke("orchestration_clarify", { prompt, workDir, engine, model });
+export function clarifyOrchestration(
+  prompt: string,
+  workDir: string,
+  engine: AgentEngine,
+  model: string,
+  askLevel: AskLevel,
+): Promise<Clarifying> {
+  return invoke("orchestration_clarify", { prompt, workDir, engine, model, askLevel });
 }
 
 /** `answers`: to the questions asked first; `overheadUsd`: what asking them cost. */
@@ -209,13 +217,19 @@ export function planOrchestration(
   model: string,
   answers: Answered[] = [],
   overheadUsd = 0,
+  askLevel: AskLevel = "essential",
 ): Promise<Orchestration> {
-  return invoke("orchestration_plan", { prompt, workDir, engine, model, answers, overheadUsd });
+  return invoke("orchestration_plan", { prompt, workDir, engine, model, answers, overheadUsd, askLevel });
 }
 
 /** The user's answer to what an agent asked; the agent goes on. */
 export function answerOrchestration(id: string, questionId: string, answer: string): Promise<Orchestration> {
   return invoke("orchestration_answer", { id, questionId, answer });
+}
+
+/** When its agents ask the user, in any state: the tasks that start from now go by it. */
+export function setOrchestrationAskLevel(id: string, askLevel: AskLevel): Promise<Orchestration> {
+  return invoke("orchestration_set_ask_level", { id, askLevel });
 }
 
 export function approveOrchestration(id: string, chosen: string, plan: Plan, budgetUsd: number): Promise<Orchestration> {

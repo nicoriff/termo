@@ -27,6 +27,11 @@
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
   import type { MessageKey } from "$lib/i18n/translate";
   import OrchestrationList from "./OrchestrationList.svelte";
+  import { orchestrationStore } from "./orchestration-store.svelte";
+  import { askingAgentIds } from "./orchestration-spec";
+
+  /** Agents whose orchestration task waits on the user: asked on the plan. */
+  const askingInPlans = $derived(askingAgentIds(orchestrationStore.all));
 
   const timeOf = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const weekdayOf = (ms: number) => new Date(ms).toLocaleDateString([], { weekday: "short" });
@@ -492,7 +497,7 @@
 
     {#snippet agentRow(agent: AgentSpec)}
         {@const last = agentsStore.lastRun[agent.id] ?? null}
-        {@const state = agentState(agent, last, !!agentsStore.questionOf(agent.id))}
+        {@const state = agentState(agent, last, !!agentsStore.questionOf(agent.id) || askingInPlans.has(agent.id))}
         {@const running = last?.status === "running"}
         {@const age = last?.endedAt ? ago(last.endedAt, agentsStore.now) : null}
         {@const next = agentsStore.nextRun[agent.id]}

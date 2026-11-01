@@ -24,7 +24,7 @@ pub fn save_config(
     store::save(&app, &config).map_err(|err| err.to_string())?;
     crate::marketplace::agent_install::apply(&config.agent_install_dirs);
     // Modo IA switched in Preferences: the agents and their server follow at once.
-    crate::agents::console_orchestration::set_enabled(config.orchestrations_from_consoles);
+    crate::agents::console_orchestration::configure(&config);
     crate::ai_mode::set(&app, config.ai_mode_enabled);
     // Where the agents run in their own process, it follows too.
     crate::agents::host::client::config_saved(&app, &config);

@@ -25,7 +25,7 @@ use super::orchestration::{planner, questions, report, store as orchestrations};
 use super::projects;
 use super::run_questions;
 use super::runner::Runner;
-use super::spec::AgentSpec;
+use super::spec::{AgentSpec, AskLevel};
 use super::store::{self, now_millis, RunTrigger};
 use super::webhook;
 
@@ -103,6 +103,12 @@ struct OrchestrationAnswer {
 }
 
 #[derive(Deserialize)]
+struct SetAskLevel {
+    id: String,
+    ask_level: AskLevel,
+}
+
+#[derive(Deserialize)]
 struct Resume {
     id: String,
     budget_usd: Option<f64>,
@@ -161,6 +167,7 @@ pub fn call(agents: &Agents, name: &str, value: Value) -> Result<Value, String> 
         "orchestration_approve" => reply(approve(agents, args(value)?)?),
         "orchestration_edit_plan" => reply(edit(agents, args(value)?)?),
         "orchestration_answer" => reply(answer_orchestration(agents, args(value)?)?),
+        "orchestration_set_ask_level" => reply(set_ask_level(agents, args(value)?)?),
         "orchestration_stop" => {
             let Id { id } = args(value)?;
             agents.orchestrator.stop(&id);
@@ -285,6 +292,16 @@ fn answer_orchestration(agents: &Agents, OrchestrationAnswer { id, question_id, 
     if !answered {
         return Err(tr(Msg::OrchestrationQuestionClosed));
     }
+    agents.hub.emit("orchestration", &updated);
+    Ok(updated)
+}
+
+/// When its agents ask the user something, in any state; a running one goes
+/// by it from its next task (executor::with_asking). Here, like an answer:
+/// its file is written by whoever drives it.
+fn set_ask_level(agents: &Agents, SetAskLevel { id, ask_level }: SetAskLevel) -> Result<Orchestration, String> {
+    let updated = orchestrations::update_in(agents.hub.root(), &id, |orchestration| orchestration.ask_level = ask_level)
+        .ok_or_else(|| tr(Msg::OrchestrationNotFound))?;
     agents.hub.emit("orchestration", &updated);
     Ok(updated)
 }

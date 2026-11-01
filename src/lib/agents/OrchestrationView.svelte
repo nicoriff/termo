@@ -4,7 +4,8 @@
   import { t } from "$lib/i18n/i18n.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import type { AgentAutonomy, AgentEngine } from "$lib/core/agents-client";
+  import type { AgentAutonomy, AgentEngine, AskLevel } from "$lib/core/agents-client";
+  import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import type { Outcome, Plan, PlannedAgent, PlannedTask } from "$lib/core/orchestration-client";
   import type { MessageKey } from "$lib/i18n/translate";
   import { AUTONOMY_TITLE_KEYS, formatDuration, type AgentTone } from "./agent-spec";
@@ -14,6 +15,8 @@
   import { agentsStore } from "./agents-store.svelte";
   import { orchestrationStore } from "./orchestration-store.svelte";
   import {
+    ASK_LEVEL_KEYS,
+    ASK_LEVELS,
     ENGINE_NAMES,
     HOLD_KEYS,
     STATUS_KEYS,
@@ -1364,6 +1367,21 @@
             <span class="muted small">{t("agents.orchestration.view.budgetHint")}</span>
           {:else}
             <span class="figure-value">{orchestration.budgetUsd > 0 ? formatUsd(orchestration.budgetUsd) : "—"}</span>
+          {/if}
+        </span>
+        <!-- Changeable in any state: the tasks that start after go by it. -->
+        <span class="figure" title={t(ASK_LEVEL_KEYS[orchestration.askLevel ?? "essential"].hint)}>
+          <span class="figure-label" id="orchestration-ask-label">{t("agents.orchestration.askLevel.label")}</span>
+          <SettingDropdown
+            options={ASK_LEVELS.map((level) => ({ value: level, label: t(ASK_LEVEL_KEYS[level].label) }))}
+            value={orchestration.askLevel ?? "essential"}
+            width="190px"
+            labelledby="orchestration-ask-label"
+            disabled={busy}
+            onpick={(value) => void act(() => orchestrationStore.setAskLevel(orchestrationId, value as AskLevel))}
+          />
+          {#if !isDraft && !ended}
+            <span class="muted small">{t("agents.orchestration.askLevel.appliesNext")}</span>
           {/if}
         </span>
         {#if isDraft}

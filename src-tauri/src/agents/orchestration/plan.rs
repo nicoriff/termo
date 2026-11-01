@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::super::diagnose::Failure;
 use super::super::project_ai::MAX_AGENTS;
-use super::super::spec::{is_valid_model, Autonomy, Engine};
+use super::super::spec::{is_valid_model, AskLevel, Autonomy, Engine};
 use super::pricing::{self, Price};
 
 pub const MAX_TASKS: usize = 24;
@@ -261,6 +261,9 @@ pub struct Orchestration {
     /// The orchestrator's last word: what it's waiting for, why it stopped,
     /// or how the work went.
     pub note: String,
+    /// When its agents ask the user something. Applies to the tasks that
+    /// start from when it's set.
+    pub ask_level: AskLevel,
     /// What its agents asked the user, answered or not.
     pub questions: Vec<UserQuestion>,
     /// The final report, once it ended (or when the user asked for one).

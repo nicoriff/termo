@@ -1,4 +1,4 @@
-import type { AgentEngine, RunEvent } from "$lib/core/agents-client";
+import type { AgentEngine, AskLevel, RunEvent } from "$lib/core/agents-client";
 import type {
   Catalog,
   CatalogModel,
@@ -199,6 +199,31 @@ export function pendingQuestions(orchestration: Orchestration): UserQuestion[] {
 export function askingTasks(orchestration: Orchestration): Set<string> {
   return new Set(pendingQuestions(orchestration).map((question) => question.task));
 }
+
+/** The saved agents (by id) whose orchestration task is waiting on the
+ * user, across every orchestration: their questions live on the plan, not
+ * on the run, so the agents list learns of them here. */
+export function askingAgentIds(orchestrations: Orchestration[]): Set<string> {
+  const ids = new Set<string>();
+  for (const orchestration of orchestrations) {
+    const tasks = askingTasks(orchestration);
+    for (const task of orchestration.plan.tasks) {
+      if (!tasks.has(task.key)) continue;
+      const agent = orchestration.plan.agents.find((candidate) => candidate.key === task.agent);
+      if (agent?.agentId) ids.add(agent.agentId);
+    }
+  }
+  return ids;
+}
+
+/** When an orchestration's agents ask the user, in the order offered. */
+export const ASK_LEVELS: readonly AskLevel[] = ["never", "essential", "unsure"];
+
+export const ASK_LEVEL_KEYS: Record<AskLevel, { label: MessageKey; hint: MessageKey }> = {
+  never: { label: "agents.orchestration.askLevel.never", hint: "agents.orchestration.askLevel.neverHint" },
+  essential: { label: "agents.orchestration.askLevel.essential", hint: "agents.orchestration.askLevel.essentialHint" },
+  unsure: { label: "agents.orchestration.askLevel.unsure", hint: "agents.orchestration.askLevel.unsureHint" },
+};
 
 /** How the tasks ended up: for the final summary. */
 export function taskCounts(plan: Plan): { total: number; done: number; failed: number; dropped: number; pending: number } {

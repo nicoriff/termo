@@ -10,6 +10,7 @@ import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
 import type { AppConfig, PromptEngine, ShortcutsConfig, TabSaverMode } from "./types";
 import { DEFAULT_SOUNDS, isSoundChoice, type SoundChoice, type SoundEvent } from "$lib/ai-mode/sounds";
+import type { AskLevel } from "./agents-client";
 import type { ToolId } from "$lib/ai-mode/pattern-table";
 import { defaultLayout, normalizeLayout, type StatusBarLayout } from "$lib/statusbar/layout";
 
@@ -184,6 +185,8 @@ class AppConfigStore {
   agentsFromAnyConsole = $state(false);
   /** Consoles may plan and run orchestrations (see agents/console_orchestration.rs). */
   orchestrationsFromConsoles = $state(false);
+  /** When an orchestration's agents ask the user, for the ones planned from now. */
+  agentAskLevel = $state<AskLevel>("essential");
   /** The agents keep running with Termo closed (see agents/host/). Changed
    * by the backend (setBackgroundAgents), which moves them. */
   backgroundAgents = $state(false);
@@ -354,6 +357,7 @@ class AppConfigStore {
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.orchestrationsFromConsoles = config.orchestrations_from_consoles ?? false;
+    this.agentAskLevel = config.agent_ask_level ?? "essential";
     this.backgroundAgents = config.background_agents ?? false;
     this.backgroundAgentsAtLogin = config.background_agents_at_login ?? false;
     this.marketplaceSource = config.marketplace_source === "smithery" ? "smithery" : "official";
@@ -572,6 +576,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setAgentAskLevel(level: AskLevel): void {
+    this.agentAskLevel = level;
+    void this.persist();
+  }
+
   setAgentClisKnown(known: Record<string, string>): void {
     this.agentClisKnown = known;
     void this.persist();
@@ -782,6 +791,7 @@ class AppConfigStore {
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
       orchestrations_from_consoles: this.orchestrationsFromConsoles,
+      agent_ask_level: this.agentAskLevel,
       background_agents: this.backgroundAgents,
       background_agents_at_login: this.backgroundAgentsAtLogin,
       marketplace_source: this.marketplaceSource,

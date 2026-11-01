@@ -9,7 +9,9 @@
   import { collectTiles } from "$lib/layout/split-tree";
   import type { Answered, ClarifyQuestion } from "$lib/core/orchestration-client";
   import { orchestrationStore } from "./orchestration-store.svelte";
-  import { ENGINE_NAMES, modelsOf } from "./orchestration-spec";
+  import { ASK_LEVEL_KEYS, ASK_LEVELS, ENGINE_NAMES, modelsOf } from "./orchestration-spec";
+  import { appConfigStore } from "$lib/core/app-config.svelte";
+  import type { AskLevel } from "$lib/core/agents-client";
   import { aiEngine } from "./ai-engine.svelte";
   import AiEnginePicker from "./AiEnginePicker.svelte";
   import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
@@ -19,6 +21,8 @@
   let prompt = $state("");
   let workDir = $state("");
   let model = $state("");
+  /** When its agents ask: the user's default to start with. */
+  let askLevel = $state<AskLevel>(appConfigStore.agentAskLevel);
   let error = $state("");
   let dialogEl: HTMLDivElement | undefined = $state();
   /** Before planning, the orchestrator may ask about the request: its
@@ -71,7 +75,7 @@
     if (!canAnalyze || !engine) return;
     error = "";
     phase = "clarifying";
-    const asked = await orchestrationStore.clarify(prompt.trim(), workDir.trim(), engine, model).catch(() => null);
+    const asked = await orchestrationStore.clarify(prompt.trim(), workDir.trim(), engine, model, askLevel).catch(() => null);
     askCost = asked?.costUsd ?? 0;
     // Closed meanwhile: nobody to ask, so it plans as it is.
     if (asked && asked.questions.length > 0 && uiState.orchestrationDialog) {
@@ -97,7 +101,7 @@
     error = "";
     phase = "planning";
     try {
-      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), engine, model, given, askCost);
+      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), engine, model, given, askCost, askLevel);
       workspaceStore.openOrchestration(orchestration.id, orchestration.name);
       if (uiState.orchestrationDialog) close();
     } catch (reason) {
@@ -219,6 +223,17 @@
         onpick={(value) => (model = value)}
       />
       <p class="hint">{t("agents.orchestration.dialog.modelHint")}</p>
+
+      <span class="label" id="orchestration-ask-label">{t("agents.orchestration.askLevel.label")}</span>
+      <SettingDropdown
+        options={ASK_LEVELS.map((level) => ({ value: level, label: t(ASK_LEVEL_KEYS[level].label) }))}
+        value={askLevel}
+        width="min(320px, 100%)"
+        labelledby="orchestration-ask-label"
+        disabled={planning}
+        onpick={(value) => (askLevel = value as AskLevel)}
+      />
+      <p class="hint">{t(ASK_LEVEL_KEYS[askLevel].hint)}</p>
       {/if}
     </div>
 

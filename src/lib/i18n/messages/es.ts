@@ -1633,6 +1633,16 @@ export const es = {
         selectHint: "Elegí un agente o una tarea del árbol para ver el detalle.",
         noTasks: "Sin tareas",
       },
+      askLevel: {
+        label: "Cuándo preguntarte",
+        never: "Nunca",
+        essential: "Solo lo imprescindible",
+        unsure: "Ante la duda",
+        neverHint: "Los agentes deciden solos y dicen en su respuesta qué supusieron. Tampoco hay preguntas antes de planificar. Sirve para dejarla corriendo sin vos.",
+        essentialHint: "Solo preguntan decisiones que te corresponden y cambian el resultado: un enfoque u otro, el alcance, qué hacer con lo que ya existe.",
+        unsureHint: "Preguntan cuando hay más de una forma razonable y la elección cambia algo que vas a notar. Los detalles internos los deciden solos.",
+        appliesNext: "Rige para las tareas que empiecen desde ahora.",
+      },
       questions: {
         title: "Pregunta de un agente",
         asks: "{agent} te pregunta",
@@ -2950,6 +2960,9 @@ export const es = {
         "Manda junto con la pregunta tu último mensaje al agente y su respuesta, para preguntar sobre eso. Se puede cambiar en cada pregunta. Por ahora solo en consolas de Claude Code.",
     },
     agents: {
+      orchestrationsSection: "Orquestaciones",
+      askLevel: "Cuándo te preguntan sus agentes",
+      askLevelHint: "El valor con el que empieza cada orquestación nueva, también las que se planifican desde una consola. Cada una lo puede cambiar antes de aprobarla o mientras corre.",
       access: "Acceso",
       inActivityBar: "Mostrar el botón de Agentes en la barra vertical",
       inActivityBarHint:

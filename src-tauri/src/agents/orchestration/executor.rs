@@ -23,7 +23,7 @@ use super::super::hub::Hub;
 use super::super::project_ai::clip;
 use super::super::projects::{self, Project};
 use super::super::runner::Runner;
-use super::super::spec::AgentSpec;
+use super::super::spec::{AgentSpec, AskLevel};
 use super::super::store::{self as agent_store, now_millis, RunStatus, RunTrigger};
 use super::plan::{
     self, agent_of, apply, hold_for, Hold, Orchestration, PlannedTask, Revision, RevisionState, Status, TaskStatus,
@@ -105,6 +105,24 @@ pub fn ensure_team(root: &Path, orchestration: &mut Orchestration) -> Result<(),
     Ok(())
 }
 
+/// What a task is told about asking the user, by when the user wants to be
+/// asked.
+fn asking_msg(level: AskLevel) -> Msg<'static> {
+    match level {
+        AskLevel::Never => Msg::OrchestrationNoAsking,
+        AskLevel::Essential => Msg::OrchestrationCanAsk,
+        AskLevel::Unsure => Msg::OrchestrationAskWhenUnsure,
+    }
+}
+
+/// Whether the task's agent gets `ask_user`, and when it asks: read as each
+/// task starts, so a change applies to the tasks that start after it.
+fn with_asking(mut spec: AgentSpec, level: AskLevel) -> AgentSpec {
+    spec.collaboration.ask_user = level != AskLevel::Never;
+    spec.collaboration.ask_level = level;
+    spec
+}
+
 /// What the agent is asked for this task, and what it gets as context: the
 /// answers of the tasks it builds on, and its own last attempt when this is
 /// a retry. The context is other agents' text: the runner fences it as data
@@ -114,7 +132,7 @@ fn request_for(orchestration: &Orchestration, task: &PlannedTask) -> (String, Op
     if !task.done_when.is_empty() {
         request.push_str(&format!("\n\n{} {}", tr(Msg::OrchestrationDoneWhen), task.done_when));
     }
-    request.push_str(&format!("\n\n{}", tr(Msg::OrchestrationCanAsk)));
+    request.push_str(&format!("\n\n{}", tr(asking_msg(orchestration.ask_level))));
     let plan = &orchestration.plan;
     let mut context = String::new();
     let earlier: Vec<&PlannedTask> = task
@@ -305,8 +323,9 @@ impl Run {
             let Some(task) = orchestration.plan.tasks.iter().find(|task| task.key == key) else { continue };
             let spec = agent_of(&orchestration.plan, task).and_then(|agent| agent_store::get_in(&self.root, &agent.agent_id));
             let started = match spec {
-                Some(mut spec) => {
+                Some(spec) => {
                     let (request, context) = request_for(orchestration, task);
+                    let mut spec = with_asking(spec, orchestration.ask_level);
                     spec.task = request;
                     self.runner.start_linked(&self.hub, &spec, RunTrigger::Orchestrator, context.as_deref(), None, false)
                 }
@@ -560,6 +579,24 @@ mod tests {
         orchestration.plan.tasks[1].summary = "2 tests failed".into();
         let (_, context) = request_for(&orchestration, &orchestration.plan.tasks[1]);
         assert!(context.unwrap().contains("2 tests failed"));
+    }
+
+    #[test]
+    fn when_to_ask_follows_the_orchestration() {
+        let mut orchestration = orchestration();
+        let task = orchestration.plan.tasks[0].clone();
+        assert!(request_for(&orchestration, &task).0.contains(&tr(Msg::OrchestrationCanAsk)));
+        orchestration.ask_level = AskLevel::Unsure;
+        assert!(request_for(&orchestration, &task).0.contains(&tr(Msg::OrchestrationAskWhenUnsure)));
+        orchestration.ask_level = AskLevel::Never;
+        assert!(request_for(&orchestration, &task).0.contains(&tr(Msg::OrchestrationNoAsking)));
+
+        // Without questions the agent doesn't get the tool at all.
+        let never = with_asking(AgentSpec::default(), AskLevel::Never);
+        assert!(!never.collaboration.ask_user);
+        let unsure = with_asking(AgentSpec::default(), AskLevel::Unsure);
+        assert!(unsure.collaboration.ask_user);
+        assert_eq!(unsure.collaboration.ask_level, AskLevel::Unsure);
     }
 
     #[test]

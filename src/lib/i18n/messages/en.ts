@@ -1634,6 +1634,16 @@ export const en: Messages = {
         selectHint: "Pick an agent or a task in the tree to see its details.",
         noTasks: "No tasks",
       },
+      askLevel: {
+        label: "When to ask you",
+        never: "Never",
+        essential: "Only when essential",
+        unsure: "When in doubt",
+        neverHint: "The agents decide alone and say in their answer what they assumed. There are no questions before planning either. Good for leaving it running while you're away.",
+        essentialHint: "They only ask about decisions that are yours and change the result: one approach or another, the scope, what to do with what already exists.",
+        unsureHint: "They ask when there's more than one reasonable way and the choice changes something you'll notice. They decide internal details alone.",
+        appliesNext: "Applies to the tasks that start from now on.",
+      },
       questions: {
         title: "A question from an agent",
         asks: "{agent} asks you",
@@ -2947,6 +2957,9 @@ export const en: Messages = {
         "Sends your last message to the agent and its answer along with the question, to ask about them. It can be changed for each question. Only in Claude Code consoles for now.",
     },
     agents: {
+      orchestrationsSection: "Orchestrations",
+      askLevel: "When their agents ask you",
+      askLevelHint: "The value each new orchestration starts with, including the ones planned from a console. Each one can change it before you approve it or while it runs.",
       access: "Access",
       inActivityBar: "Show the Agents button in the vertical bar",
       inActivityBarHint:
