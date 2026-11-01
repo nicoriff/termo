@@ -77,6 +77,7 @@ export interface KanbanTask {
   title: string;
   spec: string;
   successCriteria: string;
+  tags: string[];
   dependsOn: string[];
   column: KanbanColumn;
   role: KanbanRole | null;
@@ -139,6 +140,7 @@ export interface KanbanTaskInput {
   title: string;
   spec: string;
   successCriteria: string;
+  tags: string[];
   dependsOn: string[];
   column?: KanbanColumn;
 }

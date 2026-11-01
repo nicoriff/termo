@@ -199,6 +199,8 @@ pub struct KanbanTask {
     /// What it's about, in the user's words.
     pub spec: String,
     pub success_criteria: String,
+    /// The user's labels for it: "bug", "frontend"… (see clean_tags).
+    pub tags: Vec<String>,
     /// Tasks it waits for, by id: it's taken once they're all done.
     pub depends_on: Vec<String>,
     pub column: Column,
@@ -333,6 +335,26 @@ impl KanbanBoard {
     pub fn running(&self) -> usize {
         self.tasks.iter().filter(|task| task.is_running()).count()
     }
+}
+
+pub const MAX_TAGS: usize = 12;
+const MAX_TAG_LEN: usize = 32;
+
+/// Tags as they're kept: trimmed, short, without a leading '#', without
+/// repeats (whatever their case), at most MAX_TAGS.
+pub fn clean_tags(wanted: &[String]) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::new();
+    for tag in wanted {
+        let tag: String = tag.trim().trim_start_matches('#').trim().chars().take(MAX_TAG_LEN).collect();
+        if tag.is_empty() || kept.iter().any(|other| other.to_lowercase() == tag.to_lowercase()) {
+            continue;
+        }
+        kept.push(tag);
+        if kept.len() == MAX_TAGS {
+            break;
+        }
+    }
+    kept
 }
 
 /// Whether all of a task's dependencies are done. One that was deleted no
@@ -576,6 +598,14 @@ pub(crate) mod tests {
         // A reorder within the column isn't logged as a move.
         assert_eq!(board.task("c").unwrap().log.len(), 1);
         assert!(!move_task(&mut board, "nope", Column::Done, None, 7, Actor::User));
+    }
+
+    #[test]
+    fn tags_are_trimmed_and_kept_once() {
+        let wanted: Vec<String> = ["  bug ", "#Frontend", "BUG", "", "frontend", &"x".repeat(50)].iter().map(|s| s.to_string()).collect();
+        assert_eq!(clean_tags(&wanted), ["bug", "Frontend", &"x".repeat(32)]);
+        let many: Vec<String> = (0..20).map(|n| format!("t{n}")).collect();
+        assert_eq!(clean_tags(&many).len(), MAX_TAGS);
     }
 
     #[test]

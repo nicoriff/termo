@@ -47,6 +47,7 @@ pub fn tools() -> Vec<Value> {
         "spec": { "type": "string", "description": "What the task is about, with everything an agent needs to do it without this conversation: the context, what to change, constraints." },
         "success_criteria": { "type": "string", "description": "How to tell it's done: what must be true, what must pass." },
         "depends_on": { "type": "array", "items": { "type": "string" }, "description": "Tasks it waits for, by number (\"3\" or \"#3\")." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Short labels, like \"bug\" or \"frontend\". Reuse the board's existing tags when they fit." },
     });
     let mut add = fields.clone();
     add["board"] = board.clone();
@@ -124,6 +125,9 @@ fn list_boards(boards: &[KanbanBoard]) -> String {
 
 fn describe_task(board: &KanbanBoard, task: &KanbanTask, next: &[String]) -> String {
     let mut line = format!("  #{} {}", task.number, task.title);
+    if !task.tags.is_empty() {
+        line.push_str(&format!(" [{}]", task.tags.join(", ")));
+    }
     let waits = blockers(board, task);
     if !waits.is_empty() {
         let list: Vec<String> = waits.iter().map(|number| format!("#{number}")).collect();
@@ -147,6 +151,15 @@ fn describe_task(board: &KanbanBoard, task: &KanbanTask, next: &[String]) -> Str
 fn list_tasks(board: &KanbanBoard) -> String {
     let next = next_up(board);
     let mut out = format!("{} — {}", board.name, if board.enabled { "on" } else { "off" });
+    let mut in_use: Vec<&str> = Vec::new();
+    for tag in board.tasks.iter().flat_map(|task| task.tags.iter()) {
+        if !in_use.iter().any(|known| known.eq_ignore_ascii_case(tag)) {
+            in_use.push(tag);
+        }
+    }
+    if !in_use.is_empty() {
+        out.push_str(&format!("\nTags in use: {}", in_use.join(", ")));
+    }
     for column in COLUMNS {
         let tasks: Vec<&KanbanTask> = board.tasks.iter().filter(|task| task.column == column).collect();
         out.push_str(&format!("\n\n{} ({})", column_name(column), tasks.len()));
@@ -170,6 +183,12 @@ fn dependencies(board: &KanbanBoard, args: &Value) -> Result<Option<Vec<String>>
     Ok(Some(ids))
 }
 
+/// The tags a console gave, when it gave any.
+fn tags(args: &Value) -> Option<Vec<String>> {
+    let list = args.get("tags")?.as_array()?;
+    Some(list.iter().filter_map(Value::as_str).map(str::to_string).collect())
+}
+
 /// One tool call from a console.
 pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String> {
     if !enabled() {
@@ -188,6 +207,7 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
                 spec: text("spec"),
                 success_criteria: text("success_criteria"),
                 depends_on: dependencies(&board, args)?.unwrap_or_default(),
+                tags: tags(args).unwrap_or_default(),
                 column: Some(if ready { Column::Todo } else { Column::NotReady }),
             };
             let (board, task) = kanban::upsert_task(agents, &board.id, input, Actor::Console)?;
@@ -210,6 +230,7 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
                 spec: keep("spec", &task.spec),
                 success_criteria: keep("success_criteria", &task.success_criteria),
                 depends_on: dependencies(&board, args)?.unwrap_or_else(|| task.depends_on.clone()),
+                tags: tags(args).unwrap_or_else(|| task.tags.clone()),
                 column: None,
             };
             let (board, task) = kanban::upsert_task(agents, &board.id, input, Actor::Console)?;

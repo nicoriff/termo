@@ -182,7 +182,11 @@ pub fn request_for(board: &KanbanBoard, task: &KanbanTask, role: Role) -> (Strin
         request.push_str(harness);
         request.push_str("\n\n");
     }
-    request.push_str(&format!("# #{} {}\n\n{}", task.number, task.title.trim(), task.spec.trim()));
+    request.push_str(&format!("# #{} {}", task.number, task.title.trim()));
+    if !task.tags.is_empty() {
+        request.push_str(&format!("\n{} {}", tr(Msg::KanbanTags), task.tags.join(", ")));
+    }
+    request.push_str(&format!("\n\n{}", task.spec.trim()));
     if !task.success_criteria.trim().is_empty() {
         request.push_str(&format!("\n\n{}\n{}", tr(Msg::KanbanSuccessCriteria), task.success_criteria.trim()));
     }

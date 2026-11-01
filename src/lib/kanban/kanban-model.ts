@@ -94,7 +94,9 @@ export function newBoardSettings(harness: (role: KanbanRole) => string): KanbanS
 
 export function settingsOf(board: KanbanBoard): KanbanSettings {
   const { id, name, icon, workDir, mode, maxParallel, maxReviewRounds, baseBranch, askLevel, agents } = board;
-  return structuredClone({ id, name, icon, workDir, mode, maxParallel, maxReviewRounds, baseBranch, askLevel, agents });
+  // A copy through JSON: the board may be a store's reactive proxy, which
+  // structuredClone refuses.
+  return JSON.parse(JSON.stringify({ id, name, icon, workDir, mode, maxParallel, maxReviewRounds, baseBranch, askLevel, agents }));
 }
 
 export function actorKey(actor: KanbanActor): MessageKey {
@@ -108,6 +110,33 @@ export function actorKey(actor: KanbanActor): MessageKey {
     case "agent":
       return actor.role === "work" ? "kanban.actor.work" : actor.role === "review" ? "kanban.actor.review" : "kanban.actor.summary";
   }
+}
+
+/** The hues tags take: the same tag always gets the same one. */
+const TAG_HUES = [210, 150, 35, 280, 0, 180, 320, 95, 255, 15];
+
+export function tagHue(tag: string): number {
+  let hash = 0;
+  for (const char of tag.toLowerCase()) hash = (hash * 31 + char.codePointAt(0)!) | 0;
+  return TAG_HUES[Math.abs(hash) % TAG_HUES.length];
+}
+
+/** Every tag used on the board, once each (whatever its case), most used first. */
+export function boardTags(board: KanbanBoard): string[] {
+  const counts = new Map<string, { tag: string; n: number }>();
+  for (const tag of board.tasks.flatMap((task) => task.tags ?? [])) {
+    const key = tag.toLowerCase();
+    const known = counts.get(key);
+    counts.set(key, { tag: known?.tag ?? tag, n: (known?.n ?? 0) + 1 });
+  }
+  return [...counts.values()].sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)).map((entry) => entry.tag);
+}
+
+/** A tag typed in the editor added to the list: trimmed, without '#', once. */
+export function addTag(tags: string[], typed: string): string[] {
+  const tag = typed.trim().replace(/^#+/, "").trim().slice(0, 32);
+  if (!tag || tags.some((other) => other.toLowerCase() === tag.toLowerCase()) || tags.length >= 12) return tags;
+  return [...tags, tag];
 }
 
 /** What a board shows on its row in the panel. */

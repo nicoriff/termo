@@ -7,7 +7,7 @@
   import type { KanbanColumn, KanbanLogEntry } from "$lib/core/kanban-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import { actorKey, isRunning } from "./kanban-model";
+  import { actorKey, addTag, boardTags, isRunning, tagHue } from "./kanban-model";
   import { kanbanStore, type KanbanDialog } from "./kanban-store.svelte";
 
   // Read once: KanbanDialogs mounts a fresh one for each dialog opened.
@@ -24,6 +24,30 @@
   let spec = $state(initial?.spec ?? "");
   let criteria = $state(initial?.successCriteria ?? "");
   let dependsOn = $state<string[]>(initial?.dependsOn ?? []);
+  let tags = $state<string[]>(initial?.tags ?? []);
+  let tagInput = $state("");
+  /** The board's other tags, for picking one already used. */
+  const suggestions = $derived(
+    (board ? boardTags(board) : [])
+      .filter((tag) => !tags.some((other) => other.toLowerCase() === tag.toLowerCase()))
+      .filter((tag) => tag.toLowerCase().includes(tagInput.trim().replace(/^#+/, "").toLowerCase()))
+      .slice(0, 8),
+  );
+
+  function takeTag() {
+    tags = addTag(tags, tagInput);
+    tagInput = "";
+  }
+
+  function onTagKey(event: KeyboardEvent) {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      event.stopPropagation();
+      takeTag();
+    } else if (event.key === "Backspace" && tagInput === "" && tags.length > 0) {
+      tags = tags.slice(0, -1);
+    }
+  }
   let startIn = $state<KanbanColumn>(column === "todo" ? "todo" : "notReady");
   let tab = $state<"details" | "log" | "summary">("details");
   let note = $state("");
@@ -39,6 +63,7 @@
         (title !== initial.title ||
           spec !== initial.spec ||
           criteria !== initial.successCriteria ||
+          tags.join("\n") !== (initial.tags ?? []).join("\n") ||
           dependsOn.join() !== initial.dependsOn.join())),
   );
 
@@ -75,6 +100,7 @@
           title,
           spec,
           successCriteria: criteria,
+          tags: addTag(tags, tagInput),
           dependsOn,
           column: isNew ? startIn : undefined,
         }),
@@ -212,6 +238,36 @@
         <label class="label" for="kanban-task-criteria">{t("kanban.task.criteria")}</label>
         <p class="hint">{t("kanban.task.criteriaHint")}</p>
         <textarea id="kanban-task-criteria" class="field" rows="3" bind:value={criteria} placeholder={t("kanban.task.criteriaPlaceholder")}></textarea>
+
+        <label class="label" for="kanban-task-tags">{t("kanban.task.tags")}</label>
+        <p class="hint">{t("kanban.task.tagsHint")}</p>
+        <div class="tag-field">
+          {#each tags as tag (tag)}
+            <span class="tag" style="--hue:{tagHue(tag)}">
+              {tag}
+              <button
+                class="tag-remove"
+                aria-label={t("kanban.task.removeTag", { tag })}
+                onclick={() => (tags = tags.filter((other) => other !== tag))}
+              >×</button>
+            </span>
+          {/each}
+          <input
+            id="kanban-task-tags"
+            class="tag-input"
+            bind:value={tagInput}
+            placeholder={tags.length === 0 ? t("kanban.task.tagsPlaceholder") : ""}
+            onkeydown={onTagKey}
+            onblur={takeTag}
+          />
+        </div>
+        {#if suggestions.length > 0}
+          <div class="chips suggestions">
+            {#each suggestions as tag (tag)}
+              <button class="tag suggestion" style="--hue:{tagHue(tag)}" onclick={() => (tags = addTag(tags, tag))}>+ {tag}</button>
+            {/each}
+          </div>
+        {/if}
 
         <div class="label">{t("kanban.task.dependsOn")}</div>
         <p class="hint">{t("kanban.task.dependsOnHint")}</p>
@@ -541,6 +597,74 @@
   .chip.selected {
     border-color: var(--pane-active-border, #3a6df0);
     background: var(--tab-focus-bg, rgba(58, 109, 240, 0.2));
+  }
+
+  .tag-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 7px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 6px;
+    background: var(--terminal-bg, rgba(0, 0, 0, 0.25));
+  }
+
+  .tag-field:focus-within {
+    border-color: var(--pane-active-border, #3a6df0);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 8px;
+    border: 1px solid hsl(var(--hue) 60% 55% / 0.55);
+    border-radius: 999px;
+    background: hsl(var(--hue) 60% 50% / 0.2);
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 18px;
+  }
+
+  .tag-remove {
+    padding: 0 0 0 2px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0.6;
+    cursor: pointer;
+  }
+
+  .tag-remove:hover {
+    opacity: 1;
+  }
+
+  .tag-input {
+    flex: 1;
+    min-width: 120px;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    outline: none;
+  }
+
+  .suggestions {
+    margin-top: 6px;
+  }
+
+  .tag.suggestion {
+    opacity: 0.75;
+    cursor: pointer;
+  }
+
+  .tag.suggestion:hover {
+    opacity: 1;
   }
 
   .log {

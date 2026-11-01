@@ -1367,6 +1367,12 @@ export const en: Messages = {
         failed: "Failed",
       },
     },
+    card: {
+      criteria: "Has success criteria",
+      noCriteria: "No success criteria",
+      dependsOn: "Depends on {n} tasks",
+      log: "{n} log entries",
+    },
     roles: {
       work: "Work",
       review: "Review",
@@ -1389,6 +1395,10 @@ export const en: Messages = {
       criteria: "Success criteria",
       criteriaHint: "How to tell it's done: what must be true, what must pass.",
       criteriaPlaceholder: "For example: tests pass, the endpoint answers 200…",
+      tags: "Tags",
+      tagsHint: "To group them and spot them at a glance. Enter or a comma adds one.",
+      tagsPlaceholder: "For example: bug, frontend…",
+      removeTag: "Remove the tag {tag}",
       dependsOn: "Depends on",
       dependsOnHint: "It isn't taken until these are done.",
       dependsOnNone: "There are no other tasks.",

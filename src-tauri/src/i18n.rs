@@ -195,6 +195,7 @@ pub enum Msg<'a> {
     KanbanAgentTask,
     /// Labels and instructions around what a board's agent is given.
     KanbanSuccessCriteria,
+    KanbanTags,
     /// the branch
     KanbanOnBranch(&'a str),
     KanbanWorkHowTo,
@@ -622,6 +623,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KanbanAgentTask, En) => "Work on the kanban task Termo assigns you.".into(),
         (KanbanSuccessCriteria, Es) => "Criterios de éxito:".into(),
         (KanbanSuccessCriteria, En) => "Success criteria:".into(),
+        (KanbanTags, Es) => "Etiquetas:".into(),
+        (KanbanTags, En) => "Tags:".into(),
         (KanbanOnBranch(branch), Es) => format!("Trabajás en la rama {branch}, en su propia carpeta (git worktree). Commiteá ahí lo que hagas; no cambies de rama."),
         (KanbanOnBranch(branch), En) => format!("You're working on branch {branch}, in its own folder (git worktree). Commit what you do there; don't switch branches."),
         (KanbanWorkHowTo, Es) => "Hacé la tarea hasta cumplir sus criterios de éxito. Anotá las decisiones y los pasos importantes con kanban_log. Al terminar, informá con kanban_finish qué hiciste y si quedó completa; si no pudiste hacerla, usá success \"failed\" y explicá qué te frenó. Después otro agente revisa tu trabajo.".into(),
@@ -910,6 +913,7 @@ mod tests {
             Msg::KanbanSummaryAgent("b"),
             Msg::KanbanAgentTask,
             Msg::KanbanSuccessCriteria,
+            Msg::KanbanTags,
             Msg::KanbanOnBranch("x"),
             Msg::KanbanWorkHowTo,
             Msg::KanbanReviewHowTo,

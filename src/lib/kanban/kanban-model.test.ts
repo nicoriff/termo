@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KanbanBoard, KanbanColumn, KanbanTask } from "$lib/core/kanban-client";
-import { beforeAt, blockers, boardActivity, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
+import { addTag, beforeAt, blockers, boardActivity, boardTags, tagHue, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
 
 function task(id: string, column: KanbanColumn, dependsOn: string[] = [], extra: Partial<KanbanTask> = {}): KanbanTask {
   return {
@@ -9,6 +9,7 @@ function task(id: string, column: KanbanColumn, dependsOn: string[] = [], extra:
     title: id,
     spec: "",
     successCriteria: "",
+    tags: [],
     dependsOn,
     column,
     role: null,
@@ -82,6 +83,20 @@ describe("needsCancel", () => {
     expect(needsCancel(running, "notReady")).toBe(true);
     expect(needsCancel(running, "inProgress")).toBe(false);
     expect(needsCancel(task("b", "inProgress"), "todo")).toBe(false);
+  });
+});
+
+describe("tags", () => {
+  it("adds a typed tag once, trimmed and without '#'", () => {
+    expect(addTag([], "  #bug ")).toEqual(["bug"]);
+    expect(addTag(["bug"], "BUG")).toEqual(["bug"]);
+    expect(addTag(["bug"], "   ")).toEqual(["bug"]);
+  });
+
+  it("lists the board's tags, most used first, and colors each the same way", () => {
+    const b = board([task("a", "todo", [], { tags: ["ui", "bug"] }), task("b", "todo", [], { tags: ["Bug"] })]);
+    expect(boardTags(b)).toEqual(["bug", "ui"]);
+    expect(tagHue("Bug")).toBe(tagHue("bug"));
   });
 });
 

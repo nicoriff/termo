@@ -9,7 +9,8 @@
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
-  import { beforeAt, blockers, isRunning, needsCancel, queuePlaces, settingsOf, tasksIn } from "./kanban-model";
+  import { ago } from "$lib/agents/agent-spec";
+  import { beforeAt, blockers, isRunning, needsCancel, queuePlaces, settingsOf, tagHue, tasksIn } from "./kanban-model";
   import { kanbanStore } from "./kanban-store.svelte";
 
   let { boardId }: { boardId: string } = $props();
@@ -23,6 +24,13 @@
     duration: 320,
     easing: cubicOut,
     fallback: (node) => fade(node, { duration: 160 }),
+  });
+
+  /** Ticks every 30 s, for the cards' "5 min ago". */
+  let now = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
   });
 
   let error = $state("");
@@ -272,6 +280,7 @@
               {@const waits = blockers(board, task)}
               {@const agent = engineOf(task)}
               {@const live = activity(task)}
+              {@const updated = ago(task.updatedAt || task.createdAt, now)}
               <div
                 class="card"
                 class:live={isRunning(task)}
@@ -293,7 +302,20 @@
                 <div class="card-title">
                   <span class="card-number">#{task.number}</span>
                   <span class="card-text">{task.title}</span>
+                  {#if isRunning(task) && agent}
+                    <span class="card-agent" title={TOOL_DISPLAY_NAMES[agent.engine]}><ConsoleIcon kind={agent.engine} size={13} /></span>
+                  {/if}
                 </div>
+                {#if task.spec.trim()}
+                  <div class="card-spec">{task.spec.trim()}</div>
+                {/if}
+                {#if task.tags?.length}
+                  <div class="card-tags">
+                    {#each task.tags as tag (tag)}
+                      <span class="tag" style="--hue:{tagHue(tag)}">{tag}</span>
+                    {/each}
+                  </div>
+                {/if}
                 {#if live}
                   <div class="card-activity" title={live}>{live}</div>
                 {/if}
@@ -333,6 +355,40 @@
                       ⎇ {task.merged ? t("kanban.chip.merged") : t("kanban.chip.branch")}
                     </span>
                   {/if}
+                </div>
+                <div class="card-foot">
+                  <span
+                    class="foot-item"
+                    class:missing={!task.successCriteria.trim()}
+                    title={task.successCriteria.trim() ? t("kanban.card.criteria") : t("kanban.card.noCriteria")}
+                  >
+                    <svg viewBox="0 0 12 12" aria-hidden="true">
+                      <circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.1" />
+                      {#if task.successCriteria.trim()}<path d="M3.8 6.1l1.5 1.5 3-3.1" fill="none" stroke="currentColor" stroke-width="1.1" />{/if}
+                    </svg>
+                  </span>
+                  {#if task.dependsOn.length > 0}
+                    <span class="foot-item" title={t("kanban.card.dependsOn", { n: String(task.dependsOn.length) })}>
+                      <svg viewBox="0 0 12 12" aria-hidden="true">
+                        <path d="M5 7l2-2M4.2 5.4L3 6.6a1.7 1.7 0 002.4 2.4l1.2-1.2M7.8 6.6L9 5.4A1.7 1.7 0 006.6 3L5.4 4.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
+                      </svg>
+                      {task.dependsOn.length}
+                    </span>
+                  {/if}
+                  {#if task.log.length > 0}
+                    <span class="foot-item" title={t("kanban.card.log", { n: String(task.log.length) })}>
+                      <svg viewBox="0 0 12 12" aria-hidden="true">
+                        <path d="M2.5 2.5h7v5h-4l-2 2v-2h-1z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+                      </svg>
+                      {task.log.length}
+                    </span>
+                  {/if}
+                  {#if task.costUsd}
+                    <span class="foot-item" title={t("kanban.task.cost", { usd: `$${task.costUsd.toFixed(2)}` })}>${task.costUsd.toFixed(2)}</span>
+                  {/if}
+                  <span class="foot-when" title={new Date(task.updatedAt || task.createdAt).toLocaleString()}>
+                    {t(updated.key, updated.params)}
+                  </span>
                 </div>
               </div>
             {/each}
@@ -698,6 +754,78 @@
   .card-text {
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  .card-text {
+    flex: 1;
+    font-weight: 600;
+  }
+
+  .card-agent {
+    flex-shrink: 0;
+    display: flex;
+    padding-top: 1px;
+  }
+
+  .card-spec {
+    margin-top: 4px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    opacity: 0.65;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .tag {
+    padding: 0 7px;
+    border: 1px solid hsl(var(--hue) 60% 55% / 0.5);
+    border-radius: 999px;
+    background: hsl(var(--hue) 60% 50% / 0.18);
+    font-size: 10.5px;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+
+  .card-foot {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid color-mix(in srgb, var(--tabbar-border, #333) 70%, transparent);
+    font-size: 10.5px;
+    opacity: 0.6;
+  }
+
+  .foot-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .foot-item svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .foot-item.missing {
+    opacity: 0.5;
+  }
+
+  .foot-when {
+    margin-left: auto;
+    white-space: nowrap;
   }
 
   .card-activity {

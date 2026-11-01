@@ -14,7 +14,7 @@ use super::super::ops::Agents;
 use super::super::projects;
 use super::super::store::now_millis;
 use super::driver::{emit, ensure_team};
-use super::model::{self, clean_dependencies, Actor, BoardAgents, Column, KanbanBoard, KanbanTask, LogKind, Mode};
+use super::model::{self, clean_dependencies, clean_tags, Actor, BoardAgents, Column, KanbanBoard, KanbanTask, LogKind, Mode};
 use super::store;
 use super::worktree;
 
@@ -187,6 +187,7 @@ pub struct TaskInput {
     pub title: String,
     pub spec: String,
     pub success_criteria: String,
+    pub tags: Vec<String>,
     pub depends_on: Vec<String>,
     /// Where a new one goes: not ready (the default) or to do.
     pub column: Option<Column>,
@@ -216,6 +217,7 @@ pub fn upsert_task(agents: &Agents, board_id: &str, input: TaskInput, actor: Act
                 title,
                 spec: clip(&input.spec, MAX_TEXT),
                 success_criteria: clip(&input.success_criteria, MAX_TEXT),
+                tags: clean_tags(&input.tags),
                 column,
                 created_at: now,
                 ..KanbanTask::default()
@@ -236,6 +238,7 @@ pub fn upsert_task(agents: &Agents, board_id: &str, input: TaskInput, actor: Act
             task.title = title;
             task.spec = clip(&input.spec, MAX_TEXT);
             task.success_criteria = clip(&input.success_criteria, MAX_TEXT);
+            task.tags = clean_tags(&input.tags);
             task.depends_on = deps;
             task.note(now, actor, LogKind::Edited, "");
             Ok(input.id.clone())

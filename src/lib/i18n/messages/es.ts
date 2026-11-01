@@ -1366,6 +1366,12 @@ export const es = {
         failed: "Falló",
       },
     },
+    card: {
+      criteria: "Tiene criterios de éxito",
+      noCriteria: "Sin criterios de éxito",
+      dependsOn: "Depende de {n} tareas",
+      log: "{n} entradas en la bitácora",
+    },
     roles: {
       work: "Trabajo",
       review: "Revisión",
@@ -1388,6 +1394,10 @@ export const es = {
       criteria: "Criterios de éxito",
       criteriaHint: "Cómo se sabe que está terminada: qué tiene que ser cierto, qué tiene que pasar.",
       criteriaPlaceholder: "Por ejemplo: los tests pasan, el endpoint responde 200…",
+      tags: "Etiquetas",
+      tagsHint: "Para agruparlas y encontrarlas de un vistazo. Enter o coma agrega una.",
+      tagsPlaceholder: "Por ejemplo: bug, frontend…",
+      removeTag: "Quitar la etiqueta {tag}",
       dependsOn: "Depende de",
       dependsOnHint: "No se toma hasta que estas estén terminadas.",
       dependsOnNone: "No hay otras tareas.",
