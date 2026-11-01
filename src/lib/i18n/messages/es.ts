@@ -1642,6 +1642,7 @@ export const es = {
         essentialHint: "Solo preguntan decisiones que te corresponden y cambian el resultado: un enfoque u otro, el alcance, qué hacer con lo que ya existe.",
         unsureHint: "Preguntan cuando hay más de una forma razonable y la elección cambia algo que vas a notar. Los detalles internos los deciden solos.",
         appliesNext: "Rige para las tareas que empiecen desde ahora.",
+        changeAnytime: "Se puede cambiar mientras corre.",
       },
       questions: {
         title: "Pregunta de un agente",

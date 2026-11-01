@@ -1380,9 +1380,10 @@
             disabled={busy}
             onpick={(value) => void act(() => orchestrationStore.setAskLevel(orchestrationId, value as AskLevel))}
           />
-          {#if !isDraft && !ended}
-            <span class="muted small">{t("agents.orchestration.askLevel.appliesNext")}</span>
-          {/if}
+          <!-- Always a line under it, like the figures beside it: they line up at the bottom. -->
+          <span class="muted small">
+            {t(isDraft ? "agents.orchestration.askLevel.changeAnytime" : "agents.orchestration.askLevel.appliesNext")}
+          </span>
         </span>
         {#if isDraft}
           <button class="button primary approve" disabled={busy || plan.tasks.length === 0} onclick={() => void approve()}>
@@ -2272,6 +2273,7 @@
 
   .field.budget {
     width: 92px;
+    height: var(--figure-control);
     padding: 3px 6px;
   }
 
@@ -2384,10 +2386,23 @@
     gap: 22px;
   }
 
+  /* The same three rows in every figure — label, value or control, note —
+     so each row lines up across them, with or without a note. */
   .figure {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+    display: grid;
+    grid-template-rows: 15px var(--figure-control) 15px;
+    align-items: center;
+    justify-items: start;
+    row-gap: 2px;
+    white-space: nowrap;
+  }
+
+  .figures {
+    --figure-control: 28px;
+  }
+
+  .figure :global(.dropdown-trigger) {
+    height: var(--figure-control);
   }
 
   .figure-label {
@@ -2400,9 +2415,12 @@
     font-weight: 600;
   }
 
+  /* On the controls' row, not the notes'. */
   .approve {
     margin-left: auto;
-    padding: 7px 16px;
+    margin-bottom: 17px;
+    height: var(--figure-control);
+    padding: 0 16px;
   }
 
   .fine {

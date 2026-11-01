@@ -1643,6 +1643,7 @@ export const en: Messages = {
         essentialHint: "They only ask about decisions that are yours and change the result: one approach or another, the scope, what to do with what already exists.",
         unsureHint: "They ask when there's more than one reasonable way and the choice changes something you'll notice. They decide internal details alone.",
         appliesNext: "Applies to the tasks that start from now on.",
+        changeAnytime: "Can be changed while it runs.",
       },
       questions: {
         title: "A question from an agent",
