@@ -167,8 +167,41 @@
 </section>
 
 <section>
-  <h3>{t("preferences.agents.consoles")}</h3>
-  <p class="setting-hint first">{t("preferences.agents.consolesHint")}</p>
+  <h3>{t("preferences.agents.fromConsoles")}</h3>
+  <p class="setting-hint first">{t("preferences.agents.fromConsolesHint")}</p>
+  <div class="group">
+    <div class="item">
+      <div class="toggle-row static">
+        <span>{t("preferences.agents.consoleAgents")}</span>
+        <span class="tag">{t("preferences.agents.perAgent")}</span>
+      </div>
+      <p class="setting-hint">{t("preferences.agents.consoleAgentsHint")}</p>
+    </div>
+    <div class="item">
+      <label class="toggle-row">
+        <span>{t("preferences.agents.orchestrations")}</span>
+        <input
+          type="checkbox"
+          checked={appConfigStore.orchestrationsFromConsoles}
+          onchange={(e) => appConfigStore.setOrchestrationsFromConsoles(e.currentTarget.checked)}
+        />
+      </label>
+      <p class="setting-hint">{t("preferences.agents.orchestrationsHint")}</p>
+    </div>
+    <div class="item">
+      <label class="toggle-row">
+        <span>{t("preferences.agents.kanban")}</span>
+        <input
+          type="checkbox"
+          checked={appConfigStore.kanbanFromConsoles}
+          onchange={(e) => appConfigStore.setKanbanFromConsoles(e.currentTarget.checked)}
+        />
+      </label>
+      <p class="setting-hint">{t("preferences.agents.kanbanHint")}</p>
+    </div>
+  </div>
+
+  <h4>{t("preferences.agents.outside")}</h4>
   <label class="toggle-row">
     <span>{t("preferences.agents.everyConsole")}</span>
     <input
@@ -198,24 +231,6 @@
       {/each}
     </ul>
   {/if}
-  <label class="toggle-row">
-    <span>{t("preferences.agents.orchestrations")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.orchestrationsFromConsoles}
-      onchange={(e) => appConfigStore.setOrchestrationsFromConsoles(e.currentTarget.checked)}
-    />
-  </label>
-  <p class="setting-hint">{t("preferences.agents.orchestrationsHint")}</p>
-  <label class="toggle-row">
-    <span>{t("preferences.agents.kanban")}</span>
-    <input
-      type="checkbox"
-      checked={appConfigStore.kanbanFromConsoles}
-      onchange={(e) => appConfigStore.setKanbanFromConsoles(e.currentTarget.checked)}
-    />
-  </label>
-  <p class="setting-hint">{t("preferences.agents.kanbanHint")}</p>
 </section>
 
 <style>
@@ -259,6 +274,47 @@
     margin: 6px 0 0;
     font-size: 10px;
     opacity: 0.6;
+  }
+
+  h4 {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.75;
+    margin: 16px 0 8px;
+  }
+
+  .group {
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 6px;
+  }
+
+  .item {
+    padding: 8px 10px;
+  }
+
+  .item + .item {
+    border-top: 1px solid var(--tabbar-border, #3a3a3a);
+  }
+
+  .item .toggle-row {
+    margin-bottom: 0;
+  }
+
+  .item .setting-hint {
+    margin-top: 3px;
+  }
+
+  .toggle-row.static {
+    cursor: default;
+  }
+
+  .tag {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.18);
+    font-size: 10px;
+    opacity: 0.8;
   }
 
   .setting-hint.first {
