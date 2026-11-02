@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KanbanBoard, KanbanColumn, KanbanTask } from "$lib/core/kanban-client";
-import { addTag, beforeAt, blockers, boardActivity, boardTags, decisionsFor, retryKey, tagHue, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
+import { addTag, beforeAt, blockers, boardActivity, boardTags, decisionsFor, lacksCommands, retryKey, withCommands, tagHue, needsCancel, newBoardSettings, nextUp, queuePlaces, tasksIn } from "./kanban-model";
 
 function task(id: string, column: KanbanColumn, dependsOn: string[] = [], extra: Partial<KanbanTask> = {}): KanbanTask {
   return {
@@ -124,5 +124,16 @@ describe("decisions on a stuck task", () => {
     expect(retryKey(task("a", "review", [], { stuck: "noVerdict" }))).toBe("kanban.decide.reviewAgain");
     expect(retryKey(task("a", "inProgress", [], { stuck: "tooManyRounds" }))).toBe("kanban.decide.anotherRound");
     expect(retryKey(task("a", "inProgress", [], { stuck: "cancelled" }))).toBe("kanban.decide.resume");
+  });
+});
+
+describe("an agent that can't run commands", () => {
+  it("is named when the task it failed goes back to it", () => {
+    const b = board([task("a", "inProgress", [], { stuck: "workFailed" })]);
+    b.agents.work.autonomy = "edit";
+    expect(lacksCommands(b, b.tasks[0])).toBe("work");
+    expect(withCommands(b, "work").agents.work.autonomy).toBe("run");
+    b.agents.work.autonomy = "run";
+    expect(lacksCommands(b, b.tasks[0])).toBeNull();
   });
 });

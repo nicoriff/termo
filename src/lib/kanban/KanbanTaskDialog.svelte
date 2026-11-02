@@ -7,7 +7,7 @@
   import type { KanbanColumn, KanbanLogEntry } from "$lib/core/kanban-client";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-  import { actorKey, addTag, boardTags, decisionsFor, isRunning, retryKey, tagHue } from "./kanban-model";
+  import { actorKey, addTag, boardTags, decisionsFor, isRunning, lacksCommands, retryKey, tagHue, withCommands } from "./kanban-model";
   import { kanbanStore, type KanbanDialog } from "./kanban-store.svelte";
 
   // Read once: KanbanDialogs mounts a fresh one for each dialog opened.
@@ -54,6 +54,8 @@
   /** What the user tells the agent when they unstick the task. */
   let instructions = $state("");
   const decisions = $derived(task ? decisionsFor(task) : []);
+  /** The agent that would take it again without being able to run commands. */
+  const lacking = $derived(task && board ? lacksCommands(board, task) : null);
   let busy = $state(false);
   let error = $state("");
   let confirmingDelete = $state(false);
@@ -198,6 +200,23 @@
             {t("kanban.decide.seeRun")} →
           </button>
         {/if}
+        {#if lacking && board}
+          <div class="decide-permission">
+            <p>{t("kanban.decide.noCommands", { role: t(`kanban.roles.${lacking}`) })}</p>
+            <button
+              class="choice primary"
+              disabled={busy}
+              onclick={() =>
+                run(async () => {
+                  await kanbanStore.save(withCommands(board!, lacking!));
+                  await kanbanStore.resolveTask(boardId, task!.id, "retry", instructions);
+                })}
+            >
+              <span class="choice-label">{t("kanban.decide.allowCommands")}</span>
+              <span class="choice-hint">{t("kanban.decide.allowCommandsHint")}</span>
+            </button>
+          </div>
+        {/if}
         {#if decisions.some((decision) => decision !== "park")}
           <label class="label" for="kanban-decide-text">{t("kanban.decide.instructions")}</label>
           <textarea
@@ -213,7 +232,7 @@
           {#each decisions as decision, index (decision)}
             <button
               class="choice"
-              class:primary={index === 0}
+              class:primary={index === 0 && !lacking}
               disabled={busy}
               onclick={() => run(() => kanbanStore.resolveTask(boardId, task!.id, decision, instructions))}
             >
@@ -623,6 +642,22 @@
 
   .link-button:hover {
     text-decoration: underline;
+  }
+
+  .decide-permission {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: rgba(127, 127, 127, 0.1);
+  }
+
+  .decide-permission p {
+    margin: 0 0 8px;
+    line-height: 1.45;
+  }
+
+  .decide-permission .choice {
+    width: 100%;
   }
 
   .decide .label {

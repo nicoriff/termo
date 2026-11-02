@@ -175,3 +175,23 @@ export function retryKey(task: KanbanTask): MessageKey {
   if (task.column === "review") return "kanban.decide.reviewAgain";
   return task.stuck === "tooManyRounds" ? "kanban.decide.anotherRound" : "kanban.decide.retry";
 }
+
+/** The agent that takes a stuck task up again, when it failed and that agent
+ *  can't run commands: it most likely needed one (installing, building,
+ *  committing). Null when that isn't the case. */
+export function lacksCommands(board: KanbanBoard, task: KanbanTask): KanbanRole | null {
+  if (task.stuck !== "workFailed" && task.stuck !== "reviewFailed" && task.stuck !== "tooManyRounds") return null;
+  const role: KanbanRole = task.column === "review" ? "review" : "work";
+  return board.agents[role].autonomy === "run" ? null : role;
+}
+
+/** The board's settings with that agent allowed to run commands. */
+export function withCommands(board: KanbanBoard, role: KanbanRole): KanbanSettings {
+  const settings = settingsOf(board);
+  if (role === "summary") {
+    if (settings.agents.summary) settings.agents.summary.autonomy = "run";
+  } else {
+    settings.agents[role].autonomy = "run";
+  }
+  return settings;
+}
