@@ -1553,7 +1553,7 @@ export const en: Messages = {
       harnessHint: "What it does with each task in this column, step by step.",
       harnessDefault: {
         work: "1. Read the specification and the success criteria.\n2. Look at the related code before changing anything.\n3. Make the smallest changes that do the task, with tests where they fit.\n4. Run the tests and the linter.\n5. Commit with a clear message.",
-        review: "1. Look at the changes (git diff, git log) and what the work agent reported.\n2. Check each success criterion; run the tests.\n3. Look for bugs, uncovered cases and code that doesn't follow the conventions.\n4. Approve only if it meets everything; otherwise ask for concrete changes.",
+        review: "1. Look at the changes (git diff, git log) and what the work agent reported.\n2. Check each success criterion; run the tests.\n3. Look for bugs, uncovered cases and code that doesn't follow the conventions.\n4. Approve only if it meets everything; otherwise ask for concrete changes.\nDon't change the code yourself: ask for whatever has to change.",
         summary: "1. Read the log, the reported work and the review.\n2. Sum up what was done and how well it meets the success criteria.\n3. Note anything left to do.",
       },
     },

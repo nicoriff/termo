@@ -123,6 +123,8 @@ export interface KanbanBoard {
   tasks: KanbanTask[];
   projectId: string;
   nextNumber: number;
+  /** Why its agents can't take tasks now although it's on; empty when they can. */
+  onHold: string;
   createdAt: number;
   updatedAt: number;
 }

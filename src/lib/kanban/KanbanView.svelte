@@ -250,6 +250,8 @@
       <div class="notice">{t("kanban.board.aiOff")}</div>
     {:else if !board.enabled}
       <div class="notice">{t("kanban.board.offNotice")}</div>
+    {:else if board.onHold}
+      <div class="notice bad">{board.onHold}</div>
     {/if}
     {#if error}
       <div class="notice bad" transition:fade={{ duration: 120 }}>{error}</div>

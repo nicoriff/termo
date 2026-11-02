@@ -1552,7 +1552,7 @@ export const es = {
       harnessHint: "Qué hace con cada tarea en esta columna, paso a paso.",
       harnessDefault: {
         work: "1. Leé la especificación y los criterios de éxito.\n2. Mirá el código relacionado antes de cambiar nada.\n3. Hacé los cambios mínimos que cumplan la tarea, con tests si corresponde.\n4. Corré los tests y el linter.\n5. Commiteá con un mensaje claro.",
-        review: "1. Mirá los cambios (git diff, git log) y lo que informó el agente de trabajo.\n2. Verificá cada criterio de éxito; corré los tests.\n3. Buscá errores, casos sin cubrir y código que no siga las convenciones.\n4. Aprobá solo si cumple todo; si no, pedí cambios concretos.",
+        review: "1. Mirá los cambios (git diff, git log) y lo que informó el agente de trabajo.\n2. Verificá cada criterio de éxito; corré los tests.\n3. Buscá errores, casos sin cubrir y código que no siga las convenciones.\n4. Aprobá solo si cumple todo; si no, pedí cambios concretos.\nNo cambies el código vos: lo que haya que cambiar, pedilo.",
         summary: "1. Leé la bitácora, el trabajo informado y la revisión.\n2. Resumí qué se hizo y qué tan bien cumple los criterios de éxito.\n3. Anotá lo que quede pendiente.",
       },
     },

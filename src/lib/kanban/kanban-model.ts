@@ -70,10 +70,11 @@ export const DEFAULT_HARNESS: Record<KanbanRole, MessageKey> = {
 };
 
 export function newColumnAgent(engine: AgentEngine = "claude", harness = ""): KanbanColumnAgent {
-  return { engine, model: "", autonomy: "edit", web: false, context: "", harness, agentIds: [] };
+  return { engine, model: "", autonomy: "run", web: false, context: "", harness, agentIds: [] };
 }
 
-/** A new board's settings: a work agent that edits, a reviewer that only looks. */
+/** A new board's settings: agents that may run commands, since doing the
+ *  work and checking it both take building and running its tests. */
 export function newBoardSettings(harness: (role: KanbanRole) => string): KanbanSettings {
   return {
     id: "",
@@ -87,7 +88,7 @@ export function newBoardSettings(harness: (role: KanbanRole) => string): KanbanS
     askLevel: "essential",
     agents: {
       work: newColumnAgent("claude", harness("work")),
-      review: { ...newColumnAgent("claude", harness("review")), autonomy: "read" },
+      review: newColumnAgent("claude", harness("review")),
       summary: null,
     },
   };

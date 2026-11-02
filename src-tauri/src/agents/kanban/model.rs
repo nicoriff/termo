@@ -335,6 +335,9 @@ pub struct KanbanBoard {
     /// The project that holds its agents (see projects.rs).
     pub project_id: String,
     pub next_number: u32,
+    /// Why its agents can't take tasks now although it's on; empty when
+    /// they can.
+    pub on_hold: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -356,6 +359,7 @@ impl Default for KanbanBoard {
             tasks: Vec::new(),
             project_id: String::new(),
             next_number: 1,
+            on_hold: String::new(),
             created_at: 0,
             updated_at: 0,
         }

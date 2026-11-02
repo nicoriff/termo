@@ -208,6 +208,8 @@ pub enum Msg<'a> {
     KanbanPreviousLog,
     /// the error
     KanbanSaveFailed(&'a str),
+    /// the port
+    KanbanNoServer(u16),
     KanbanNotFound,
     KanbanTaskNotFound,
     KanbanNotARepo,
@@ -646,6 +648,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KanbanPreviousLog, En) => "The latest of the task's log:".into(),
         (KanbanSaveFailed(error), Es) => format!("No se pudo guardar el tablero: {error}"),
         (KanbanSaveFailed(error), En) => format!("Couldn't save the board: {error}"),
+        (KanbanNoServer(port), Es) => format!(
+            "Los agentes no pueden tomar tareas: el servidor MCP de Termo no está andando, así que no tendrían cómo informar su trabajo ni su veredicto. Lo más probable es que otro Termo abierto esté usando el puerto {port}: cerralo y este tablero sigue solo."
+        ),
+        (KanbanNoServer(port), En) => format!(
+            "The agents can't take tasks: Termo's MCP server isn't running, so they'd have no way to report their work or their verdict. Most likely another open Termo is using port {port}: close it and this board carries on by itself."
+        ),
         (KanbanNotFound, Es) => "El tablero ya no existe".into(),
         (KanbanNotFound, En) => "The board no longer exists".into(),
         (KanbanTaskNotFound, Es) => "La tarea ya no existe".into(),
@@ -927,6 +935,7 @@ mod tests {
             Msg::KanbanDependsOn,
             Msg::KanbanPreviousLog,
             Msg::KanbanSaveFailed("x"),
+            Msg::KanbanNoServer(1),
             Msg::KanbanNotFound,
             Msg::KanbanTaskNotFound,
             Msg::KanbanNotARepo,

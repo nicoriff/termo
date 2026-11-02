@@ -46,6 +46,7 @@ function board(tasks: KanbanTask[]): KanbanBoard {
     tasks: tasks.map((each, index) => ({ ...each, number: index + 1 })),
     projectId: "",
     nextNumber: tasks.length + 1,
+    onHold: "",
     createdAt: 0,
     updatedAt: 0,
   };

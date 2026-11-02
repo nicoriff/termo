@@ -24,6 +24,7 @@ use super::super::projects::{self, Project};
 use super::super::runner::Runner;
 use super::super::spec::{AgentSpec, AskLevel};
 use super::super::store::{self as agent_store, now_millis, RunStatus, RunTrigger};
+use super::super::webhook;
 use super::model::{self, Actor, Column, KanbanBoard, KanbanTask, LogKind, Mode, Outcome, Role, Stuck, Success, Verdict};
 use super::store;
 use super::worktree;
@@ -335,7 +336,13 @@ impl Drive {
             if !board.enabled && board.running() == 0 {
                 return;
             }
-            if board.enabled && crate::ai_mode::enabled() && self.launch(&board) {
+            // Without Termo's MCP server its agents would run without their
+            // kanban tools, and every review would end without a verdict.
+            let hold = if webhook::listening() { String::new() } else { tr(Msg::KanbanNoServer(webhook::PORT)) };
+            if hold != board.on_hold {
+                self.update(|board| board.on_hold = hold.clone());
+            }
+            if board.enabled && crate::ai_mode::enabled() && hold.is_empty() && self.launch(&board) {
                 continue;
             }
             std::thread::sleep(TICK);
