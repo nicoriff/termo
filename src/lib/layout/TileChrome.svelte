@@ -257,7 +257,13 @@
   type Dragged = { kind: "tab"; sessionId: string } | { kind: "group"; groupId: string };
 
   function onTabPointerDown(event: PointerEvent, sessionId: string) {
+    // The middle button closes it (see onTabAuxClick): no autoscroll.
+    if (event.button === 1) event.preventDefault();
     startDrag(event, { kind: "tab", sessionId });
+  }
+
+  function onTabAuxClick(event: MouseEvent, sessionId: string) {
+    if (event.button === 1) closeTab(event, sessionId);
   }
 
   function startDrag(event: PointerEvent, dragged: Dragged) {
@@ -784,6 +790,7 @@
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}
         onpointerdown={(e) => onTabPointerDown(e, session.id)}
+        onauxclick={(e) => onTabAuxClick(e, session.id)}
         oncontextmenu={(e) => onTabContextMenu(e, session.id)}
         onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") workspaceStore.setActiveSession(tile.id, session.id);
