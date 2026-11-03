@@ -230,6 +230,7 @@ pub enum Msg<'a> {
     /// the error
     KanbanWorktreeFailed(&'a str),
     KanbanNotMergeable,
+    KanbanBadBranch,
     /// what git said
     KanbanMergeFailed(&'a str),
     GitNotFound,
@@ -684,6 +685,8 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KanbanWorktreeFailed(error), En) => format!("Couldn't create the task's worktree: {error}"),
         (KanbanNotMergeable, Es) => "Esa tarea no tiene una rama terminada para mergear".into(),
         (KanbanNotMergeable, En) => "That task has no finished branch to merge".into(),
+        (KanbanBadBranch, Es) => "Ese nombre de rama no es válido: no puede empezar con «-» ni tener espacios".into(),
+        (KanbanBadBranch, En) => "That isn't a valid branch name: it can't start with \"-\" or have spaces".into(),
         (KanbanMergeFailed(error), Es) => format!("No se pudo mergear (la carpeta quedó como estaba): {error}"),
         (KanbanMergeFailed(error), En) => format!("Couldn't merge (the folder was left as it was): {error}"),
         (AiModeOff, Es) => "Modo IA está apagado: activalo en Preferencias para usar los agentes".into(),
@@ -951,6 +954,7 @@ mod tests {
             Msg::KanbanNoVerdict,
             Msg::KanbanWorktreeFailed("x"),
             Msg::KanbanNotMergeable,
+            Msg::KanbanBadBranch,
             Msg::KanbanMergeFailed("x"),
             Msg::HarnessInvalid(".termo/harness.json", "x"),
             Msg::HarnessWriteFailed("x"),

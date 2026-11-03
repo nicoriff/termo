@@ -7,14 +7,17 @@
 //!
 //! Nothing at all unless the user turned it on (Preferences → Agents →
 //! Consoles). A console writes tasks; it never moves them along or switches
-//! a board on: that stays with the user.
+//! a board on: that stays with the user. What it writes waits in Not ready,
+//! and it edits only what's there: a console can be led by what it reads,
+//! and no task it wrote runs, with the board's permissions, until the user
+//! moves it to To do.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{json, Value};
 
 use super::console_bridge::clip;
-use super::kanban::model::{blockers, next_up, Actor, Column, KanbanBoard, KanbanTask};
+use super::kanban::model::{blockers, next_up, Actor, Column, KanbanBoard, KanbanTask, MAX_DEPENDENCIES, MAX_TAGS};
 use super::kanban::ops::{self as kanban, TaskInput};
 use super::kanban::store;
 use super::ops::Agents;
@@ -51,7 +54,6 @@ pub fn tools() -> Vec<Value> {
     });
     let mut add = fields.clone();
     add["board"] = board.clone();
-    add["ready"] = json!({ "type": "boolean", "description": "true puts it in To do, where the board's agent takes it; otherwise it goes to Not ready for the user to look over first. Only when the user said it's ready." });
     let mut update = fields;
     update["board"] = board.clone();
     update["task"] = json!({ "type": "string", "description": "The task's number (\"3\" or \"#3\")." });
@@ -68,12 +70,12 @@ pub fn tools() -> Vec<Value> {
         }),
         json!({
             "name": "kanban_add_task",
-            "description": "Adds a task to one of the user's kanban boards. It goes to Not ready unless the user said it's ready. Write it so an agent can do it alone: it won't see this conversation.",
+            "description": "Adds a task to one of the user's kanban boards, in Not ready: the user looks it over and moves it to To do for the board's agent to take. Write it so an agent can do it alone: it won't see this conversation.",
             "inputSchema": { "type": "object", "properties": add, "required": ["board", "title", "spec"] },
         }),
         json!({
             "name": "kanban_update_task",
-            "description": "Changes a task's title, description, success criteria or dependencies. Fields left out stay as they are.",
+            "description": "Changes a task in Not ready: its title, description, success criteria, tags or dependencies. Fields left out stay as they are. Tasks the user already moved on can't be changed from here.",
             "inputSchema": { "type": "object", "properties": update, "required": ["board", "task"] },
         }),
     ]
@@ -174,6 +176,9 @@ fn list_tasks(board: &KanbanBoard) -> String {
 /// Task numbers a console gave, as ids of the board.
 fn dependencies(board: &KanbanBoard, args: &Value) -> Result<Option<Vec<String>>, String> {
     let Some(list) = args.get("depends_on").and_then(Value::as_array) else { return Ok(None) };
+    if list.len() > MAX_DEPENDENCIES {
+        return Err(format!("A task can wait for {MAX_DEPENDENCIES} others at most."));
+    }
     let mut ids = Vec::new();
     for item in list {
         let reference = item.as_str().map(str::to_string).or_else(|| item.as_u64().map(|number| number.to_string())).unwrap_or_default();
@@ -186,7 +191,7 @@ fn dependencies(board: &KanbanBoard, args: &Value) -> Result<Option<Vec<String>>
 /// The tags a console gave, when it gave any.
 fn tags(args: &Value) -> Option<Vec<String>> {
     let list = args.get("tags")?.as_array()?;
-    Some(list.iter().filter_map(Value::as_str).map(str::to_string).collect())
+    Some(list.iter().filter_map(Value::as_str).take(MAX_TAGS).map(str::to_string).collect())
 }
 
 /// One tool call from a console.
@@ -200,7 +205,6 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
         "kanban_list_tasks" => Ok(list_tasks(&find(agents, &text("board"))?)),
         "kanban_add_task" => {
             let board = find(agents, &text("board"))?;
-            let ready = args.get("ready").and_then(Value::as_bool).unwrap_or(false);
             let input = TaskInput {
                 id: String::new(),
                 title: text("title"),
@@ -208,21 +212,24 @@ pub fn call(agents: &Agents, name: &str, args: &Value) -> Result<String, String>
                 success_criteria: text("success_criteria"),
                 depends_on: dependencies(&board, args)?.unwrap_or_default(),
                 tags: tags(args).unwrap_or_default(),
-                column: Some(if ready { Column::Todo } else { Column::NotReady }),
+                column: Some(Column::NotReady),
             };
             let (board, task) = kanban::upsert_task(agents, &board.id, input, Actor::Console)?;
-            let state = if !ready {
-                "in Not ready, for the user to look over".to_string()
-            } else if board.enabled {
-                "in To do: the board's agent takes it when it can".to_string()
-            } else {
-                "in To do; the board is off, so no agent takes it until the user switches it on".to_string()
-            };
-            Ok(format!("Added #{} \"{}\" to {}, {state}.", task.number, task.title, board.name))
+            Ok(format!(
+                "Added #{} \"{}\" to {}, in Not ready: the user moves it to To do when it's ready.",
+                task.number, task.title, board.name
+            ))
         }
         "kanban_update_task" => {
             let board = find(agents, &text("board"))?;
             let task = board.find(&text("task")).ok_or_else(|| format!("There's no task {} on this board.", text("task")))?;
+            if task.column != Column::NotReady {
+                return Err(format!(
+                    "#{} is in {}: only tasks in Not ready can be changed from a console. Ask the user to change it in Termo.",
+                    task.number,
+                    column_name(task.column)
+                ));
+            }
             let keep = |key: &str, current: &str| if args.get(key).is_some() { text(key) } else { current.to_string() };
             let input = TaskInput {
                 id: task.id.clone(),
@@ -253,6 +260,13 @@ mod tests {
         assert!(text.contains("#1 do a (waits for #2)"));
         assert!(text.contains("#2 do b (next #1)"));
         assert!(text.contains("Done (1)"));
+    }
+
+    #[test]
+    fn too_many_dependencies_are_refused() {
+        let board = board(vec![task("a", Column::Todo, &[])]);
+        let many: Vec<u32> = (0..=MAX_DEPENDENCIES as u32).collect();
+        assert!(dependencies(&board, &json!({ "depends_on": many })).is_err());
     }
 
     #[test]

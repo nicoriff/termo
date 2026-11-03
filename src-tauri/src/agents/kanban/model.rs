@@ -396,6 +396,8 @@ impl KanbanBoard {
 }
 
 pub const MAX_TAGS: usize = 12;
+/// What a task can wait for at most.
+pub const MAX_DEPENDENCIES: usize = 50;
 const MAX_TAG_LEN: usize = 32;
 
 /// Tags as they're kept: trimmed, short, without a leading '#', without
@@ -490,8 +492,18 @@ pub fn clean_dependencies(board: &KanbanBoard, id: &str, wanted: &[String]) -> V
             continue;
         }
         kept.push(dep.clone());
+        if kept.len() == MAX_DEPENDENCIES {
+            break;
+        }
     }
     kept
+}
+
+/// Whether a branch name can go to git as one: never something it would
+/// read as an option.
+pub fn valid_branch(name: &str) -> bool {
+    let name = name.trim();
+    !name.starts_with('-') && !name.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
 /// Moves a task to `to`, before `before` (another task's id) or at the end

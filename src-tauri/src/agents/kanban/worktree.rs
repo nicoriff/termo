@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use crate::git::{self, git_command};
+use crate::i18n::{tr, Msg};
+
+use super::model::valid_branch;
 
 /// The branch a task works on.
 pub fn branch_for(number: u32, id: &str) -> String {
@@ -55,6 +58,10 @@ pub fn create(repo: &Path, folder: &Path, branch: &str, base: &str) -> Result<()
     if folder.join(".git").exists() {
         return Ok(());
     }
+    // Saved by an older build, or by hand: never as an option to git.
+    if !valid_branch(branch) || !valid_branch(base) {
+        return Err(tr(Msg::KanbanBadBranch));
+    }
     if let Some(parent) = folder.parent() {
         std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -85,6 +92,9 @@ pub fn remove(repo: &Path, folder: &Path, branch: &str, drop_branch: bool) {
 /// to be on that branch. A merge that conflicts is undone: the folder is
 /// left as it was and the error says why.
 pub fn merge(repo: &Path, branch: &str, base: &str, message: &str) -> Result<(), String> {
+    if !valid_branch(branch) || !valid_branch(base) {
+        return Err(tr(Msg::KanbanBadBranch));
+    }
     let current = current_branch(repo).unwrap_or_default();
     let base = if base.trim().is_empty() { current.as_str() } else { base.trim() };
     if current != base {
@@ -130,6 +140,17 @@ mod tests {
     #[test]
     fn branch_names_are_safe() {
         assert_eq!(branch_for(3, "ab-cd/ef12"), "termo/kanban/3-abcdef");
+        assert!(valid_branch(&branch_for(3, "x")));
+        assert!(valid_branch("main") && valid_branch(""));
+        assert!(!valid_branch("--upload-pack=x") && !valid_branch("a b"));
+    }
+
+    #[test]
+    fn a_base_like_an_option_never_reaches_git() {
+        let dir = std::env::temp_dir().join(format!("termo-kanban-wt-opt-{}", std::process::id()));
+        assert!(create(&dir, &dir.join("t"), "termo/kanban/1-x", "--orphan").is_err());
+        assert!(merge(&dir, "termo/kanban/1-x", "-x", "m").is_err());
+        assert!(!dir.join("t").exists());
     }
 
     #[test]

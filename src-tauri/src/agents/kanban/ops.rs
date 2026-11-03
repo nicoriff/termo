@@ -93,6 +93,9 @@ pub fn save(agents: &Agents, settings: Settings) -> Result<KanbanBoard, String> 
         return Err(tr(Msg::KanbanNameRequired));
     }
     check_folder(&settings.work_dir, settings.mode)?;
+    if !model::valid_branch(&settings.base_branch) {
+        return Err(tr(Msg::KanbanBadBranch));
+    }
     let existing = (!settings.id.is_empty()).then(|| store::get_in(root, &settings.id)).flatten();
     let mut board = existing.unwrap_or_else(|| KanbanBoard { id: uuid::Uuid::new_v4().to_string(), ..KanbanBoard::default() });
     // The saved agents behind each column stay the board's own.
