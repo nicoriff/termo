@@ -385,7 +385,7 @@
                     </svg>
                   </span>
                   {#if task.dependsOn.length > 0}
-                    <span class="foot-item" title={t("kanban.card.dependsOn", { n: String(task.dependsOn.length) })}>
+                    <span class="foot-item" title={task.dependsOn.length === 1 ? t("kanban.card.dependsOnOne") : t("kanban.card.dependsOn", { n: String(task.dependsOn.length) })}>
                       <svg viewBox="0 0 12 12" aria-hidden="true">
                         <path d="M5 7l2-2M4.2 5.4L3 6.6a1.7 1.7 0 002.4 2.4l1.2-1.2M7.8 6.6L9 5.4A1.7 1.7 0 006.6 3L5.4 4.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
                       </svg>
@@ -393,7 +393,7 @@
                     </span>
                   {/if}
                   {#if task.log.length > 0}
-                    <span class="foot-item" title={t("kanban.card.log", { n: String(task.log.length) })}>
+                    <span class="foot-item" title={task.log.length === 1 ? t("kanban.card.logOne") : t("kanban.card.log", { n: String(task.log.length) })}>
                       <svg viewBox="0 0 12 12" aria-hidden="true">
                         <path d="M2.5 2.5h7v5h-4l-2 2v-2h-1z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
                       </svg>

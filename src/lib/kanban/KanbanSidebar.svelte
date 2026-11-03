@@ -60,7 +60,7 @@
             </span>
           </span>
           {#if activity.needsYou > 0}
-            <span class="badge asking" title={t("kanban.row.needsYou", { n: String(activity.needsYou) })}>{activity.needsYou}</span>
+            <span class="badge asking" title={activity.needsYou === 1 ? t("kanban.row.needsYouOne") : t("kanban.row.needsYou", { n: String(activity.needsYou) })}>{activity.needsYou}</span>
           {:else if activity.running > 0}
             <span class="dot working" title={t("kanban.row.running", { n: String(activity.running) })}></span>
           {/if}

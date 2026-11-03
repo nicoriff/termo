@@ -1324,6 +1324,7 @@ export const es = {
       progress: "{done}/{total} terminadas",
       running: "{n} en curso",
       needsYou: "{n} te necesitan",
+      needsYouOne: "1 te necesita",
     },
     columns: {
       notReady: "No lista",
@@ -1375,7 +1376,9 @@ export const es = {
       criteria: "Tiene criterios de éxito",
       noCriteria: "Sin criterios de éxito",
       dependsOn: "Depende de {n} tareas",
+      dependsOnOne: "Depende de 1 tarea",
       log: "{n} entradas en la bitácora",
+      logOne: "1 entrada en la bitácora",
     },
     roles: {
       work: "Trabajo",

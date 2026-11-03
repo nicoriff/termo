@@ -131,7 +131,7 @@
         <rect x="16.9" y="6.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
       </svg>
       {#if kanbanStore.needingYou > 0}
-        <span class="activity-badge asking" title={t("kanban.row.needsYou", { n: String(kanbanStore.needingYou) })}>!</span>
+        <span class="activity-badge asking" title={kanbanStore.needingYou === 1 ? t("kanban.row.needsYouOne") : t("kanban.row.needsYou", { n: String(kanbanStore.needingYou) })}>!</span>
       {:else if kanbanStore.running > 0}
         <span class="activity-badge">{kanbanStore.running}</span>
       {/if}

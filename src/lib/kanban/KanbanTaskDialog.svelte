@@ -202,7 +202,7 @@
         {/if}
         {#if lacking && board}
           <div class="decide-permission">
-            <p>{t("kanban.decide.noCommands", { role: t(`kanban.roles.${lacking}`) })}</p>
+            <p>{t("kanban.decide.noCommands", { role: t(`kanban.roles.${lacking}`).toLowerCase() })}</p>
             <button
               class="choice primary"
               disabled={busy}

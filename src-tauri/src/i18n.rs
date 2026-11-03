@@ -642,11 +642,11 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (KanbanReviewNotes, Es) => "La revisión anterior pidió estos cambios:".into(),
         (KanbanReviewNotes, En) => "The last review asked for these changes:".into(),
         (KanbanUserInstructions, Es) => "Lo que pidió el usuario al destrabar la tarea (tiene prioridad):".into(),
-        (KanbanUserInstructions, En) => "What the user asked when they unstuck the task (it comes first):".into(),
+        (KanbanUserInstructions, En) => "What the user asked when they unblocked the task (it comes first):".into(),
         (KanbanDependsOn, Es) => "Resultados de las tareas de las que depende esta:".into(),
         (KanbanDependsOn, En) => "Results of the tasks this one depends on:".into(),
         (KanbanPreviousLog, Es) => "Lo último de la bitácora de la tarea:".into(),
-        (KanbanPreviousLog, En) => "The latest of the task's log:".into(),
+        (KanbanPreviousLog, En) => "The latest entries in the task's log:".into(),
         (KanbanSaveFailed(error), Es) => format!("No se pudo guardar el tablero: {error}"),
         (KanbanSaveFailed(error), En) => format!("Couldn't save the board: {error}"),
         (KanbanNoServer(port), Es) => format!(
