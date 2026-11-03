@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.29.0",
+    "date": "2026-11-02",
+    "es": [
+      "**Tableros kanban** (Modo IA): escribís tareas en un tablero y un agente por columna las va tomando. El de trabajo las hace, el de revisión las aprueba o las devuelve con cambios, y uno opcional escribe el resumen final. Cada tarea tiene especificación, criterios de éxito, etiquetas, dependencias y una bitácora de quién hizo qué. Las tarjetas se mueven solas y brillan mientras un agente trabaja en ellas. Se abren desde la barra de actividad, el menú ≡ o `Ctrl+Shift+U`.",
+      "Cada tablero elige motor, modelo, permisos, contexto y harness para cada agente, si trabaja de a una tarea o en paralelo con git worktrees, y cuántas rondas de revisión permite. Cuando una tarea se traba, la tarjeta muestra **Decidir** con lo que pasó y las opciones: intentarlo de nuevo, volver al trabajo, aprobarla así o devolverla a No lista, con instrucciones para el próximo agente.",
+      "**Nueva tarea** desde cualquier lado con `Alt+Shift+N`, o desde la paleta de comandos. Las consolas de Claude Code, Codex, Gemini CLI y Copilot CLI pueden agregar tareas a tus tableros si lo activás en Preferencias → Modo IA → Agentes → Desde las consolas; quedan en No lista hasta que las revisás.",
+      "**Panel de grupos de pestañas**: debajo de cada consola se ve qué corre en ella (el agente o la shell), en qué estado está el agente y los puertos que tiene abiertos. Los que responden HTTP se abren en el navegador con un clic. Un botón nuevo muestra también las pestañas que no están en ningún grupo.",
+      "**Cuándo preguntarte** en las orquestaciones: Nunca, Solo lo imprescindible o Ante la duda. Se elige al crearla, se cambia en cualquier momento y su valor por defecto está en Preferencias. Las preguntas que esperan tu respuesta se avisan igual en todos lados: la barra de estado, el botón de Agentes y las notificaciones.",
+      "Preferencias → Modo IA → Agentes está más ordenado: lo que pueden hacer las consolas queda junto, bajo Desde las consolas, con textos más cortos.",
+      "Un clic con la rueda del mouse en una pestaña la cierra."
+    ],
+    "en": [
+      "**Kanban boards** (AI Mode): write tasks on a board and one agent per column works through them. The work agent does them, the review agent approves them or sends them back with changes, and an optional one writes the final summary. Each task has a specification, success criteria, tags, dependencies and a log of who did what. Cards move on their own and glow while an agent works on them. Open them from the activity bar, the ≡ menu or `Ctrl+Shift+U`.",
+      "Each board picks the engine, model, permissions, context and harness of each agent, whether it works one task at a time or in parallel with git worktrees, and how many review rounds it allows. When a task gets stuck, its card shows **Decide** with what happened and the choices: try again, back to work, approve it as it is or back to Not ready, with instructions for the next agent.",
+      "**New task** from anywhere with `Alt+Shift+N`, or from the command palette. Claude Code, Codex, Gemini CLI and Copilot CLI consoles can add tasks to your boards if you turn it on in Preferences → AI Mode → Agents → From consoles; they wait in Not ready until you look them over.",
+      "**Tab groups panel**: under each console you see what runs in it (the agent or the shell), what state the agent is in and the ports it has open. The ones that answer HTTP open in your browser with a click. A new button also shows the tabs that aren't in any group.",
+      "**When to ask you** in orchestrations: Never, Only when essential or When in doubt. You choose it when creating one, change it at any time, and set its default in Preferences. Questions waiting for your answer show the same everywhere: the status bar, the Agents button and the notifications.",
+      "Preferences → AI Mode → Agents is tidier: what consoles can do is grouped under From consoles, with shorter texts.",
+      "Middle-clicking a tab closes it."
+    ]
+  },
+  {
     "version": "0.28.1",
     "date": "2026-10-31",
     "es": [
