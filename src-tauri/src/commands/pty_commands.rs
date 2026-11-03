@@ -414,6 +414,34 @@ pub async fn diagnostics_snapshot(app: tauri::AppHandle) -> Result<crate::pty::m
     .map_err(|err| err.to_string())
 }
 
+/// The ports something in each console listens on, and which speak HTTP:
+/// what the tab groups panel shows beside each tab. Off the main thread,
+/// like the diagnostics: it reads the process table and the socket table.
+#[tauri::command]
+pub async fn console_ports(app: tauri::AppHandle) -> Result<Vec<crate::pty::ports::ConsolePorts>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use crate::pty::ports;
+        let state = app.state::<AppState>();
+        let consoles: Vec<(String, u32)> =
+            state.pty.roots().into_iter().map(|(id, pid)| (id.to_string(), pid)).collect();
+        let mut trees = state.memory.trees(&consoles);
+        let listeners = ports::listeners();
+        // Whatever listens outside every tree may still be a console's: one
+        // whose parent ended, found by what it inherited.
+        let in_trees: std::collections::HashSet<u32> = trees.iter().flat_map(|(_, tree)| tree.iter().copied()).collect();
+        let strays: Vec<u32> = listeners.iter().map(|(pid, _)| *pid).filter(|pid| !in_trees.contains(pid)).collect();
+        for (pid, console) in state.memory.consoles_by_env(&strays) {
+            if let Some((_, tree)) = trees.iter_mut().find(|(id, _)| *id == console) {
+                tree.insert(pid);
+            }
+        }
+        let answers = state.http_probe.answers(&listeners);
+        ports::by_console(&trees, &listeners, |pid, port| answers.get(&(pid, port)).copied().unwrap_or(false))
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
 /// Ends everything running under a console's shell (not the shell: closing
 /// its tab does that, through the usual `pty_kill`). What the diagnostics
 /// panel's "Kill" does to a tab that is stuck; the number is how many

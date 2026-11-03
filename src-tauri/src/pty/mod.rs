@@ -14,6 +14,7 @@ pub mod copilot_status;
 pub mod cwd_report;
 mod manager;
 pub mod memory;
+pub mod ports;
 pub mod oh_my_posh;
 pub mod powershell_keys;
 pub mod starship;

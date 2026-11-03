@@ -8,18 +8,23 @@
   import { isMac } from "$lib/core/platform";
   import { formatKeybindingLabel } from "$lib/core/shortcuts";
   import { uiState } from "$lib/core/ui-state.svelte";
-  import { isConsoleTab, type SessionTab } from "$lib/layout/split-tree";
+  import { collectSessions, isConsoleTab, type SessionLocation, type SessionTab } from "$lib/layout/split-tree";
+  import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
+  import type { AiSessionStatus } from "$lib/ai-mode/classifier";
+  import { openLink } from "$lib/core/links";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { GROUP_COLORS, type GroupAlert, type TabGroup } from "./tab-groups";
   import { TAB_GROUPS_WIDTH, tabGroupsStore } from "./tab-groups-store.svelte";
+  import { consolePortsStore } from "./console-ports.svelte";
 
   /** Every tab group, as an accordion: each one's open tabs (a click brings
    * one to the front) or, for a group whose tabs are closed, the ones it
    * last had (a click opens the group again, showing that one). */
 
   const FOLDED_KEY = "termo.tabGroups.folded";
+  const UNGROUPED_KEY = "termo.tabGroups.showUngrouped";
 
   function loadFolded(): string[] {
     try {
@@ -31,6 +36,32 @@
   }
 
   let folded = $state<string[]>(loadFolded());
+  let showUngrouped = $state(loadShowUngrouped());
+
+  function loadShowUngrouped(): boolean {
+    try {
+      return localStorage.getItem(UNGROUPED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function toggleUngrouped() {
+    showUngrouped = !showUngrouped;
+    try {
+      localStorage.setItem(UNGROUPED_KEY, showUngrouped ? "1" : "0");
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  /** The window's tabs in no group, in the order they're in. */
+  const ungrouped = $derived(
+    workspaceStore.root ? collectSessions(workspaceStore.root).filter((loc) => !loc.session.groupId) : [],
+  );
+
+  // The ports the consoles serve, asked for while the panel is open.
+  $effect(() => consolePortsStore.watch());
   const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleTabGroups"), isMac));
 
   function toggleFolded(groupId: string) {
@@ -65,6 +96,16 @@
     return alert === "error" ? colors.red : alert === "awaiting" ? colors.yellow : colors.green;
   }
 
+  /** The same colors as the tabs' own agent dots (see TileChrome). */
+  function statusColor(status: AiSessionStatus): string {
+    const colors = themeStore.current.colors;
+    return status === "running" ? colors.blue : status === "awaiting" ? colors.yellow : status === "error" ? colors.red : colors.green;
+  }
+
+  function portUrl(port: number): string {
+    return `http://localhost:${port}`;
+  }
+
   function countLabel(n: number): string {
     return n === 1 ? t("tabGroups.tabsOne") : t("tabGroups.tabs", { n });
   }
@@ -73,6 +114,59 @@
     return tabTitleStore.titleFor(session.id, session.title);
   }
 </script>
+
+{#snippet liveRow(loc: SessionLocation)}
+  {@const session = loc.session}
+  {@const isConsole = isConsoleTab(session)}
+  {@const status = isConsole ? aiStatusStore.byId[session.id]?.status : undefined}
+  {@const ports = consolePortsStore.byTab[session.id] ?? []}
+  <li class="tab-row" class:active={workspaceStore.focusedSessionId === session.id}>
+    <button class="tab-button" title={session.filePath ?? liveTitle(session)} onclick={() => tabGroupsStore.focusTab(session.id)}>
+      {#if isConsole}
+        <ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} />
+      {:else}
+        <span class="tab-glyph" aria-hidden="true"></span>
+      {/if}
+      <span class="tab-title">{liveTitle(session)}</span>
+    </button>
+    <button
+      class="icon-button tab-close"
+      title={t("tabs.close")}
+      aria-label={t("tabs.close")}
+      onclick={() => workspaceStore.closeTab(loc.tileId, session.id)}
+    >
+      <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
+    </button>
+    {#if isConsole}
+      <!-- What the console is (its agent, else its shell), what the agent is
+           doing and what the console serves. Part of the tab: a click beside
+           them goes to it too (the title button is the keyboard's way). -->
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="tab-meta" onclick={(event) => event.target === event.currentTarget && tabGroupsStore.focusTab(session.id)}>
+        <span class="tab-type">{tabTitleStore.typeFor(session)}</span>
+        {#if status}
+          <span class="tab-status" class:urgent={status === "awaiting" || status === "error"} style="--status:{statusColor(status)}">
+            {t(`aiMode.status.${status}`)}
+          </span>
+        {/if}
+        {#each ports as served (served.port)}
+          {#if served.http}
+            <button
+              class="port http"
+              title={t("tabGroups.openPort", { url: portUrl(served.port) })}
+              onclick={() => void openLink(portUrl(served.port)).catch(() => {})}
+            >
+              :{served.port}
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5h5v5M8.5 1.5 2 8" fill="none" stroke="currentColor" stroke-width="1.1" /></svg>
+            </button>
+          {:else}
+            <span class="port" title={t("tabGroups.portHint", { port: String(served.port) })}>:{served.port}</span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+  </li>
+{/snippet}
 
 <aside
   class="groups-panel"
@@ -88,6 +182,20 @@
         <path d="M1.5 6.5h13M4.5 4V2.5h4V4" fill="none" stroke="currentColor" stroke-width="1.1" />
       </svg>
       <span class="header-name">{t("tabGroups.title")}</span>
+      <button
+        class="icon-button"
+        class:pressed={showUngrouped}
+        title={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
+        aria-label={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
+        aria-pressed={showUngrouped}
+        onclick={toggleUngrouped}
+      >
+        <!-- Loose tabs: a stack of them, not in a folder. -->
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <rect x="1" y="1.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
+          <rect x="4" y="6.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 1.1" />
+        </svg>
+      </button>
       <button class="icon-button" title={t("tabGroups.newGroup")} aria-label={t("tabGroups.newGroup")} onclick={newGroup}>
         <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1.1" /></svg>
       </button>
@@ -97,7 +205,7 @@
     </header>
 
     <div class="groups-body">
-      {#if tabGroupsStore.groups.length === 0}
+      {#if tabGroupsStore.groups.length === 0 && !showUngrouped}
         <p class="empty-note">{t("tabGroups.empty")}</p>
       {/if}
       {#each tabGroupsStore.groups as group (group.id)}
@@ -161,25 +269,7 @@
             <ul class="group-tabs" transition:slide={{ duration: 140, easing: cubicOut }}>
               {#if isOpen}
                 {#each live as loc (loc.session.id)}
-                  {@const session = loc.session}
-                  <li class="tab-row" class:active={workspaceStore.focusedSessionId === session.id}>
-                    <button class="tab-button" title={session.filePath ?? liveTitle(session)} onclick={() => tabGroupsStore.focusTab(session.id)}>
-                      {#if isConsoleTab(session)}
-                        <ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} />
-                      {:else}
-                        <span class="tab-glyph" aria-hidden="true"></span>
-                      {/if}
-                      <span class="tab-title">{liveTitle(session)}</span>
-                    </button>
-                    <button
-                      class="icon-button tab-close"
-                      title={t("tabs.close")}
-                      aria-label={t("tabs.close")}
-                      onclick={() => workspaceStore.closeTab(loc.tileId, session.id)}
-                    >
-                      <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-                    </button>
-                  </li>
+                  {@render liveRow(loc)}
                 {/each}
               {:else if group.tabs.length === 0}
                 <li class="tab-empty">{t("tabGroups.emptyGroup")}</li>
@@ -200,6 +290,24 @@
           {/if}
         </section>
       {/each}
+
+      {#if showUngrouped}
+        <section class="group ungrouped" transition:slide={{ duration: 140, easing: cubicOut }}>
+          <div class="group-head">
+            <div class="group-label">
+              <span class="group-name">{t("tabGroups.ungrouped")}</span>
+              <span class="group-count">{countLabel(ungrouped.length)}</span>
+            </div>
+          </div>
+          <ul class="group-tabs">
+            {#each ungrouped as loc (loc.session.id)}
+              {@render liveRow(loc)}
+            {:else}
+              <li class="tab-empty">{t("tabGroups.ungroupedEmpty")}</li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
     </div>
   </div>
 </aside>
@@ -273,6 +381,11 @@
   .icon-button:hover {
     opacity: 1;
     background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
+  }
+
+  .icon-button.pressed {
+    opacity: 1;
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.25));
   }
 
   .groups-body {
@@ -380,6 +493,21 @@
     opacity: 0.55;
   }
 
+  /* The tabs in no group: no color of their own. */
+  .group.ungrouped {
+    --group-color: color-mix(in srgb, currentColor 30%, transparent);
+    margin-top: 8px;
+  }
+
+  .group-label {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 6px 6px 21px;
+  }
+
   .group-head.closed .group-name {
     opacity: 0.7;
   }
@@ -390,10 +518,24 @@
     list-style: none;
   }
 
+  /* The tab, its close button and its ports are one block: hovered and
+     selected together. */
   .tab-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    margin: 1px 4px;
     padding-right: 2px;
+    border-radius: 5px;
+  }
+
+  .tab-row:hover,
+  .tab-row:focus-within {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.06));
+  }
+
+  .tab-row.active {
+    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
   }
 
   .tab-button {
@@ -402,9 +544,8 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 5px 6px 5px 28px;
+    padding: 5px 6px 5px 24px;
     border: none;
-    border-radius: 4px;
     background: transparent;
     color: inherit;
     font: inherit;
@@ -412,14 +553,8 @@
     cursor: pointer;
   }
 
-  .tab-button:hover,
   .tab-button:focus-visible {
-    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.08));
     outline: none;
-  }
-
-  .tab-row.active .tab-button {
-    background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
   }
 
   .tab-row.closed .tab-button {
@@ -441,6 +576,82 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* What the agent in the console is doing, in the tab dots' colors. */
+  /* Under the title: what the console is, what its agent is doing and the
+     ports it serves. */
+  .tab-meta {
+    flex-basis: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: -3px;
+    padding: 0 6px 6px 43px;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .tab-type {
+    opacity: 0.6;
+    white-space: nowrap;
+  }
+
+  .tab-status {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    opacity: 0.85;
+  }
+
+  .tab-status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status);
+  }
+
+  .tab-status.urgent::before {
+    animation: group-alert-pulse 1.4s ease-in-out infinite;
+  }
+
+  .port:not(.http) {
+    cursor: default;
+  }
+
+  .port {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 10px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    opacity: 0.75;
+  }
+
+  .port.http {
+    border-color: color-mix(in srgb, var(--pane-active-border, #3a6df0) 60%, transparent);
+    color: var(--pane-active-border, #6a9bff);
+    opacity: 1;
+    cursor: pointer;
+  }
+
+  .port.http:hover {
+    background: color-mix(in srgb, var(--pane-active-border, #3a6df0) 18%, transparent);
+  }
+
+  .port svg {
+    width: 8px;
+    height: 8px;
   }
 
   .tab-where {

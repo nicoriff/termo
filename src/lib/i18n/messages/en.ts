@@ -106,6 +106,12 @@ export const en: Messages = {
     closedHint: "Its tabs are closed: click to open them as they were",
     empty: "No groups yet. Right-click a tab and pick “Add to new group”, or create one here.",
     emptyGroup: "No tabs",
+    showUngrouped: "Show tabs in no group",
+    hideUngrouped: "Hide tabs in no group",
+    ungrouped: "No group",
+    ungroupedEmpty: "Every tab is in a group.",
+    openPort: "Open {url}",
+    portHint: "Something in this console listens on port {port}",
     saver: {
       asleepHint: "Asleep to save memory: its console keeps running and comes back when you open it",
       discardedHint: "Discarded to save memory: when you open it, it starts again in its folder",

@@ -90,9 +90,13 @@ class KanbanStore {
     this.boards = before
       ? this.boards.map((other) => (other.id === board.id ? board : other))
       : [...this.boards, board].sort((a, b) => a.name.localeCompare(b.name));
-    // Its column agents are saved by the backend: ones this window hasn't seen.
+    // Its column agents and their project are saved by the backend: ones this
+    // window hasn't seen. Without the project, the agents would pass for the
+    // user's own in the Agents panel.
     const ids = [board.agents.work, board.agents.review, board.agents.summary].flatMap((agent) => agent?.agentIds ?? []);
-    if (ids.some((id) => !agentsStore.agents.some((agent) => agent.id === id))) void agentsStore.reload();
+    const unseenAgent = ids.some((id) => !agentsStore.agents.some((agent) => agent.id === id));
+    const unseenProject = board.projectId !== "" && !agentsStore.projects.some((project) => project.id === board.projectId);
+    if (unseenAgent || unseenProject) void agentsStore.reload();
   }
 
   private replace(board: KanbanBoard): KanbanBoard {

@@ -348,6 +348,7 @@ pub fn run() {
             commands::window_commands::quit_app,
             commands::pty_commands::busy_consoles,
             commands::pty_commands::diagnostics_snapshot,
+            commands::pty_commands::console_ports,
             commands::companion_commands::companion_session,
             commands::companion_commands::companion_recent,
             commands::companion_commands::companion_overview,

@@ -76,6 +76,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_Storage_FileSystem",
     # The installed browsers, for where links open (browser.rs).
     "Win32_System_Registry",
+    # The ports the consoles listen on (pty/ports.rs).
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
 ] }
 
 # Already in the graph through tauri-plugin-notification, which shows a toast

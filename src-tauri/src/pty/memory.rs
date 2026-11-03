@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// Measures a console's memory: its shell process plus everything running
 /// under it (e.g. `claude`, `node`). One shared `System` so repeated polls
@@ -36,7 +36,7 @@ impl MemorySampler {
 
     /// CPU and memory for the diagnostics panel: the whole app, the machine,
     /// and each of `consoles` (id, shell pid). One refresh for all of them,
-    /// from which every tree is worked out — asking per console would scan
+    /// from which every tree is worked out ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â asking per console would scan
     /// the process table once each. CPU is measured between two refreshes,
     /// so the first reading after startup is 0 and the ones after it need
     /// the polls to be a moment apart (the panel asks once a second).
@@ -96,7 +96,46 @@ impl MemorySampler {
         ended
     }
 
-    /// Which of `roots` have something running under them — a command in
+    /// Every process in each console's tree (its shell and all under it),
+    /// by console: what pty/ports.rs matches the listening sockets against.
+    pub fn trees(&self, consoles: &[(String, u32)]) -> Vec<(String, HashSet<u32>)> {
+        let mut system = self.0.lock().unwrap();
+        system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        let parents: Vec<(Pid, Option<Pid>)> = without_threads(&system).map(|(pid, process)| (*pid, process.parent())).collect();
+        consoles
+            .iter()
+            .map(|(id, root)| {
+                let tree = tree_pids(parents.iter().copied(), Pid::from_u32(*root));
+                (id.clone(), tree.into_iter().map(|pid| pid.as_u32()).collect())
+            })
+            .collect()
+    }
+
+    /// The console each of `pids` was started in, by the variable it
+    /// inherited from its shell (see pty/ports.rs), for the processes no
+    /// console's tree reaches any more. A process's environment doesn't
+    /// change, so each one is read once.
+    pub fn consoles_by_env(&self, pids: &[u32]) -> HashMap<u32, String> {
+        if pids.is_empty() {
+            return HashMap::new();
+        }
+        let mut system = self.0.lock().unwrap();
+        let wanted: Vec<Pid> = pids.iter().map(|pid| Pid::from_u32(*pid)).collect();
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&wanted),
+            false,
+            ProcessRefreshKind::nothing().with_environ(UpdateKind::OnlyIfNotSet),
+        );
+        wanted
+            .iter()
+            .filter_map(|pid| {
+                let console = super::ports::console_of(system.process(*pid)?.environ())?;
+                Some((pid.as_u32(), console))
+            })
+            .collect()
+    }
+
+    /// Which of `roots` have something running under them ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a command in
     /// progress, as opposed to a shell sitting at its prompt. Asked before
     /// quitting, so the app only interrupts when there's work to lose. One
     /// refresh for all of them: the process table is the expensive part.
@@ -146,7 +185,7 @@ pub struct ConsoleUsage {
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemUsage {
-    /// 0–100 across all cores.
+    /// 0ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“100 across all cores.
     pub cpu: f32,
     pub memory_used: u64,
     pub memory_total: u64,
