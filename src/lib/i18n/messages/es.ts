@@ -104,6 +104,12 @@ export const es = {
     closedHint: "Sus pestañas están cerradas: clic para abrirlas como estaban",
     empty: "Todavía no hay grupos. Hacé clic derecho en una pestaña y elegí “Agregar a un grupo nuevo”, o creá uno acá.",
     emptyGroup: "Sin pestañas",
+    showUngrouped: "Mostrar las pestañas sin grupo",
+    hideUngrouped: "Ocultar las pestañas sin grupo",
+    ungrouped: "Sin grupo",
+    ungroupedEmpty: "Todas las pestañas están en un grupo.",
+    openPort: "Abrir {url}",
+    portHint: "Algo en esta consola escucha en el puerto {port}",
     saver: {
       asleepHint: "Dormida para ahorrar memoria: su consola sigue corriendo y vuelve al abrirla",
       discardedHint: "Descartada para ahorrar memoria: al abrirla empieza de nuevo en su carpeta",

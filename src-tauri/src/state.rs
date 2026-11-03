@@ -8,12 +8,15 @@ use crate::git::review::Reviews;
 use crate::harness::assist::Asks;
 use crate::keep_awake::KeepAwake;
 use crate::marketplace::catalog::CatalogCache;
+use crate::pty::ports::HttpProbe;
 use crate::pty::{Consoles, MemorySampler};
 
 #[derive(Default)]
 pub struct AppState {
     pub pty: Consoles,
     pub memory: MemorySampler,
+    /// Which ports the consoles listen on speak HTTP (see pty/ports.rs).
+    pub http_probe: HttpProbe,
     pub marketplace: CatalogCache,
     pub agents: Arc<Runner>,
     pub orchestrator: Arc<Orchestrator>,
