@@ -22,6 +22,7 @@ import { appConfigStore } from "$lib/core/app-config.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { harnessStore } from "$lib/harness/harness-store.svelte";
+import { collectSessions } from "$lib/layout/split-tree";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { announceKanban } from "./kanban-attention";
@@ -59,6 +60,8 @@ class KanbanStore {
   open = $state(false);
   width = $state(loadWidth());
   dialog = $state<KanbanDialog | null>(null);
+  /** The board last opened or worked on: where a new task goes by default. */
+  private lastBoardId = $state("");
   private started = false;
 
   async init(): Promise<void> {
@@ -126,7 +129,39 @@ class KanbanStore {
   }
 
   openBoard(board: KanbanBoard): void {
+    this.lastBoardId = board.id;
     workspaceStore.openKanban(board.id, board.name);
+  }
+
+  /** The board a new task goes to: the one in the focused tab, else the one
+   * last opened or worked on, else the only one there is. */
+  private targetBoard(): KanbanBoard | undefined {
+    const root = workspaceStore.root;
+    const focused = workspaceStore.focusedSessionId;
+    const shown = root && focused ? collectSessions(root).find((loc) => loc.session.id === focused)?.session.kanbanView : undefined;
+    return (
+      (shown && this.get(shown.boardId)) ||
+      this.get(this.lastBoardId) ||
+      (this.boards.length === 1 ? this.boards[0] : undefined)
+    );
+  }
+
+  /** Whether the new-task shortcut would go to this board. */
+  isTarget(boardId: string): boolean {
+    return this.targetBoard()?.id === boardId;
+  }
+
+  /** A new task, from the shortcut: on the board that fits, or (with no way
+   * to tell which) the panel, to pick one; a first board when there's none. */
+  newTaskAnywhere(): void {
+    if (!appConfigStore.aiModeEnabled) return;
+    const board = this.targetBoard();
+    if (board) {
+      this.editTask(board.id, null);
+      return;
+    }
+    this.setOpen(true);
+    if (this.boards.length === 0) this.newBoard();
   }
 
   newBoard(): void {
@@ -138,6 +173,7 @@ class KanbanStore {
   }
 
   editTask(boardId: string, taskId: string | null, column?: KanbanColumn): void {
+    this.lastBoardId = boardId;
     this.dialog = { kind: "task", boardId, taskId, column };
   }
 

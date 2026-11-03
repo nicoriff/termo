@@ -19,6 +19,7 @@
   import { agentsStore } from "$lib/agents/agents-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+  import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
   import { menuKeys } from "$lib/core/menu-keys";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
   import { favoriteLabel, favoritesStore } from "$lib/ai-mode/favorites-store.svelte";
@@ -166,6 +167,11 @@
   function showAgents() {
     onclose();
     agentsStore.setOpen(true);
+  }
+
+  function showKanban() {
+    onclose();
+    kanbanStore.setOpen(true);
   }
 
   function showHarness() {
@@ -368,6 +374,17 @@
     </svg>
     <span class="app-menu-text">{t("agents.title")}</span>
     <span class="app-menu-hint">{hint("toggleAgents")}</span>
+  </button>
+
+  <button class="app-menu-item" role="menuitem" onmouseenter={closeSubmenus} onclick={showKanban}>
+    <!-- As on the panels bar: a board split in columns, with its cards. -->
+    <svg class="app-menu-icon" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1" y="1.5" width="10" height="9" rx="1.2" fill="none" stroke="currentColor" stroke-width="1" />
+      <path d="M4.3 1.5v9M7.7 1.5v9" stroke="currentColor" stroke-width="0.8" />
+      <path d="M2 3.4h1.4M2 5.4h1.4M5.3 3.4h1.4M8.7 3.4h1.4M8.7 5.4h1.4M8.7 7.4h1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+    </svg>
+    <span class="app-menu-text">{t("kanban.title")}</span>
+    <span class="app-menu-hint">{hint("toggleKanban")}</span>
   </button>
 
   {#if appConfigStore.companionEnabled}

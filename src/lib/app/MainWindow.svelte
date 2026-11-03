@@ -317,6 +317,27 @@
       if (!tabGroupsStore.open) uiState.refocusTerminals();
       return;
     }
+    if (
+      appConfigStore.aiModeEnabled &&
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("toggleKanban"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      kanbanStore.toggle();
+      if (!kanbanStore.open) uiState.refocusTerminals();
+      return;
+    }
+    if (
+      appConfigStore.aiModeEnabled &&
+      !workspaceStore.overviewOpen &&
+      eventMatchesKeybinding(event, appConfigStore.getEffectiveShortcut("newKanbanTask"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      kanbanStore.newTaskAnywhere();
+      return;
+    }
     if (!workspaceStore.overviewOpen) {
       for (const [action, section] of [
         ["toggleAgents", "local"],

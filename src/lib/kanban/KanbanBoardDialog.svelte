@@ -131,17 +131,36 @@
     }
   }
 
-  const ROLES: { role: KanbanRole; title: MessageKey; hint: MessageKey }[] = [
-    { role: "work", title: "kanban.agents.work", hint: "kanban.agents.workHint" },
-    { role: "review", title: "kanban.agents.review", hint: "kanban.agents.reviewHint" },
-    { role: "summary", title: "kanban.agents.summary", hint: "kanban.agents.summaryHint" },
+  const ROLES: { role: KanbanRole; title: MessageKey; hint: MessageKey; column: MessageKey }[] = [
+    { role: "work", title: "kanban.agents.work", hint: "kanban.agents.workHint", column: "kanban.columns.inProgress" },
+    { role: "review", title: "kanban.agents.review", hint: "kanban.agents.reviewHint", column: "kanban.columns.review" },
+    { role: "summary", title: "kanban.agents.summary", hint: "kanban.agents.summaryHint", column: "kanban.columns.done" },
   ];
+
+  /** The role whose settings the Agents tab shows. */
+  let role = $state<KanbanRole>("work");
+  const current = $derived(ROLES.find((candidate) => candidate.role === role) ?? ROLES[0]);
+
+  function agentOf(of: KanbanRole): KanbanColumnAgent | null {
+    return of === "work" ? settings.agents.work : of === "review" ? settings.agents.review : settings.agents.summary;
+  }
+
+  function modelName(agent: KanbanColumnAgent): string {
+    if (!agent.model) return t("kanban.agents.defaultModel");
+    return models[agent.engine]?.find((model) => model.id === agent.model)?.name ?? agent.model;
+  }
+
+  function autonomyTitle(level: AgentAutonomy): string {
+    return t(AUTONOMY.find((candidate) => candidate.id === level)?.title ?? "agents.wizard.autonomy.readTitle");
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} />
 
 {#snippet agentForm(role: KanbanRole, agent: KanbanColumnAgent)}
   {@const list = models[agent.engine] ?? []}
+  <div class="group">
+  <div class="group-title">{t("kanban.agents.groupEngine")}</div>
   <div class="agent-grid">
     <div>
       <div class="label">{t("kanban.agents.engine")}</div>
@@ -169,20 +188,27 @@
       </select>
     </div>
   </div>
-  <div class="label">{t("kanban.agents.autonomy")}</div>
-  <RichSelect label={t("kanban.agents.autonomy")} options={autonomyOptions} value={agent.autonomy} onpick={(level) => (agent.autonomy = level)}>
-    {#snippet icon(level)}{AUTONOMY_ICONS[level]}{/snippet}
-  </RichSelect>
-  <label class="check">
-    <input type="checkbox" bind:checked={agent.web} />
-    {t("kanban.agents.web")}
-  </label>
-  <label class="label" for="kanban-context-{role}">{t("kanban.agents.context")}</label>
-  <p class="hint">{t("kanban.agents.contextHint")}</p>
-  <textarea id="kanban-context-{role}" class="field" rows="3" bind:value={agent.context} placeholder={t("kanban.agents.contextPlaceholder")}></textarea>
-  <label class="label" for="kanban-harness-{role}">{t("kanban.agents.harness")}</label>
-  <p class="hint">{t("kanban.agents.harnessHint")}</p>
-  <textarea id="kanban-harness-{role}" class="field mono" rows="5" bind:value={agent.harness}></textarea>
+  </div>
+  <div class="group">
+    <div class="group-title">{t("kanban.agents.groupAccess")}</div>
+    <div class="label">{t("kanban.agents.autonomy")}</div>
+    <RichSelect label={t("kanban.agents.autonomy")} options={autonomyOptions} value={agent.autonomy} onpick={(level) => (agent.autonomy = level)}>
+      {#snippet icon(level)}{AUTONOMY_ICONS[level]}{/snippet}
+    </RichSelect>
+    <label class="check">
+      <input type="checkbox" bind:checked={agent.web} />
+      {t("kanban.agents.web")}
+    </label>
+  </div>
+  <div class="group">
+    <div class="group-title">{t("kanban.agents.groupInstructions")}</div>
+    <label class="label" for="kanban-context-{role}">{t("kanban.agents.context")}</label>
+    <p class="hint">{t("kanban.agents.contextHint")}</p>
+    <textarea id="kanban-context-{role}" class="field" rows="3" bind:value={agent.context} placeholder={t("kanban.agents.contextPlaceholder")}></textarea>
+    <label class="label" for="kanban-harness-{role}">{t("kanban.agents.harness")}</label>
+    <p class="hint">{t("kanban.agents.harnessHint")}</p>
+    <textarea id="kanban-harness-{role}" class="field mono" rows="6" bind:value={agent.harness}></textarea>
+  </div>
 {/snippet}
 
 <div class="backdrop" transition:fade={{ duration: 140 }}></div>
@@ -283,28 +309,55 @@
         </div>
       {:else}
         <p class="hint explain">{t("kanban.agents.explain")}</p>
-        {#each ROLES as { role, title, hint } (role)}
-          {@const agent = role === "work" ? settings.agents.work : role === "review" ? settings.agents.review : settings.agents.summary}
-          <section class="role">
-            <header class="role-head">
-              <span class="role-title">{t(title)}</span>
-              {#if role === "summary" && agent}
-                <button class="link" onclick={() => (settings.agents.summary = null)}>{t("kanban.agents.removeSummary")}</button>
+        <div class="roles" role="tablist" aria-label={t("kanban.dialog.tabs.agents")}>
+          {#each ROLES as candidate (candidate.role)}
+            {@const agent = agentOf(candidate.role)}
+            <button
+              class="role-card {candidate.role}"
+              class:current={role === candidate.role}
+              class:empty={!agent}
+              role="tab"
+              aria-selected={role === candidate.role}
+              onclick={() => (role = candidate.role)}
+            >
+              <span class="role-top">
+                <span class="role-dot"></span>
+                <span class="role-name">{t(candidate.title)}</span>
+              </span>
+              <span class="role-column">{t("kanban.agents.column", { column: t(candidate.column) })}</span>
+              {#if agent}
+                <span class="role-line"><ConsoleIcon kind={agent.engine} size={13} />{TOOL_DISPLAY_NAMES[agent.engine]} · {modelName(agent)}</span>
+                <span class="role-line">{AUTONOMY_ICONS[agent.autonomy]} {autonomyTitle(agent.autonomy)}</span>
+              {:else}
+                <span class="role-line muted">{t("kanban.agents.none")}</span>
               {/if}
-            </header>
-            <p class="hint">{t(hint)}</p>
-            {#if agent}
-              {@render agentForm(role, agent)}
-            {:else}
-              <button
-                class="button"
-                onclick={() => (settings.agents.summary = { ...newColumnAgent("claude", t(DEFAULT_HARNESS.summary)), autonomy: "read" })}
-              >
-                + {t("kanban.agents.addSummary")}
-              </button>
+            </button>
+          {/each}
+        </div>
+
+        {@const agent = agentOf(role)}
+        <section class="role-panel {role}" role="tabpanel">
+          <header class="role-head">
+            <span class="role-dot"></span>
+            <span class="role-title">{t(current.title)}</span>
+            {#if role === "summary"}<span class="optional">{t("kanban.agents.optional")}</span>{/if}
+            <span class="spacer"></span>
+            {#if role === "summary" && agent}
+              <button class="link" onclick={() => (settings.agents.summary = null)}>{t("kanban.agents.removeSummary")}</button>
             {/if}
-          </section>
-        {/each}
+          </header>
+          <p class="hint role-hint">{t(current.hint)}</p>
+          {#if agent}
+            {@render agentForm(role, agent)}
+          {:else}
+            <button
+              class="button"
+              onclick={() => (settings.agents.summary = { ...newColumnAgent("claude", t(DEFAULT_HARNESS.summary)), autonomy: "read" })}
+            >
+              + {t("kanban.agents.addSummary")}
+            </button>
+          {/if}
+        </section>
       {/if}
     </div>
 
@@ -572,22 +625,145 @@
     cursor: default;
   }
 
-  .role {
-    margin-top: 14px;
-    padding: 12px 14px;
-    border: 1px solid var(--tabbar-border, #333);
+  /* Each role keeps its color on its card and on its panel. */
+  .work {
+    --role: #4c8dff;
+  }
+
+  .review {
+    --role: #b57cff;
+  }
+
+  .summary {
+    --role: #3fb68b;
+  }
+
+  .roles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .role-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding: 9px 11px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-top: 3px solid color-mix(in srgb, var(--role) 55%, transparent);
     border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .role-card:hover:not(.current) {
+    background: var(--titlebar-hover-bg, rgba(255, 255, 255, 0.05));
+  }
+
+  .role-card.current {
+    border-color: var(--role);
+    border-top-color: var(--role);
+    background: color-mix(in srgb, var(--role) 14%, transparent);
+  }
+
+  .role-card.empty {
+    border-style: dashed;
+    border-top-style: solid;
+  }
+
+  .role-top {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .role-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--role);
+  }
+
+  .role-name {
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .role-column {
+    font-size: 11px;
+    opacity: 0.55;
+  }
+
+  .role-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+    font-size: 11.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    opacity: 0.85;
+  }
+
+  .role-line.muted {
+    opacity: 0.5;
+  }
+
+  .role-panel {
+    margin-top: 16px;
   }
 
   .role-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 8px;
   }
 
   .role-title {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 14.5px;
+    color: color-mix(in srgb, var(--role) 70%, currentColor);
+  }
+
+  .optional {
+    padding: 1px 7px;
+    border: 1px solid var(--tabbar-border, #3a3a3a);
+    border-radius: 999px;
+    font-size: 10.5px;
+    opacity: 0.7;
+  }
+
+  .role-hint {
+    margin-top: 4px;
+  }
+
+  .group {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--tabbar-border, #333);
+  }
+
+  .group-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+
+  .group-title + .label,
+  .group-title + .agent-grid {
+    margin-top: 8px;
+  }
+
+  .group-title + .agent-grid .label {
+    margin-top: 0;
   }
 
   .agent-grid {

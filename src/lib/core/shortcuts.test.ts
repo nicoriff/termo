@@ -208,7 +208,7 @@ describe("findConflict", () => {
   });
 
   it("returns null when there's no conflict", () => {
-    expect(findConflict("ctrl+shift+u", "newTab", {}, false)).toBeNull();
+    expect(findConflict("ctrl+alt+u", "newTab", {}, false)).toBeNull();
   });
 
   it("covers the new window's default binding", () => {
