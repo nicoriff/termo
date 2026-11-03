@@ -33,6 +33,8 @@ export type ShortcutAction =
   | "toggleGit"
   | "toggleHarness"
   | "toggleTabGroups"
+  | "toggleKanban"
+  | "newKanbanTask"
   | "toggleAgents"
   | "toggleOrchestration"
   | "cycleTab"
@@ -65,6 +67,8 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   "toggleGit",
   "toggleHarness",
   "toggleTabGroups",
+  "toggleKanban",
+  "newKanbanTask",
   "toggleAgents",
   "toggleOrchestration",
   "cycleTab",
@@ -100,6 +104,8 @@ export const SHORTCUT_LABEL_KEYS: Record<ShortcutAction, MessageKey> = {
   toggleGit: "shortcuts.labels.toggleGit",
   toggleHarness: "shortcuts.labels.toggleHarness",
   toggleTabGroups: "shortcuts.labels.toggleTabGroups",
+  toggleKanban: "shortcuts.labels.toggleKanban",
+  newKanbanTask: "shortcuts.labels.newKanbanTask",
   toggleAgents: "shortcuts.labels.toggleAgents",
   toggleOrchestration: "shortcuts.labels.toggleOrchestration",
   cycleTab: "shortcuts.labels.cycleTab",
@@ -291,6 +297,11 @@ const DEFAULT_KEYBINDINGS: Record<ShortcutAction, { mac: string; other: string }
   toggleHarness: { mac: "meta+shift+w", other: "ctrl+shift+w" },
   // Q, one of the few left: U opens a Unicode prompt on Linux, Z is redo.
   toggleTabGroups: { mac: "meta+shift+q", other: "ctrl+shift+q" },
+  // U, one of the last letters left (on Linux, IBus may take it for its
+  // Unicode prompt: remappable).
+  toggleKanban: { mac: "meta+shift+u", other: "ctrl+shift+u" },
+  // Alt+Shift: no Ctrl+Shift letter is left. Not Ctrl+Alt, which is AltGr.
+  newKanbanTask: { mac: "meta+alt+n", other: "alt+shift+n" },
   toggleAgents: { mac: "meta+shift+g", other: "ctrl+shift+g" },
   // R, from oRchestration: O is Copilot's.
   toggleOrchestration: { mac: "meta+shift+r", other: "ctrl+shift+r" },
@@ -402,6 +413,8 @@ export const SHORTCUT_GROUPS: { id: string; titleKey: MessageKey; actions: Short
       "toggleGit",
       "toggleHarness",
       "toggleTabGroups",
+      "toggleKanban",
+      "newKanbanTask",
       "toggleAgents",
       "toggleOrchestration",
       "marketplace",

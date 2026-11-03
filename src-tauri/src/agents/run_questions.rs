@@ -56,7 +56,7 @@ fn questions() -> &'static Mutex<Vec<RunQuestion>> {
 /// starts on its own — a schedule, a change in a folder, another agent —
 /// has nobody to ask.
 pub fn attended(trigger: RunTrigger) -> bool {
-    matches!(trigger, RunTrigger::Manual | RunTrigger::Console | RunTrigger::Orchestrator)
+    matches!(trigger, RunTrigger::Manual | RunTrigger::Console | RunTrigger::Orchestrator | RunTrigger::Kanban)
 }
 
 /// How long a question asked `now` can wait in a run that started at

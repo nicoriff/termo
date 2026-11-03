@@ -6,6 +6,7 @@ export type NotificationTarget =
   | { kind: "session"; sessionId: string }
   | { kind: "agentRun"; agentId: string; runId: string; title: string }
   | { kind: "orchestration"; orchestrationId: string; title: string }
+  | { kind: "kanban"; boardId: string; title: string }
   /** A page of Preferences (see Preferences.svelte's "preferences-section"). */
   | { kind: "preferences"; section: string };
 

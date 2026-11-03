@@ -31,3 +31,5 @@ export const loadDeleteLayoutDialog = lazy(() => import("$lib/layout/DeleteLayou
 export const loadMissingAgentsDialog = lazy(() => import("$lib/agent-install/MissingAgentsDialog.svelte"));
 export const loadQuitDialog = lazy(() => import("$lib/app/QuitDialog.svelte"));
 export const loadMarketplacePanel = lazy(() => import("$lib/marketplace/MarketplacePanel.svelte"));
+export const loadKanbanSidebar = lazy(() => import("$lib/kanban/KanbanSidebar.svelte"));
+export const loadKanbanDialogs = lazy(() => import("$lib/kanban/KanbanDialogs.svelte"));

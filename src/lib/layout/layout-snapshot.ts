@@ -13,6 +13,7 @@
 import {
   makeAgentRunSession,
   makeFileSession,
+  makeKanbanSession,
   makeOrchestrationSession,
   makeProjectSession,
   makeDiffSession,
@@ -40,6 +41,8 @@ export interface LayoutSession {
   projectView?: { projectId: string };
   /** An orchestration's tab, or its console's. */
   orchestrationView?: { orchestrationId: string; console?: boolean };
+  /** A kanban board's tab. */
+  kanbanView?: { boardId: string };
   /** A file's changes, or a repository's history. */
   diff?: DiffTarget;
   gitGraph?: { root: string };
@@ -132,6 +135,10 @@ export function snapshotSession(session: SessionTab, options: SnapshotOptions = 
   }
   if (session.orchestrationView !== undefined) {
     stored.orchestrationView = { ...session.orchestrationView };
+    return stored;
+  }
+  if (session.kanbanView !== undefined) {
+    stored.kanbanView = { ...session.kanbanView };
     return stored;
   }
   if (session.diff !== undefined) {
@@ -240,6 +247,7 @@ function hydrateTab(
       ),
       newId,
     );
+  if (session.kanbanView) return withId(makeKanbanSession(session.title, session.kanbanView.boardId), newId);
   if (session.diff) return withId(makeDiffSession(session.diff), newId);
   if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
   const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);

@@ -41,6 +41,10 @@ const EMPTY_SHORTCUTS: ShortcutsConfig = {
   toggle_harness_other: null,
   toggle_tab_groups_mac: null,
   toggle_tab_groups_other: null,
+  toggle_kanban_mac: null,
+  toggle_kanban_other: null,
+  new_kanban_task_mac: null,
+  new_kanban_task_other: null,
   toggle_agents_mac: null,
   toggle_agents_other: null,
   toggle_orchestration_mac: null,
@@ -91,6 +95,8 @@ const SHORTCUT_FIELDS: Record<ShortcutAction, { mac: keyof ShortcutsConfig; othe
   toggleGit: { mac: "toggle_git_mac", other: "toggle_git_other" },
   toggleHarness: { mac: "toggle_harness_mac", other: "toggle_harness_other" },
   toggleTabGroups: { mac: "toggle_tab_groups_mac", other: "toggle_tab_groups_other" },
+  toggleKanban: { mac: "toggle_kanban_mac", other: "toggle_kanban_other" },
+  newKanbanTask: { mac: "new_kanban_task_mac", other: "new_kanban_task_other" },
   toggleAgents: { mac: "toggle_agents_mac", other: "toggle_agents_other" },
   toggleOrchestration: { mac: "toggle_orchestration_mac", other: "toggle_orchestration_other" },
   cycleTab: { mac: "cycle_tab_mac", other: "cycle_tab_other" },
@@ -185,6 +191,8 @@ class AppConfigStore {
   agentsFromAnyConsole = $state(false);
   /** Consoles may plan and run orchestrations (see agents/console_orchestration.rs). */
   orchestrationsFromConsoles = $state(false);
+  /** Consoles may add tasks to kanban boards (see agents/console_kanban.rs). */
+  kanbanFromConsoles = $state(false);
   /** When an orchestration's agents ask the user, for the ones planned from now. */
   agentAskLevel = $state<AskLevel>("essential");
   /** The agents keep running with Termo closed (see agents/host/). Changed
@@ -357,6 +365,7 @@ class AppConfigStore {
     this.companionMuted = config.companion_muted ?? [];
     this.agentsFromAnyConsole = config.agents_from_any_console ?? false;
     this.orchestrationsFromConsoles = config.orchestrations_from_consoles ?? false;
+    this.kanbanFromConsoles = config.kanban_from_consoles ?? false;
     this.agentAskLevel = config.agent_ask_level ?? "essential";
     this.backgroundAgents = config.background_agents ?? false;
     this.backgroundAgentsAtLogin = config.background_agents_at_login ?? false;
@@ -576,6 +585,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setKanbanFromConsoles(enabled: boolean): void {
+    this.kanbanFromConsoles = enabled;
+    void this.persist();
+  }
+
   setAgentAskLevel(level: AskLevel): void {
     this.agentAskLevel = level;
     void this.persist();
@@ -791,6 +805,7 @@ class AppConfigStore {
       companion_muted: this.companionMuted,
       agents_from_any_console: this.agentsFromAnyConsole,
       orchestrations_from_consoles: this.orchestrationsFromConsoles,
+      kanban_from_consoles: this.kanbanFromConsoles,
       agent_ask_level: this.agentAskLevel,
       background_agents: this.backgroundAgents,
       background_agents_at_login: this.backgroundAgentsAtLogin,

@@ -9,6 +9,7 @@
   import { gitStore } from "$lib/git/git-store.svelte";
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+  import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -25,6 +26,7 @@
   const gitHint = $derived(`${t("git.title")} (${keys("toggleGit")})`);
   const harnessHint = $derived(`${t("harness.title")} (${keys("toggleHarness")})`);
   const tabGroupsHint = $derived(`${t("tabGroups.title")} (${keys("toggleTabGroups")})`);
+  const kanbanHint = $derived(`${t("kanban.title")} (${keys("toggleKanban")})`);
   /** Files with anything to commit, in the repository of the tab in focus. */
   const changed = $derived(gitStore.counts.total);
 </script>
@@ -108,6 +110,33 @@
       <span class="activity-badge">{tabGroupsStore.groups.length}</span>
     {/if}
   </button>
+  {#if appConfigStore.aiModeEnabled}
+    <button
+      class="activity-item"
+      class:active={kanbanStore.open}
+      title={kanbanHint}
+      aria-label={kanbanHint}
+      aria-pressed={kanbanStore.open}
+      onclick={() => kanbanStore.toggle()}
+    >
+      <!-- A board split in columns, with its cards: fewer as they move along. -->
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3.5" width="18" height="17" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <path d="M9 3.5v17M15 3.5v17" stroke="currentColor" stroke-width="1.2" />
+        <rect x="4.9" y="6.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+        <rect x="4.9" y="10.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+        <rect x="4.9" y="14.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+        <rect x="10.9" y="6.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+        <rect x="10.9" y="10.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+        <rect x="16.9" y="6.2" width="2.2" height="2.6" rx="0.6" fill="currentColor" />
+      </svg>
+      {#if kanbanStore.needingYou > 0}
+        <span class="activity-badge asking" title={t("kanban.row.needsYou", { n: String(kanbanStore.needingYou) })}>!</span>
+      {:else if kanbanStore.running > 0}
+        <span class="activity-badge">{kanbanStore.running}</span>
+      {/if}
+    </button>
+  {/if}
   {#if appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar}
     <button
       class="activity-item"

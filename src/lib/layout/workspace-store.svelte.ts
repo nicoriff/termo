@@ -8,6 +8,7 @@ import {
   isConsoleTab,
   isFileTab,
   makeAgentRunSession,
+  makeKanbanSession,
   makeOrchestrationSession,
   makeProjectSession,
   makeFileSession,
@@ -283,6 +284,14 @@ class WorkspaceStore {
         session.diff.from === diff.from &&
         session.diff.to === diff.to,
       () => makeDiffSession(diff),
+    );
+  }
+
+  /** Shows a kanban board in a tab; each board has one. */
+  openKanban(boardId: string, title: string): void {
+    this.openOwnTab(
+      (session) => session.kanbanView?.boardId === boardId,
+      () => makeKanbanSession(title, boardId),
     );
   }
 

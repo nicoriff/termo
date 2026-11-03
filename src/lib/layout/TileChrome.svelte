@@ -257,7 +257,13 @@
   type Dragged = { kind: "tab"; sessionId: string } | { kind: "group"; groupId: string };
 
   function onTabPointerDown(event: PointerEvent, sessionId: string) {
+    // The middle button closes it (see onTabAuxClick): no autoscroll.
+    if (event.button === 1) event.preventDefault();
     startDrag(event, { kind: "tab", sessionId });
+  }
+
+  function onTabAuxClick(event: MouseEvent, sessionId: string) {
+    if (event.button === 1) closeTab(event, sessionId);
   }
 
   function startDrag(event: PointerEvent, dragged: Dragged) {
@@ -784,6 +790,7 @@
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}
         onpointerdown={(e) => onTabPointerDown(e, session.id)}
+        onauxclick={(e) => onTabAuxClick(e, session.id)}
         oncontextmenu={(e) => onTabContextMenu(e, session.id)}
         onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") workspaceStore.setActiveSession(tile.id, session.id);
@@ -823,6 +830,12 @@
             <circle cx="11" cy="11" r="1.6" fill="none" stroke="currentColor" stroke-width="1" />
             <path d="M7 4.6v2.4M7 7L3.6 9.6M7 7l3.4 2.6" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
+        {:else if session.kanbanView}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="1.5" y="2" width="3" height="10" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
+            <rect x="5.5" y="2" width="3" height="6.5" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
+            <rect x="9.5" y="2" width="3" height="8.5" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
         {:else if !session.agentRun}
           <span class="tile-tab-kind"><ConsoleIcon kind={tabTitleStore.kindFor(session)} size={12} /></span>
         {:else if session.agentRun}
@@ -840,7 +853,7 @@
             ? t(session.dormant.kind === "asleep" ? "tabGroups.saver.asleepHint" : "tabGroups.saver.discardedHint")
             : favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
             session.diff?.path ??
-            (session.agentRun || session.projectView || session.orchestrationView || session.gitGraph
+            (session.agentRun || session.projectView || session.orchestrationView || session.kanbanView || session.gitGraph
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >

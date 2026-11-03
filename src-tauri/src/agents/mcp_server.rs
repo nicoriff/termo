@@ -14,6 +14,7 @@ use tiny_http::{Header, Method, Response};
 
 use super::console_bridge;
 use super::hub::Hub;
+use super::kanban;
 use super::ops::Agents;
 use super::orchestration::questions;
 use super::projects;
@@ -141,7 +142,11 @@ impl Context<'_> {
         let reply = match message.get("method").and_then(Value::as_str).unwrap_or_default() {
             "initialize" => result_reply(id, initialize(&params)),
             "ping" => result_reply(id, json!({})),
-            "tools/list" => result_reply(id, json!({ "tools": tools(self.session) })),
+            "tools/list" => {
+                let mut list = tools(self.session);
+                list.extend(kanban::tools::tools(self.root, self.session));
+                result_reply(id, json!({ "tools": list }))
+            }
             "tools/call" => {
                 let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
                 let args = params.get("arguments").cloned().unwrap_or(Value::Null);
@@ -157,6 +162,9 @@ impl Context<'_> {
     }
 
     fn call(&self, name: &str, args: &Value) -> Result<String, String> {
+        if kanban::tools::is_tool(name) {
+            return kanban::tools::call(self.hub, self.session, name, args);
+        }
         let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
         let caller = &self.session.caller;
         let collaboration = &caller.collaboration;

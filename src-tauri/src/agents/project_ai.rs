@@ -209,6 +209,7 @@ pub fn build(draft: ProjectDraft, work_dir: &str, new_id: impl Fn() -> String) -
         entry_agent_id: entry,
         limits: ProjectLimits { max_runs_per_day: DEFAULT_DAILY_RUNS },
         orchestration_id: String::new(),
+        kanban_id: String::new(),
         created_at: 0,
         updated_at: 0,
     };

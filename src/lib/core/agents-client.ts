@@ -86,6 +86,7 @@ export type RunTrigger =
   | "agent"
   | "message"
   | "orchestrator"
+  | "kanban"
   | "console";
 
 /** Where a run sits in a conversation between agents. */
@@ -177,6 +178,8 @@ export interface Project {
   limits: { maxRunsPerDay: number };
   /** Set on the team an orchestration runs; empty for the user's own. */
   orchestrationId: string;
+  /** Set on the team a kanban board runs; empty for the user's own. */
+  kanbanId?: string;
   createdAt: number;
   updatedAt: number;
 }

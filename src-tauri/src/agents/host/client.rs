@@ -336,7 +336,12 @@ pub fn call_where_they_run(app: &tauri::AppHandle, name: &str, args: Value) -> R
 
 pub(crate) fn local(app: &tauri::AppHandle) -> Result<Agents, String> {
     let state = app.state::<AppState>();
-    Ok(Agents { hub: Hub::for_app(app)?, runner: state.agents.clone(), orchestrator: state.orchestrator.clone() })
+    Ok(Agents {
+        hub: Hub::for_app(app)?,
+        runner: state.agents.clone(),
+        orchestrator: state.orchestrator.clone(),
+        kanban: state.kanban.clone(),
+    })
 }
 
 /// Tells it the config changed, so it follows at once.
@@ -435,6 +440,7 @@ fn back_to_app(app_handle: &tauri::AppHandle) -> Result<(), String> {
     super::set_runs_here(true);
     if config.ai_mode_enabled {
         if let Ok(agents) = local(app_handle) {
+            agents.kanban.start_all(&agents.hub, &agents.runner);
             webhook::start(agents);
         }
     }

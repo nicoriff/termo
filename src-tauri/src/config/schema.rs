@@ -51,6 +51,10 @@ pub struct ShortcutsConfig {
     pub toggle_harness_other: Option<String>,
     pub toggle_tab_groups_mac: Option<String>,
     pub toggle_tab_groups_other: Option<String>,
+    pub toggle_kanban_mac: Option<String>,
+    pub toggle_kanban_other: Option<String>,
+    pub new_kanban_task_mac: Option<String>,
+    pub new_kanban_task_other: Option<String>,
     pub toggle_agents_mac: Option<String>,
     pub toggle_agents_other: Option<String>,
     pub toggle_orchestration_mac: Option<String>,
@@ -219,6 +223,9 @@ pub struct AppConfig {
     /// Consoles may plan and run orchestrations too (see
     /// agents/console_orchestration.rs). Off unless the user turns it on.
     pub orchestrations_from_consoles: bool,
+    /// Consoles may add tasks to kanban boards (see agents/console_kanban.rs).
+    /// Off unless the user turns it on.
+    pub kanban_from_consoles: bool,
     /// When an orchestration's agents ask the user something, for the ones
     /// planned from now on; each orchestration keeps its own.
     pub agent_ask_level: crate::agents::spec::AskLevel,
@@ -372,6 +379,7 @@ impl Default for AppConfig {
             companion_muted: Vec::new(),
             agents_from_any_console: false,
             orchestrations_from_consoles: false,
+            kanban_from_consoles: false,
             agent_ask_level: crate::agents::spec::AskLevel::Essential,
             marketplace_source: "official".into(),
             agent_install_dirs: std::collections::BTreeMap::new(),

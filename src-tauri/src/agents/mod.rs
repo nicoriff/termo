@@ -4,6 +4,7 @@
 
 pub mod acp;
 pub mod console_bridge;
+pub mod console_kanban;
 pub mod console_orchestration;
 pub mod diagnose;
 pub mod draft;
@@ -13,6 +14,7 @@ pub mod github;
 pub mod host;
 pub mod hub;
 pub mod integrations;
+pub mod kanban;
 pub mod mcp_server;
 pub mod models;
 pub mod ops;

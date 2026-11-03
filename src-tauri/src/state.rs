@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::agents::kanban::driver::Kanban;
 use crate::agents::orchestration::executor::Orchestrator;
 use crate::agents::runner::Runner;
 use crate::git::ops::GitOps;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub marketplace: CatalogCache,
     pub agents: Arc<Runner>,
     pub orchestrator: Arc<Orchestrator>,
+    pub kanban: Arc<Kanban>,
     pub keep_awake: Arc<KeepAwake>,
     /// The git actions under way, by repository (see git/ops.rs).
     pub git: Arc<GitOps>,

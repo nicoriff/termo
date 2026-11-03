@@ -35,6 +35,7 @@ import {
 import { appConfigStore } from "$lib/core/app-config.svelte";
 import { explorerStore } from "$lib/explorer/explorer-store.svelte";
 import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
+import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
 import { gitStore } from "$lib/git/git-store.svelte";
 import { harnessStore } from "$lib/harness/harness-store.svelte";
 
@@ -151,12 +152,12 @@ class AgentsStore {
   /** The user's own projects: an orchestration's team shows with its
    * orchestration instead. */
   get localProjects(): Project[] {
-    return this.projects.filter((project) => !project.orchestrationId);
+    return this.projects.filter((project) => !project.orchestrationId && !project.kanbanId);
   }
 
   /** The user's own agents: not the ones an orchestration made. */
   get localAgents(): AgentSpec[] {
-    const teams = new Set(this.projects.filter((project) => project.orchestrationId).map((project) => project.id));
+    const teams = new Set(this.projects.filter((project) => project.orchestrationId || project.kanbanId).map((project) => project.id));
     return teams.size === 0 ? this.agents : this.agents.filter((agent) => !teams.has(agent.projectId));
   }
 
@@ -222,6 +223,7 @@ class AgentsStore {
       gitStore.open = false;
       harnessStore.setOpen(false);
       tabGroupsStore.open = false;
+      kanbanStore.open = false;
     }
     this.open = open;
     if (this.timer) clearInterval(this.timer);

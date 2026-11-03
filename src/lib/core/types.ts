@@ -42,6 +42,10 @@ export interface ShortcutsConfig {
   toggle_harness_other: string | null;
   toggle_tab_groups_mac: string | null;
   toggle_tab_groups_other: string | null;
+  toggle_kanban_mac: string | null;
+  toggle_kanban_other: string | null;
+  new_kanban_task_mac: string | null;
+  new_kanban_task_other: string | null;
   toggle_agents_mac: string | null;
   toggle_agents_other: string | null;
   toggle_orchestration_mac: string | null;
@@ -139,6 +143,7 @@ export interface AppConfig {
   companion_muted?: string[];
   agents_from_any_console?: boolean;
   orchestrations_from_consoles?: boolean;
+  kanban_from_consoles?: boolean;
   agent_ask_level?: "never" | "essential" | "unsure";
   marketplace_source?: string;
   keep_awake_button: boolean;

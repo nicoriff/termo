@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::agents::hub::{Hub, Sink};
 use crate::agents::ops::{self, Agents};
 use crate::agents::orchestration::executor;
-use crate::agents::{console_bridge, console_orchestration, runner, store, webhook};
+use crate::agents::{console_bridge, console_kanban, console_orchestration, runner, store, webhook};
 use crate::config::store as config_store;
 use crate::i18n::{self, Lang};
 use crate::mux::protocol::{read_frame, read_frame_within, write_frame, Frame};
@@ -125,15 +125,17 @@ pub fn run(build: &str, dir: Option<&str>) {
     let notifier = Arc::new(Notifier::new(&root, &dir));
     notifier.set_config(&config);
     let hub = Hub::new(root.clone(), Arc::new(HostSink { clients: clients.clone(), notifier: notifier.clone() }));
-    let agents = Agents { hub: hub.clone(), runner: Arc::default(), orchestrator: Arc::default() };
+    let agents = Agents { hub: hub.clone(), runner: Arc::default(), orchestrator: Arc::default(), kanban: Arc::default() };
 
     // As the app does when it runs them: what a run Termo didn't see end
     // left, and orchestrations left running.
     runner::remove_leftovers(&root);
     executor::recover(&root);
+    crate::agents::kanban::driver::recover(&root);
     console_bridge::read_from_disk(&root);
     console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
     console_orchestration::configure(&config);
+    console_kanban::configure(&config);
     crate::ai_mode::init_agents(&agents, config.ai_mode_enabled);
 
     let host = Arc::new(Host {
@@ -320,6 +322,7 @@ impl Host {
         crate::ai_mode::set_agents(&self.agents, config.ai_mode_enabled);
         console_bridge::set_global(config.ai_mode_enabled && config.agents_from_any_console);
         console_orchestration::configure(&config);
+        console_kanban::configure(&config);
         self.notifier.set_config(&config);
         if !config.background_agents || !config.ai_mode_enabled {
             self.retiring.store(true, Ordering::SeqCst);

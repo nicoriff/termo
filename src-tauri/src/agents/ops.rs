@@ -19,6 +19,9 @@ use crate::commands::agent_commands::{delete_agent, save_agent};
 use crate::i18n::{tr, Msg};
 
 use super::hub::Hub;
+use super::kanban::driver::Kanban;
+use super::kanban::model::{Actor, Column, Decision};
+use super::kanban::ops as kanban;
 use super::orchestration::executor::{ensure_team, Orchestrator};
 use super::orchestration::plan::{self, apply, edit_plan, max_autonomy, sanitize, Orchestration, Plan, RevisionState, Status, TaskStatus};
 use super::orchestration::{planner, questions, report, store as orchestrations};
@@ -35,6 +38,7 @@ pub struct Agents {
     pub hub: Hub,
     pub runner: Arc<Runner>,
     pub orchestrator: Arc<Orchestrator>,
+    pub kanban: Arc<Kanban>,
 }
 
 fn args<T: DeserializeOwned>(value: Value) -> Result<T, String> {
@@ -121,6 +125,56 @@ struct ResolveRevision {
     approve: bool,
 }
 
+#[derive(Deserialize)]
+struct KanbanEnabled {
+    id: String,
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KanbanTaskRef {
+    board_id: String,
+    task_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KanbanUpsert {
+    board_id: String,
+    task: kanban::TaskInput,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KanbanMove {
+    board_id: String,
+    task_id: String,
+    column: Column,
+    #[serde(default)]
+    before: Option<String>,
+    #[serde(default)]
+    cancel: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KanbanResolve {
+    board_id: String,
+    task_id: String,
+    decision: Decision,
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KanbanNote {
+    board_id: String,
+    task_id: String,
+    text: String,
+}
+
 /// Runs `name` with `args` on these agents.
 pub fn call(agents: &Agents, name: &str, value: Value) -> Result<Value, String> {
     let root = agents.hub.root();
@@ -182,6 +236,43 @@ pub fn call(agents: &Agents, name: &str, value: Value) -> Result<Value, String> 
         "orchestration_delete" => {
             let Id { id } = args(value)?;
             reply(delete_orchestration(agents, &id)?)
+        }
+        "kanban_save" => reply(kanban::save(agents, args(value)?)?),
+        "kanban_set_enabled" => {
+            let KanbanEnabled { id, enabled } = args(value)?;
+            reply(kanban::set_enabled(agents, &id, enabled)?)
+        }
+        "kanban_delete" => {
+            let Id { id } = args(value)?;
+            reply(kanban::delete(agents, &id)?)
+        }
+        "kanban_task_upsert" => {
+            let KanbanUpsert { board_id, task } = args(value)?;
+            reply(kanban::upsert_task(agents, &board_id, task, Actor::User)?.0)
+        }
+        "kanban_task_move" => {
+            let KanbanMove { board_id, task_id, column, before, cancel } = args(value)?;
+            reply(kanban::move_task(agents, &board_id, &task_id, column, before.as_deref(), cancel, Actor::User)?)
+        }
+        "kanban_task_cancel" => {
+            let KanbanTaskRef { board_id, task_id } = args(value)?;
+            reply(kanban::cancel_task(agents, &board_id, &task_id)?)
+        }
+        "kanban_task_delete" => {
+            let KanbanTaskRef { board_id, task_id } = args(value)?;
+            reply(kanban::delete_task(agents, &board_id, &task_id)?)
+        }
+        "kanban_task_resolve" => {
+            let KanbanResolve { board_id, task_id, decision, text } = args(value)?;
+            reply(kanban::resolve_task(agents, &board_id, &task_id, decision, &text)?)
+        }
+        "kanban_task_note" => {
+            let KanbanNote { board_id, task_id, text } = args(value)?;
+            reply(kanban::note_task(agents, &board_id, &task_id, &text, Actor::User)?)
+        }
+        "kanban_task_merge" => {
+            let KanbanTaskRef { board_id, task_id } = args(value)?;
+            reply(kanban::merge_task(agents, &board_id, &task_id)?)
         }
         _ => Err(format!("unknown call: {name}")),
     }

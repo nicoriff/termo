@@ -22,6 +22,7 @@ import { explorerStore } from "../explorer/explorer-store.svelte";
 import { gitStore } from "../git/git-store.svelte";
 import { harnessStore } from "../harness/harness-store.svelte";
 import { tabGroupsStore } from "../tab-groups/tab-groups-store.svelte";
+import { kanbanStore } from "../kanban/kanban-store.svelte";
 import { gitReviewStore } from "../git/git-review-store.svelte";
 import { fileName } from "../layout/split-tree";
 import { favoriteDraftForTab, favoriteLabel, favoritesStore } from "../ai-mode/favorites-store.svelte";
@@ -173,7 +174,39 @@ export function buildCommands(): Command[] {
         label: t("commands.createAgent"),
         run: () => uiState.openAgentWizard(null, true),
       },
+      {
+        id: "kanban.toggle",
+        group: "agents",
+        label: kanbanStore.open ? t("commands.hideKanban") : t("commands.showKanban"),
+        shortcut: "toggleKanban",
+        run: () => kanbanStore.toggle(),
+      },
+      {
+        id: "kanban.newBoard",
+        group: "agents",
+        label: t("commands.newKanbanBoard"),
+        run: () => kanbanStore.newBoard(),
+      },
     );
+    // The new-task shortcut shows on the board it would go to.
+    for (const board of kanbanStore.boards) {
+      const name = board.name || t("kanban.unnamed");
+      commands.push(
+        {
+          id: `kanban.newTask.${board.id}`,
+          group: "agents",
+          label: t("commands.newKanbanTask", { name }),
+          shortcut: kanbanStore.isTarget(board.id) ? "newKanbanTask" : undefined,
+          run: () => kanbanStore.editTask(board.id, null),
+        },
+        {
+          id: `kanban.open.${board.id}`,
+          group: "agents",
+          label: t("commands.openKanbanBoard", { name }),
+          run: () => kanbanStore.openBoard(board),
+        },
+      );
+    }
     // The Companion and its quick question have switches of their own.
     if (appConfigStore.companionEnabled) {
       commands.push({

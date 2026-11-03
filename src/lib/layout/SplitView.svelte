@@ -15,6 +15,7 @@
   import {
     loadAgentRunView,
     loadGitGraphView,
+    loadKanbanView,
     loadOrchestrationConsole,
     loadOrchestrationView,
     loadProjectView,
@@ -130,6 +131,11 @@
           {@const orchestrationId = loc.session.orchestrationView.orchestrationId}
           {#await loadOrchestrationView() then { default: OrchestrationView }}
             <OrchestrationView {orchestrationId} />
+          {/await}
+        {:else if loc.session.kanbanView}
+          {@const boardId = loc.session.kanbanView.boardId}
+          {#await loadKanbanView() then { default: KanbanView }}
+            <KanbanView {boardId} />
           {/await}
         {:else if loc.session.dormant}
           <!-- Put away to save memory (see tab-saver): no console mounted.

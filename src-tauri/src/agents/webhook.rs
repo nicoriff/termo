@@ -103,13 +103,18 @@ pub fn start(agents: Agents) {
         let root = agents.hub.root().to_path_buf();
         // Turned back on right after being turned off, the old socket may
         // take a moment to be let go.
-        let Some(server) = (0..10).find_map(|attempt| {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(200));
+        // Held by another program (most often another Termo), it keeps
+        // trying, slower, until that one lets it go.
+        let mut attempt = 0u32;
+        let server = loop {
+            if let Ok(server) = Server::http(("127.0.0.1", PORT)) {
+                break server;
             }
-            Server::http(("127.0.0.1", PORT)).ok()
-        }) else {
-            return;
+            if !crate::ai_mode::enabled() || LISTENING.load(Ordering::Relaxed) {
+                return;
+            }
+            attempt += 1;
+            std::thread::sleep(Duration::from_millis(if attempt < 10 { 200 } else { 3000 }));
         };
         let server = Arc::new(server);
         {

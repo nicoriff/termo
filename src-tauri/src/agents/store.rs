@@ -64,6 +64,8 @@ pub enum RunTrigger {
     Orchestrator,
     /// Asked from one of the user's consoles (see console_bridge.rs).
     Console,
+    /// A task of a kanban board (see kanban/).
+    Kanban,
 }
 
 /// Where a run sits in a conversation between agents: the run that set it

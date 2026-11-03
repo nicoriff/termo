@@ -202,6 +202,7 @@ pub fn run() {
                     // Before any run can start: files a run killed with Termo left.
                     agents::runner::remove_leftovers(&root);
                     agents::orchestration::executor::recover(&root);
+                    agents::kanban::driver::recover(&root);
                 }
                 // Consoles' token files from before: their tokens died with it,
                 // but for those of consoles still running.
@@ -232,6 +233,7 @@ pub fn run() {
             // token), like the hooks do.
             agents::console_bridge::set_global(ai_mode_on && loaded.agents_from_any_console);
             agents::console_orchestration::configure(&loaded);
+            agents::console_kanban::configure(&loaded);
             if ai_mode_on && loaded.agents_from_any_console {
                 if let Ok(root) = agents::store::root(app.handle()) {
                     std::thread::spawn(move || {
@@ -420,6 +422,18 @@ pub fn run() {
             commands::orchestration_commands::orchestration_resume,
             commands::orchestration_commands::orchestration_resolve_revision,
             commands::orchestration_commands::orchestration_delete,
+            commands::kanban_commands::kanban_list,
+            commands::kanban_commands::kanban_branches,
+            commands::kanban_commands::kanban_save,
+            commands::kanban_commands::kanban_set_enabled,
+            commands::kanban_commands::kanban_delete,
+            commands::kanban_commands::kanban_task_upsert,
+            commands::kanban_commands::kanban_task_move,
+            commands::kanban_commands::kanban_task_cancel,
+            commands::kanban_commands::kanban_task_delete,
+            commands::kanban_commands::kanban_task_resolve,
+            commands::kanban_commands::kanban_task_merge,
+            commands::kanban_commands::kanban_task_note,
             commands::project_commands::project_draft,
             commands::project_commands::project_create,
             commands::project_commands::project_improve,

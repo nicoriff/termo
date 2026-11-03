@@ -111,7 +111,7 @@ impl Notifier {
         }
         // Tests are watched as they happen, stopping one was the user's own
         // doing, and an orchestration's tasks speak through it.
-        if matches!(run.trigger, RunTrigger::Test | RunTrigger::Orchestrator) || run.status == RunStatus::Stopped {
+        if matches!(run.trigger, RunTrigger::Test | RunTrigger::Orchestrator | RunTrigger::Kanban) || run.status == RunStatus::Stopped {
             return None;
         }
         if !worth_telling(run, &mut self.failing.lock().unwrap()) {
