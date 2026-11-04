@@ -226,6 +226,19 @@ pub struct Report {
     pub cost_usd: f64,
 }
 
+/// Read-only folders as the user gave them: trimmed, without blank or
+/// repeated ones (Windows paths don't care about case).
+pub fn clean_read_dirs(dirs: Vec<String>) -> Vec<String> {
+    let mut clean: Vec<String> = Vec::new();
+    for dir in dirs {
+        let dir = dir.trim().to_string();
+        if !dir.is_empty() && !clean.iter().any(|seen| seen.eq_ignore_ascii_case(&dir)) {
+            clean.push(dir);
+        }
+    }
+    clean
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Orchestration {
@@ -235,6 +248,9 @@ pub struct Orchestration {
     /// What the user asked for.
     pub prompt: String,
     pub work_dir: String,
+    /// Folders its agents may read but never change (another repository to
+    /// go by, say). Applies to the tasks that start from when it's set.
+    pub read_dirs: Vec<String>,
     pub status: Status,
     /// Whose CLI plans and supervises. Claude Code's in the ones from before
     /// there was a choice.

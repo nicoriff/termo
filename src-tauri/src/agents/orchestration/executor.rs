@@ -123,6 +123,24 @@ fn with_asking(mut spec: AgentSpec, level: AskLevel) -> AgentSpec {
     spec
 }
 
+/// The folders the task's agent may read besides the orchestration's: the
+/// ones there still, read as each task starts like the ask level.
+fn with_reading(mut spec: AgentSpec, orchestration: &Orchestration) -> AgentSpec {
+    spec.read_dirs = orchestration.read_dirs.iter().filter(|dir| Path::new(dir.trim()).is_dir()).cloned().collect();
+    spec
+}
+
+/// The request, telling the agent which of those folders its CLI lets it
+/// read (see spec::extra_read_dirs), if any.
+fn with_read_dirs_note(mut request: String, spec: &AgentSpec) -> String {
+    let dirs = crate::agents::spec::extra_read_dirs(spec);
+    if !dirs.is_empty() {
+        let list = dirs.iter().map(|dir| format!("- {dir}")).collect::<Vec<_>>().join("\n");
+        request.push_str(&format!("\n\n{}", tr(Msg::OrchestrationReadDirs(&list))));
+    }
+    request
+}
+
 /// What the agent is asked for this task, and what it gets as context: the
 /// answers of the tasks it builds on, and its own last attempt when this is
 /// a retry. The context is other agents' text: the runner fences it as data
@@ -325,8 +343,8 @@ impl Run {
             let started = match spec {
                 Some(spec) => {
                     let (request, context) = request_for(orchestration, task);
-                    let mut spec = with_asking(spec, orchestration.ask_level);
-                    spec.task = request;
+                    let mut spec = with_reading(with_asking(spec, orchestration.ask_level), orchestration);
+                    spec.task = with_read_dirs_note(request, &spec);
                     self.runner.start_linked(&self.hub, &spec, RunTrigger::Orchestrator, context.as_deref(), None, false)
                 }
                 None => Err(tr(Msg::AgentRunFailed("agent missing"))),

@@ -16,10 +16,13 @@
   import AiEnginePicker from "./AiEnginePicker.svelte";
   import SettingDropdown from "$lib/preferences/SettingDropdown.svelte";
   import FolderField from "./FolderField.svelte";
+  import ReadDirsField from "./ReadDirsField.svelte";
   import PlanningProgress from "./PlanningProgress.svelte";
 
   let prompt = $state("");
   let workDir = $state("");
+  /** Folders its agents may read but not change. */
+  let readDirs = $state<string[]>([]);
   let model = $state("");
   /** When its agents ask: the user's default to start with. */
   let askLevel = $state<AskLevel>(appConfigStore.agentAskLevel);
@@ -101,7 +104,7 @@
     error = "";
     phase = "planning";
     try {
-      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), engine, model, given, askCost, askLevel);
+      const orchestration = await orchestrationStore.plan(prompt.trim(), workDir.trim(), engine, model, given, askCost, askLevel, readDirs);
       workspaceStore.openOrchestration(orchestration.id, orchestration.name);
       if (uiState.orchestrationDialog) close();
     } catch (reason) {
@@ -207,6 +210,10 @@
         {/if}
       </div>
       <p class="hint">{t("agents.orchestration.dialog.folderHint")}</p>
+
+      <span class="label">{t("agents.orchestration.readDirs.label")}</span>
+      <ReadDirsField dirs={readDirs} disabled={planning} onchange={(next) => (readDirs = next)} />
+      <p class="hint">{t("agents.orchestration.readDirs.dialogHint")}</p>
 
       <AiEnginePicker id="orchestration-engine" label={t("agents.orchestration.dialog.engineLabel")} disabled={planning} />
 

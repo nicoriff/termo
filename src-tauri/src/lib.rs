@@ -418,6 +418,7 @@ pub fn run() {
             commands::orchestration_commands::orchestration_clarify,
             commands::orchestration_commands::orchestration_answer,
             commands::orchestration_commands::orchestration_set_ask_level,
+            commands::orchestration_commands::orchestration_set_read_dirs,
             commands::agent_commands::agents_console_global,
             commands::agent_commands::agents_console_rotate,
             commands::orchestration_commands::orchestration_resume,

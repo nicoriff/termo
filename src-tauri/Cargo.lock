@@ -4766,6 +4766,7 @@ dependencies = [
  "notify",
  "notify-rust",
  "portable-pty",
+ "regex",
  "serde",
  "serde_json",
  "sysinfo",

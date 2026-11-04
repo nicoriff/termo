@@ -113,6 +113,12 @@ struct SetAskLevel {
 }
 
 #[derive(Deserialize)]
+struct SetReadDirs {
+    id: String,
+    read_dirs: Vec<String>,
+}
+
+#[derive(Deserialize)]
 struct Resume {
     id: String,
     budget_usd: Option<f64>,
@@ -222,6 +228,7 @@ pub fn call(agents: &Agents, name: &str, value: Value) -> Result<Value, String> 
         "orchestration_edit_plan" => reply(edit(agents, args(value)?)?),
         "orchestration_answer" => reply(answer_orchestration(agents, args(value)?)?),
         "orchestration_set_ask_level" => reply(set_ask_level(agents, args(value)?)?),
+        "orchestration_set_read_dirs" => reply(set_read_dirs(agents, args(value)?)?),
         "orchestration_stop" => {
             let Id { id } = args(value)?;
             agents.orchestrator.stop(&id);
@@ -392,6 +399,16 @@ fn answer_orchestration(agents: &Agents, OrchestrationAnswer { id, question_id, 
 /// its file is written by whoever drives it.
 fn set_ask_level(agents: &Agents, SetAskLevel { id, ask_level }: SetAskLevel) -> Result<Orchestration, String> {
     let updated = orchestrations::update_in(agents.hub.root(), &id, |orchestration| orchestration.ask_level = ask_level)
+        .ok_or_else(|| tr(Msg::OrchestrationNotFound))?;
+    agents.hub.emit("orchestration", &updated);
+    Ok(updated)
+}
+
+/// The folders its agents may read besides its own, in any state: the tasks
+/// that start from now on get them. Blank and repeated ones are dropped.
+fn set_read_dirs(agents: &Agents, SetReadDirs { id, read_dirs }: SetReadDirs) -> Result<Orchestration, String> {
+    let dirs = crate::agents::orchestration::plan::clean_read_dirs(read_dirs);
+    let updated = orchestrations::update_in(agents.hub.root(), &id, |orchestration| orchestration.read_dirs = dirs)
         .ok_or_else(|| tr(Msg::OrchestrationNotFound))?;
     agents.hub.emit("orchestration", &updated);
     Ok(updated)

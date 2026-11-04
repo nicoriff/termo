@@ -15,6 +15,7 @@ import {
   resolveRevision,
   resumeOrchestration,
   setOrchestrationAskLevel,
+  setOrchestrationReadDirs,
   stopOrchestration,
   type Answered,
   type Catalog,
@@ -138,11 +139,12 @@ class OrchestrationStore {
     answers: Answered[] = [],
     overheadUsd = 0,
     askLevel: AskLevel = "essential",
+    readDirs: string[] = [],
   ): Promise<Orchestration> {
     this.planning = true;
     this.startPhase("plan");
     try {
-      const orchestration = await planOrchestration(prompt, workDir, engine, model, answers, overheadUsd, askLevel);
+      const orchestration = await planOrchestration(prompt, workDir, engine, model, answers, overheadUsd, askLevel, readDirs);
       this.take(orchestration);
       return orchestration;
     } finally {
@@ -185,6 +187,10 @@ class OrchestrationStore {
 
   async setAskLevel(id: string, askLevel: AskLevel): Promise<void> {
     this.take(await setOrchestrationAskLevel(id, askLevel));
+  }
+
+  async setReadDirs(id: string, readDirs: string[]): Promise<void> {
+    this.take(await setOrchestrationReadDirs(id, readDirs));
   }
 
   /** Questions waiting for the user, across every orchestration. */
