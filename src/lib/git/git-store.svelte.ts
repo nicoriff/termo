@@ -22,11 +22,7 @@ import { appConfigStore } from "$lib/core/app-config.svelte";
 import { fileTabs } from "$lib/editor/file-tabs.svelte";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
-import { agentsStore } from "$lib/agents/agents-store.svelte";
-import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
-import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
-import { harnessStore } from "$lib/harness/harness-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 import { countChanges } from "./git-summary";
 
 /** How often the repository is looked at again while something shows it:
@@ -60,11 +56,17 @@ export function mainRemote(snapshot: RepoSnapshot | null): Remote | null {
  * poll while any of them shows it), its pull request, and the actions run
  * on it (see src-tauri/src/git).
  *
- * The panel docks at the window's left edge like the explorer and the agents
- * panel, so opening one closes the others.
+ * The panel is a section of the side panel (see side-panel-store).
  */
 class GitStore {
-  open = $state(false);
+  get open(): boolean {
+    return sidePanelStore.isShown("git");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
+
   snapshot = $state<RepoSnapshot | null>(null);
   /** Whether the folder in focus has been looked at yet. */
   loaded = $state(false);
@@ -235,20 +237,14 @@ class GitStore {
   }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    if (sidePanelStore.isShown("git")) sidePanelStore.hide();
+    else this.setOpen(true);
   }
 
   setOpen(open: boolean): void {
     if (open && !appConfigStore.gitEnabled) return;
-    // One side panel at a time: they share the window's left edge.
-    if (open) {
-      agentsStore.setOpen(false);
-      explorerStore.open = false;
-      harnessStore.setOpen(false);
-      tabGroupsStore.open = false;
-      kanbanStore.open = false;
-    }
-    this.open = open;
+    if (open) sidePanelStore.show("git");
+    else sidePanelStore.close("git");
   }
 
   /** Opens the panel with the keyboard in the commit message. */

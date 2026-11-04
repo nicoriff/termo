@@ -33,31 +33,9 @@ import {
   type RunTrigger,
 } from "$lib/core/agents-client";
 import { appConfigStore } from "$lib/core/app-config.svelte";
-import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
-import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
-import { gitStore } from "$lib/git/git-store.svelte";
-import { harnessStore } from "$lib/harness/harness-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 
-/** The sidebar's width: a default, and how far it can be dragged. */
-export const SIDEBAR_WIDTH = { initial: 264, min: 200, max: 560 };
-const WIDTH_KEY = "termo.agents.sidebarWidth";
 const COLLAPSED_KEY = "termo.agents.collapsedProjects";
-
-export function clampSidebarWidth(width: number): number {
-  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
-}
-
-/** Only a convenience: a browser storage that's missing or throws just means
- * the default width. */
-function loadWidth(): number {
-  try {
-    const saved = Number(localStorage.getItem(WIDTH_KEY));
-    return saved ? clampSidebarWidth(saved) : SIDEBAR_WIDTH.initial;
-  } catch {
-    return SIDEBAR_WIDTH.initial;
-  }
-}
 
 /** The panel's two sections: the agents the user builds and keeps, and
  * teams designed for one job. */
@@ -96,16 +74,20 @@ class AgentsStore {
   questions = $state<RunQuestion[]>([]);
   /** When each scheduled agent runs next on its own. */
   nextRun = $state<Record<string, number>>({});
-  /** The left sidebar. */
-  open = $state(false);
-  /** Its width in px, as the user last dragged it. */
-  width = $state(loadWidth());
+  /** Its section of the side panel, showing. */
+  get open(): boolean {
+    return sidePanelStore.isShown("agents");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
+
   /** Which section it shows (remembered per computer). */
   section = $state<AgentsSection>(loadSection());
   /** Ticks every 30 s while the sidebar is open, for "hace 5 min" labels. */
   now = $state(Date.now());
   private started = false;
-  private timer: ReturnType<typeof setInterval> | null = null;
 
   async init(): Promise<void> {
     if (this.started) return;
@@ -179,18 +161,20 @@ class AgentsStore {
     return answerAgentQuestion(questionId, answer);
   }
 
-  setWidth(width: number, persist = false): void {
-    this.width = clampSidebarWidth(width);
-    if (!persist) return;
-    try {
-      localStorage.setItem(WIDTH_KEY, String(this.width));
-    } catch {
-      // Not remembered next time; nothing else depends on it.
-    }
+  /** Keeps `now` current while the panel shows (the panel calls it as it
+   * mounts); the returned function stops it. */
+  tick(): () => void {
+    this.now = Date.now();
+    const timer = setInterval(() => {
+      this.now = Date.now();
+      void this.refreshNextRuns();
+    }, 30_000);
+    return () => clearInterval(timer);
   }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    if (sidePanelStore.isShown("agents")) sidePanelStore.hide();
+    else this.setOpen(true);
   }
 
   setSection(section: AgentsSection): void {
@@ -206,7 +190,7 @@ class AgentsStore {
    * the one already showing. */
   toggleSection(section: AgentsSection): void {
     if (this.open && this.section === section) {
-      this.setOpen(false);
+      sidePanelStore.hide();
       return;
     }
     this.setSection(section);
@@ -216,25 +200,8 @@ class AgentsStore {
   setOpen(open: boolean): void {
     // Modo IA's, like every agent feature: it doesn't open with it off.
     if (open && !appConfigStore.aiModeEnabled) return;
-    // One side panel at a time: the explorer and the Git panel are docked
-    // on the same edge.
-    if (open) {
-      explorerStore.open = false;
-      gitStore.open = false;
-      harnessStore.setOpen(false);
-      tabGroupsStore.open = false;
-      kanbanStore.open = false;
-    }
-    this.open = open;
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-    if (open) {
-      this.now = Date.now();
-      this.timer = setInterval(() => {
-        this.now = Date.now();
-        void this.refreshNextRuns();
-      }, 30_000);
-    }
+    if (open) sidePanelStore.show("agents");
+    else sidePanelStore.close("agents");
   }
 
   async save(spec: AgentSpec): Promise<void> {

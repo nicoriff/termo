@@ -1,12 +1,7 @@
 <script lang="ts">
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { listOf, t } from "$lib/i18n/i18n.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
-  import { appConfigStore } from "$lib/core/app-config.svelte";
   import { harnessDetectChecks, type HarnessFileChange, type ProposedRule } from "$lib/core/harness-client";
-  import { formatKeybindingLabel } from "$lib/core/shortcuts";
-  import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { TOOL_DISPLAY_NAMES } from "$lib/ai-mode/tool-names";
   import { fileName } from "$lib/layout/split-tree";
@@ -30,7 +25,7 @@
     matchingRule,
     testCommand,
   } from "./harness-model";
-  import { HARNESS_WIDTH, harnessStore } from "./harness-store.svelte";
+  import { harnessStore } from "./harness-store.svelte";
 
   const COLLAPSED_KEY = "termo.harness.collapsed";
 
@@ -52,7 +47,6 @@
   const review = $derived(harnessStore.review);
   const busy = $derived(harnessStore.busy);
   const repoName = $derived(root ? fileName(root) : t("harness.title"));
-  const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleHarness"), isMac));
   const pendingCount = $derived(harnessStore.saved?.pending.length ?? 0);
   const assist = $derived(harnessStore.assist);
   const proposals = $derived(harnessStore.proposals);
@@ -129,11 +123,6 @@
     }
   }
 
-  function close() {
-    harnessStore.setOpen(false);
-    uiState.refocusTerminals();
-  }
-
   function toggleAgent(agent: (typeof AGENTS)[number], on: boolean) {
     harnessStore.edit((spec) => {
       spec.agents = on ? [...spec.agents.filter((other) => other !== agent), agent] : spec.agents.filter((other) => other !== agent);
@@ -157,6 +146,7 @@
     else if (harnessStore.editingFile !== null) harnessStore.editFile(null);
     else uiState.refocusTerminals();
   }
+  sectionHeader({ actions: headerActions, note: () => repoName });
 </script>
 
 {#snippet sectionHead(id: SectionId, label: string, count: number | null)}
@@ -198,31 +188,10 @@
 
 <aside
   class="harness-panel"
-  style="--panel-width:{harnessStore.width}px"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("harness.title")}
 >
-  <SidebarResizeHandle sizer={harnessStore} limits={HARNESS_WIDTH} />
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="harness-inner" onkeydown={onKeydown}>
-    <header class="harness-header">
-      <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3.5 20.5L8.5 3.5M20.5 20.5L15.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-        <path d="M12 19V8.5M9.4 11.1L12 8.5l2.6 2.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-      <div class="header-text">
-        <span class="header-name" title={root ?? ""}>{repoName}</span>
-        <span class="header-note">{t("harness.title")}</span>
-      </div>
-      <button class="icon-button" title={t("harness.refresh")} aria-label={t("harness.refresh")} onclick={() => void harnessStore.reload()}>
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
-        </svg>
-      </button>
-      <button class="icon-button" title={`${t("harness.close")} (${shortcut})`} aria-label={t("harness.close")} onclick={close}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-    </header>
 
     {#if !root}
       <p class="empty-note">{t(!harnessStore.loaded ? "harness.loading" : "harness.notRepo")}</p>
@@ -590,22 +559,30 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+
+{#snippet headerActions()}
+      <button class="icon-button" title={t("harness.refresh")} aria-label={t("harness.refresh")} onclick={() => void harnessStore.reload()}>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+        </svg>
+      </button>
+{/snippet}
+
 <style>
-  /* Docked at the window's left edge, like the explorer and the Git panel,
-     with a width of its own: it holds editors. */
+  /* A section of the side panel: it fills its slot (see SidePanelColumn). */
   .harness-panel {
     position: relative;
-    flex-shrink: 0;
-    width: var(--panel-width, 380px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
   .harness-inner {
-    width: var(--panel-width, 380px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;

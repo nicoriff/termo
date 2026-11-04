@@ -1,7 +1,6 @@
 <script lang="ts">
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { untrack } from "svelte";
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { explorerRoot, gitStatus, listEntries, type GitMark } from "$lib/core/explorer-client";
   import { t } from "$lib/i18n/i18n.svelte";
@@ -11,7 +10,6 @@
   import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { collectTiles, fileName, isFileTab } from "$lib/layout/split-tree";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { explorerStore } from "./explorer-store.svelte";
   import { folderHasChanges, visibleRows, type TreeEntry } from "./explorer-tree";
   import { fileBadge } from "./file-icons";
@@ -125,11 +123,6 @@
     }
   }
 
-  function close() {
-    explorerStore.setOpen(false);
-    uiState.refocusTerminals();
-  }
-
   function markFor(path: string, isDir: boolean): GitMark | "folder" | null {
     if (!isDir) return marks[path] ?? null;
     return folderHasChanges(path, changedPaths) ? "folder" : null;
@@ -168,38 +161,15 @@
     reveal(on);
     return { update: reveal };
   }
+  sectionHeader({ actions: headerActions, note: () => root ? fileName(root) : "" });
 </script>
 
 <aside
   class="explorer"
-  style="--explorer-width:{agentsStore.width}px"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("explorer.toggle")}
 >
-  <SidebarResizeHandle />
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div class="explorer-inner" role="tree" tabindex="0" aria-label={t("explorer.toggle")} bind:this={panelEl} onkeydown={onKeydown}>
-  <header class="explorer-header">
-    <svg class="header-icon" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M1.5 4.5v8h13v-7h-6l-1.5-1.5h-5.5z" fill="none" stroke="currentColor" stroke-width="1.1" />
-    </svg>
-    <div class="header-text">
-      <span class="header-name" title={root ?? ""}>{root ? fileName(root) : t("explorer.toggle")}</span>
-      {#if root && !isRepo}
-        <span class="header-note">{t("explorer.notRepo")}</span>
-      {/if}
-    </div>
-    <button class="header-button" title={t("explorer.refresh")} aria-label={t("explorer.refresh")} onclick={() => void refresh()}>
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
-      </svg>
-    </button>
-    <button class="header-button" title={t("explorer.close")} aria-label={t("explorer.close")} onclick={close}>
-      <svg viewBox="0 0 10 10" aria-hidden="true">
-        <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" />
-      </svg>
-    </button>
-  </header>
 
   <div class="explorer-list" bind:this={listEl}>
     {#if !root && !folder}
@@ -265,23 +235,30 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+
+{#snippet headerActions()}
+    <button class="header-button" title={t("explorer.refresh")} aria-label={t("explorer.refresh")} onclick={() => void refresh()}>
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+      </svg>
+    </button>
+{/snippet}
+
 <style>
-  /* Docked at the window's left edge, like the agents panel: the consoles
-     make room for it. The width animates; the content inside keeps its own
-     fixed width so nothing reflows while it slides. */
+  /* A section of the side panel: it fills its slot (see SidePanelColumn). */
   .explorer {
     position: relative;
-    flex-shrink: 0;
-    width: var(--explorer-width, 264px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
   .explorer-inner {
-    width: var(--explorer-width, 264px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -289,42 +266,6 @@
 
   .explorer-inner:focus {
     outline: none;
-  }
-
-  .explorer-header {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 28px;
-    padding: 0 6px 0 10px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-  }
-
-  .header-icon {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    opacity: 0.8;
-  }
-
-  .header-text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .header-name {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .header-note {
-    font-size: 10px;
-    opacity: 0.55;
   }
 
   .header-button {

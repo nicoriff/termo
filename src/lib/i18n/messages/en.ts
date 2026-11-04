@@ -1312,6 +1312,11 @@ export const en: Messages = {
   activityBar: {
     label: "Panels bar",
   },
+  sidePanel: {
+    label: "Side panel",
+    resizeGroups: "Resize the groups (double-click to even them out)",
+    dragHint: "Drag it to the side panel to open it in a group of its own",
+  },
   kanban: {
     title: "Kanban boards",
     new: "New board",

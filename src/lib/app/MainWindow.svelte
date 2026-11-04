@@ -18,6 +18,7 @@
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
   import { tabSaver } from "$lib/tab-groups/tab-saver.svelte";
   import ActivityBar from "./ActivityBar.svelte";
+  import SidePanelColumn from "./SidePanelColumn.svelte";
   import { orchestrationStore } from "$lib/agents/orchestration-store.svelte";
   import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
@@ -202,6 +203,7 @@
   $effect(() => {
     if (!appConfigStore.loaded || appConfigStore.aiModeEnabled) return;
     agentsStore.setOpen(false);
+    kanbanStore.setOpen(false);
     uiState.closeAiSurfaces();
   });
 
@@ -431,20 +433,7 @@
   {/if}
   <main class="content">
     <ActivityBar />
-    <!-- One side panel at a time (see explorerStore). -->
-    {#if agentsStore.open}
-      <Lazy load={surfaces.loadAgentsSidebar} />
-    {:else if explorerStore.open}
-      <Lazy load={surfaces.loadExplorerPanel} />
-    {:else if gitStore.open && appConfigStore.gitEnabled}
-      <Lazy load={surfaces.loadGitPanel} />
-    {:else if harnessStore.open}
-      <Lazy load={surfaces.loadHarnessPanel} />
-    {:else if tabGroupsStore.open}
-      <Lazy load={surfaces.loadTabGroupsPanel} />
-    {:else if kanbanStore.open && appConfigStore.aiModeEnabled}
-      <Lazy load={surfaces.loadKanbanSidebar} />
-    {/if}
+    <SidePanelColumn />
     {#if workspaceStore.root}
       <SplitView node={workspaceStore.root} />
     {/if}
