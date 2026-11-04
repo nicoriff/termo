@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.30.0",
+    "date": "2026-11-03",
+    "es": [
+      "**Varias secciones a la vez en el panel lateral**: un clic en la barra de actividad suma la sección al grupo de más arriba, como un acordeón. Cada sección tiene un solo encabezado, con su ícono (el de GitHub, GitLab o el proveedor que sea, en Git), sus botones y una X para cerrarla, y al hacerle clic se pliega o se despliega. Arrastrando un ícono o un encabezado arriba o abajo de un grupo se abre un grupo aparte, visible al mismo tiempo, con un divisor para repartir el alto. El panel recuerda cómo lo dejaste.",
+      "**Carpetas de solo lectura** en las orquestaciones: sus agentes pueden leer otras carpetas además de la del proyecto, como otro repositorio de referencia, pero no cambiarlas. Se eligen al crearla o después, en su vista. Las reciben los agentes de Claude Code, Codex y Gemini CLI, y los de Copilot CLI que solo leen.",
+      "Textos en inglés más claros en los tableros kanban, con el singular bien puesto (\"1 tarea\", \"1 entrada\")."
+    ],
+    "en": [
+      "**Several sections at once in the side panel**: a click on the activity bar adds the section to the topmost group, as an accordion. Each section has a single header, with its icon (GitHub's, GitLab's or whichever host it is, for Git), its buttons and an X to close it, and clicking it folds or unfolds it. Dragging an icon or a header above or below a group opens a separate group, visible at the same time, with a divider to share the height. The panel remembers how you left it.",
+      "**Read-only folders** in orchestrations: their agents can read other folders besides the project's, such as another repository to go by, but not change them. Choose them when creating one or later, in its view. Claude Code, Codex and Gemini CLI agents get them, and Copilot CLI agents that only read.",
+      "Clearer English wording on kanban boards, with proper singulars (\"1 task\", \"1 log entry\")."
+    ]
+  },
+  {
     "version": "0.29.0",
     "date": "2026-11-02",
     "es": [
