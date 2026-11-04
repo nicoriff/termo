@@ -1,4 +1,4 @@
-import { agentsStore } from "$lib/agents/agents-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 import { explorerRoot } from "$lib/core/explorer-client";
 import type { AgentEngine } from "$lib/core/agents-client";
 import {
@@ -18,10 +18,6 @@ import {
 } from "$lib/core/harness-client";
 import type { PlanStep } from "$lib/core/orchestration-client";
 import { fileTabs } from "$lib/editor/file-tabs.svelte";
-import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
-import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
-import { gitStore } from "$lib/git/git-store.svelte";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
 import { addProposed, addRule, copySpec, harnessStatus, sameEntry, sameSpec } from "./harness-model";
 
@@ -38,30 +34,19 @@ export interface AssistRun {
   steps: PlanStep[];
 }
 
-/** Wider than the other side panels: rules and instructions are edited in it. */
-export const HARNESS_WIDTH = { initial: 380, min: 300, max: 760 };
-const WIDTH_KEY = "termo.harness.width";
-
-function loadWidth(): number {
-  try {
-    const saved = Number(localStorage.getItem(WIDTH_KEY));
-    return saved ? clampWidth(saved) : HARNESS_WIDTH.initial;
-  } catch {
-    return HARNESS_WIDTH.initial;
-  }
-}
-
-function clampWidth(width: number): number {
-  return Math.round(Math.min(HARNESS_WIDTH.max, Math.max(HARNESS_WIDTH.min, width)));
-}
-
 /** The Harness panel: the rules of the repository the focused tab is in,
  * edited as a draft and written, after a look at what changes, into each
- * agent's files (see src-tauri/src/harness). Docked on the window's left
- * edge like the explorer, the Git panel and the agents panel: one at a time. */
+ * agent's files (see src-tauri/src/harness). A section of the side panel
+ * (see side-panel-store). */
 class HarnessStore {
-  open = $state(false);
-  width = $state(loadWidth());
+  get open(): boolean {
+    return sidePanelStore.isShown("harness");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
+
   /** The repository in view; null when the tab's folder isn't in one. */
   root = $state<string | null>(null);
   /** False until the first look at the tab's folder. */
@@ -143,29 +128,14 @@ class HarnessStore {
   }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    if (sidePanelStore.isShown("harness")) sidePanelStore.hide();
+    else this.setOpen(true);
   }
 
   setOpen(open: boolean): void {
-    if (open) {
-      agentsStore.setOpen(false);
-      explorerStore.open = false;
-      gitStore.open = false;
-      tabGroupsStore.open = false;
-      kanbanStore.open = false;
-    }
-    this.open = open;
+    if (open) sidePanelStore.show("harness");
+    else sidePanelStore.close("harness");
     if (!open) this.review = null;
-  }
-
-  setWidth(width: number, persist = false): void {
-    this.width = clampWidth(width);
-    if (!persist) return;
-    try {
-      localStorage.setItem(WIDTH_KEY, String(this.width));
-    } catch {
-      // Only a convenience.
-    }
   }
 
   private async follow(folder: string): Promise<void> {

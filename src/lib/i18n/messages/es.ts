@@ -1311,6 +1311,11 @@ export const es = {
   activityBar: {
     label: "Barra de paneles",
   },
+  sidePanel: {
+    label: "Panel lateral",
+    resizeGroups: "Cambiar el alto de los grupos (doble clic para igualarlos)",
+    dragHint: "Arrastralo al panel lateral para abrirlo en un grupo aparte",
+  },
   kanban: {
     title: "Tableros kanban",
     new: "Nuevo tablero",

@@ -1,29 +1,23 @@
-import { agentsStore } from "$lib/agents/agents-store.svelte";
-import { gitStore } from "$lib/git/git-store.svelte";
-import { harnessStore } from "$lib/harness/harness-store.svelte";
-import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
-import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 
-/** Whether the file explorer is open: a side panel docked at the window's
- * left edge, showing the repository the focused tab is in. It shares that
- * edge with the agents panel, the Git panel and the Harness panel, so opening
- * one closes the others. */
+/** Whether the file explorer is showing: a section of the side panel docked
+ * at the window's left edge, showing the repository the focused tab is in. */
 class ExplorerStore {
-  open = $state(false);
+  get open(): boolean {
+    return sidePanelStore.isShown("explorer");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    sidePanelStore.toggle("explorer");
   }
 
   setOpen(open: boolean): void {
-    if (open) {
-      agentsStore.setOpen(false);
-      gitStore.open = false;
-      harnessStore.setOpen(false);
-      tabGroupsStore.open = false;
-      kanbanStore.open = false;
-    }
-    this.open = open;
+    if (open) sidePanelStore.show("explorer");
+    else sidePanelStore.close("explorer");
   }
 }
 

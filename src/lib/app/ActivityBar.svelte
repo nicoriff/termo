@@ -10,6 +10,9 @@
   import { harnessStore } from "$lib/harness/harness-store.svelte";
   import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
   import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
+  import { sidePanelStore } from "./side-panel-store.svelte";
+  import { startSectionDrag } from "./side-panel-drag";
+  import { SIDE_PANEL_SECTIONS } from "./side-panel-sections";
 
   /** What's working right now, shown on each button so it's noticed with the
    * panel closed: the agents' runs, and the orchestrations running. */
@@ -27,20 +30,26 @@
   const harnessHint = $derived(`${t("harness.title")} (${keys("toggleHarness")})`);
   const tabGroupsHint = $derived(`${t("tabGroups.title")} (${keys("toggleTabGroups")})`);
   const kanbanHint = $derived(`${t("kanban.title")} (${keys("toggleKanban")})`);
+  const withDragHint = (hint: string) => `${hint}
+${t("sidePanel.dragHint")}`;
   /** Files with anything to commit, in the repository of the tab in focus. */
   const changed = $derived(gitStore.counts.total);
 </script>
 
-<!-- The window's vertical tab strip: one button per side panel, each opening
-     and closing its own. The agents panel has one per section. -->
+<!-- The window's vertical tab strip: one button per section of the side
+     panel. A click shows it (in the accordion of the topmost group), or hides
+     the panel when it's showing; dragging it to the panel opens it in a group
+     of its own (see SidePanelColumn). The agents panel has one per section. -->
 <nav class="activity-bar" aria-label={t("activityBar.label")}>
   <button
     class="activity-item"
     class:active={explorerStore.open}
-    title={explorerHint}
+    class:folded={!explorerStore.open && sidePanelStore.has("explorer")}
+    title={withDragHint(explorerHint)}
     aria-label={explorerHint}
     aria-pressed={explorerStore.open}
     onclick={() => explorerStore.toggle()}
+      onpointerdown={(e) => startSectionDrag(e, "explorer", t(SIDE_PANEL_SECTIONS.explorer.title))}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path
@@ -57,10 +66,12 @@
     <button
       class="activity-item"
       class:active={gitStore.open}
-      title={gitHint}
+    class:folded={!gitStore.open && sidePanelStore.has("git")}
+      title={withDragHint(gitHint)}
       aria-label={gitHint}
       aria-pressed={gitStore.open}
       onclick={() => gitStore.toggle()}
+      onpointerdown={(e) => startSectionDrag(e, "git", t(SIDE_PANEL_SECTIONS.git.title))}
     >
       <!-- A branch leaving the trunk. -->
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -79,10 +90,12 @@
   <button
     class="activity-item"
     class:active={harnessStore.open}
-    title={harnessHint}
+    class:folded={!harnessStore.open && sidePanelStore.has("harness")}
+    title={withDragHint(harnessHint)}
     aria-label={harnessHint}
     aria-pressed={harnessStore.open}
     onclick={() => harnessStore.toggle()}
+      onpointerdown={(e) => startSectionDrag(e, "harness", t(SIDE_PANEL_SECTIONS.harness.title))}
   >
     <!-- Guardrails: the agent moves ahead, between the rules it works under. -->
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -96,10 +109,12 @@
   <button
     class="activity-item"
     class:active={tabGroupsStore.open}
-    title={tabGroupsHint}
+    class:folded={!tabGroupsStore.open && sidePanelStore.has("tabGroups")}
+    title={withDragHint(tabGroupsHint)}
     aria-label={tabGroupsHint}
     aria-pressed={tabGroupsStore.open}
     onclick={() => tabGroupsStore.toggle()}
+      onpointerdown={(e) => startSectionDrag(e, "tabGroups", t(SIDE_PANEL_SECTIONS.tabGroups.title))}
   >
     <!-- A folder tab over a card: tabs kept together. -->
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -114,10 +129,12 @@
     <button
       class="activity-item"
       class:active={kanbanStore.open}
-      title={kanbanHint}
+    class:folded={!kanbanStore.open && sidePanelStore.has("kanban")}
+      title={withDragHint(kanbanHint)}
       aria-label={kanbanHint}
       aria-pressed={kanbanStore.open}
       onclick={() => kanbanStore.toggle()}
+      onpointerdown={(e) => startSectionDrag(e, "kanban", t(SIDE_PANEL_SECTIONS.kanban.title))}
     >
       <!-- A board split in columns, with its cards: fewer as they move along. -->
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -141,10 +158,12 @@
     <button
       class="activity-item"
       class:active={agentsStore.open && agentsStore.section === "local"}
-      title={localHint}
+      class:folded={!agentsStore.open && sidePanelStore.has("agents") && agentsStore.section === "local"}
+      title={withDragHint(localHint)}
       aria-label={localHint}
       aria-pressed={agentsStore.open && agentsStore.section === "local"}
       onclick={() => agentsStore.toggleSection("local")}
+      onpointerdown={(e) => startSectionDrag(e, "agents", t(SIDE_PANEL_SECTIONS.agents.title))}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="4" y="7.5" width="16" height="12" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -163,10 +182,12 @@
     <button
       class="activity-item"
       class:active={agentsStore.open && agentsStore.section === "orchestration"}
-      title={orchestrationHint}
+      class:folded={!agentsStore.open && sidePanelStore.has("agents") && agentsStore.section === "orchestration"}
+      title={withDragHint(orchestrationHint)}
       aria-label={orchestrationHint}
       aria-pressed={agentsStore.open && agentsStore.section === "orchestration"}
       onclick={() => agentsStore.toggleSection("orchestration")}
+      onpointerdown={(e) => startSectionDrag(e, "agents", t(SIDE_PANEL_SECTIONS.agents.title))}
     >
       <!-- An org chart: the orchestrator over its team. -->
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -222,6 +243,19 @@
   /* The open panel's button: full strength, with the accent on its edge. */
   .activity-item.active {
     opacity: 1;
+  }
+
+  /* In the side panel, folded or with the panel hidden: a fainter mark. */
+  .activity-item.folded::before {
+    content: "";
+    position: absolute;
+    top: 14px;
+    bottom: 14px;
+    left: 0;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--pane-active-border, #3a6df0);
+    opacity: 0.45;
   }
 
   .activity-item.active::before {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { slide } from "svelte/transition";
   import { menuKeys } from "$lib/core/menu-keys";
   import { cubicOut } from "svelte/easing";
@@ -7,8 +8,6 @@
   import { uiState } from "$lib/core/ui-state.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { formatKeybindingLabel } from "$lib/core/shortcuts";
-  import { isMac } from "$lib/core/platform";
   import {
     agentsBoard,
     removeBoardEntry,
@@ -23,7 +22,6 @@
   import { openLink } from "$lib/core/links";
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { agentsStore, type AgentsSection } from "./agents-store.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { agentState, ago, nextRunLabel, type AgentTone } from "./agent-spec";
   import type { MessageKey } from "$lib/i18n/translate";
   import OrchestrationList from "./OrchestrationList.svelte";
@@ -46,6 +44,8 @@
       .map((run) => `${run.id}:${run.status}`)
       .join(),
   );
+  // "5 min ago" labels, kept current while the panel shows.
+  $effect(() => agentsStore.tick());
   $effect(() => {
     void runsSignature;
     if (!boardOpen) return;
@@ -345,12 +345,7 @@
   const section = $derived(agentsStore.section);
   const sectionTabs = $derived(!(appConfigStore.aiModeEnabled && appConfigStore.agentsInActivityBar));
 
-  const shortcut = $derived(
-    formatKeybindingLabel(
-      appConfigStore.getEffectiveShortcut(section === "orchestration" ? "toggleOrchestration" : "toggleAgents"),
-      isMac,
-    ),
-  );
+  sectionHeader({ actions: headerActions, note: () => sectionTabs ? "" : t(SECTIONS.find((item) => item.id === section)!.label) });
 </script>
 
 <svelte:window
@@ -364,80 +359,9 @@
 
 <aside
   class="agents"
-  style="--agents-width:{agentsStore.width}px"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("agents.title")}
 >
-  <SidebarResizeHandle />
   <div class="agents-inner">
-    <header class="agents-header">
-      <span class="agents-title">{sectionTabs ? t("agents.title") : t(SECTIONS.find((item) => item.id === section)!.label)}</span>
-      {#if section === "local" && agentsStore.localAgents.length > 0}
-        <span class="agents-count">{agentsStore.localAgents.length}</span>
-      {/if}
-      {#if section === "orchestration"}
-        <button
-          class="icon-button"
-          title={t("agents.orchestration.new")}
-          aria-label={t("agents.orchestration.new")}
-          onclick={() => uiState.openOrchestrationDialog()}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
-        </button>
-      {:else}
-      {#if usesBoard || boardOpen}
-        <button
-          class="icon-button"
-          class:active={boardOpen}
-          title={boardOpen ? t("agents.board.close") : t("agents.board.open")}
-          aria-label={boardOpen ? t("agents.board.close") : t("agents.board.open")}
-          aria-pressed={boardOpen}
-          onclick={() => (boardOpen = !boardOpen)}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <rect x="1.5" y="2" width="9" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
-            <path d="M3.5 4.5h5M3.5 6.5h3" stroke="currentColor" stroke-width="1.1" />
-          </svg>
-        </button>
-      {/if}
-      <button
-        class="icon-button"
-        title={t("agents.portable.import")}
-        aria-label={t("agents.portable.import")}
-        onclick={() => void importAgents()}
-      >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M6 1.5v6M3.5 5L6 7.5 8.5 5M1.5 8.5v2h9v-2" fill="none" stroke="currentColor" stroke-width="1.2" />
-        </svg>
-      </button>
-      <button
-        class="icon-button"
-        title={t("agents.projects.new")}
-        aria-label={t("agents.projects.new")}
-        onclick={() => uiState.openProjectDialog(null)}
-      >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M1.5 3h3l1 1h5v6h-9z M6 5.5v3M4.5 7h3" fill="none" stroke="currentColor" stroke-width="1.1" />
-        </svg>
-      </button>
-      <button
-        class="icon-button"
-        title={t("agents.new")}
-        aria-label={t("agents.new")}
-        onclick={() => uiState.openAgentWizard(null, true)}
-      >
-        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
-      </button>
-      {/if}
-      <button
-        class="icon-button"
-        title={`${t("agents.close")} (${shortcut})`}
-        aria-label={t("agents.close")}
-        onclick={() => agentsStore.setOpen(false)}
-      >
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-    </header>
 
     {#if sectionTabs}
     <div class="sections" role="tablist" aria-label={t("agents.sections.label")}>
@@ -800,17 +724,75 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+{#snippet headerActions()}
+      {#if section === "local" && agentsStore.localAgents.length > 0}
+        <span class="agents-count">{agentsStore.localAgents.length}</span>
+      {/if}
+      {#if section === "orchestration"}
+        <button
+          class="icon-button"
+          title={t("agents.orchestration.new")}
+          aria-label={t("agents.orchestration.new")}
+          onclick={() => uiState.openOrchestrationDialog()}
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
+        </button>
+      {:else}
+      {#if usesBoard || boardOpen}
+        <button
+          class="icon-button"
+          class:active={boardOpen}
+          title={boardOpen ? t("agents.board.close") : t("agents.board.open")}
+          aria-label={boardOpen ? t("agents.board.close") : t("agents.board.open")}
+          aria-pressed={boardOpen}
+          onclick={() => (boardOpen = !boardOpen)}
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <rect x="1.5" y="2" width="9" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
+            <path d="M3.5 4.5h5M3.5 6.5h3" stroke="currentColor" stroke-width="1.1" />
+          </svg>
+        </button>
+      {/if}
+      <button
+        class="icon-button"
+        title={t("agents.portable.import")}
+        aria-label={t("agents.portable.import")}
+        onclick={() => void importAgents()}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M6 1.5v6M3.5 5L6 7.5 8.5 5M1.5 8.5v2h9v-2" fill="none" stroke="currentColor" stroke-width="1.2" />
+        </svg>
+      </button>
+      <button
+        class="icon-button"
+        title={t("agents.projects.new")}
+        aria-label={t("agents.projects.new")}
+        onclick={() => uiState.openProjectDialog(null)}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M1.5 3h3l1 1h5v6h-9z M6 5.5v3M4.5 7h3" fill="none" stroke="currentColor" stroke-width="1.1" />
+        </svg>
+      </button>
+      <button
+        class="icon-button"
+        title={t("agents.new")}
+        aria-label={t("agents.new")}
+        onclick={() => uiState.openAgentWizard(null, true)}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.3" /></svg>
+      </button>
+      {/if}
+{/snippet}
+
 <style>
-  /* Docked at the window's left edge: the consoles make room for it rather
-     than being covered. The width animates; the content inside keeps its
-     own fixed width so nothing reflows while it slides. */
+  /* A section of the side panel: it fills its slot (see SidePanelColumn). */
   .agents {
     position: relative;
-    flex-shrink: 0;
-    width: var(--agents-width, 264px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
@@ -867,28 +849,10 @@
   }
 
   .agents-inner {
-    width: var(--agents-width, 264px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-  }
-
-  .agents-header {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 6px 0 12px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-  }
-
-  .agents-title {
-    font-weight: 600;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    opacity: 0.8;
   }
 
   .agents-count {
@@ -916,10 +880,6 @@
   .icon-button.active {
     opacity: 1;
     background: var(--tab-focus-bg, rgba(58, 109, 240, 0.2));
-  }
-
-  .agents-header .icon-button:first-of-type {
-    margin-left: auto;
   }
 
   .icon-button svg {

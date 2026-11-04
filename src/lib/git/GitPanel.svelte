@@ -1,18 +1,14 @@
 <script lang="ts">
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { menuKeys } from "$lib/core/menu-keys";
   import { untrack } from "svelte";
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
   import { openLink } from "$lib/core/links";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { t } from "$lib/i18n/i18n.svelte";
   import { ago } from "$lib/agents/agent-spec";
   import { agentsStore } from "$lib/agents/agents-store.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import { appConfigStore } from "$lib/core/app-config.svelte";
   import { gitGraph, type Branch, type FileChange, type GraphCommit } from "$lib/core/git-client";
-  import { formatKeybindingLabel } from "$lib/core/shortcuts";
-  import { isMac } from "$lib/core/platform";
   import { uiState } from "$lib/core/ui-state.svelte";
   import { MARK_LETTER, markColor } from "$lib/explorer/git-marks";
   import { fileName, type DiffTarget } from "$lib/layout/split-tree";
@@ -50,7 +46,6 @@
   const busy = $derived(gitStore.running !== null);
   const forge = $derived(gitStore.forge);
   const repoName = $derived(forge ? `${forge.owner}/${forge.repo}` : root ? fileName(root) : t("git.title"));
-  const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleGit"), isMac));
 
   let collapsed = $state<SectionId[]>(loadCollapsed());
   let menuOpen = $state(false);
@@ -123,11 +118,6 @@
     } catch {
       // Only a convenience.
     }
-  }
-
-  function close() {
-    gitStore.setOpen(false);
-    uiState.refocusTerminals();
   }
 
   function age(ms: number): string {
@@ -225,6 +215,7 @@
   function focusOnMount(node: HTMLElement) {
     node.focus();
   }
+  sectionHeader({ actions: headerActions, note: () => repoName });
 </script>
 
 <svelte:window onpointerdown={() => (menuOpen = false)} />
@@ -243,37 +234,10 @@
 
 <aside
   class="git-panel"
-  style="--panel-width:{agentsStore.width}px"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("git.title")}
 >
-  <SidebarResizeHandle />
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="git-inner" onkeydown={onKeydown}>
-    <header class="git-header">
-      <ForgeIcon kind={snap ? (forge?.kind ?? "generic") : null} />
-      <div class="header-text">
-        <span class="header-name" title={root ?? ""}>{repoName}</span>
-        {#if forge}
-          <span class="header-note">{forge.host}</span>
-        {/if}
-      </div>
-      {#if forge?.webUrl}
-        <button class="icon-button" title={t("git.openInBrowser")} aria-label={t("git.openInBrowser")} onclick={() => open(forge.webUrl)}>
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M5 2.5H2.5v7h7V7M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.2" />
-          </svg>
-        </button>
-      {/if}
-      <button class="icon-button" title={t("git.refresh")} aria-label={t("git.refresh")} onclick={() => void gitStore.refresh()}>
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
-        </svg>
-      </button>
-      <button class="icon-button" title={`${t("git.close")} (${shortcut})`} aria-label={t("git.close")} onclick={close}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-    </header>
 
     {#if !snap}
       <p class="empty-note">{t(!gitStore.loaded ? "git.loading" : "git.notRepo")}</p>
@@ -645,23 +609,37 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+
+{#snippet headerActions()}
+      {#if forge?.webUrl}
+        <button class="icon-button" title={t("git.openInBrowser")} aria-label={t("git.openInBrowser")} onclick={() => open(forge.webUrl)}>
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M5 2.5H2.5v7h7V7M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+          </svg>
+        </button>
+      {/if}
+      <button class="icon-button" title={t("git.refresh")} aria-label={t("git.refresh")} onclick={() => void gitStore.refresh()}>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M13 8a5 5 0 1 1-1.5-3.55M13 2.5v2.5h-2.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+        </svg>
+      </button>
+{/snippet}
+
 <style>
-  /* Docked at the window's left edge, like the explorer and the agents
-     panel: the consoles make room for it. The width animates; the content
-     inside keeps its own fixed width so nothing reflows while it slides. */
+  /* A section of the side panel: it fills its slot (see SidePanelColumn). */
   .git-panel {
     position: relative;
-    flex-shrink: 0;
-    width: var(--panel-width, 264px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
   .git-inner {
-    width: var(--panel-width, 264px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;

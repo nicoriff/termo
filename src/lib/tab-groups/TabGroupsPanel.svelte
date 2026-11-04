@@ -1,13 +1,9 @@
 <script lang="ts">
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { t } from "$lib/i18n/i18n.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
   import ConsoleIcon from "$lib/agent-launch/ConsoleIcon.svelte";
-  import { appConfigStore } from "$lib/core/app-config.svelte";
-  import { isMac } from "$lib/core/platform";
-  import { formatKeybindingLabel } from "$lib/core/shortcuts";
-  import { uiState } from "$lib/core/ui-state.svelte";
   import { collectSessions, isConsoleTab, type SessionLocation, type SessionTab } from "$lib/layout/split-tree";
   import { aiStatusStore } from "$lib/ai-mode/ai-status-store.svelte";
   import type { AiSessionStatus } from "$lib/ai-mode/classifier";
@@ -16,7 +12,7 @@
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { GROUP_COLORS, type GroupAlert, type TabGroup } from "./tab-groups";
-  import { TAB_GROUPS_WIDTH, tabGroupsStore } from "./tab-groups-store.svelte";
+  import { tabGroupsStore } from "./tab-groups-store.svelte";
   import { consolePortsStore } from "./console-ports.svelte";
 
   /** Every tab group, as an accordion: each one's open tabs (a click brings
@@ -62,7 +58,6 @@
 
   // The ports the consoles serve, asked for while the panel is open.
   $effect(() => consolePortsStore.watch());
-  const shortcut = $derived(formatKeybindingLabel(appConfigStore.getEffectiveShortcut("toggleTabGroups"), isMac));
 
   function toggleFolded(groupId: string) {
     folded = folded.includes(groupId) ? folded.filter((id) => id !== groupId) : [...folded, groupId];
@@ -71,11 +66,6 @@
     } catch {
       // Only a convenience.
     }
-  }
-
-  function close() {
-    tabGroupsStore.setOpen(false);
-    uiState.refocusTerminals();
   }
 
   function newGroup(event: MouseEvent) {
@@ -113,6 +103,7 @@
   function liveTitle(session: SessionTab): string {
     return tabTitleStore.titleFor(session.id, session.title);
   }
+  sectionHeader({ actions: headerActions });
 </script>
 
 {#snippet liveRow(loc: SessionLocation)}
@@ -170,39 +161,9 @@
 
 <aside
   class="groups-panel"
-  style="--panel-width:{tabGroupsStore.width}px"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
   aria-label={t("tabGroups.title")}
 >
-  <SidebarResizeHandle sizer={tabGroupsStore} limits={TAB_GROUPS_WIDTH} />
   <div class="groups-inner">
-    <header class="groups-header">
-      <svg class="header-icon" viewBox="0 0 16 16" aria-hidden="true">
-        <rect x="1.5" y="4" width="13" height="9.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.1" />
-        <path d="M1.5 6.5h13M4.5 4V2.5h4V4" fill="none" stroke="currentColor" stroke-width="1.1" />
-      </svg>
-      <span class="header-name">{t("tabGroups.title")}</span>
-      <button
-        class="icon-button"
-        class:pressed={showUngrouped}
-        title={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
-        aria-label={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
-        aria-pressed={showUngrouped}
-        onclick={toggleUngrouped}
-      >
-        <!-- Loose tabs: a stack of them, not in a folder. -->
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <rect x="1" y="1.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
-          <rect x="4" y="6.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 1.1" />
-        </svg>
-      </button>
-      <button class="icon-button" title={t("tabGroups.newGroup")} aria-label={t("tabGroups.newGroup")} onclick={newGroup}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-      <button class="icon-button" title={`${t("tabGroups.title")} (${shortcut})`} aria-label={t("tabGroups.closePanel")} onclick={close}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-    </header>
 
     <div class="groups-body">
       {#if tabGroupsStore.groups.length === 0 && !showUngrouped}
@@ -312,49 +273,44 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+
+{#snippet headerActions()}
+      <button
+        class="icon-button"
+        class:pressed={showUngrouped}
+        title={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
+        aria-label={showUngrouped ? t("tabGroups.hideUngrouped") : t("tabGroups.showUngrouped")}
+        aria-pressed={showUngrouped}
+        onclick={toggleUngrouped}
+      >
+        <!-- Loose tabs: a stack of them, not in a folder. -->
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <rect x="1" y="1.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" />
+          <rect x="4" y="6.5" width="7" height="4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 1.1" />
+        </svg>
+      </button>
+      <button class="icon-button" title={t("tabGroups.newGroup")} aria-label={t("tabGroups.newGroup")} onclick={newGroup}>
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1.1" /></svg>
+      </button>
+{/snippet}
+
 <style>
   .groups-panel {
     position: relative;
-    flex-shrink: 0;
-    width: var(--panel-width, 280px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
   .groups-inner {
-    width: var(--panel-width, 280px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-  }
-
-  .groups-header {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 28px;
-    padding: 0 6px 0 10px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-  }
-
-  .header-icon {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    opacity: 0.8;
-  }
-
-  .header-name {
-    flex: 1;
-    min-width: 0;
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .icon-button {

@@ -1,11 +1,7 @@
-import { agentsStore } from "$lib/agents/agents-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 import { resumeInTab } from "$lib/ai-mode/restore-session";
 import { tabAgentSessions } from "$lib/ai-mode/tab-sessions.svelte";
 import { deleteTabGroup, listTabGroups, onTabGroups, saveTabGroup } from "$lib/core/tab-groups-client";
-import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-import { gitStore } from "$lib/git/git-store.svelte";
-import { harnessStore } from "$lib/harness/harness-store.svelte";
-import { kanbanStore } from "$lib/kanban/kanban-store.svelte";
 import { hydrateSession, snapshotSession, type LayoutResume } from "$lib/layout/layout-snapshot";
 import { collectSessions, collectTiles, type SessionLocation } from "$lib/layout/split-tree";
 import { sessionFolder, workspaceStore } from "$lib/layout/workspace-store.svelte";
@@ -25,22 +21,6 @@ import {
 /** How long after a change to the tree each group's tabs are recorded. */
 const SAVE_DELAY_MS = 300;
 
-export const TAB_GROUPS_WIDTH = { initial: 280, min: 220, max: 520 };
-const WIDTH_KEY = "termo.tabGroups.width";
-
-function loadWidth(): number {
-  try {
-    const saved = Number(localStorage.getItem(WIDTH_KEY));
-    return saved ? clampWidth(saved) : TAB_GROUPS_WIDTH.initial;
-  } catch {
-    return TAB_GROUPS_WIDTH.initial;
-  }
-}
-
-function clampWidth(width: number): number {
-  return Math.round(Math.min(TAB_GROUPS_WIDTH.max, Math.max(TAB_GROUPS_WIDTH.min, width)));
-}
-
 /** A file edited by hand, or written by a later Termo, still reads. */
 function checked(group: TabGroup): TabGroup {
   return {
@@ -56,17 +36,22 @@ function checked(group: TabGroup): TabGroup {
 
 /**
  * The tab groups (see tab-groups.ts), as kept by the backend, plus the side
- * panel that manages them. Docked on the window's left edge like the
- * explorer, the Git panel, the Harness panel and the agents panel: one at a
- * time.
+ * panel that manages them, a section of the side panel (see
+ * side-panel-store).
  *
  * What a group's tabs are is recorded as they change, so a group whose tabs
  * were all closed — or that outlived Termo — opens again as it last was.
  */
 class TabGroupsStore {
   groups = $state<TabGroup[]>([]);
-  open = $state(false);
-  width = $state(loadWidth());
+  get open(): boolean {
+    return sidePanelStore.isShown("tabGroups");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
+
   /** The group whose editor (name, color, actions) is open, and where. */
   editing = $state<{ groupId: string; x: number; y: number } | null>(null);
 
@@ -385,29 +370,13 @@ class TabGroupsStore {
   }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    if (sidePanelStore.isShown("tabGroups")) sidePanelStore.hide();
+    else this.setOpen(true);
   }
 
   setOpen(open: boolean): void {
-    // One side panel at a time: they're all docked on the same edge.
-    if (open) {
-      agentsStore.setOpen(false);
-      explorerStore.open = false;
-      gitStore.open = false;
-      harnessStore.setOpen(false);
-      kanbanStore.open = false;
-    }
-    this.open = open;
-  }
-
-  setWidth(width: number, persist = false): void {
-    this.width = clampWidth(width);
-    if (!persist) return;
-    try {
-      localStorage.setItem(WIDTH_KEY, String(this.width));
-    } catch {
-      // Private mode or storage off: it just won't be remembered.
-    }
+    if (open) sidePanelStore.show("tabGroups");
+    else sidePanelStore.close("tabGroups");
   }
 }
 

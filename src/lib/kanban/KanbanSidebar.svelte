@@ -1,13 +1,10 @@
 <script lang="ts">
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
+  import { sectionHeader } from "$lib/app/side-panel-host.svelte";
   import { t } from "$lib/i18n/i18n.svelte";
-  import SidebarResizeHandle from "$lib/app/SidebarResizeHandle.svelte";
-  import { uiState } from "$lib/core/ui-state.svelte";
   import { themeStore } from "$lib/theme/theme-store.svelte";
   import { workspaceStore } from "$lib/layout/workspace-store.svelte";
   import { boardActivity } from "./kanban-model";
-  import { KANBAN_WIDTH, kanbanStore } from "./kanban-store.svelte";
+  import { kanbanStore } from "./kanban-store.svelte";
 
   /** Every kanban board: whether it's on, what's running, what waits for the
    * user. A click opens the board in a tab. */
@@ -16,34 +13,15 @@
   /** The board in the tab in focus, highlighted in the list. */
   const current = $derived(workspaceStore.focusedSession?.kanbanView?.boardId ?? null);
 
-  function close() {
-    kanbanStore.setOpen(false);
-    uiState.refocusTerminals();
-  }
+  sectionHeader({ actions: headerActions });
 </script>
 
 <aside
   class="kanban-panel"
-  style="--panel-width:{kanbanStore.width}px;--live:{colors.blue};--ask:{colors.yellow};--on:{colors.green}"
-  transition:slide={{ axis: "x", duration: 180, easing: cubicOut }}
+  style="--live:{colors.blue};--ask:{colors.yellow};--on:{colors.green}"
   aria-label={t("kanban.title")}
 >
-  <SidebarResizeHandle sizer={kanbanStore} limits={KANBAN_WIDTH} />
   <div class="kanban-inner">
-    <header class="kanban-header">
-      <svg class="header-icon" viewBox="0 0 16 16" aria-hidden="true">
-        <rect x="1.5" y="2" width="3.4" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
-        <rect x="6.3" y="2" width="3.4" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
-        <rect x="11.1" y="2" width="3.4" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
-      </svg>
-      <span class="header-name">{t("kanban.title")}</span>
-      <button class="icon-button" title={t("kanban.new")} aria-label={t("kanban.new")} onclick={() => kanbanStore.newBoard()}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-      <button class="icon-button" title={t("kanban.closePanel")} aria-label={t("kanban.closePanel")} onclick={close}>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" /></svg>
-      </button>
-    </header>
 
     <div class="kanban-body">
       {#each kanbanStore.boards as board (board.id)}
@@ -76,49 +54,30 @@
   </div>
 </aside>
 
+<!-- Its header's buttons, shown in the side panel's header for it
+     (see SidePanelColumn). -->
+
+{#snippet headerActions()}
+      <button class="icon-button" title={t("kanban.new")} aria-label={t("kanban.new")} onclick={() => kanbanStore.newBoard()}>
+        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0v10M0 5h10" stroke="currentColor" stroke-width="1.1" /></svg>
+      </button>
+{/snippet}
+
 <style>
   .kanban-panel {
     position: relative;
-    flex-shrink: 0;
-    width: var(--panel-width, 260px);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--tabbar-border, #2a2a2a);
-    background: var(--tabbar-bg, #1e1e1e);
     color: var(--titlebar-fg, #d4d4d4);
     font-size: 12px;
   }
 
   .kanban-inner {
-    width: var(--panel-width, 260px);
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-  }
-
-  .kanban-header {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 28px;
-    padding: 0 6px 0 10px;
-    border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
-  }
-
-  .header-icon {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    opacity: 0.8;
-  }
-
-  .header-name {
-    flex: 1;
-    min-width: 0;
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .icon-button {

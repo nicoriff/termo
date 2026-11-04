@@ -1,16 +1,10 @@
 <script lang="ts">
   import { t } from "$lib/i18n/i18n.svelte";
-  import { SIDEBAR_WIDTH, agentsStore } from "$lib/agents/agents-store.svelte";
+  import { sidePanelStore } from "./side-panel-store.svelte";
 
-  interface Sizer {
-    width: number;
-    setWidth(width: number, persist?: boolean): void;
-  }
-
-  /** The panels on the left edge share the agents panel's width; one that
-   * needs more room (the Harness panel) brings its own, with its limits. */
-  let { sizer = agentsStore, limits = SIDEBAR_WIDTH }: { sizer?: Sizer; limits?: { initial: number; min: number; max: number } } =
-    $props();
+  /** The side panel's column: one width for every section in it. */
+  const sizer = sidePanelStore;
+  const limits = $derived(sidePanelStore.limits);
 
   let resizing = $state(false);
 
@@ -46,9 +40,8 @@
   }
 </script>
 
-<!-- The right edge of a docked side panel (agents, explorer): they share one
-     width, so switching between them doesn't move the consoles. The panel it's
-     in has to be positioned. -->
+<!-- The right edge of the side panel's column. The column has to be
+     positioned. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
   class="sidebar-resize-handle"

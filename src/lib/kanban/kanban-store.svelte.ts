@@ -19,29 +19,10 @@ import {
 } from "$lib/core/kanban-client";
 import { agentsStore } from "$lib/agents/agents-store.svelte";
 import { appConfigStore } from "$lib/core/app-config.svelte";
-import { explorerStore } from "$lib/explorer/explorer-store.svelte";
-import { gitStore } from "$lib/git/git-store.svelte";
-import { harnessStore } from "$lib/harness/harness-store.svelte";
+import { sidePanelStore } from "$lib/app/side-panel-store.svelte";
 import { collectSessions } from "$lib/layout/split-tree";
 import { workspaceStore } from "$lib/layout/workspace-store.svelte";
-import { tabGroupsStore } from "$lib/tab-groups/tab-groups-store.svelte";
 import { announceKanban } from "./kanban-attention";
-
-export const KANBAN_WIDTH = { initial: 260, min: 200, max: 480 };
-const WIDTH_KEY = "termo.kanban.width";
-
-function clampWidth(width: number): number {
-  return Math.round(Math.min(KANBAN_WIDTH.max, Math.max(KANBAN_WIDTH.min, width)));
-}
-
-function loadWidth(): number {
-  try {
-    const saved = Number(localStorage.getItem(WIDTH_KEY));
-    return saved ? clampWidth(saved) : KANBAN_WIDTH.initial;
-  } catch {
-    return KANBAN_WIDTH.initial;
-  }
-}
 
 /** Which dialog is open over the window: a board's settings (new when the
  * settings have no id), or a task's editor (new when there's no task id). */
@@ -53,12 +34,18 @@ export type KanbanDialog =
  * The kanban boards (see src-tauri/src/agents/kanban), kept by the backend:
  * every change arrives through the `kanban` event, so a board that's
  * running shows its cards moving. Plus the side panel that lists them,
- * docked on the window's left edge like the others: one at a time.
+ * a section of the side panel (see side-panel-store).
  */
 class KanbanStore {
   boards = $state<KanbanBoard[]>([]);
-  open = $state(false);
-  width = $state(loadWidth());
+  get open(): boolean {
+    return sidePanelStore.isShown("kanban");
+  }
+
+  set open(open: boolean) {
+    this.setOpen(open);
+  }
+
   dialog = $state<KanbanDialog | null>(null);
   /** The board last opened or worked on: where a new task goes by default. */
   private lastBoardId = $state("");
@@ -105,31 +92,15 @@ class KanbanStore {
   }
 
   toggle(): void {
-    this.setOpen(!this.open);
+    if (sidePanelStore.isShown("kanban")) sidePanelStore.hide();
+    else this.setOpen(true);
   }
 
   setOpen(open: boolean): void {
     // Agents' work, like every agent feature: it doesn't open with Modo IA off.
     if (open && !appConfigStore.aiModeEnabled) return;
-    // One side panel at a time: they're all docked on the same edge.
-    if (open) {
-      agentsStore.setOpen(false);
-      explorerStore.open = false;
-      gitStore.open = false;
-      harnessStore.setOpen(false);
-      tabGroupsStore.open = false;
-    }
-    this.open = open;
-  }
-
-  setWidth(width: number, persist = false): void {
-    this.width = clampWidth(width);
-    if (!persist) return;
-    try {
-      localStorage.setItem(WIDTH_KEY, String(this.width));
-    } catch {
-      // Private mode or storage off: it just won't be remembered.
-    }
+    if (open) sidePanelStore.show("kanban");
+    else sidePanelStore.close("kanban");
   }
 
   openBoard(board: KanbanBoard): void {
