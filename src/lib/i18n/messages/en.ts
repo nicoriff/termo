@@ -1910,6 +1910,13 @@ export const en: Messages = {
         selectHint: "Pick an agent or a task in the tree to see its details.",
         noTasks: "No tasks",
       },
+      readDirs: {
+        label: "Read-only folders",
+        add: "Add folder",
+        remove: "Remove folder",
+        hint: "Its agents can read them but not change them. They apply to the tasks that start from now on. Grok agents don't get them, nor Copilot agents that edit. An agent that runs commands could still write to them from the terminal.",
+        dialogHint: "Optional. Other folders its agents can read but not change, such as another repository to go by. They can be changed later.",
+      },
       askLevel: {
         label: "When to ask you",
         never: "Never",

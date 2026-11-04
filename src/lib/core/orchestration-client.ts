@@ -135,6 +135,9 @@ export interface Orchestration {
   icon: string;
   prompt: string;
   workDir: string;
+  /** Folders its agents may read but never change. Missing in the ones from
+   * before there were any. */
+  readDirs?: string[];
   status: OrchestrationStatus;
   /** Whose CLI plans and supervises it. */
   orchestratorEngine: AgentEngine;
@@ -218,8 +221,9 @@ export function planOrchestration(
   answers: Answered[] = [],
   overheadUsd = 0,
   askLevel: AskLevel = "essential",
+  readDirs: string[] = [],
 ): Promise<Orchestration> {
-  return invoke("orchestration_plan", { prompt, workDir, engine, model, answers, overheadUsd, askLevel });
+  return invoke("orchestration_plan", { prompt, workDir, engine, model, answers, overheadUsd, askLevel, readDirs });
 }
 
 /** The user's answer to what an agent asked; the agent goes on. */
@@ -230,6 +234,12 @@ export function answerOrchestration(id: string, questionId: string, answer: stri
 /** When its agents ask the user, in any state: the tasks that start from now go by it. */
 export function setOrchestrationAskLevel(id: string, askLevel: AskLevel): Promise<Orchestration> {
   return invoke("orchestration_set_ask_level", { id, askLevel });
+}
+
+/** The folders its agents may read besides its own; the tasks that start
+ * from now on get them. */
+export function setOrchestrationReadDirs(id: string, readDirs: string[]): Promise<Orchestration> {
+  return invoke("orchestration_set_read_dirs", { id, readDirs });
 }
 
 export function approveOrchestration(id: string, chosen: string, plan: Plan, budgetUsd: number): Promise<Orchestration> {

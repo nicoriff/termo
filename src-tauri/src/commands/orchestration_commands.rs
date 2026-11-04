@@ -3,7 +3,7 @@ use tauri::Emitter;
 
 use crate::agents::draft::Step;
 use crate::agents::host::client::dispatch;
-use crate::agents::orchestration::plan::{Catalog, Orchestration, Plan, Status};
+use crate::agents::orchestration::plan::{self, Catalog, Orchestration, Plan, Status};
 use crate::agents::orchestration::{planner, store};
 use crate::agents::spec::{AskLevel, Engine};
 use crate::agents::store::now_millis;
@@ -85,6 +85,7 @@ pub async fn orchestration_plan(
     answers: Option<Vec<planner::Answered>>,
     overhead_usd: Option<f64>,
     ask_level: Option<AskLevel>,
+    read_dirs: Option<Vec<String>>,
 ) -> Result<Orchestration, String> {
     let root = root(&app)?;
     let request = planner::with_answers(&prompt, &answers.unwrap_or_default());
@@ -96,6 +97,7 @@ pub async fn orchestration_plan(
         .map_err(|err| tr(Msg::OrchestrationPlanFailed(&err.to_string())))??;
     planned.overhead_usd += overhead_usd.filter(|usd| usd.is_finite() && *usd > 0.0).unwrap_or(0.0);
     planned.ask_level = ask_level.unwrap_or_default();
+    planned.read_dirs = plan::clean_read_dirs(read_dirs.unwrap_or_default());
     let orchestration = saved(store::save_in(&root, planned))?;
     let _ = app.emit("orchestration", &orchestration);
     Ok(orchestration)
@@ -177,6 +179,13 @@ pub async fn orchestration_answer(app: tauri::AppHandle, id: String, question_id
 #[tauri::command]
 pub async fn orchestration_set_ask_level(app: tauri::AppHandle, id: String, ask_level: AskLevel) -> Result<Orchestration, String> {
     dispatch(app, "orchestration_set_ask_level", json!({ "id": id, "ask_level": ask_level })).await
+}
+
+/// The folders its agents may read besides its own, in any state: the tasks
+/// that start from now on get them.
+#[tauri::command]
+pub async fn orchestration_set_read_dirs(app: tauri::AppHandle, id: String, read_dirs: Vec<String>) -> Result<Orchestration, String> {
+    dispatch(app, "orchestration_set_read_dirs", json!({ "id": id, "read_dirs": read_dirs })).await
 }
 
 #[tauri::command]

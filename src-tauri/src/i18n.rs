@@ -185,6 +185,9 @@ pub enum Msg<'a> {
     /// before "done when", the heading of the results it builds on, and the
     /// one over its own failed attempt.
     OrchestrationDoneWhen,
+    /// The folders an orchestration's agent may read besides its own (one
+    /// per line).
+    OrchestrationReadDirs(&'a str),
     OrchestrationBuildsOn,
     OrchestrationLastAttempt,
     /// The names of a kanban board's column agents (the board's name).
@@ -613,6 +616,12 @@ fn tr_in(lang: Lang, msg: Msg) -> String {
         (OrchestrationAgentTask, En) => "Do the task the orchestrator assigns you.".into(),
         (OrchestrationDoneWhen, Es) => "Está listo cuando:".into(),
         (OrchestrationDoneWhen, En) => "Done when:".into(),
+        (OrchestrationReadDirs(dirs), Es) => format!(
+            "Además de tu carpeta de trabajo podés leer estas carpetas, como referencia. No cambies nada en ellas:\n{dirs}"
+        ),
+        (OrchestrationReadDirs(dirs), En) => {
+            format!("Besides your working folder you can read these folders, for reference. Don't change anything in them:\n{dirs}")
+        }
         (OrchestrationBuildsOn, Es) => "Resultados de las tareas anteriores de las que depende esta:".into(),
         (OrchestrationBuildsOn, En) => "Results of the earlier tasks this one builds on:".into(),
         (OrchestrationLastAttempt, Es) => "Tu intento anterior de esta tarea falló así:".into(),
@@ -918,6 +927,7 @@ mod tests {
             Msg::OrchestrationNoReview("timeout"),
             Msg::OrchestrationAgentTask,
             Msg::OrchestrationDoneWhen,
+            Msg::OrchestrationReadDirs("- /x"),
             Msg::OrchestrationBuildsOn,
             Msg::OrchestrationLastAttempt,
             Msg::GitNotFound,

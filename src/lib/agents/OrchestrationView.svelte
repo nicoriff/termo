@@ -14,6 +14,7 @@
   import PlanningProgress from "./PlanningProgress.svelte";
   import { agentsStore } from "./agents-store.svelte";
   import { orchestrationStore } from "./orchestration-store.svelte";
+  import ReadDirsField from "./ReadDirsField.svelte";
   import {
     ASK_LEVEL_KEYS,
     ASK_LEVELS,
@@ -441,6 +442,9 @@
   function setEngine(agent: PlannedAgent, engine: AgentEngine) {
     setModel(agent, engine, modelsOf(catalog, engine)[0]?.id ?? "");
   }
+
+  /** Folders its agents may read besides its own. */
+  const readDirs = $derived(orchestration?.readDirs ?? []);
 
   async function act(action: () => Promise<void>) {
     if (busy) return;
@@ -1390,6 +1394,17 @@
             {t("agents.orchestration.view.approve")}
           </button>
         {/if}
+      </div>
+      <!-- Changeable in any state, like when to ask: the tasks that start
+           after get them. -->
+      <div class="read-dirs">
+        <span class="figure-label">{t("agents.orchestration.readDirs.label")}</span>
+        <ReadDirsField
+          dirs={readDirs}
+          disabled={busy}
+          onchange={(next) => void act(() => orchestrationStore.setReadDirs(orchestrationId, next))}
+        />
+        <span class="muted small">{t("agents.orchestration.readDirs.hint")}</span>
       </div>
       <p class="muted small fine">
         {t("agents.orchestration.view.approx")}{#if totals.unpriced > 0}{" "}{t("agents.orchestration.view.unpriced", {
@@ -2426,6 +2441,13 @@
   .fine {
     margin: 8px 0 0;
     line-height: 1.45;
+  }
+
+  .read-dirs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
   }
 
   .button {

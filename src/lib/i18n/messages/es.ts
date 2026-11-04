@@ -1909,6 +1909,13 @@ export const es = {
         selectHint: "Elegí un agente o una tarea del árbol para ver el detalle.",
         noTasks: "Sin tareas",
       },
+      readDirs: {
+        label: "Carpetas de solo lectura",
+        add: "Agregar carpeta",
+        remove: "Quitar carpeta",
+        hint: "Sus agentes pueden leerlas pero no cambiarlas. Valen para las tareas que empiezan desde ahora. No llegan a los agentes de Grok ni a los de Copilot que editan. Un agente que ejecuta comandos podría escribir en ellas desde la terminal.",
+        dialogHint: "Opcional. Otras carpetas que sus agentes pueden leer pero no cambiar, como otro repositorio de referencia. Se pueden cambiar después.",
+      },
       askLevel: {
         label: "Cuándo preguntarte",
         never: "Nunca",

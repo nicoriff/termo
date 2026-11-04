@@ -241,6 +241,10 @@ pub struct AgentSpec {
     pub model: String,
     /// The folder the agent works in.
     pub work_dir: String,
+    /// Folders it may read besides that one, never change: an
+    /// orchestration's, given to each task as it starts (see
+    /// `extra_read_dirs` for which engines can take them).
+    pub read_dirs: Vec<String>,
     /// What to do on each run: the prompt.
     pub task: String,
     /// The agent's logic: the steps it follows, its rules, when it's done.
@@ -274,6 +278,7 @@ impl Default for AgentSpec {
             engine: Engine::default(),
             model: String::new(),
             work_dir: String::new(),
+            read_dirs: Vec::new(),
             task: String::new(),
             instructions: String::new(),
             autonomy: Autonomy::default(),
@@ -419,6 +424,57 @@ pub const GIT_SAFETY_ENV: &[(&str, &str)] = &[
     ("GIT_CONFIG_VALUE_0", "false"),
 ];
 
+/// The folders the run may read besides its working one, as far as its CLI
+/// can keep them read-only:
+/// - Claude Code: `--add-dir`, with its edit tools denied there.
+/// - Gemini CLI: `--include-directories`, with its writing tools denied there
+///   by policy.
+/// - Copilot CLI: `--add-dir` only for an agent that doesn't write at all;
+///   its rules can't deny writes under a folder.
+/// - Codex reads the whole disk already and writes only in its working
+///   folder; Grok has no way to add one. Neither is told about them.
+///
+/// Only absolute paths, and nothing that could read as an option. An agent
+/// that runs commands has the whole shell, so it could still write there.
+pub fn extra_read_dirs(spec: &AgentSpec) -> Vec<String> {
+    let reaches = match spec.engine {
+        Engine::Claude | Engine::Gemini => true,
+        Engine::Copilot => spec.autonomy == Autonomy::Read,
+        Engine::Codex => true,
+        Engine::Grok => false,
+    };
+    if !reaches {
+        return Vec::new();
+    }
+    let work = spec.work_dir.trim();
+    let mut dirs: Vec<String> = Vec::new();
+    for dir in &spec.read_dirs {
+        let dir = dir.trim().trim_end_matches(['/', '\\']);
+        let absolute = std::path::Path::new(dir).is_absolute() || dir.starts_with('/');
+        if dir.is_empty() || dir.starts_with('-') || !absolute || dir.eq_ignore_ascii_case(work) {
+            continue;
+        }
+        if !dirs.iter().any(|seen| seen.eq_ignore_ascii_case(dir)) {
+            dirs.push(dir.to_string());
+        }
+    }
+    dirs
+}
+
+/// A folder as Claude Code's permission rules name an absolute path:
+/// `//` and the path in POSIX form, a Windows drive as its lowercase letter
+/// (`C:\work\lib` is `//c/work/lib`).
+fn claude_path_rule(dir: &str) -> String {
+    let posix = dir.replace('\\', "/");
+    let bytes = posix.as_bytes();
+    let posix = if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        format!("/{}{}", (bytes[0] as char).to_ascii_lowercase(), &posix[2..])
+    } else {
+        posix
+    };
+    format!("/{}", posix.trim_end_matches('/'))
+}
+
 /// What `--allowedTools` can't say, passed as `--settings`: rules with spaces
 /// in them, rules that deny, and keeping every read — the file tools, `cat`,
 /// `git` — inside the working folder, so text from outside (a webhook, a
@@ -432,6 +488,11 @@ pub fn claude_settings_json(spec: &AgentSpec) -> String {
             allow.extend(READ_ONLY_GIT_BRANCH.iter().map(|command| format!("{tool}({command})")));
             deny.extend(GIT_DENIED_OPTIONS.iter().map(|option| format!("{tool}(git *{option}*)")));
         }
+    }
+    // The folders it may only read: Edit's rules cover every tool that
+    // writes a file (Write, NotebookEdit).
+    if spec.engine == Engine::Claude {
+        deny.extend(extra_read_dirs(spec).iter().map(|dir| format!("Edit({}/**)", claude_path_rule(dir))));
     }
     serde_json::json!({
         "permissions": {
@@ -614,6 +675,13 @@ fn claude_invocation(
         "--settings".into(),
         claude_settings_json(spec),
     ];
+    // Where it may read besides its folder (its settings deny edits there).
+    // The flag takes several values: each folder its own pair, followed by
+    // another option.
+    for dir in extra_read_dirs(spec) {
+        args.push("--add-dir".into());
+        args.push(dir);
+    }
     if let Some(file) = system_prompt_file.filter(|_| !spec.instructions.trim().is_empty()) {
         args.push("--append-system-prompt-file".into());
         args.push(file.into());
@@ -793,6 +861,16 @@ fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<
         args.push("-m".into());
         args.push(spec.model.trim().into());
     }
+    let read_dirs = extra_read_dirs(spec);
+    for dir in &read_dirs {
+        args.push("--include-directories".into());
+        args.push(dir.clone());
+    }
+    let mut policy = String::new();
+    if !spec.tools.web {
+        policy.push_str(&gemini_no_web_policy());
+    }
+    policy.push_str(&gemini_read_only_policy(&read_dirs));
     Invocation {
         args,
         stdin: String::new(),
@@ -801,7 +879,7 @@ fn gemini_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap<
         // reads the folder's own settings, such as the rules a repository
         // gives every agent.
         env: vec![(GEMINI_TRUST_VAR.to_string(), "true".to_string())],
-        settings: (!spec.tools.web).then(gemini_no_web_policy),
+        settings: (!policy.is_empty()).then_some(policy),
         acp: Some(AcpRun {
             prompt: codex_prompt(spec, context),
             mcp_servers: acp_servers(spec, secrets),
@@ -857,6 +935,43 @@ fn is_plain_path(path: &str) -> bool {
     !path.trim().is_empty()
         && !path.starts_with('-')
         && !path.chars().any(|c| c.is_control() || "\"%&|<>^!`$;".contains(c))
+}
+
+/// Gemini CLI's tools that write a file, by the `file_path` they take (an
+/// absolute one).
+const GEMINI_WRITE_TOOLS: &[&str] = &["write_file", "replace"];
+
+/// A policy denying those tools anywhere under the folders the run may only
+/// read. Its patterns test the call's arguments as JSON, where a backslash
+/// is `\\`: either separator matches, and letters in either case (Windows
+/// paths don't care).
+pub fn gemini_read_only_policy(dirs: &[String]) -> String {
+    let tools = GEMINI_WRITE_TOOLS.iter().map(|tool| format!("\"{tool}\"")).collect::<Vec<_>>().join(", ");
+    dirs.iter()
+        .map(|dir| {
+            let mut pattern = String::from("\"file_path\":\"");
+            for c in dir.trim_end_matches(['/', '\\']).chars() {
+                match c {
+                    '/' | '\\' => pattern.push_str(r"(\\\\|/)"),
+                    c if c.is_ascii_alphabetic() => {
+                        pattern.push_str(&format!("[{}{}]", c.to_ascii_lowercase(), c.to_ascii_uppercase()));
+                    }
+                    // Only what regular expressions give a meaning: escaping
+                    // anything else is an error under JavaScript's `u` flag.
+                    c if "^$.|?*+()[]{}".contains(c) => {
+                        pattern.push('\\');
+                        pattern.push(c);
+                    }
+                    c => pattern.push(c),
+                }
+            }
+            // The folder itself, or anything in it: not a sibling that
+            // starts the same.
+            pattern.push_str(r#"(\\\\|/|")"#);
+            let pattern = serde_json::to_string(&pattern).unwrap_or_default();
+            format!("[[rule]]\ntoolName = [{tools}]\nargsPattern = {pattern}\ndecision = \"deny\"\npriority = 999\n")
+        })
+        .collect()
 }
 
 pub fn gemini_no_web_policy() -> String {
@@ -935,6 +1050,11 @@ fn copilot_invocation(spec: &AgentSpec, context: Option<&str>, secrets: &HashMap
         }
     }
     rule(if spec.tools.web { "--allow-tool" } else { "--deny-tool" }, COPILOT_WEB_TOOL);
+    // Folders it may read: only for one that writes nothing (see
+    // extra_read_dirs).
+    for dir in extra_read_dirs(spec) {
+        rule("--add-dir", &dir);
+    }
     // Every tool of each of the agent's own servers.
     for server in usable_servers(spec) {
         rule("--allow-tool", &server.name);
@@ -1180,6 +1300,58 @@ mod tests {
         // The value only in the environment, for Claude Code to expand.
         assert!(!run.args.iter().any(|arg| arg.contains("s3cr3t")));
         assert_eq!(run.env, vec![("GITHUB_TOKEN".to_string(), "s3cr3t".to_string())]);
+    }
+
+    fn with_read_dirs(engine: Engine, autonomy: Autonomy, dirs: &[&str]) -> AgentSpec {
+        let mut agent = spec(engine, autonomy);
+        agent.read_dirs = dirs.iter().map(|dir| dir.to_string()).collect();
+        agent
+    }
+
+    #[test]
+    fn read_dirs_are_absolute_distinct_and_never_an_option() {
+        let agent = with_read_dirs(
+            Engine::Claude,
+            Autonomy::Edit,
+            &["C:\\lib\\", "c:\\LIB", "relative\\dir", "-rf", "", "C:\\repo", "/srv/docs"],
+        );
+        assert_eq!(extra_read_dirs(&agent), vec!["C:\\lib".to_string(), "/srv/docs".to_string()]);
+    }
+
+    #[test]
+    fn claude_reads_extra_folders_but_cant_edit_them() {
+        let run = build_invocation(&with_read_dirs(Engine::Claude, Autonomy::Edit, &["C:\\lib", "/srv/docs"]), None, None, &no_secrets());
+        assert_eq!(values_after(&run.args, "--add-dir"), vec!["C:\\lib", "/srv/docs"]);
+        let settings: serde_json::Value = serde_json::from_str(value_after(&run.args, "--settings").unwrap()).unwrap();
+        let deny: Vec<&str> = settings["permissions"]["deny"].as_array().unwrap().iter().filter_map(|rule| rule.as_str()).collect();
+        assert!(deny.contains(&"Edit(//c/lib/**)") && deny.contains(&"Edit(//srv/docs/**)"), "{deny:?}");
+        assert_eq!(settings["permissions"]["blockReadsOutsideWorkingDirectories"], true);
+    }
+
+    #[test]
+    fn gemini_includes_extra_folders_and_its_policy_denies_writing_there() {
+        let run = build_invocation(&with_read_dirs(Engine::Gemini, Autonomy::Edit, &["C:\\Lib"]), None, None, &no_secrets());
+        assert_eq!(values_after(&run.args, "--include-directories"), vec!["C:\\Lib"]);
+        let policy = run.settings.unwrap();
+        assert!(policy.contains("\"write_file\", \"replace\"") && policy.contains("decision = \"deny\""), "{policy}");
+        // The pattern, read back as TOML would, matches a write in it in
+        // either separator and case, and not one in a sibling folder.
+        let line = policy.lines().find(|line| line.starts_with("argsPattern = ")).unwrap();
+        let pattern: String = serde_json::from_str(line.trim_start_matches("argsPattern = ")).unwrap();
+        let matches = |args: &str| regex::Regex::new(&pattern).unwrap().is_match(args);
+        assert!(matches(r#"{"content":"x","file_path":"C:\\Lib\\a.rs"}"#));
+        assert!(matches(r#"{"file_path":"c:/lib/a.rs"}"#));
+        assert!(!matches(r#"{"file_path":"C:\\Library\\a.rs"}"#));
+        assert!(!matches(r#"{"file_path":"C:\\repo\\a.rs"}"#));
+    }
+
+    #[test]
+    fn copilot_and_grok_only_where_nothing_can_be_written() {
+        let read = build_invocation(&with_read_dirs(Engine::Copilot, Autonomy::Read, &["C:\\lib"]), None, None, &no_secrets());
+        assert_eq!(values_after(&read.args, "--add-dir"), vec!["C:\\lib"]);
+        let edit = build_invocation(&with_read_dirs(Engine::Copilot, Autonomy::Edit, &["C:\\lib"]), None, None, &no_secrets());
+        assert!(!edit.args.contains(&"--add-dir".into()));
+        assert!(extra_read_dirs(&with_read_dirs(Engine::Grok, Autonomy::Read, &["C:\\lib"])).is_empty());
     }
 
     #[test]
