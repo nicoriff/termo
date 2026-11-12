@@ -1471,6 +1471,7 @@ async function open(session, { again = false } = {}) {
   consoleView.hidden = false;
   render();
 
+  dropLinks();
   term?.dispose();
   term = null;
   await symbolsReady;
@@ -1483,11 +1484,14 @@ async function open(session, { again = false } = {}) {
     disableStdin: readOnly(),
     cursorBlink: !readOnly(),
     allowTransparency: true,
+    // Links a program made of some text (OSC 8): only to web addresses.
+    linkHandler: { activate: (_event, uri) => openLink(uri) },
     ...terminalOptions(),
   });
   fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open($("terminal"));
+  watchLinks();
   term.onData((data) => send(data));
   term.onTitleChange((title) => {
     const entry = sessions.find((item) => item.id === shown);
@@ -1528,6 +1532,7 @@ function showHome() {
   if (shown && connection) connection.request({ op: "detach", session: shown }).catch(() => {});
   shown = null;
   menuOpen = false;
+  dropLinks();
   term?.dispose();
   term = null;
   consoleView.hidden = true;
@@ -1641,6 +1646,193 @@ for (const [id, step] of [
   };
 }
 
+// ---- Links: the web addresses a console printed open in a new tab. With
+// a mouse, xterm finds them as it finds its own (hover, then click); on a
+// phone, where there's no hover, each one gets a see-through link over its
+// cells: a tap opens it, a long press gives the phone's own menu for links
+// (open in a new tab, copy the address).
+
+/** A web address, up to what can't be in one. What it ends with is
+ * trimmed after (see findUrls). */
+const URL_PATTERN = /https?:\/\/[^\s"'<>`{}|\\^]+/g;
+
+function openLink(url) {
+  if (!/^https?:\/\//i.test(url)) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function occurrences(text, char) {
+  return text.split(char).length - 1;
+}
+
+/** The web addresses in a piece of text, with where each starts and ends. */
+function findUrls(text) {
+  const found = [];
+  for (const match of text.matchAll(URL_PATTERN)) {
+    let url = match[0];
+    // A sentence's punctuation after it, or a bracket it doesn't open.
+    for (;;) {
+      const trimmed = url.replace(/[.,;:!?'"]+$/, "");
+      const unopened =
+        (trimmed.endsWith(")") && occurrences(trimmed, ")") > occurrences(trimmed, "(")) ||
+        (trimmed.endsWith("]") && occurrences(trimmed, "]") > occurrences(trimmed, "["));
+      const next = unopened ? trimmed.slice(0, -1) : trimmed;
+      if (next === url) break;
+      url = next;
+    }
+    try {
+      const parsed = new URL(url);
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.hostname) continue;
+    } catch {
+      continue;
+    }
+    found.push({ url, start: match.index, end: match.index + url.length });
+  }
+  return found;
+}
+
+/** The first row of the line that row `y` is part of (a long line wraps
+ * over several rows). */
+function lineStart(buffer, y) {
+  while (y > 0 && buffer.getLine(y)?.isWrapped) y -= 1;
+  return y;
+}
+
+/** The text of the line that starts at row `start`, its wrapped rows
+ * joined, with the cell each of its characters is in; and the row after it. */
+function readLine(buffer, start, cols) {
+  let text = "";
+  const cells = [];
+  const cell = buffer.getNullCell();
+  for (let y = start; ; y += 1) {
+    const line = buffer.getLine(y);
+    if (!line || (y > start && !line.isWrapped)) return { text, cells, next: y };
+    for (let x = 0; x < cols; x += 1) {
+      if (!line.getCell(x, cell)) break;
+      const width = cell.getWidth();
+      // The second half of a wide character.
+      if (width === 0) continue;
+      const chars = cell.getChars() || " ";
+      for (let i = 0; i < chars.length; i += 1) cells.push({ y, x, width });
+      text += chars;
+    }
+  }
+}
+
+/** The links in the line row `y` is part of: their address and the cells
+ * they take up, row by row. */
+function linksAround(buffer, y, cols) {
+  const line = readLine(buffer, lineStart(buffer, y), cols);
+  const links = findUrls(line.text).map(({ url, start, end }) => ({ url, cells: line.cells.slice(start, end) }));
+  return { links, next: line.next };
+}
+
+/** With a mouse: what xterm underlines on hover. */
+function linkProvider(owner) {
+  return {
+    provideLinks(row, callback) {
+      const y = row - 1;
+      const { links } = linksAround(owner.buffer.active, y, owner.cols);
+      const here = links
+        .filter((link) => link.cells.some((cell) => cell.y === y))
+        .map((link) => {
+          const first = link.cells[0];
+          const last = link.cells[link.cells.length - 1];
+          return {
+            text: link.url,
+            range: { start: { x: first.x + 1, y: first.y + 1 }, end: { x: last.x + last.width, y: last.y + 1 } },
+            activate: () => openLink(link.url),
+          };
+        });
+      callback(here.length ? here : undefined);
+    },
+  };
+}
+
+let linkLayer = null;
+let linkFrame = 0;
+/** Fingers on the console: the links stay as they are meanwhile, since
+ * one taken away under a finger would take the touch with it (no tap, no
+ * scroll). */
+let fingersDown = 0;
+
+function watchLinks() {
+  term.registerLinkProvider(linkProvider(term));
+  linkLayer = document.createElement("div");
+  linkLayer.className = "link-layer";
+  $("terminal").append(linkLayer);
+  term.onRender(drawLinksSoon);
+  term.onScroll(drawLinksSoon);
+  term.onResize(drawLinksSoon);
+  drawLinksSoon();
+}
+
+function dropLinks() {
+  cancelAnimationFrame(linkFrame);
+  linkFrame = 0;
+  linkLayer?.remove();
+  linkLayer = null;
+}
+
+function drawLinksSoon() {
+  if (!linkFrame) linkFrame = requestAnimationFrame(drawLinks);
+}
+
+function drawLinks() {
+  linkFrame = 0;
+  if (!term || !linkLayer || fingersDown) return;
+  const old = new Map([...linkLayer.children].map((anchor) => [anchor.dataset.key, anchor]));
+  const kept = new Set();
+  const screen = term.element?.querySelector(".xterm-screen");
+  // Only where there's no mouse to hover with.
+  if (screen && term.cols && term.rows && matchMedia("(pointer: coarse)").matches) {
+    const box = screen.getBoundingClientRect();
+    const frame = $("terminal").getBoundingClientRect();
+    linkLayer.style.left = `${box.left - frame.left}px`;
+    linkLayer.style.top = `${box.top - frame.top}px`;
+    const width = box.width / term.cols;
+    const height = box.height / term.rows;
+    const buffer = term.buffer.active;
+    const top = buffer.viewportY;
+    const bottom = top + term.rows - 1;
+    for (let y = lineStart(buffer, top); y <= bottom; ) {
+      const { links, next } = linksAround(buffer, y, term.cols);
+      for (const link of links) {
+        // One link a row: a wrapped address is one on each of its rows.
+        const rows = new Map();
+        for (const cell of link.cells) {
+          if (cell.y < top || cell.y > bottom) continue;
+          const span = rows.get(cell.y);
+          if (span) span.end = cell.x + cell.width;
+          else rows.set(cell.y, { start: cell.x, end: cell.x + cell.width });
+        }
+        for (const [row, span] of rows) {
+          const key = `${row - top}:${span.start}:${span.end}:${link.url}`;
+          if (kept.has(key)) continue;
+          kept.add(key);
+          // The same link where it was is left alone: a tap may be on it.
+          let anchor = old.get(key);
+          if (!anchor) {
+            anchor = document.createElement("a");
+            anchor.dataset.key = key;
+            anchor.href = link.url;
+            anchor.target = "_blank";
+            anchor.rel = "noopener noreferrer";
+            anchor.setAttribute("aria-label", link.url);
+            linkLayer.append(anchor);
+          }
+          anchor.style.left = `${span.start * width}px`;
+          anchor.style.top = `${(row - top) * height}px`;
+          anchor.style.width = `${(span.end - span.start) * width}px`;
+          anchor.style.height = `${height}px`;
+        }
+      }
+      y = next;
+    }
+  }
+  for (const [key, anchor] of old) if (!kept.has(key)) anchor.remove();
+}
+
 // ---- Scrolling with a finger. xterm leaves touch to the browser, which
 // finds nothing to scroll: the console's lines live in xterm's own buffer.
 // A drag up or down moves through them, and a flick carries on a while; a
@@ -1686,6 +1878,7 @@ function stopFlick() {
 terminalFrame.addEventListener(
   "touchstart",
   (event) => {
+    fingersDown = event.touches.length;
     stopFlick();
     if (event.touches.length !== 1 || !term) return (touch = null);
     const { clientX: x, clientY: y } = event.touches[0];
@@ -1724,6 +1917,8 @@ terminalFrame.addEventListener(
 );
 
 terminalFrame.addEventListener("touchend", (event) => {
+  fingersDown = event.touches.length;
+  drawLinksSoon();
   const ended = touch;
   touch = null;
   if (!ended || ended.axis !== "y" || term?.buffer.active.type !== "normal") return;
@@ -1750,7 +1945,11 @@ terminalFrame.addEventListener("touchend", (event) => {
   flick = { frame: requestAnimationFrame(step) };
 });
 
-terminalFrame.addEventListener("touchcancel", () => (touch = null));
+terminalFrame.addEventListener("touchcancel", (event) => {
+  touch = null;
+  fingersDown = event.touches.length;
+  drawLinksSoon();
+});
 
 // ---- The phone's keyboard: the page shrinks to what's above it, so the
 // console's last line and the extra keys stay in sight.
