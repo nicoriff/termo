@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.31.0",
+    "date": "2026-11-11",
+    "es": [
+      "**La página del celular vuelve a conectarse sola**: si se corta la conexión (bloqueaste el teléfono, cambió la red, se reinició Termo en la computadora), reintenta sola y vuelve a la consola que estabas mirando, que mientras tanto queda atenuada. Al volver a la página revisa que la conexión siga viva, en vez de quedarse colgada.",
+      "**Links en las consolas desde el celular**: las direcciones web quedan subrayadas y se abren con un toque en una pestaña nueva. Manteniéndolas apretadas aparece el menú del teléfono para links, por ejemplo para copiar la dirección. En el navegador de una computadora se abren con un clic."
+    ],
+    "en": [
+      "**The phone page connects again on its own**: if the connection drops (you locked the phone, the network changed, Termo restarted on the computer), it keeps trying and goes back to the console you were looking at, dimmed meanwhile. Back on the page, it checks the connection is still alive instead of hanging.",
+      "**Links in consoles from the phone**: web addresses are underlined and open in a new tab with a tap. Pressing and holding one gives the phone's menu for links, to copy the address for example. On a computer's browser they open with a click."
+    ]
+  },
+  {
     "version": "0.30.0",
     "date": "2026-11-03",
     "es": [
