@@ -1961,3 +1961,20 @@ body.typing .statusbar {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The connection dropped: the console stays, dimmed, until it's back (the
+   dot pulses meanwhile). */
+body.offline .terminal-frame {
+  opacity: 0.45;
+  transition: opacity 200ms ease;
+}
+
+body.offline .link-dot:not(.up) {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.offline .link-dot:not(.up) {
+    animation: none;
+  }
+}

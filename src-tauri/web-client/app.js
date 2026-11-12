@@ -20,6 +20,7 @@ const WORDS = {
     allConsoles: "Todas las consolas",
     noConsoles: "No hay consolas abiertas en esta computadora.",
     disconnected: "Se cortó la conexión. Tocá ⟳ para volver a conectar.",
+    reconnecting: "Se cortó la conexión. Volviendo a conectar…",
     rejected: "Esta computadora no te dejó entrar: {reason}",
     fullAccess: "Acceso total",
     readOnly: "Solo lectura",
@@ -95,6 +96,7 @@ const WORDS = {
     allConsoles: "All consoles",
     noConsoles: "This computer has no open consoles.",
     disconnected: "The connection dropped. Tap ⟳ to connect again.",
+    reconnecting: "The connection dropped. Connecting again…",
     rejected: "This computer didn't let you in: {reason}",
     fullAccess: "Full access",
     readOnly: "Read-only",
@@ -264,12 +266,37 @@ class Connection {
         }
       };
       ws.onclose = () => {
+        clearTimeout(handshake);
         if (!welcomed) reject(new Error("closed"));
-        for (const waiting of this.pending.values()) waiting.reject(new Error("closed"));
-        this.pending.clear();
-        this.onClose();
+        this.closed();
       };
+      // A network that swallows everything never says it closed.
+      const handshake = setTimeout(() => {
+        if (welcomed) return;
+        reject(new Error("closed"));
+        this.drop();
+      }, HANDSHAKE_TIMEOUT_MS);
     });
+  }
+
+  closed() {
+    this.ws = null;
+    for (const waiting of this.pending.values()) waiting.reject(new Error("closed"));
+    this.pending.clear();
+    this.onClose();
+  }
+
+  /** Gives up on a socket that stopped answering. A half dead one (the
+   * phone slept, the network changed) can take the browser minutes to
+   * report closed, so it isn't waited for. */
+  drop() {
+    const ws = this.ws;
+    if (!ws) return;
+    ws.onopen = ws.onmessage = ws.onclose = null;
+    try {
+      ws.close();
+    } catch {}
+    this.closed();
   }
 
   /** Appends what arrived and returns the messages it completes; output
@@ -427,6 +454,14 @@ $("host").textContent = location.hostname;
 /** How often the list of consoles is asked again: a console opened or
  * closed on the computer shows up here. */
 const LIST_EVERY_MS = 5000;
+/** Waiting for the computer again after the connection drops: sooner
+ * first, then less often (the last one repeats). */
+const RETRY_DELAYS_MS = [1000, 2000, 5000, 10000, 20000, 30000];
+/** How long a connection that seems up gets to answer before it's taken
+ * for dead: short when back on the page, longer for the periodic list. */
+const PROBE_TIMEOUT_MS = 4000;
+const LIST_TIMEOUT_MS = 15000;
+const HANDSHAKE_TIMEOUT_MS = 10000;
 
 let connection = null;
 let sessions = [];
@@ -437,6 +472,9 @@ let fontSize = Number(remembered.get("fontSize")) || 13;
 let ctrl = false;
 let alt = false;
 let listTimer = null;
+let connecting = false;
+let retries = 0;
+let retryTimer = null;
 let menuOpen = false;
 
 function readOnly() {
@@ -552,17 +590,60 @@ function ended(session) {
 
 // ---- Connecting.
 
+/** Resolves as the promise does, or fails after `ms`. */
+function within(promise, ms) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
+/** Tries again later, unless the page is out of sight: then when it's back. */
+function retryLater() {
+  clearTimeout(retryTimer);
+  if (document.visibilityState !== "visible") return;
+  const delay = RETRY_DELAYS_MS[Math.min(retries, RETRY_DELAYS_MS.length - 1)];
+  retries += 1;
+  retryTimer = setTimeout(() => void connect(), delay);
+}
+
+/** Right now, from the start of the delays (a tap, the page back in sight). */
+function connectNow() {
+  retries = 0;
+  void connect();
+}
+
+/** Makes sure the connection still works: one that seems up is asked for
+ * the list, and dropped if it doesn't answer in time. */
+async function checkLink() {
+  if (connecting) return;
+  if (!connection) return connectNow();
+  const mine = connection;
+  try {
+    await within(mine.request({ op: "list" }), PROBE_TIMEOUT_MS);
+  } catch {
+    if (connection !== mine) return;
+    mine.drop();
+    connectNow();
+  }
+}
+
 async function connect() {
+  if (connecting) return;
+  connecting = true;
+  clearTimeout(retryTimer);
   clearInterval(listTimer);
   setLink("connecting");
-  setStatus(t("connecting"));
+  setStatus(t(retries ? "reconnecting" : "connecting"));
   sessionList.replaceChildren();
   homeHeading.hidden = true;
-  connection = new Connection();
-  connection.onOutput = (session, bytes) => {
+  const mine = new Connection();
+  connection = mine;
+  mine.onOutput = (session, bytes) => {
     if (shown === session && term) term.write(bytes);
   };
-  connection.onEvent = (message) => {
+  mine.onEvent = (message) => {
     const session = sessions.find((entry) => entry.id === message.session);
     if (message.type === "exit" && session) {
       session.exitCode = message.code;
@@ -582,35 +663,67 @@ async function connect() {
     }
     if (message.type === "agent_event") agentsUi.event(message.name, message.payload);
   };
-  connection.onClose = () => {
+  mine.onClose = () => {
+    // An older one, dropped: this page is on another by now.
+    if (connection !== mine) return;
     connection = null;
     clearInterval(listTimer);
     setLink("down");
     agentsUi.disconnected();
-    showHome();
-    setStatus(t("disconnected"));
+    // The console stays in sight, dimmed, and is attached again on the way
+    // back (see below): a drop of a few seconds doesn't lose its place.
+    document.body.classList.add("offline");
+    setStatus(t("reconnecting"));
+    if (!connecting) retryLater();
   };
   try {
-    await connection.open();
+    await mine.open();
   } catch (err) {
+    connecting = false;
+    // (Its onClose may have let go of it already.)
+    if (connection === mine) connection = null;
     setLink("down");
-    setStatus(err.message === "closed" ? t("disconnected") : t("rejected", { reason: err.message }));
+    if (err.message === "closed") {
+      setStatus(t("reconnecting"));
+      retryLater();
+    } else {
+      // Turned away: trying again wouldn't change that.
+      document.body.classList.remove("offline");
+      if (shown) showHome();
+      setStatus(t("rejected", { reason: err.message }));
+    }
     return;
   }
+  connecting = false;
+  retries = 0;
+  document.body.classList.remove("offline");
   setLink("up");
   renderAccess();
   agentsUi.connected();
   await listSessions();
   listTimer = setInterval(() => void listSessions(), LIST_EVERY_MS);
-  // Back where it was: the console shown last time, or the only one.
-  const last = remembered.get("shown");
+  // Back where it was: the console in sight when the connection dropped,
+  // the one shown last time, or the only one.
+  const last = shown ?? remembered.get("shown");
   const first = sessions.find((session) => session.id === last) ?? (sessions.length === 1 ? sessions[0] : null);
-  if (first) void open(first);
+  if (first) void open(first, { again: true });
+  else if (shown) showHome();
 }
 
 async function listSessions() {
-  if (!connection) return connect();
-  const [reply] = await Promise.all([connection.request({ op: "list" }).catch(() => null), listChoices()]);
+  const mine = connection;
+  if (!mine) return;
+  let reply = null;
+  try {
+    [reply] = await Promise.all([within(mine.request({ op: "list" }), LIST_TIMEOUT_MS), listChoices()]);
+  } catch (err) {
+    // No answer at all: the connection is dead even if it doesn't say so.
+    if (err.message === "timeout" && connection === mine) {
+      mine.drop();
+      connectNow();
+    }
+    return;
+  }
   if (!reply) return;
   sessions = (reply.sessions ?? []).sort((a, b) => a.startedAt - b.startedAt);
   const current = sessions.find((session) => session.id === shown);
@@ -1505,7 +1618,7 @@ $("refresh").onclick = (event) => {
   void button.offsetWidth;
   button.classList.add("spinning");
   void loadLook();
-  void (connection ? listSessions() : connect());
+  void (connection ? listSessions() : connectNow());
 };
 fitButton.onclick = () => {
   if (!term || !connection || !shown) return;
@@ -1654,10 +1767,16 @@ window.visualViewport?.addEventListener("scroll", followViewport);
 followViewport();
 
 // Back to the page after a while away (the phone locked, another app): the
-// connection may have dropped meanwhile.
+// connection may have dropped meanwhile, or be dead without saying so.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !connection) void connect();
+  if (document.visibilityState === "visible") void checkLink();
+  else clearTimeout(retryTimer);
 });
+// Back from the browser's page cache, or on a network again.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) void checkLink();
+});
+window.addEventListener("online", () => void checkLink());
 
 void loadLook();
 // Once agents.js has run too (it's loaded after this one): connecting uses
