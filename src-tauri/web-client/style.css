@@ -313,7 +313,27 @@ svg {
 }
 
 #terminal {
+  position: relative;
   display: inline-block;
+}
+
+/* The links over a console's web addresses on a phone (see app.js): see
+   through, with a line under each so they look like something to tap. */
+.link-layer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.link-layer a {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 75%, transparent);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.link-layer a:active {
+  background: var(--accent-soft);
 }
 
 /* Fitted, there's nothing for the browser to pan: a drag scrolls the
