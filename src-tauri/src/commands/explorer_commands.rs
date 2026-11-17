@@ -168,6 +168,28 @@ fn read_text(path: &Path) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|_| tr(Msg::FileNotText(&name)))
 }
 
+/// When each of `paths` was last written, in ms since the epoch, or None
+/// when it isn't a file there. What a console prints is checked with it
+/// before it becomes a link, and the Markdown viewer re-reads its file when
+/// the time moves. A network path is never looked at: what a console
+/// printed shouldn't have this computer reach a server it names.
+#[tauri::command]
+pub async fn file_stamps(paths: Vec<String>) -> Vec<Option<u64>> {
+    tauri::async_runtime::spawn_blocking(move || paths.iter().map(|path| file_stamp(path)).collect())
+        .await
+        .unwrap_or_default()
+}
+
+fn file_stamp(path: &str) -> Option<u64> {
+    if path.starts_with("\\\\") || path.starts_with("//") {
+        return None;
+    }
+    let meta = fs::metadata(path).ok().filter(|meta| meta.is_file())?;
+    let modified = meta.modified().ok()?;
+    let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
+    Some(since.as_millis() as u64)
+}
+
 #[tauri::command]
 pub async fn write_text_file(path: String, content: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || write_text(Path::new(&path), &content))
@@ -308,5 +330,18 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
         assert_eq!(content, "new");
         assert_eq!(leftovers, 1);
+    }
+
+    #[test]
+    fn a_stamp_is_only_for_a_file_and_never_for_a_network_path() {
+        let dir = scratch();
+        let file = dir.join("plan.md");
+        fs::write(&file, "# Plan").unwrap();
+        assert!(file_stamp(&file.to_string_lossy()).is_some());
+        assert!(file_stamp(&dir.to_string_lossy()).is_none());
+        assert!(file_stamp(&dir.join("missing.md").to_string_lossy()).is_none());
+        assert!(file_stamp("\\\\server\\share\\plan.md").is_none());
+        assert!(file_stamp("//server/share/plan.md").is_none());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -14,6 +14,7 @@ import {
   makeFileSession,
   makeDiffSession,
   makeGitGraphSession,
+  makeMarkdownSession,
   computeLayout,
   countSessions,
   detachSessions,
@@ -301,6 +302,50 @@ class WorkspaceStore {
       (session) => session.gitGraph?.root === root,
       () => makeGitGraphSession(title, root),
     );
+  }
+
+  /** Shows a Markdown file rendered in a tab; each file has one. A new one
+   * opens in a tile to the right of the one `fromTabId` is in (the console or
+   * viewer it was opened from; the focused tile if not given): the tile of
+   * viewers already there, or a new one split off its right side. A viewer
+   * opened from a viewer goes next to it, in its own tile. */
+  openMarkdown(path: string, fromTabId?: string): void {
+    if (!this.root) return;
+    const sessions = collectSessions(this.root);
+    const open = sessions.find((loc) => loc.session.markdownView?.path === path);
+    if (open) {
+      this.setActiveSession(open.tileId, open.session.id);
+      return;
+    }
+    const fromTileId =
+      sessions.find((loc) => loc.session.id === fromTabId)?.tileId ?? this.focusedTileId ?? collectTiles(this.root)[0]?.id;
+    if (!fromTileId) return;
+    const session = makeMarkdownSession(path);
+    const onlyViewers = (tile: TileNode | undefined) =>
+      !!tile && tile.sessions.every((s) => s.markdownView !== undefined);
+    const tiles = new Map(collectTiles(this.root).map((tile) => [tile.id, tile]));
+    const right = findTileInDirection(computeLayout(this.root), fromTileId, "right");
+    const intoTileId = onlyViewers(tiles.get(fromTileId))
+      ? fromTileId
+      : right && onlyViewers(tiles.get(right))
+        ? right
+        : null;
+    if (intoTileId) {
+      const updated = updateLeaf(this.root, intoTileId, (tile) => ({
+        ...tile,
+        sessions: [...tile.sessions, session],
+        activeSessionId: session.id,
+      }));
+      if (!updated) return;
+      this.root = updated;
+      this.focusedTileId = intoTileId;
+      return;
+    }
+    const newTile = makeTile(session);
+    this.root = splitLeaf(this.root, fromTileId, "row", newTile, crypto.randomUUID(), false);
+    this.focusedTileId = newTile.id;
+    // A zoomed tile would keep the new one out of sight.
+    this.zoomedTileId = null;
   }
 
   /** Brings forward the tab `matches` finds, wherever it is, or opens the
@@ -733,6 +778,7 @@ export function sessionFolder(session: SessionTab): string | undefined {
   // focus (the explorer, the Git panel) stays on it.
   if (session.diff) return session.diff.root;
   if (session.gitGraph) return session.gitGraph.root;
+  if (session.markdownView) return fileFolder(session.markdownView.path);
   if (session.agentRun || session.projectView || session.orchestrationView) return undefined;
   return tabCwd.byTab[session.id] ?? session.cwd;
 }

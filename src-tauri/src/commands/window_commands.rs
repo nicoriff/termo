@@ -321,8 +321,8 @@ fn ensure_preferences_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWin
         tauri::WebviewUrl::App("/#preferences".into()),
     )
     .title(crate::i18n::tr(crate::i18n::Msg::PreferencesTitle))
-    .inner_size(760.0, 480.0)
-    .min_inner_size(640.0, 420.0)
+    .inner_size(960.0, 660.0)
+    .min_inner_size(720.0, 480.0)
     .resizable(true)
     .maximizable(false)
     .transparent(true)

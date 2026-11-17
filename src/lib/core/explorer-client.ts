@@ -35,3 +35,9 @@ export function readTextFile(path: string): Promise<string> {
 export function writeTextFile(path: string, content: string): Promise<void> {
   return invoke("write_text_file", { path, content });
 }
+
+/** When each path was last written (ms since the epoch), or null where
+ * there's no file. Network paths are always null. */
+export function fileStamps(paths: string[]): Promise<(number | null)[]> {
+  return invoke("file_stamps", { paths });
+}

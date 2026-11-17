@@ -16,6 +16,7 @@
     loadAgentRunView,
     loadGitGraphView,
     loadKanbanView,
+    loadMarkdownView,
     loadOrchestrationConsole,
     loadOrchestrationView,
     loadProjectView,
@@ -111,6 +112,15 @@
           {@const root = loc.session.gitGraph.root}
           {#await loadGitGraphView() then { default: GitGraphView }}
             <GitGraphView {root} />
+          {/await}
+        {:else if loc.session.markdownView}
+          {@const mdPath = loc.session.markdownView.path}
+          {#await loadMarkdownView() then { default: MarkdownView }}
+            <MarkdownView
+              sessionId={loc.session.id}
+              path={mdPath}
+              active={tileById.get(loc.tileId)?.activeSessionId === loc.session.id}
+            />
           {/await}
         {:else if loc.session.agentRun}
           {@const { agentId, runId } = loc.session.agentRun}

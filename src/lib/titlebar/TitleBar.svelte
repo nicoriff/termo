@@ -210,7 +210,7 @@
     display: flex;
     align-items: stretch;
     height: var(--titlebar-height, 34px);
-    background: var(--titlebar-bg, #1e1e1e);
+    background: var(--titlebar-paint, var(--titlebar-bg, #1e1e1e));
     color: var(--titlebar-fg, #d4d4d4);
     user-select: none;
     flex-shrink: 0;

@@ -18,6 +18,7 @@ import {
   makeProjectSession,
   makeDiffSession,
   makeGitGraphSession,
+  makeMarkdownSession,
   makeSession,
   makeTile,
   type DiffTarget,
@@ -46,6 +47,8 @@ export interface LayoutSession {
   /** A file's changes, or a repository's history. */
   diff?: DiffTarget;
   gitGraph?: { root: string };
+  /** A Markdown file shown rendered. */
+  markdownView?: { path: string };
   /** The agent conversation this console had open, when the layout was saved
    * with sessions. Restoring reopens it with the agent's own resume command. */
   agentTool?: ToolId;
@@ -149,6 +152,10 @@ export function snapshotSession(session: SessionTab, options: SnapshotOptions = 
     stored.gitGraph = { ...session.gitGraph };
     return stored;
   }
+  if (session.markdownView !== undefined) {
+    stored.markdownView = { ...session.markdownView };
+    return stored;
+  }
   if (session.shellPath !== undefined) stored.shellPath = session.shellPath;
   if (session.shellArgs !== undefined) stored.shellArgs = [...session.shellArgs];
   if (session.cwd !== undefined) stored.cwd = session.cwd;
@@ -250,6 +257,7 @@ function hydrateTab(
   if (session.kanbanView) return withId(makeKanbanSession(session.title, session.kanbanView.boardId), newId);
   if (session.diff) return withId(makeDiffSession(session.diff), newId);
   if (session.gitGraph) return withId(makeGitGraphSession(session.title, session.gitGraph.root), newId);
+  if (session.markdownView) return withId(makeMarkdownSession(session.markdownView.path), newId);
   const live = withId(makeSession(session.title, session.shellPath, session.shellArgs, session.cwd), newId);
   if (session.consoleId && running.has(session.consoleId)) return { ...live, attach: session.consoleId };
   // Another computer's: whether it still runs is only known by asking it,

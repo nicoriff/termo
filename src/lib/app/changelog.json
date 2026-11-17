@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.32.0",
+    "date": "2026-11-16",
+    "es": [
+      "**Markdown en una pestaña**: cuando un agente nombra un archivo `.md` en la consola (el plan o las notas que acaba de escribir), la ruta queda subrayada y con `Ctrl+clic` (`Cmd+clic` en macOS) se abre renderizado en un panel a la derecha: encabezados, tablas, listas de tareas y bloques de código. Se actualiza solo cuando el agente vuelve a escribirlo, sin perder por dónde ibas, y **Abrir en el editor** lo lleva al editor para cambiarlo.",
+      "**Temas coloridos y retro**: diez temas nuevos con degradés en la barra de título, las pestañas y la barra de estado, un color para cada pestaña y un brillo suave en el panel donde estás trabajando. Coloridos: Neon Night, Tropical, Aurora, Sunset, Candy y Lime Pop. Retro: Amber CRT, Phosphor, Hacker (verde sobre negro) y Arcade.",
+      "**Pestañas de colores**: en Preferencias → Apariencia → Pestañas cada pestaña puede tomar un color, con una línea abajo y el ícono en ese color. Según el tema (con los coloridos y retro), siempre (con cualquier tema) o nunca.",
+      "**Nuevo selector de temas**, en su propia página (Preferencias → Apariencia → Temas): cada tema se ve como una ventanita de Termo con sus colores, y se pueden filtrar los oscuros, los claros, los coloridos o los retro. La ventana de Preferencias es más grande.",
+      "**Botones del panel en la pestaña**: dividir y maximizar ya no flotan arriba a la derecha de cada panel. Aparecen al dejar el mouse sobre el título de una pestaña, que se agranda para hacerles lugar, y se van cuando el mouse sale de ella."
+    ],
+    "en": [
+      "**Markdown in a tab**: when an agent names a `.md` file in the console (the plan or notes it just wrote), the path is underlined and `Ctrl+click` (`Cmd+click` on macOS) opens it rendered in a tile to the right: headings, tables, task lists and code blocks. It updates on its own when the agent writes it again, without losing your place, and **Open in the editor** takes it to the editor to change it.",
+      "**Colorful and retro themes**: ten new themes with gradients in the title bar, the tabs and the status bar, a color for each tab and a soft glow on the tile you're working in. Colorful: Neon Night, Tropical, Aurora, Sunset, Candy and Lime Pop. Retro: Amber CRT, Phosphor, Hacker (green on black) and Arcade.",
+      "**Colored tabs**: in Preferences → Appearance → Tabs each tab can take a color, with a line along its bottom and its icon in that color. As the theme says (with the colorful and retro ones), always (with any theme) or never.",
+      "**A new theme picker**, on a page of its own (Preferences → Appearance → Themes): each theme shows as a small Termo window in its colors, and you can narrow it to the dark, light, colorful or retro ones. The Preferences window is larger.",
+      "**A tile's buttons on its tabs**: split and zoom no longer float at the top right of each tile. They open out when you rest the mouse on a tab's title, the tab growing to fit them, and go when the mouse leaves it."
+    ]
+  },
+  {
     "version": "0.31.0",
     "date": "2026-11-11",
     "es": [

@@ -159,6 +159,9 @@ export interface AppConfig {
   agent_install_dirs?: Record<string, string>;
   agent_clis_known?: Record<string, string>;
   tabs_fill_width: boolean;
+  /** Whether tabs take colors (see theme/theme-paint.ts tabPalette). Absent
+   * in configs from before it: "theme". */
+  tab_colors?: "theme" | "always" | "never";
   /** What becomes of a collapsed tab group's tabs (see tab-saver.svelte.ts).
    * Absent in configs from before it. */
   tab_saver?: TabSaverMode;

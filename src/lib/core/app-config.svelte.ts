@@ -6,6 +6,7 @@ import { themeStore } from "../theme/theme-store.svelte";
 import { observeSystemAppearance } from "../theme/system-appearance";
 import { i18n, type LanguagePreference } from "../i18n/i18n.svelte";
 import { injectFontFace } from "../theme/google-fonts";
+import type { TabColorsMode } from "../theme/theme-paint";
 import { isMac } from "./platform";
 import { resolveKeybinding, SHORTCUT_ACTIONS, type ShortcutAction } from "./shortcuts";
 import type { AppConfig, PromptEngine, ShortcutsConfig, TabSaverMode } from "./types";
@@ -208,6 +209,9 @@ class AppConfigStore {
   /** The browser links open with (see core/links.ts); null for the system's. */
   linkBrowser = $state<string | null>(null);
   tabsFillWidth = $state(false);
+  /** Whether tabs are colored: with the theme's colors when it has some
+   * ("theme"), always, or never. */
+  tabColors = $state<TabColorsMode>("theme");
   /** What becomes of a collapsed tab group's tabs (see tab-saver.svelte.ts). */
   tabSaver = $state<TabSaverMode>("off");
   tabSaverMinutes = $state(10);
@@ -375,6 +379,7 @@ class AppConfigStore {
     this.linkBrowser = config.link_browser ?? null;
     // Absent in configs from before it was an option: as tabs looked then.
     this.tabsFillWidth = config.tabs_fill_width ?? false;
+    this.tabColors = config.tab_colors === "always" || config.tab_colors === "never" ? config.tab_colors : "theme";
     this.tabSaver = config.tab_saver === "sleep" || config.tab_saver === "discard" ? config.tab_saver : "off";
     this.tabSaverMinutes = config.tab_saver_minutes ?? 10;
     this.gitEnabled = config.git_enabled ?? true;
@@ -694,6 +699,11 @@ class AppConfigStore {
     void this.persist();
   }
 
+  setTabColors(mode: TabColorsMode): void {
+    this.tabColors = mode;
+    void this.persist();
+  }
+
   setTabSaver(mode: TabSaverMode, minutes = this.tabSaverMinutes): void {
     this.tabSaver = mode;
     this.tabSaverMinutes = Math.max(1, Math.round(minutes));
@@ -814,6 +824,7 @@ class AppConfigStore {
       remote_button: this.remoteButton,
       link_browser: this.linkBrowser,
       tabs_fill_width: this.tabsFillWidth,
+      tab_colors: this.tabColors,
       tab_saver: this.tabSaver,
       tab_saver_minutes: this.tabSaverMinutes,
       git_enabled: this.gitEnabled,
