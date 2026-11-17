@@ -289,6 +289,7 @@ pub fn run() {
             commands::explorer_commands::git_status,
             commands::explorer_commands::read_text_file,
             commands::explorer_commands::write_text_file,
+            commands::explorer_commands::file_stamps,
             commands::git_commands::git_snapshot,
             commands::harness_commands::harness_load,
             commands::harness_commands::harness_preview,

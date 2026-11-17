@@ -45,6 +45,9 @@ export interface SessionTab {
   diff?: DiffTarget;
   /** Set on a tab that shows a repository's history (see GitGraphView). */
   gitGraph?: { root: string };
+  /** Set on a tab that shows a Markdown file rendered, to read rather than
+   * edit (see MarkdownView). */
+  markdownView?: { path: string };
   /** The tab group it's in (see tab-groups.ts). Unlike the tab's own id, a
    * group's is kept across restarts and layouts: nothing live is keyed by it. */
   groupId?: string;
@@ -93,7 +96,8 @@ export function isConsoleTab(session: SessionTab): boolean {
     session.orchestrationView === undefined &&
     session.kanbanView === undefined &&
     session.diff === undefined &&
-    session.gitGraph === undefined
+    session.gitGraph === undefined &&
+    session.markdownView === undefined
   );
 }
 
@@ -123,6 +127,10 @@ export function makeDiffSession(diff: DiffTarget): SessionTab {
 
 export function makeGitGraphSession(title: string, root: string): SessionTab {
   return { id: crypto.randomUUID(), title, gitGraph: { root } };
+}
+
+export function makeMarkdownSession(path: string): SessionTab {
+  return { id: crypto.randomUUID(), title: fileName(path), markdownView: { path } };
 }
 
 /** A file's name, which titles its tab. */

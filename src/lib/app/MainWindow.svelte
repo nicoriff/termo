@@ -189,10 +189,12 @@
   $effect(() => {
     if (!isFirstWindow()) return;
     const theme = themeStore.current;
+    // Only its plain colors: the page doesn't paint gradients or tab colors.
+    const { titlebarGradient, tabbarGradient, statusBar, tabColors, glow, ...plain } = theme.ui;
     void shareRemoteLook({
       appearance: theme.appearance,
       colors: { ...theme.colors },
-      ui: { ...theme.ui },
+      ui: plain,
       fontFamily: themeStore.effectiveFontFamily,
       lineHeight: theme.font.lineHeight,
     }).catch(() => {});

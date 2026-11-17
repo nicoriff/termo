@@ -30,6 +30,7 @@ import { themeStore } from "../theme/theme-store.svelte";
 import type { Theme } from "../theme/theme-types";
 import { neutralizePaintedControls } from "./conpty-controls";
 import { OutputHighlighter } from "./output-highlighter";
+import { markdownLinkProvider } from "./markdown-link-provider";
 import { parseOsc7 } from "./osc7";
 import { tabCwd } from "./tab-cwd.svelte";
 import { tabSize } from "./tab-size.svelte";
@@ -139,6 +140,8 @@ export class TerminalInstance {
     // The addon's own handler would open the link in a window of the web
     // view, not the user's browser.
     this.term.loadAddon(new WebLinksAddon((_event, uri) => void openLink(uri).catch(() => {})));
+    // A Markdown file the console names opens rendered in a tab.
+    this.term.registerLinkProvider(markdownLinkProvider(this.term, tabId));
 
     // Unicode 15 widths, and grapheme clusters taken as one character: a ZWJ
     // family (👨‍👩‍👧), a flag, a skin tone, a newer emoji (🫠) take the cells

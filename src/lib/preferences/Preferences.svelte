@@ -7,6 +7,7 @@
   import { isWindows } from "$lib/core/platform";
   import { newTabOptions } from "$lib/layout/new-tab-options.svelte";
   import AppearanceSection from "./sections/AppearanceSection.svelte";
+  import ThemeSection from "./sections/ThemeSection.svelte";
   import FontSection from "./sections/FontSection.svelte";
   import ConsoleSection from "./sections/ConsoleSection.svelte";
   import RemoteSection from "./sections/RemoteSection.svelte";
@@ -31,6 +32,7 @@
   type SectionId =
     | "general"
     | "appearance"
+    | "theme"
     | "font"
     | "status-bar"
     | "console"
@@ -68,6 +70,7 @@
       id: "appearance",
       label: "preferences.sidebar.appearance",
       children: [
+        { id: "theme", label: "preferences.sidebar.theme" },
         { id: "font", label: "preferences.sidebar.font" },
         { id: "status-bar", label: "preferences.sidebar.statusBar" },
       ],
@@ -243,6 +246,8 @@
         <GeneralSection />
       {:else if selected === "appearance"}
         <AppearanceSection />
+      {:else if selected === "theme"}
+        <ThemeSection />
       {:else if selected === "font"}
         <FontSection />
       {:else if selected === "status-bar"}

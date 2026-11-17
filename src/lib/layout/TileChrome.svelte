@@ -10,6 +10,8 @@
   import { tabTitleStore } from "$lib/terminal/tab-title-store.svelte";
 
   import { themeStore } from "$lib/theme/theme-store.svelte";
+  import { tabPalette } from "$lib/theme/theme-paint";
+  import { tabColorIndex } from "./tab-colors";
   import type { ShellInfo } from "$lib/core/types";
   import {
     dropZoneAt,
@@ -244,6 +246,47 @@
 
   async function split(direction: "row" | "col") {
     workspaceStore.splitTile(tile.id, direction, await resolveDefaultShell());
+  }
+
+  const zoomed = $derived(workspaceStore.zoomedTileId === tile.id);
+  /** The colors tabs take, in turn; empty when they're not colored. */
+  const palette = $derived(tabPalette(themeStore.current, appConfigStore.tabColors));
+
+  // A tab's title, hovered a moment, opens the tile's actions in the tab;
+  // they stay while the pointer is anywhere on the tab, so heading for its
+  // X doesn't shrink the tab from under it. The X alone never opens them.
+  const EXPAND_DELAY_MS = 250;
+  let expandedTabId = $state<string | null>(null);
+  let expandTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onTitleEnter(sessionId: string) {
+    if (expandedTabId === sessionId || document.body.classList.contains("termo-dragging-tab")) return;
+    if (expandTimer) clearTimeout(expandTimer);
+    expandTimer = setTimeout(() => {
+      expandTimer = null;
+      expandedTabId = sessionId;
+    }, EXPAND_DELAY_MS);
+  }
+
+  function onTitleLeave() {
+    // Left before it opened: it doesn't.
+    if (expandTimer) clearTimeout(expandTimer);
+    expandTimer = null;
+  }
+
+  function collapseTab() {
+    onTitleLeave();
+    expandedTabId = null;
+  }
+
+  $effect(() => () => {
+    if (expandTimer) clearTimeout(expandTimer);
+  });
+
+  /** Zooming from a tab's title shows that tab in the zoomed tile. */
+  function zoomFromTab(sessionId: string) {
+    if (workspaceStore.zoomedTileId !== tile.id) workspaceStore.setActiveSession(tile.id, sessionId);
+    workspaceStore.toggleZoom(tile.id);
   }
 
   // Manual pointer-based drag instead of native HTML5 DnD: on Windows, native
@@ -730,6 +773,7 @@
   data-tile-id={tile.id}
   class:focused={workspaceStore.focusedTileId === tile.id}
   class:fill-width={appConfigStore.tabsFillWidth}
+  class:colorful={palette.length > 0}
   style="left:calc({rect.left * 100}% + {insets.left}px); top:calc({rect.top * 100}% + {insets.top}px); width:calc({rect.width *
     100}% - {insets.left + insets.right}px); height:calc({rect.height * 100}% - {insets.top + insets.bottom}px)"
 >
@@ -782,13 +826,21 @@
         class:active={tile.activeSessionId === session.id}
         class:in-group={!!item.group}
         class:dormant={!!session.dormant}
-        style={item.group ? `--group-color:${GROUP_COLORS[item.group.color]}` : undefined}
+        class:expanded={expandedTabId === session.id}
+        style={item.group
+          ? `--group-color:${GROUP_COLORS[item.group.color]}; --tab-color:${GROUP_COLORS[item.group.color]}`
+          : palette.length > 0
+            ? `--tab-color:${palette[tabColorIndex(session.id) % palette.length]}`
+            : undefined}
         data-session-id={session.id}
         data-group-id={item.group?.id}
         transition:foldTab|global={{ groupId: item.group?.id }}
         role="tab"
         tabindex="0"
         aria-selected={tile.activeSessionId === session.id}
+        onpointerleave={() => {
+          if (expandedTabId === session.id || expandTimer) collapseTab();
+        }}
         onpointerdown={(e) => onTabPointerDown(e, session.id)}
         onauxclick={(e) => onTabAuxClick(e, session.id)}
         oncontextmenu={(e) => onTabContextMenu(e, session.id)}
@@ -806,6 +858,11 @@
         {:else if session.diff}
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
             <path d="M4 1.5v4M2 3.5h4M2 10.5h4M9 2v10M12 5 9 2 6.5 4.5" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+        {:else if session.markdownView}
+          <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="1" y="2.5" width="12" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1" />
+            <path d="M3.3 9V5l1.7 2 1.7-2v4M9.8 5v4M8.4 7.6l1.4 1.4 1.4-1.4" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
         {:else if session.gitGraph}
           <svg class="tile-tab-file" viewBox="0 0 14 14" aria-hidden="true">
@@ -847,18 +904,93 @@
         {#if favorite}
           <span class="tile-tab-favorite" title={t("favorites.tabHint", { name: favoriteLabel(favorite) })}>★</span>
         {/if}
+        <!-- The title is what shows the tile's actions on hover, not the
+             whole tab: reaching for the X shouldn't make the tab grow. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span
+          class="tile-tab-main"
+          onpointerenter={() => onTitleEnter(session.id)}
+          onpointerleave={onTitleLeave}
+        >
         <span
           class="tile-tab-title"
           title={session.dormant
             ? t(session.dormant.kind === "asleep" ? "tabGroups.saver.asleepHint" : "tabGroups.saver.discardedHint")
             : favorite ? t("favorites.tabHint", { name: favoriteLabel(favorite) }) : session.filePath ??
             session.diff?.path ??
+            session.markdownView?.path ??
             (session.agentRun || session.projectView || session.orchestrationView || session.kanbanView || session.gitGraph
               ? tabTitleStore.titleFor(session.id, session.title)
               : `${tabTitleStore.typeFor(session)} · ${tabTitleStore.titleFor(session.id, session.title)}`)}
         >
           <!-- A favorite with a name of its own goes by it. -->
           {favorite?.name ?? tabTitleStore.titleFor(session.id, session.title)}
+        </span>
+        <span class="tile-tab-actions">
+          <span class="tile-tab-actions-inner">
+            {#each [["row", "tabs.splitVertical"], ["col", "tabs.splitHorizontal"]] as const as [direction, label], index (direction)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <span
+                class="tile-tab-action"
+                style="--i:{index}"
+                role="button"
+                tabindex="-1"
+                title={t(label)}
+                aria-label={t(label)}
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  void split(direction);
+                }}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    void split(direction);
+                  }
+                }}
+              >
+                <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                  <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
+                  {#if direction === "row"}
+                    <line x1="6" y1="0.5" x2="6" y2="11.5" stroke="currentColor" />
+                  {:else}
+                    <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />
+                  {/if}
+                </svg>
+              </span>
+            {/each}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span
+              class="tile-tab-action"
+              style="--i:2"
+              role="button"
+              tabindex="-1"
+              title={t(zoomed ? "tabs.restore" : "tabs.zoom")}
+              aria-label={t(zoomed ? "tabs.restore" : "tabs.zoom")}
+              onpointerdown={(e) => e.stopPropagation()}
+              onclick={(e) => {
+                e.stopPropagation();
+                zoomFromTab(session.id);
+              }}
+              onkeydown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  zoomFromTab(session.id);
+                }
+              }}
+            >
+              <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                {#if zoomed}
+                  <path d="M7.5 1v3.5H11M4.5 11V7.5H1" fill="none" stroke="currentColor" />
+                  <path d="M11 1L7.5 4.5M1 11l3.5-3.5" stroke="currentColor" />
+                {:else}
+                  <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" />
+                  <path d="M1 1l3.5 3.5M11 11l-3.5-3.5" stroke="currentColor" />
+                {/if}
+              </svg>
+            </span>
+          </span>
+        </span>
         </span>
         {#if fileTabs.dirty[session.id]}
           <span class="tile-tab-dirty" title={t("editor.unsaved")}>●</span>
@@ -1284,37 +1416,6 @@
     </div>
   {/if}
 
-  <div class="tile-toolbar">
-    <button title={t("tabs.splitVertical")} onclick={() => void split("row")}>
-      <svg viewBox="0 0 12 12" width="11" height="11">
-        <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
-        <line x1="6" y1="0.5" x2="6" y2="11.5" stroke="currentColor" />
-      </svg>
-    </button>
-    <button title={t("tabs.splitHorizontal")} onclick={() => void split("col")}>
-      <svg viewBox="0 0 12 12" width="11" height="11">
-        <rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" />
-        <line x1="0.5" y1="6" x2="11.5" y2="6" stroke="currentColor" />
-      </svg>
-    </button>
-    <button
-      title={t(workspaceStore.zoomedTileId === tile.id ? "tabs.restore" : "tabs.zoom")}
-      aria-label={t(workspaceStore.zoomedTileId === tile.id ? "tabs.restore" : "tabs.zoom")}
-      onclick={() => workspaceStore.toggleZoom(tile.id)}
-    >
-      {#if workspaceStore.zoomedTileId === tile.id}
-        <svg viewBox="0 0 12 12" width="11" height="11">
-          <path d="M7.5 1v3.5H11M4.5 11V7.5H1" fill="none" stroke="currentColor" />
-          <path d="M11 1L7.5 4.5M1 11l3.5-3.5" stroke="currentColor" />
-        </svg>
-      {:else}
-        <svg viewBox="0 0 12 12" width="11" height="11">
-          <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" />
-          <path d="M1 1l3.5 3.5M11 11l-3.5-3.5" stroke="currentColor" />
-        </svg>
-      {/if}
-    </button>
-  </div>
 </div>
 
 <style>
@@ -1345,13 +1446,18 @@
     transition: none;
   }
 
+  /* A theme with a glow lights the focused tile's edges (see theme-paint). */
+  .tile-chrome.focused {
+    box-shadow: var(--pane-glow, none);
+  }
+
   .tile-tabstrip {
     pointer-events: auto;
     display: flex;
     align-items: stretch;
     height: 28px;
     flex-shrink: 0;
-    background: var(--tabbar-bg, #181818);
+    background: var(--tabbar-paint, var(--tabbar-bg, #181818));
     border-bottom: 1px solid var(--tabbar-border, #2a2a2a);
     overflow-x: auto;
     scrollbar-width: none;
@@ -1477,6 +1583,55 @@
     background: var(--tab-focus-bg, rgba(58, 109, 240, 0.35));
   }
 
+  /* Colored tabs (Preferences → Appearance → Tabs): each tab tinted with
+     its color (its group's, in a group), a line of it along the bottom and
+     its icon in it; the active one brighter, the focused tile's brightest. */
+  .tile-chrome.colorful .tile-tab {
+    position: relative;
+    background: color-mix(in srgb, var(--tab-color) 9%, transparent);
+  }
+
+  .tile-chrome.colorful .tile-tab:hover {
+    background: color-mix(in srgb, var(--tab-color) 16%, transparent);
+  }
+
+  .tile-chrome.colorful .tile-tab::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--tab-color);
+    opacity: 0.45;
+    pointer-events: none;
+    transition:
+      opacity 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .tile-chrome.colorful .tile-tab.active {
+    background: color-mix(in srgb, var(--tab-color) 20%, var(--tabbar-active-bg, #1e1e1e));
+  }
+
+  .tile-chrome.colorful.focused .tile-tab.active {
+    background: color-mix(in srgb, var(--tab-color) 32%, var(--tabbar-active-bg, #1e1e1e));
+  }
+
+  .tile-chrome.colorful .tile-tab.active::after,
+  .tile-chrome.colorful .tile-tab.in-group::after {
+    opacity: 1;
+  }
+
+  .tile-chrome.colorful .tile-tab.active::after {
+    box-shadow: 0 0 8px var(--tab-color);
+  }
+
+  .tile-chrome.colorful .tile-tab :is(.tile-tab-file, .tile-tab-kind) {
+    color: var(--tab-color);
+    opacity: 1;
+  }
+
   /* Appearance → Tabs: the tabs share the whole strip in equal parts, down
      to a width that still shows a title; past that the strip scrolls. */
   .tile-chrome.fill-width .tile-tab {
@@ -1486,10 +1641,94 @@
 
   .tile-tab-title {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
+  }
+
+  /* The tile's actions, opened in a tab by hovering its title (see
+     onTitleEnter). The tab makes room for them, up to a wider cap — the
+     others in the strip give way — and settles back as they close. */
+  .tile-tab {
+    transition:
+      max-width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      flex-grow 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tile-tab.expanded {
+    max-width: 240px;
+  }
+
+  .tile-chrome.fill-width .tile-tab.expanded {
+    flex-grow: 1.6;
+  }
+
+  .tile-tab-main {
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+  }
+
+  /* 0fr → 1fr animates to the buttons' own width, whatever it is. */
+  .tile-tab-actions {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 0fr;
+    transition: grid-template-columns 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tile-tab.expanded .tile-tab-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .tile-tab-actions-inner {
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .tile-tab-action {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0;
+    transform: translateX(-4px) scale(0.85);
+    transition:
+      opacity 120ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      background 100ms ease;
+  }
+
+  .tile-tab-action:first-child {
+    margin-left: 4px;
+  }
+
+  /* One after the other, left to right, as they come in. */
+  .tile-tab.expanded .tile-tab-action {
+    opacity: 0.75;
+    transform: none;
+    transition-delay: calc(40ms + var(--i, 0) * 35ms);
+  }
+
+  .tile-tab.expanded .tile-tab-action:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+    transition-delay: 0ms;
+  }
+
+  /* Dragging a tab, nothing opens or stays open. */
+  :global(body.termo-dragging-tab) .tile-tab-actions {
+    display: none;
   }
 
   .tile-tab-file {
@@ -1968,40 +2207,4 @@
     padding: 4px;
   }
 
-  .tile-toolbar {
-    pointer-events: auto;
-    position: absolute;
-    top: 32px;
-    right: 4px;
-    z-index: 10;
-    display: flex;
-    gap: 2px;
-    background: rgba(20, 20, 20, 0.7);
-    border-radius: 4px;
-    padding: 2px;
-    opacity: 0.4;
-    transition: opacity 0.1s;
-  }
-
-  .tile-toolbar:hover {
-    opacity: 1;
-  }
-
-  .tile-toolbar button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: none;
-    background: transparent;
-    color: #cfcfcf;
-    cursor: pointer;
-    border-radius: 3px;
-  }
-
-  .tile-toolbar button:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
-  }
 </style>

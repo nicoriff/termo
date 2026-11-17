@@ -254,6 +254,9 @@ pub struct AppConfig {
     pub background_agents_at_login: bool,
     /// Tabs share their strip's whole width instead of keeping their own size.
     pub tabs_fill_width: bool,
+    /// Whether tabs take colors: "theme" (when the theme has its own),
+    /// "always" or "never" (see src/lib/theme/theme-paint.ts).
+    pub tab_colors: String,
     /// What becomes of the tabs of a tab group collapsed for a while (see
     /// src/lib/tab-groups/tab-saver.svelte.ts): "off", "sleep" (their view
     /// goes, their consoles keep running in the sessions daemon) or "discard"
@@ -390,6 +393,7 @@ impl Default for AppConfig {
             background_agents: false,
             background_agents_at_login: false,
             tabs_fill_width: false,
+            tab_colors: "theme".into(),
             tab_saver: "off".into(),
             tab_saver_minutes: 10,
             git_enabled: true,

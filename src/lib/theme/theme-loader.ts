@@ -1,17 +1,6 @@
 import type { Theme } from "./theme-types";
 import type { ITheme } from "@xterm/xterm";
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const clean = hex.replace("#", "");
-  const full = clean.length === 3
-    ? clean
-        .split("")
-        .map((c) => c + c)
-        .join("")
-    : clean;
-  const value = parseInt(full, 16);
-  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
-}
+import { barPaint, glowShadow, hexToRgb, hexToRgba } from "./theme-paint";
 
 /** Whether a theme's own background is dark, by perceived brightness (the
  * usual sRGB weighting: green reads brightest, blue dimmest). What it's for
@@ -21,11 +10,6 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 export function isDarkColor(hex: string): boolean {
   const { r, g, b } = hexToRgb(hex);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /** xterm's own background stays fully transparent: the terminal's container
@@ -67,6 +51,15 @@ export function applyThemeToDocument(theme: Theme, opacity = 1): void {
   root.setProperty("--tab-focus-bg", hexToRgba(theme.ui.accent, 0.35));
   root.setProperty("--divider-bg", theme.ui.border);
   root.setProperty("--divider-hover-bg", theme.ui.accent);
+
+  // What the bars paint with: a theme's gradients, or the plain colors
+  // above. Separate from --titlebar-bg / --tabbar-bg, which panels and
+  // dialogs use as a plain color (a gradient wouldn't do there).
+  root.setProperty("--titlebar-paint", barPaint(theme.ui.titlebarGradient, theme.ui.background, opacity));
+  root.setProperty("--tabbar-paint", barPaint(theme.ui.tabbarGradient, theme.ui.background, opacity));
+  root.setProperty("--statusbar-paint", barPaint(theme.ui.statusBar?.background, theme.ui.background, opacity));
+  root.setProperty("--statusbar-fg", theme.ui.statusBar?.foreground ?? theme.ui.foreground);
+  root.setProperty("--pane-glow", glowShadow(theme.ui.glow));
 
   // Deliberately only a variable, never a background on <body>: the rounded
   // window corners are a border-radius on .window-chrome, and anything
